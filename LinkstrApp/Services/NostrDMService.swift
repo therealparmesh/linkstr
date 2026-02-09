@@ -43,9 +43,31 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     self.onIncoming = onIncoming
     self.onRelayStatus = onRelayStatus
 
+    let parsedRelayURLs = relayURLs.map { ($0, URL(string: $0)) }
+    let validRelayURLs = Set(parsedRelayURLs.compactMap(\.1))
+    let invalidRelayURLs = parsedRelayURLs.compactMap { rawValue, parsedURL in
+      parsedURL == nil ? rawValue : nil
+    }
+
+    for invalidRelay in invalidRelayURLs {
+      onRelayStatus(
+        invalidRelay,
+        .failed,
+        "Invalid relay URL format: \(invalidRelay)"
+      )
+    }
+
+    guard !validRelayURLs.isEmpty else {
+      onRelayStatus(
+        relayURLs.first ?? "relays",
+        .failed,
+        "No valid relay URLs are configured."
+      )
+      return
+    }
+
     do {
-      let urls = Set(relayURLs.compactMap(URL.init(string:)))
-      let relayPool = try RelayPool(relayURLs: urls, delegate: self)
+      let relayPool = try RelayPool(relayURLs: validRelayURLs, delegate: self)
       self.relayPool = relayPool
 
       eventCancellable = relayPool.events
@@ -68,7 +90,10 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
       )
 
     } catch {
-      print("Failed to start relay pool: \(error)")
+      let message = "Failed to start relay pool: \(error.localizedDescription)"
+      for relayURL in relayURLs {
+        onRelayStatus(relayURL, .failed, message)
+      }
     }
   }
 
@@ -84,6 +109,9 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     processedEventIDs.removeAll()
     recipientFilter = nil
     authorFilter = nil
+    onIncoming = nil
+    onRelayStatus = nil
+    keypair = nil
   }
 
   private func scheduleReconnect() {

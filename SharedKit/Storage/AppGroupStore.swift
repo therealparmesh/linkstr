@@ -1,7 +1,10 @@
+import Darwin
 import Foundation
 
 enum AppGroupStoreError: Error {
   case appGroupUnavailable
+  case lockCreationFailed(Int32)
+  case lockAcquisitionFailed(Int32)
 }
 
 final class AppGroupStore {
@@ -10,6 +13,7 @@ final class AppGroupStore {
   let groupIdentifier = "group.com.parmscript.linkstr"
   private let contactsFileName = "contacts_snapshot.json"
   private let pendingSharesFileName = "pending_shares.json"
+  private let pendingSharesLockFileName = "pending_shares.lock"
 
   private init() {}
 
@@ -54,18 +58,46 @@ final class AppGroupStore {
   }
 
   func appendPendingShare(_ item: PendingShareItem) throws {
-    var items = try loadPendingShares()
-    items.append(item)
-    try write(items, to: pendingSharesFileName)
+    try withPendingSharesLock {
+      var items = try read([PendingShareItem].self, from: pendingSharesFileName, defaultValue: [])
+      items.append(item)
+      try write(items, to: pendingSharesFileName)
+    }
   }
 
   func loadPendingShares() throws -> [PendingShareItem] {
-    try read([PendingShareItem].self, from: pendingSharesFileName, defaultValue: [])
+    try withPendingSharesLock {
+      try read([PendingShareItem].self, from: pendingSharesFileName, defaultValue: [])
+    }
   }
 
-  func consumePendingShares() throws -> [PendingShareItem] {
-    let items = try loadPendingShares()
-    try write([PendingShareItem](), to: pendingSharesFileName)
-    return items
+  func removePendingShares(withIDs ids: Set<String>) throws {
+    guard !ids.isEmpty else { return }
+    try withPendingSharesLock {
+      let items = try read([PendingShareItem].self, from: pendingSharesFileName, defaultValue: [])
+      let remaining = items.filter { !ids.contains($0.id) }
+      guard remaining.count != items.count else { return }
+      try write(remaining, to: pendingSharesFileName)
+    }
+  }
+
+  private func withPendingSharesLock<T>(_ body: () throws -> T) throws -> T {
+    let lockURL = try containerURL().appendingPathComponent(pendingSharesLockFileName)
+    let fd = open(lockURL.path, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
+    guard fd >= 0 else {
+      throw AppGroupStoreError.lockCreationFailed(errno)
+    }
+    defer {
+      close(fd)
+    }
+
+    guard flock(fd, LOCK_EX) == 0 else {
+      throw AppGroupStoreError.lockAcquisitionFailed(errno)
+    }
+    defer {
+      flock(fd, LOCK_UN)
+    }
+
+    return try body()
   }
 }

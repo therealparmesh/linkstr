@@ -62,6 +62,12 @@ final class AppSession: ObservableObject {
     return env[key] == "1"
   }
 
+  private func shouldDisableNostrStartupForCurrentProcess() -> Bool {
+    let isRunningTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    if !isRunningTests { return false }
+    return !isEnvironmentFlagEnabled("LINKSTR_ENABLE_NOSTR_IN_TESTS")
+  }
+
   func ensureIdentity() {
     if identityService.keypair == nil {
       do {
@@ -115,12 +121,26 @@ final class AppSession: ObservableObject {
   func startNostrIfPossible() {
     guard let keypair = identityService.keypair else { return }
 
+    if shouldDisableNostrStartupForCurrentProcess() {
+      // Keep local send paths available in tests without opening relay connections.
+      nostrService.start(
+        keypair: keypair,
+        relayURLs: [],
+        onIncoming: { _ in },
+        onRelayStatus: { _, _, _ in }
+      )
+      return
+    }
+
     let relayURLs: [String]
     do {
       relayURLs = try relayStore.fetchRelays().filter(\.isEnabled).map(\.url)
     } catch {
       report(error: error)
       return
+    }
+    if relayURLs.isEmpty {
+      composeError = "No enabled relays configured"
     }
 
     nostrService.start(
@@ -134,6 +154,9 @@ final class AppSession: ObservableObject {
       onRelayStatus: { [weak self] relayURL, status, message in
         Task { @MainActor in
           guard let self else { return }
+          if status == .failed, let message, !message.isEmpty {
+            self.composeError = message
+          }
           do {
             try self.relayStore.updateRelayStatus(
               relayURL: relayURL,
@@ -148,33 +171,35 @@ final class AppSession: ObservableObject {
     )
   }
 
-  func createPost(url: String, note: String?, contact: ContactEntity) {
+  @discardableResult
+  func createPost(url: String, note: String?, contact: ContactEntity) -> Bool {
     createPost(url: url, note: note, recipientNPub: contact.npub)
   }
 
-  func createPost(url: String, note: String?, recipientNPub: String) {
-    guard let parsedURL = URL(string: url),
-      ["http", "https"].contains(parsedURL.scheme?.lowercased() ?? "")
-    else {
+  @discardableResult
+  func createPost(url: String, note: String?, recipientNPub: String) -> Bool {
+    guard let normalizedURL = LinkstrURLValidator.normalizedWebURL(from: url) else {
       composeError = "Invalid URL"
-      return
+      return false
     }
 
     guard let keypair = identityService.keypair,
       let recipientPublicKey = PublicKey(npub: recipientNPub)
     else {
       composeError = "Identity or contact key is invalid"
-      return
+      return false
     }
 
     let conversationID = ConversationID.deterministic(keypair.publicKey.hex, recipientPublicKey.hex)
+    let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let normalizedNote = (trimmedNote?.isEmpty == false) ? trimmedNote : nil
 
     let payload = LinkstrPayload(
       conversationID: conversationID,
       rootID: UUID().uuidString.replacingOccurrences(of: "-", with: ""),
       kind: .root,
-      url: url,
-      note: note,
+      url: normalizedURL,
+      note: normalizedNote,
       timestamp: Int64(Date.now.timeIntervalSince1970)
     )
 
@@ -188,18 +213,20 @@ final class AppSession: ObservableObject {
         kind: .root,
         senderPubkey: keypair.publicKey.hex,
         receiverPubkey: recipientPublicKey.hex,
-        url: url,
-        note: note,
+        url: normalizedURL,
+        note: normalizedNote,
         timestamp: .now,
         readAt: .now,
-        linkType: URLClassifier.classify(url)
+        linkType: URLClassifier.classify(normalizedURL)
       )
       try messageStore.insert(message)
 
       updateMetadata(for: message)
       composeError = nil
+      return true
     } catch {
       report(error: error)
+      return false
     }
   }
 
@@ -317,8 +344,7 @@ final class AppSession: ObservableObject {
   }
 
   func addRelay(url: String) {
-    guard let parsedURL = URL(string: url),
-      ["ws", "wss"].contains(parsedURL.scheme?.lowercased() ?? "")
+    guard let parsedURL = normalizedRelayURL(from: url)
     else {
       composeError = "Invalid relay URL"
       return
@@ -482,16 +508,41 @@ final class AppSession: ObservableObject {
   }
 
   private func processPendingShares() {
-    let pendingItems = (try? AppGroupStore.shared.consumePendingShares()) ?? []
+    guard identityService.keypair != nil else { return }
+
+    let pendingItems = (try? AppGroupStore.shared.loadPendingShares()) ?? []
     guard !pendingItems.isEmpty else { return }
 
     let contacts = (try? contactStore.fetchContacts()) ?? []
     let contactsByNPub = Dictionary(uniqueKeysWithValues: contacts.map { ($0.npub, $0) })
+    var processedIDs = Set<String>()
 
     for item in pendingItems {
       guard let contact = contactsByNPub[item.contactNPub] else { continue }
-      createPost(url: item.url, note: item.note, contact: contact)
+      if createPost(url: item.url, note: item.note, contact: contact) {
+        processedIDs.insert(item.id)
+      }
     }
+
+    do {
+      try AppGroupStore.shared.removePendingShares(withIDs: processedIDs)
+    } catch {
+      report(error: error)
+    }
+  }
+
+  private func normalizedRelayURL(from raw: String) -> URL? {
+    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return nil }
+    guard let components = URLComponents(string: trimmed),
+      let scheme = components.scheme?.lowercased(),
+      scheme == "ws" || scheme == "wss",
+      let host = components.host,
+      !host.isEmpty
+    else {
+      return nil
+    }
+    return components.url
   }
 
   #if targetEnvironment(simulator)

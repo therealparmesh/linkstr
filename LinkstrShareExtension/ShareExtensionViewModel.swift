@@ -29,7 +29,7 @@ final class ShareExtensionViewModel: ObservableObject {
   }
 
   func send() {
-    guard URL(string: incomingURL) != nil else {
+    guard let normalizedURL = LinkstrURLValidator.normalizedWebURL(from: incomingURL) else {
       errorMessage = "Invalid URL"
       return
     }
@@ -38,10 +38,15 @@ final class ShareExtensionViewModel: ObservableObject {
       return
     }
 
+    let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
     let item = PendingShareItem(
-      url: incomingURL, contactNPub: selectedContact.npub, note: note.isEmpty ? nil : note)
+      url: normalizedURL,
+      contactNPub: selectedContact.npub,
+      note: trimmedNote.isEmpty ? nil : trimmedNote
+    )
     do {
       try store.appendPendingShare(item)
+      errorMessage = nil
     } catch {
       errorMessage = "Unable to queue share: \(error.localizedDescription)"
     }

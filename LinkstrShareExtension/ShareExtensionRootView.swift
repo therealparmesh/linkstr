@@ -46,7 +46,10 @@ struct ShareExtensionRootView: View {
               onDone()
             }
           }
-          .disabled(viewModel.selectedContact == nil || URL(string: viewModel.incomingURL) == nil)
+          .disabled(
+            viewModel.selectedContact == nil
+              || LinkstrURLValidator.normalizedWebURL(from: viewModel.incomingURL) == nil
+          )
         }
       }
     }

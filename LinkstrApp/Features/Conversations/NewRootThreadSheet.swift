@@ -77,11 +77,18 @@ struct NewPostSheet: View {
         ToolbarItem(placement: .confirmationAction) {
           Button("Send") {
             guard let recipientNPub = activeRecipientNPub else { return }
+            guard let normalizedURL = normalizedURL else { return }
             session.createPost(
-              url: url, note: note.isEmpty ? nil : note, recipientNPub: recipientNPub)
-            dismiss()
+              url: normalizedURL,
+              note: note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? nil : note.trimmingCharacters(in: .whitespacesAndNewlines),
+              recipientNPub: recipientNPub
+            )
+            if session.composeError == nil {
+              dismiss()
+            }
           }
-          .disabled(activeRecipientNPub == nil || URL(string: url) == nil)
+          .disabled(activeRecipientNPub == nil || normalizedURL == nil)
           .tint(LinkstrTheme.neonCyan)
         }
       }
@@ -93,5 +100,9 @@ struct NewPostSheet: View {
       return lockedRecipient.npub
     }
     return selectedContactNPub
+  }
+
+  private var normalizedURL: String? {
+    LinkstrURLValidator.normalizedWebURL(from: url)
   }
 }

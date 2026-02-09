@@ -203,6 +203,10 @@ final class AppSessionLocalFlowTests: XCTestCase {
     session.addRelay(url: "https://invalid-relay.example.com")
     XCTAssertEqual(session.composeError, "Invalid relay URL")
 
+    session.addRelay(url: "wss://")
+    XCTAssertEqual(session.composeError, "Invalid relay URL")
+    XCTAssertTrue(try fetchRelays(in: container.mainContext).isEmpty)
+
     session.addRelay(url: "wss://relay.example.com")
     var relays = try fetchRelays(in: container.mainContext)
     XCTAssertEqual(relays.count, 1)
@@ -262,6 +266,18 @@ final class AppSessionLocalFlowTests: XCTestCase {
     session.startNostrIfPossible()
 
     session.createPost(url: "not-a-url", note: nil, recipientNPub: recipientNPub)
+
+    XCTAssertEqual(session.composeError, "Invalid URL")
+    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
+  }
+
+  func testCreatePostRejectsUnsupportedScheme() throws {
+    let (session, container) = try makeSession()
+    let recipientNPub = try makeNPub()
+    try session.identityService.createNewIdentity()
+    session.startNostrIfPossible()
+
+    session.createPost(url: "ftp://example.com/file.mp4", note: nil, recipientNPub: recipientNPub)
 
     XCTAssertEqual(session.composeError, "Invalid URL")
     XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
