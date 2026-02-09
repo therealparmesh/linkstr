@@ -1,0 +1,87 @@
+name: Linkstr
+options:
+  deploymentTarget:
+    iOS: 17.0
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: 5.10
+packages:
+  NostrSDK:
+    url: https://github.com/nostr-sdk/nostr-sdk-ios.git
+    branch: main
+targets:
+  Linkstr:
+    type: application
+    platform: iOS
+    deploymentTarget: 17.0
+    sources:
+      - path: LinkstrApp
+      - path: SharedKit
+    dependencies:
+      - package: NostrSDK
+      - target: LinkstrShareExtension
+        embed: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.parmscript.linkstr
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_ENTITLEMENTS: LinkstrApp/Linkstr.entitlements
+        INFOPLIST_FILE: LinkstrApp/Info.plist
+        DEVELOPMENT_TEAM: ""
+    info:
+      path: LinkstrApp/Info.plist
+      properties:
+        CFBundleDisplayName: linkstr
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        NSCameraUsageDescription: Camera access is used to scan contact User Key (npub) QR codes.
+        UILaunchStoryboardName: LaunchScreen
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoadsInWebContent: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+
+  LinkstrShareExtension:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: 17.0
+    sources:
+      - path: LinkstrShareExtension
+      - path: SharedKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.parmscript.linkstr.share
+        CODE_SIGN_ENTITLEMENTS: LinkstrShareExtension/LinkstrShareExtension.entitlements
+        INFOPLIST_FILE: LinkstrShareExtension/Info.plist
+        DEVELOPMENT_TEAM: ""
+        GENERATE_INFOPLIST_FILE: NO
+    info:
+      path: LinkstrShareExtension/Info.plist
+      properties:
+        CFBundleDisplayName: linkstr share
+        NSExtension:
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsWebURLWithMaxCount: 1
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: "$(PRODUCT_MODULE_NAME).ShareViewController"
+
+  LinkstrTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: 17.0
+    sources:
+      - path: LinkstrTests
+    dependencies:
+      - target: Linkstr
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES

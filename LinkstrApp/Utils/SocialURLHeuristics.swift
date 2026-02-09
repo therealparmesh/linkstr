@@ -1,0 +1,276 @@
+import Foundation
+
+enum SocialURLHeuristics {
+  static func isTikTokVideoLikeURL(_ url: URL) -> Bool {
+    let host = url.host?.lowercased() ?? ""
+    if host.hasPrefix("vm.tiktok.com") || host.hasPrefix("vt.tiktok.com") {
+      return true
+    }
+
+    let parts = url.pathComponents.map { $0.lowercased() }
+    if parts.contains("video") {
+      return true
+    }
+
+    guard let queryItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
+    else {
+      return false
+    }
+    return queryItems.contains { item in
+      let key = item.name.lowercased()
+      return key == "aweme_id" || key == "video_id" || key == "item_id"
+    }
+  }
+
+  static func isInstagramReelURL(_ url: URL) -> Bool {
+    let parts = normalizedPathComponents(for: url)
+    guard let first = parts.first else { return false }
+    return first == "reel" || first == "reels"
+  }
+
+  static func isInstagramVideoPostURL(_ url: URL) -> Bool {
+    let parts = normalizedPathComponents(for: url)
+    guard let first = parts.first else { return false }
+    return first == "p" || first == "tv"
+  }
+
+  static func isFacebookReelURL(_ url: URL) -> Bool {
+    let parts = normalizedPathComponents(for: url)
+    guard let first = parts.first else { return false }
+    return first == "reel" || first == "reels"
+  }
+
+  static func isFacebookVideoURL(_ url: URL) -> Bool {
+    let host = url.host?.lowercased() ?? ""
+    if host.contains("fb.watch") {
+      return true
+    }
+
+    let parts = normalizedPathComponents(for: url)
+    if parts.contains("videos") {
+      return true
+    }
+
+    guard let queryItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
+    else {
+      return false
+    }
+    return queryItems.contains { item in
+      let key = item.name.lowercased()
+      return key == "v" || key == "video_id" || key == "story_fbid"
+    }
+  }
+
+  static func tikTokVideoID(from sourceURL: URL) -> String? {
+    let parts = sourceURL.pathComponents
+    if let videoIndex = parts.firstIndex(of: "video"), videoIndex + 1 < parts.count {
+      let candidate = parts[videoIndex + 1]
+      let digits = candidate.filter(\.isNumber)
+      if digits.count >= 8 { return digits }
+    }
+    return nil
+  }
+
+  static func tikTokVideoID(fromCandidateURL url: URL) -> String? {
+    let queryKeys = ["aweme_id", "item_id", "group_id", "video_id"]
+    if let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+      let queryItems = components.queryItems
+    {
+      for item in queryItems where queryKeys.contains(item.name.lowercased()) {
+        let digits = (item.value ?? "").filter(\.isNumber)
+        if digits.count >= 8 { return digits }
+      }
+    }
+
+    let raw = url.absoluteString
+    let patterns = [
+      #"/video/(\d{8,})"#,
+      #"(?:aweme_id|item_id|group_id|video_id)=(\d{8,})"#,
+    ]
+
+    for pattern in patterns {
+      guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+      let nsRange = NSRange(raw.startIndex..<raw.endIndex, in: raw)
+      guard let match = regex.firstMatch(in: raw, range: nsRange), match.numberOfRanges > 1,
+        let range = Range(match.range(at: 1), in: raw)
+      else { continue }
+      return String(raw[range])
+    }
+
+    return nil
+  }
+
+  static func instagramPostID(from sourceURL: URL) -> String? {
+    if let token = pathToken(
+      in: sourceURL,
+      markers: ["reel", "reels", "p", "tv"],
+      minLength: 5,
+      allowDigitsOnly: false
+    ) {
+      return token
+    }
+
+    guard let components = URLComponents(url: sourceURL, resolvingAgainstBaseURL: false),
+      let queryItems = components.queryItems
+    else { return nil }
+
+    for key in ["shortcode", "media_id", "igshid"] {
+      if let value = queryItems.first(where: { $0.name.lowercased() == key })?.value,
+        let token = normalizedToken(value, minLength: 5, allowDigitsOnly: false)
+      {
+        return token
+      }
+    }
+
+    return nil
+  }
+
+  static func instagramPostID(fromCandidateURL url: URL) -> String? {
+    if let token = pathToken(
+      in: url,
+      markers: ["reel", "reels", "p", "tv"],
+      minLength: 5,
+      allowDigitsOnly: false
+    ) {
+      return token
+    }
+
+    if let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+      let queryItems = components.queryItems
+    {
+      for key in ["shortcode", "media_id", "ig_cache_key", "item_id"] {
+        guard let raw = queryItems.first(where: { $0.name.lowercased() == key })?.value else {
+          continue
+        }
+
+        if key == "ig_cache_key" {
+          if let token = tokenFromRegex(#"([A-Za-z0-9_-]{5,})"#, in: raw) {
+            return token.lowercased()
+          }
+          continue
+        }
+
+        if let token = normalizedToken(raw, minLength: 5, allowDigitsOnly: false) {
+          return token
+        }
+      }
+    }
+
+    if let token = tokenFromRegex(
+      #"/(?:reel|reels|p|tv)/([A-Za-z0-9_-]{5,})"#,
+      in: url.absoluteString
+    ) {
+      return token.lowercased()
+    }
+
+    return nil
+  }
+
+  static func facebookVideoID(from sourceURL: URL) -> String? {
+    if let id = pathToken(
+      in: sourceURL,
+      markers: ["reel", "videos"],
+      minLength: 6,
+      allowDigitsOnly: true
+    ) {
+      return id
+    }
+
+    guard let components = URLComponents(url: sourceURL, resolvingAgainstBaseURL: false),
+      let queryItems = components.queryItems
+    else { return nil }
+
+    for key in ["v", "video_id", "story_fbid"] {
+      if let value = queryItems.first(where: { $0.name.lowercased() == key })?.value,
+        let id = normalizedToken(value, minLength: 6, allowDigitsOnly: true)
+      {
+        return id
+      }
+    }
+
+    return nil
+  }
+
+  static func facebookVideoID(fromCandidateURL url: URL) -> String? {
+    if let id = pathToken(
+      in: url,
+      markers: ["reel", "videos"],
+      minLength: 6,
+      allowDigitsOnly: true
+    ) {
+      return id
+    }
+
+    if let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+      let queryItems = components.queryItems
+    {
+      for key in ["video_id", "v", "story_fbid", "item_id", "group_id"] {
+        if let value = queryItems.first(where: { $0.name.lowercased() == key })?.value,
+          let id = normalizedToken(value, minLength: 6, allowDigitsOnly: true)
+        {
+          return id
+        }
+      }
+    }
+
+    if let id = tokenFromRegex(#"/(?:reel|videos)/(\d{6,})"#, in: url.absoluteString) {
+      return id
+    }
+
+    return nil
+  }
+
+  private static func normalizedPathComponents(for url: URL) -> [String] {
+    url.pathComponents
+      .map { $0.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "/")) }
+      .filter { !$0.isEmpty }
+  }
+
+  private static func pathToken(
+    in url: URL,
+    markers: [String],
+    minLength: Int,
+    allowDigitsOnly: Bool
+  ) -> String? {
+    let parts = url.pathComponents
+      .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "/")) }
+      .filter { !$0.isEmpty }
+
+    for (index, part) in parts.enumerated() {
+      guard markers.contains(part.lowercased()), index + 1 < parts.count else { continue }
+      if let token = normalizedToken(
+        parts[index + 1], minLength: minLength, allowDigitsOnly: allowDigitsOnly)
+      {
+        return token
+      }
+    }
+
+    return nil
+  }
+
+  private static func normalizedToken(
+    _ raw: String,
+    minLength: Int,
+    allowDigitsOnly: Bool
+  ) -> String? {
+    let cleaned =
+      raw
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+      .trimmingCharacters(in: CharacterSet(charactersIn: "/?&=#"))
+      .lowercased()
+    guard cleaned.count >= minLength else { return nil }
+    if allowDigitsOnly, !cleaned.allSatisfy(\.isNumber) {
+      return nil
+    }
+    return cleaned
+  }
+
+  private static func tokenFromRegex(_ pattern: String, in value: String) -> String? {
+    guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+    let nsRange = NSRange(value.startIndex..<value.endIndex, in: value)
+    guard let match = regex.firstMatch(in: value, range: nsRange), match.numberOfRanges > 1,
+      let range = Range(match.range(at: 1), in: value)
+    else { return nil }
+    return String(value[range])
+  }
+}
