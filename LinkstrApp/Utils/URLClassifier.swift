@@ -52,6 +52,14 @@ enum URLClassifier {
     if host.contains("facebook.com") || host.contains("fb.watch") { return .facebook }
     if host.contains("youtube.com") || host.contains("youtu.be") { return .youtube }
     if host.contains("rumble.com") || host.contains("rumble.video") { return .rumble }
+    if hostMatches(host, domain: "x.com")
+      || hostMatches(host, domain: "twitter.com")
+      || hostMatches(host, domain: "fixupx.com")
+      || hostMatches(host, domain: "fxtwitter.com")
+      || hostMatches(host, domain: "vxtwitter.com")
+    {
+      return .twitter
+    }
     return .generic
   }
 
@@ -84,6 +92,12 @@ enum URLClassifier {
         return .embedOnly(embedURL: embedURL(for: url, linkType: linkType) ?? url)
       }
       return .link
+    case .twitter:
+      guard SocialURLHeuristics.isTwitterStatusURL(url) else { return .link }
+      if SocialURLHeuristics.isTwitterVideoURL(url) {
+        return .extractionPreferred(embedURL: embedURL(for: url, linkType: linkType) ?? url)
+      }
+      return .embedOnly(embedURL: embedURL(for: url, linkType: linkType) ?? url)
     case .youtube, .rumble:
       return .embedOnly(embedURL: embedURL(for: url, linkType: linkType) ?? url)
     case .generic:
@@ -118,6 +132,8 @@ enum URLClassifier {
       return youtubeEmbedURL(for: sourceURL)
     case .rumble:
       return rumbleEmbedURL(for: sourceURL)
+    case .twitter:
+      return twitterEmbedURL(for: sourceURL)
     case .generic:
       return nil
     }
@@ -192,6 +208,19 @@ enum URLClassifier {
     return URL(string: "https://rumble.com/embed/\(id)")
   }
 
+  private static func twitterEmbedURL(for sourceURL: URL) -> URL? {
+    guard SocialURLHeuristics.isTwitterStatusURL(sourceURL) else { return sourceURL }
+    guard var components = URLComponents(url: sourceURL, resolvingAgainstBaseURL: false) else {
+      return sourceURL
+    }
+    components.scheme = "https"
+    components.host = "fixupx.com"
+    components.port = nil
+    components.user = nil
+    components.password = nil
+    return components.url ?? sourceURL
+  }
+
   private static func isShortFormVideoURL(_ sourceURL: URL) -> Bool {
     let linkType = classify(sourceURL)
     switch linkType {
@@ -206,9 +235,15 @@ enum URLClassifier {
         .map { $0.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "/")) }
         .filter { !$0.isEmpty }
       return parts.first == "shorts"
+    case .twitter:
+      return SocialURLHeuristics.isTwitterVideoURL(sourceURL)
     case .rumble, .generic:
       return false
     }
+  }
+
+  private static func hostMatches(_ host: String, domain: String) -> Bool {
+    host == domain || host.hasSuffix(".\(domain)")
   }
 
 }

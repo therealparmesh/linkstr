@@ -12,6 +12,15 @@ final class URLClassifierTests: XCTestCase {
       URLClassifier.classify("https://www.facebook.com/reel/123456789012345"), .facebook)
     XCTAssertEqual(URLClassifier.classify("https://youtu.be/dQw4w9WgXcQ"), .youtube)
     XCTAssertEqual(URLClassifier.classify("https://rumble.com/v5h7abc-sample.html"), .rumble)
+    XCTAssertEqual(URLClassifier.classify("https://x.com/jack/status/20"), .twitter)
+    XCTAssertEqual(
+      URLClassifier.classify("https://twitter.com/nyjets/status/924685391524798464/video/1"),
+      .twitter
+    )
+    XCTAssertEqual(
+      URLClassifier.classify("https://fixupx.com/nyjets/status/924685391524798464/video/1"),
+      .twitter
+    )
     XCTAssertEqual(URLClassifier.classify("https://example.com/post/abc"), .generic)
   }
 
@@ -99,6 +108,29 @@ final class URLClassifierTests: XCTestCase {
 
     let tiktokProfile = URLClassifier.mediaStrategy(for: "https://www.tiktok.com/@nasa")
     XCTAssertEqual(tiktokProfile, .link)
+
+    let twitterProfile = URLClassifier.mediaStrategy(for: "https://x.com/nasa")
+    XCTAssertEqual(twitterProfile, .link)
+  }
+
+  func testMediaStrategyTwitterVideoAndNonVideoStatuses() {
+    assertExtractionPreferred(
+      "https://twitter.com/nyjets/status/924685391524798464/video/1",
+      expectedEmbedPrefix: "https://fixupx.com/nyjets/status/924685391524798464/video/1"
+    )
+    assertExtractionPreferred(
+      "http://twitter.com/nyjets/status/924685391524798464/video/1",
+      expectedEmbedPrefix: "https://fixupx.com/nyjets/status/924685391524798464/video/1"
+    )
+
+    assertEmbedOnly(
+      "https://twitter.com/FloodSocial/status/861627479294746624/photo/1",
+      expectedEmbedPrefix: "https://fixupx.com/FloodSocial/status/861627479294746624/photo/1"
+    )
+    assertEmbedOnly(
+      "https://x.com/jack/status/20",
+      expectedEmbedPrefix: "https://fixupx.com/jack/status/20"
+    )
   }
 
   func testYouTubeEmbedForShortsAndYoutuBe() {

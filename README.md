@@ -34,9 +34,11 @@
   - Reset to default relays from Settings.
 - Media
   - Runtime URL classification decides playback strategy.
-  - Local extraction candidates: TikTok video links, Instagram Reels, Facebook Reels.
+  - Local extraction candidates: TikTok video links, Instagram Reels, Facebook Reels, X/Twitter status video links (`.../status/<id>/video/...`).
   - Extraction candidates default to local playback and auto-fallback to official embed.
-  - Embed-only: YouTube (including Shorts), Rumble, Instagram non-reel video posts, Facebook non-reel video posts.
+  - Embed-only: YouTube (including Shorts), Rumble, Instagram non-reel video posts, Facebook non-reel video posts, and X/Twitter non-video statuses (text/photo).
+  - X/Twitter embeds use `fixupx.com` substitution (`https://fixupx.com/...`) for consistent embedded rendering.
+  - Local extraction only accepts HTTPS media URLs; HTTP candidates are ignored.
   - `Video` label appears only for extraction candidates; embed-only and generic URLs show `Link`.
 
 ## QR scanner note

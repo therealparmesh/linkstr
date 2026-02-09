@@ -61,6 +61,22 @@ enum SocialURLHeuristics {
     }
   }
 
+  static func isTwitterStatusURL(_ url: URL) -> Bool {
+    let parts = normalizedPathComponents(for: url)
+    guard let statusIndex = parts.firstIndex(of: "status"), statusIndex + 1 < parts.count else {
+      return false
+    }
+    return parts[statusIndex + 1].allSatisfy(\.isNumber)
+  }
+
+  static func isTwitterVideoURL(_ url: URL) -> Bool {
+    let parts = normalizedPathComponents(for: url)
+    guard let statusIndex = parts.firstIndex(of: "status"), statusIndex + 2 < parts.count else {
+      return false
+    }
+    return parts[(statusIndex + 2)...].contains("video")
+  }
+
   static func tikTokVideoID(from sourceURL: URL) -> String? {
     let parts = sourceURL.pathComponents
     if let videoIndex = parts.firstIndex(of: "video"), videoIndex + 1 < parts.count {

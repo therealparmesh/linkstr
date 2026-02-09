@@ -12,6 +12,7 @@ enum LinkType: String, Codable, CaseIterable {
   case facebook
   case youtube
   case rumble
+  case twitter
   case generic
 }
 

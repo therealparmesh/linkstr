@@ -62,6 +62,9 @@ final class SocialVideoExtractionService: NSObject {
     cookies: [HTTPCookie]
   ) async -> ExtractionState? {
     for candidateURL in candidates {
+      // All providers in scope expose HTTPS media URLs and ATS expects secure transport.
+      guard candidateURL.scheme?.lowercased() == "https" else { continue }
+
       if !matchesSourceIdentity(candidateURL, sourceURL: sourceURL) {
         continue
       }
@@ -129,6 +132,13 @@ final class SocialVideoExtractionService: NSObject {
       expectedID != candidateID
     {
       return false
+    }
+
+    if SocialURLHeuristics.isTwitterStatusURL(sourceURL) {
+      let host = candidateURL.host?.lowercased() ?? ""
+      if !(host.contains("twimg.com") || host.contains("twitter.com") || host.contains("x.com")) {
+        return false
+      }
     }
 
     return true
@@ -219,6 +229,10 @@ final class SocialVideoExtractionService: NSObject {
     if value.contains("fbcdn.net/v/t39.25447-2") { score += 24 }
     if value.contains("cdninstagram.com/v/t50.2886-16") { score += 28 }
     if value.contains("cdninstagram.com/v/t66.30100-16") { score += 28 }
+    if value.contains("video.twimg.com") { score += 34 }
+    if value.contains("/ext_tw_video/") { score += 24 }
+    if value.contains("/amplify_video/") { score += 24 }
+    if value.contains("/tweet_video/") { score += 20 }
     if value.contains("video") { score += 14 }
     if value.contains("play") { score += 10 }
     if value.contains("download") { score += 8 }
@@ -381,6 +395,10 @@ final class SocialVideoExtractionService: NSObject {
       || lower.contains("fbcdn.net/v/t39.25447-2")
       || lower.contains("cdninstagram.com/v/t50.2886-16")
       || lower.contains("cdninstagram.com/v/t66.30100-16")
+      || lower.contains("video.twimg.com")
+      || lower.contains("/ext_tw_video/")
+      || lower.contains("/amplify_video/")
+      || lower.contains("/tweet_video/")
   }
 
   private func mergeCandidates(primary: [URL], secondary: [URL]) -> [URL] {
@@ -440,7 +458,7 @@ final class SocialVideoExtractionService: NSObject {
 
   private static let injectionScript = """
     (function() {
-      const candidatePattern = /(\\.m3u8|\\.mp4|mime_type=video_mp4|\\/aweme\\/v1\\/play\\/|\\/video\\/tos\\/|playaddr|play_addr|video\\.xx\\.fbcdn\\.net|fbcdn\\.net\\/v\\/t42\\.1790-2|fbcdn\\.net\\/v\\/t39\\.25447-2|cdninstagram\\.com\\/v\\/t50\\.2886-16|cdninstagram\\.com\\/v\\/t66\\.30100-16)/i;
+      const candidatePattern = /(\\.m3u8|\\.mp4|mime_type=video_mp4|\\/aweme\\/v1\\/play\\/|\\/video\\/tos\\/|playaddr|play_addr|video\\.xx\\.fbcdn\\.net|fbcdn\\.net\\/v\\/t42\\.1790-2|fbcdn\\.net\\/v\\/t39\\.25447-2|cdninstagram\\.com\\/v\\/t50\\.2886-16|cdninstagram\\.com\\/v\\/t66\\.30100-16|video\\.twimg\\.com|\\/ext_tw_video\\/|\\/amplify_video\\/|\\/tweet_video\\/)/i;
 
       const send = (u) => {
         if (!u || typeof u !== 'string') return;
