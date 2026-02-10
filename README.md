@@ -33,6 +33,8 @@
   - Relay health status shown by colored dot.
   - Relay disconnect/reconnect chatter is suppressed in toasts.
   - Offline toast appears only when zero enabled relays are connected.
+  - Sending is blocked while zero enabled relays are connected.
+  - Pending shares stay queued until a relay connection is available.
   - Relays sorted alphabetically in Settings.
   - Reset to default relays from Settings.
 - Media
@@ -66,7 +68,7 @@ open Linkstr.xcodeproj
 ## Run tests
 
 ```bash
-xcodebuild test -project Linkstr.xcodeproj -scheme Linkstr -destination 'platform=iOS Simulator,name=iPhone 16'
+xcodebuild test -project Linkstr.xcodeproj -scheme Linkstr -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 ```
 
-If your installed simulator name differs, replace `name=iPhone 16` with one available on your machine.
+If your installed simulator name differs, replace `name=iPhone 17 Pro` with one available on your machine.

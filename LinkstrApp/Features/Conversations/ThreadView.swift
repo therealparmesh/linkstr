@@ -297,17 +297,23 @@ struct ThreadView: View {
         mediaSurface {
           InlineVideoPlayer(media: media)
         }
-        Button("Use Embedded Player") {
-          localPlaybackMode = .embedPreferred
-        }
-        .frame(maxWidth: .infinity)
-        .buttonStyle(LinkstrSecondaryButtonStyle())
+        HStack(spacing: 8) {
+          Button {
+            localPlaybackMode = .embedPreferred
+          } label: {
+            Text("Use Embedded Player")
+              .frame(maxWidth: .infinity)
+          }
+          .buttonStyle(LinkstrSecondaryButtonStyle())
 
-        Button("Open Embed Fullscreen") {
-          fullScreenWebItem = FullScreenWebItem(url: embedURL)
+          Button {
+            fullScreenWebItem = FullScreenWebItem(url: embedURL)
+          } label: {
+            Text("Open Fullscreen")
+              .frame(maxWidth: .infinity)
+          }
+          .buttonStyle(LinkstrSecondaryButtonStyle())
         }
-        .frame(maxWidth: .infinity)
-        .buttonStyle(LinkstrSecondaryButtonStyle())
       }
       .frame(maxWidth: .infinity, alignment: .leading)
     case .cannotExtract:
@@ -335,30 +341,38 @@ struct ThreadView: View {
           .foregroundStyle(LinkstrTheme.textSecondary)
       }
 
-      Button("Try Local Playback") {
-        Task {
-          localPlaybackMode = .localPreferred
-          if case .cannotExtract = extractionState {
-            extractionState = nil
-            extractionFallbackReason = nil
-            await prepareMediaIfNeeded()
+      HStack(spacing: 8) {
+        Button {
+          Task {
+            localPlaybackMode = .localPreferred
+            if case .cannotExtract = extractionState {
+              extractionState = nil
+              extractionFallbackReason = nil
+              await prepareMediaIfNeeded()
+            }
           }
+        } label: {
+          Text("Try Local Playback")
+            .frame(maxWidth: .infinity)
         }
-      }
-      .frame(maxWidth: .infinity)
-      .buttonStyle(LinkstrSecondaryButtonStyle())
+        .buttonStyle(LinkstrSecondaryButtonStyle())
 
-      Button("Open Embed Fullscreen") {
-        fullScreenWebItem = FullScreenWebItem(url: embedURL)
+        Button {
+          fullScreenWebItem = FullScreenWebItem(url: embedURL)
+        } label: {
+          Text("Open Fullscreen")
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(LinkstrSecondaryButtonStyle())
       }
-      .frame(maxWidth: .infinity)
-      .buttonStyle(LinkstrSecondaryButtonStyle())
 
       if let sourceURL {
-        Button("Open Source in Safari") {
+        Button {
           openURL(sourceURL)
+        } label: {
+          Text("Open Source in Safari")
+            .frame(maxWidth: .infinity)
         }
-        .frame(maxWidth: .infinity)
         .buttonStyle(LinkstrSecondaryButtonStyle())
       }
     }
