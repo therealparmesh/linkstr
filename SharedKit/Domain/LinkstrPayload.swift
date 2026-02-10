@@ -54,7 +54,7 @@ struct LinkstrPayload: Codable, Hashable {
   func validated() throws {
     switch kind {
     case .root:
-      guard let url, URL(string: url) != nil else {
+      guard let url, LinkstrURLValidator.normalizedWebURL(from: url) != nil else {
         throw LinkstrPayloadError.invalidRootURL
       }
     case .reply:

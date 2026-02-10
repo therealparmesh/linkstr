@@ -69,9 +69,7 @@ final class AppSession: ObservableObject {
     let enabledRelays = try relayStore.fetchRelays().filter(\.isEnabled)
     guard !enabledRelays.isEmpty else { return }
 
-    let hasConnectedRelay = enabledRelays.contains {
-      $0.status == .connected || $0.status == .readOnly
-    }
+    let hasConnectedRelay = hasConnectedEnabledRelay(enabledRelays)
 
     if hasConnectedRelay {
       hasShownOfflineToastForCurrentOutage = false
@@ -84,6 +82,46 @@ final class AppSession: ObservableObject {
     guard !hasShownOfflineToastForCurrentOutage else { return }
     composeError = relayOfflineMessage
     hasShownOfflineToastForCurrentOutage = true
+  }
+
+  private func hasConnectedEnabledRelay(_ enabledRelays: [RelayEntity]) -> Bool {
+    enabledRelays.contains { $0.status == .connected || $0.status == .readOnly }
+  }
+
+  private func ensureRelayReadyForSend() -> Bool {
+    if shouldDisableNostrStartupForCurrentProcess() {
+      return true
+    }
+
+    let enabledRelays: [RelayEntity]
+    do {
+      enabledRelays = try relayStore.fetchRelays().filter(\.isEnabled)
+    } catch {
+      report(error: error)
+      return false
+    }
+
+    guard !enabledRelays.isEmpty else {
+      composeError = noEnabledRelaysMessage
+      hasShownOfflineToastForCurrentOutage = false
+      return false
+    }
+
+    guard hasConnectedEnabledRelay(enabledRelays) else {
+      composeError = relayOfflineMessage
+      hasShownOfflineToastForCurrentOutage = true
+      return false
+    }
+
+    hasShownOfflineToastForCurrentOutage = false
+    if composeError == relayOfflineMessage || composeError == noEnabledRelaysMessage {
+      composeError = nil
+    }
+    return true
+  }
+
+  private func makeLocalEventID() -> String {
+    UUID().uuidString.replacingOccurrences(of: "-", with: "")
   }
 
   private func isEnvironmentFlagEnabled(_ key: String) -> Bool {
@@ -229,15 +267,24 @@ final class AppSession: ObservableObject {
 
     let payload = LinkstrPayload(
       conversationID: conversationID,
-      rootID: UUID().uuidString.replacingOccurrences(of: "-", with: ""),
+      rootID: makeLocalEventID(),
       kind: .root,
       url: normalizedURL,
       note: normalizedNote,
       timestamp: Int64(Date.now.timeIntervalSince1970)
     )
 
+    guard ensureRelayReadyForSend() else {
+      return false
+    }
+
     do {
-      let eventID = try nostrService.send(payload: payload, to: recipientPublicKey.hex)
+      let eventID: String
+      if shouldDisableNostrStartupForCurrentProcess() {
+        eventID = makeLocalEventID()
+      } else {
+        eventID = try nostrService.send(payload: payload, to: recipientPublicKey.hex)
+      }
 
       let message = SessionMessageEntity(
         eventID: eventID,
@@ -282,8 +329,17 @@ final class AppSession: ObservableObject {
       timestamp: Int64(Date.now.timeIntervalSince1970)
     )
 
+    guard ensureRelayReadyForSend() else {
+      return
+    }
+
     do {
-      let eventID = try nostrService.send(payload: payload, to: recipientPubkey)
+      let eventID: String
+      if shouldDisableNostrStartupForCurrentProcess() {
+        eventID = makeLocalEventID()
+      } else {
+        eventID = try nostrService.send(payload: payload, to: recipientPubkey)
+      }
       let reply = SessionMessageEntity(
         eventID: eventID,
         conversationID: post.conversationID,
@@ -456,7 +512,18 @@ final class AppSession: ObservableObject {
       canonicalPostID = incoming.payload.rootID
     }
 
-    let url = incoming.payload.kind == .root ? incoming.payload.url : nil
+    let url: String?
+    switch incoming.payload.kind {
+    case .root:
+      guard let payloadURL = incoming.payload.url,
+        let normalizedURL = LinkstrURLValidator.normalizedWebURL(from: payloadURL)
+      else {
+        return
+      }
+      url = normalizedURL
+    case .reply:
+      url = nil
+    }
 
     let isEchoedOutgoing = identityService.pubkeyHex == incoming.senderPubkey
 

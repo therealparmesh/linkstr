@@ -132,6 +132,9 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     guard let keypair else {
       throw NostrServiceError.missingIdentity
     }
+    guard relayPool != nil else {
+      throw NostrServiceError.relayUnavailable
+    }
 
     try payload.validated()
 
@@ -263,6 +266,7 @@ extension NostrDMService: @preconcurrency RelayDelegate {
 
 enum NostrServiceError: Error, LocalizedError {
   case missingIdentity
+  case relayUnavailable
   case payloadEncodingFailed
   case invalidPubkey
 
@@ -270,6 +274,8 @@ enum NostrServiceError: Error, LocalizedError {
     switch self {
     case .missingIdentity:
       return "You're signed out. Sign in to continue."
+    case .relayUnavailable:
+      return "You're offline. Waiting for a relay connection."
     case .payloadEncodingFailed:
       return "Couldn't prepare this message. Try again."
     case .invalidPubkey:

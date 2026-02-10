@@ -17,12 +17,10 @@ private struct ConversationSummary: Identifiable {
 
 private struct ConversationMessageIndex {
   let postsByConversationID: [String: [SessionMessageEntity]]
-  let repliesByConversationID: [String: [SessionMessageEntity]]
   let unreadIncomingRepliesByPostID: [String: Int]
 
   init(messages: [SessionMessageEntity], myPubkey: String?) {
     var postsByConversationID: [String: [SessionMessageEntity]] = [:]
-    var repliesByConversationID: [String: [SessionMessageEntity]] = [:]
     var unreadIncomingRepliesByPostID: [String: Int] = [:]
 
     for message in messages {
@@ -30,7 +28,6 @@ private struct ConversationMessageIndex {
       case .root:
         postsByConversationID[message.conversationID, default: []].append(message)
       case .reply:
-        repliesByConversationID[message.conversationID, default: []].append(message)
         if let myPubkey, message.senderPubkey != myPubkey, message.readAt == nil {
           unreadIncomingRepliesByPostID[message.rootID, default: 0] += 1
         }
@@ -38,7 +35,6 @@ private struct ConversationMessageIndex {
     }
 
     self.postsByConversationID = postsByConversationID
-    self.repliesByConversationID = repliesByConversationID
     self.unreadIncomingRepliesByPostID = unreadIncomingRepliesByPostID
   }
 }
