@@ -10,9 +10,14 @@ final class AppSession: ObservableObject {
   private let contactStore: ContactStore
   private let relayStore: RelayStore
   private let messageStore: SessionMessageStore
+  private let noEnabledRelaysMessage =
+    "No relays are enabled. Enable at least one relay in Settings."
+  private let relayOfflineMessage = "You're offline. Waiting for a relay connection."
+  private var hasShownOfflineToastForCurrentOutage = false
 
   @Published var composeError: String?
   @Published private(set) var hasIdentity = false
+  @Published private(set) var didFinishBoot = false
 
   init(modelContext: ModelContext) {
     self.modelContext = modelContext
@@ -24,6 +29,9 @@ final class AppSession: ObservableObject {
   }
 
   func boot() {
+    didFinishBoot = false
+    defer { didFinishBoot = true }
+
     identityService.loadIdentity()
     refreshIdentityState()
     LocalNotificationService.shared.configure()
@@ -55,6 +63,27 @@ final class AppSession: ObservableObject {
 
   private func report(error: Error) {
     composeError = error.localizedDescription
+  }
+
+  private func refreshRelayConnectivityAlert() throws {
+    let enabledRelays = try relayStore.fetchRelays().filter(\.isEnabled)
+    guard !enabledRelays.isEmpty else { return }
+
+    let hasConnectedRelay = enabledRelays.contains {
+      $0.status == .connected || $0.status == .readOnly
+    }
+
+    if hasConnectedRelay {
+      hasShownOfflineToastForCurrentOutage = false
+      if composeError == relayOfflineMessage {
+        composeError = nil
+      }
+      return
+    }
+
+    guard !hasShownOfflineToastForCurrentOutage else { return }
+    composeError = relayOfflineMessage
+    hasShownOfflineToastForCurrentOutage = true
   }
 
   private func isEnvironmentFlagEnabled(_ key: String) -> Bool {
@@ -140,7 +169,13 @@ final class AppSession: ObservableObject {
       return
     }
     if relayURLs.isEmpty {
-      composeError = "No enabled relays configured"
+      nostrService.stop()
+      composeError = noEnabledRelaysMessage
+      hasShownOfflineToastForCurrentOutage = false
+      return
+    }
+    if composeError == noEnabledRelaysMessage {
+      composeError = nil
     }
 
     nostrService.start(
@@ -154,15 +189,13 @@ final class AppSession: ObservableObject {
       onRelayStatus: { [weak self] relayURL, status, message in
         Task { @MainActor in
           guard let self else { return }
-          if status == .failed, let message, !message.isEmpty {
-            self.composeError = message
-          }
           do {
             try self.relayStore.updateRelayStatus(
               relayURL: relayURL,
               status: status,
               message: message
             )
+            try self.refreshRelayConnectivityAlert()
           } catch {
             self.report(error: error)
           }
@@ -179,14 +212,14 @@ final class AppSession: ObservableObject {
   @discardableResult
   func createPost(url: String, note: String?, recipientNPub: String) -> Bool {
     guard let normalizedURL = LinkstrURLValidator.normalizedWebURL(from: url) else {
-      composeError = "Invalid URL"
+      composeError = "Enter a valid URL."
       return false
     }
 
     guard let keypair = identityService.keypair,
       let recipientPublicKey = PublicKey(npub: recipientNPub)
     else {
-      composeError = "Identity or contact key is invalid"
+      composeError = "Couldn't send. Check your account and recipient Contact key (npub)."
       return false
     }
 
@@ -233,7 +266,7 @@ final class AppSession: ObservableObject {
   func sendReply(text: String, post: SessionMessageEntity) {
     guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
     guard let keypair = identityService.keypair else {
-      composeError = "Identity missing"
+      composeError = "You're signed out. Sign in to send replies."
       return
     }
 
@@ -346,44 +379,35 @@ final class AppSession: ObservableObject {
   func addRelay(url: String) {
     guard let parsedURL = normalizedRelayURL(from: url)
     else {
-      composeError = "Invalid relay URL"
+      composeError = "Enter a valid relay URL (ws:// or wss://)."
       return
     }
-    do {
+    performRelayMutation {
       try relayStore.addRelay(url: parsedURL)
-      composeError = nil
-    } catch {
-      report(error: error)
-      return
     }
-    startNostrIfPossible()
   }
 
   func removeRelay(_ relay: RelayEntity) {
-    do {
+    performRelayMutation {
       try relayStore.removeRelay(relay)
-      composeError = nil
-    } catch {
-      report(error: error)
-      return
     }
-    startNostrIfPossible()
   }
 
   func toggleRelay(_ relay: RelayEntity) {
-    do {
+    performRelayMutation {
       try relayStore.toggleRelay(relay)
-      composeError = nil
-    } catch {
-      report(error: error)
-      return
     }
-    startNostrIfPossible()
   }
 
   func resetDefaultRelays() {
-    do {
+    performRelayMutation {
       try relayStore.resetDefaultRelays()
+    }
+  }
+
+  private func performRelayMutation(_ mutation: () throws -> Void) {
+    do {
+      try mutation()
       composeError = nil
     } catch {
       report(error: error)
@@ -714,11 +738,11 @@ private enum ContactStoreError: LocalizedError {
   var errorDescription: String? {
     switch self {
     case .invalidNPub:
-      return "Invalid User Key (npub)"
+      return "Invalid Contact key (npub)."
     case .emptyDisplayName:
-      return "Display name is required"
+      return "Enter a display name."
     case .duplicateContact:
-      return "Contact already exists"
+      return "This contact is already in your list."
     }
   }
 }

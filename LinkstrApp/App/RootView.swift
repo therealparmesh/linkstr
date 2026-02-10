@@ -9,7 +9,11 @@ struct RootView: View {
     ZStack {
       LinkstrBackgroundView()
       Group {
-        if !session.hasIdentity {
+        if !session.didFinishBoot {
+          ProgressView("Loading account…")
+            .tint(LinkstrTheme.neonCyan)
+            .foregroundStyle(LinkstrTheme.textSecondary)
+        } else if !session.hasIdentity {
           OnboardingView()
         } else {
           NavigationStack {

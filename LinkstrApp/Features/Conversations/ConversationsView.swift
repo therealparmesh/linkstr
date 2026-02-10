@@ -123,7 +123,7 @@ struct ConversationsView: View {
     if summaries.isEmpty {
       ContentUnavailableView(
         "No Sessions", systemImage: "bubble.left.and.bubble.right",
-        description: Text("Share a post to start a session.")
+        description: Text("Share a link to start a session.")
       )
       .padding(.top, 64)
     } else {
@@ -237,7 +237,7 @@ private struct ConversationRowView: View {
       .frame(maxWidth: .infinity, alignment: .leading)
 
       if !summary.isKnownContact {
-        Text("NOT CONTACT")
+        Text("Unknown Contact")
           .font(.custom(LinkstrTheme.bodyFont, size: 10))
           .foregroundStyle(Color.white)
           .padding(.horizontal, 7)
@@ -293,7 +293,10 @@ private struct SessionPostsView: View {
   }
 
   private var repliesByPostID: [String: [SessionMessageEntity]] {
-    let replies = messageIndex.repliesByConversationID[conversationID] ?? []
+    let postRootIDs = Set(posts.map(\.rootID))
+    let replies = allMessages.filter { message in
+      message.kind == .reply && postRootIDs.contains(message.rootID)
+    }
     return Dictionary(grouping: replies, by: \.rootID)
   }
 
@@ -327,7 +330,7 @@ private struct SessionPostsView: View {
         if sortedPosts.isEmpty {
           ContentUnavailableView(
             "No Posts Yet", systemImage: "link.badge.plus",
-            description: Text("Share a post in this session.")
+            description: Text("Share a link in this session.")
           )
           .padding(.top, 24)
         } else {
@@ -435,11 +438,11 @@ private struct PostCardView: View {
         }
 
         HStack(spacing: 8) {
-          Text("\(replyCount) replies")
+          Text(replyCountLabel)
             .font(.caption)
             .foregroundStyle(LinkstrTheme.textSecondary)
           if unreadReplyCount > 0 {
-            Text("\(unreadReplyCount) unread")
+            Text(unreadReplyCountLabel)
               .font(.caption)
               .foregroundStyle(LinkstrTheme.neonAmber)
           }
@@ -447,7 +450,7 @@ private struct PostCardView: View {
             .font(.caption)
             .foregroundStyle(LinkstrTheme.textSecondary)
           if let latestReplyTimestamp {
-            Text("updated \(latestReplyTimestamp.linkstrListTimestampLabel)")
+            Text("Updated \(latestReplyTimestamp.linkstrListTimestampLabel)")
               .font(.caption)
               .foregroundStyle(LinkstrTheme.textSecondary)
               .lineLimit(1)
@@ -475,6 +478,14 @@ private struct PostCardView: View {
 
   private var contentKindLabel: String {
     URLClassifier.mediaStrategy(for: post.url).contentKindLabel
+  }
+
+  private var replyCountLabel: String {
+    replyCount == 1 ? "1 reply" : "\(replyCount) replies"
+  }
+
+  private var unreadReplyCountLabel: String {
+    unreadReplyCount == 1 ? "1 unread" : "\(unreadReplyCount) unread"
   }
 
   @ViewBuilder

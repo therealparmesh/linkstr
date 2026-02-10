@@ -2,7 +2,7 @@ import SwiftUI
 
 struct OnboardingView: View {
   @EnvironmentObject private var session: AppSession
-  @State private var nsec = ""
+  @State private var secretKey = ""
 
   var body: some View {
     NavigationStack {
@@ -19,7 +19,7 @@ struct OnboardingView: View {
 
             VStack(alignment: .leading, spacing: 10) {
               LinkstrSectionHeader(title: "Sign In")
-              TextField("nsec1...", text: $nsec)
+              TextField("Secret Key (nsec1...)", text: $secretKey)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled(true)
                 .padding(12)
@@ -28,13 +28,13 @@ struct OnboardingView: View {
                     .fill(LinkstrTheme.panelSoft)
                 )
               Button {
-                session.importNsec(nsec)
+                session.importNsec(secretKey)
               } label: {
-                Label("Sign In", systemImage: "arrow.right.circle.fill")
+                Label("Sign In with Secret Key (nsec)", systemImage: "arrow.right.circle.fill")
                   .frame(maxWidth: .infinity)
               }
               .buttonStyle(LinkstrPrimaryButtonStyle())
-              .disabled(nsec.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+              .disabled(secretKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             .padding(12)
             .linkstrNeonCard()

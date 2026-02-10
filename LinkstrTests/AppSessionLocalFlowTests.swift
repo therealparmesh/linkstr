@@ -37,11 +37,11 @@ final class AppSessionLocalFlowTests: XCTestCase {
 
       let didAddDuplicate = session.addContact(npub: npub, displayName: "Alice 2")
       XCTAssertFalse(didAddDuplicate)
-      XCTAssertEqual(session.composeError, "Contact already exists")
+      XCTAssertEqual(session.composeError, "This contact is already in your list.")
 
       let didAddInvalid = session.addContact(npub: "not-an-npub", displayName: "Bob")
       XCTAssertFalse(didAddInvalid)
-      XCTAssertEqual(session.composeError, "Invalid User Key (npub)")
+      XCTAssertEqual(session.composeError, "Invalid Contact key (npub).")
     }
   }
 
@@ -66,7 +66,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
       displayName: "Alice Updated"
     )
     XCTAssertFalse(didUpdateWithDuplicate)
-    XCTAssertEqual(session.composeError, "Contact already exists")
+    XCTAssertEqual(session.composeError, "This contact is already in your list.")
 
     let didUpdate = session.updateContact(
       alice, npub: replacementNPub, displayName: "Alice Updated")
@@ -201,10 +201,10 @@ final class AppSessionLocalFlowTests: XCTestCase {
     let (session, container) = try makeSession()
 
     session.addRelay(url: "https://invalid-relay.example.com")
-    XCTAssertEqual(session.composeError, "Invalid relay URL")
+    XCTAssertEqual(session.composeError, "Enter a valid relay URL (ws:// or wss://).")
 
     session.addRelay(url: "wss://")
-    XCTAssertEqual(session.composeError, "Invalid relay URL")
+    XCTAssertEqual(session.composeError, "Enter a valid relay URL (ws:// or wss://).")
     XCTAssertTrue(try fetchRelays(in: container.mainContext).isEmpty)
 
     session.addRelay(url: "wss://relay.example.com")
@@ -267,7 +267,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
 
     session.createPost(url: "not-a-url", note: nil, recipientNPub: recipientNPub)
 
-    XCTAssertEqual(session.composeError, "Invalid URL")
+    XCTAssertEqual(session.composeError, "Enter a valid URL.")
     XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
   }
 
@@ -279,7 +279,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
 
     session.createPost(url: "ftp://example.com/file.mp4", note: nil, recipientNPub: recipientNPub)
 
-    XCTAssertEqual(session.composeError, "Invalid URL")
+    XCTAssertEqual(session.composeError, "Enter a valid URL.")
     XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
   }
 

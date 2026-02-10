@@ -5,8 +5,8 @@
 ## Product behavior
 
 - Identity
-  - Sign in with `nsec` or create a new keypair.
-  - `User Key (npub)` is visible in Share and Settings.
+  - Sign in with `Secret Key (nsec)` or create a new keypair.
+  - `Contact key (npub)` is visible in Share and Settings.
   - `Secret Key (nsec)` is reveal/copy only in Settings.
   - Log out is available in Settings.
 - Messaging
@@ -20,7 +20,7 @@
   - Unknown peers appear directly in Sessions (no invite flow).
   - Contacts are local-only (no follow event is published).
   - Add/edit/delete contacts locally.
-  - Add contact flow supports camera QR scan to prefill `User Key (npub)`.
+  - Add contact flow supports camera QR scan to prefill `Contact key (npub)`.
   - New post composer uses contact selection by default. From inside a known-contact session, recipient is preselected; from inside an unknown-peer session, recipient is locked to that peer.
   - Share extension sends to a selected contact with URL + optional note.
 - Read/unread
@@ -30,6 +30,8 @@
 - Relays
   - Add/remove/toggle relays.
   - Relay health status shown by colored dot.
+  - Relay disconnect/reconnect chatter is suppressed in toasts.
+  - Offline toast appears only when zero enabled relays are connected.
   - Relays sorted alphabetically in Settings.
   - Reset to default relays from Settings.
 - Media
@@ -52,7 +54,7 @@
 - Contacts, messages, relay settings, and cached media are local app data.
 - Uninstall removes local app data.
 - Identity key is stored in keychain. Keychain entries may survive reinstall on the same device, but do not rely on that for recovery.
-- For reliable recovery across devices/reinstalls, back up your `nsec` and sign in again.
+- For reliable recovery across devices/reinstalls, back up your `Secret Key (nsec)` and sign in again.
 
 ## Open in Xcode
 

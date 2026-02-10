@@ -1,7 +1,7 @@
 import Foundation
 import NostrSDK
 
-enum UserKeyParser {
+enum ContactKeyParser {
   static func extractNPub(from raw: String) -> String? {
     let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return nil }

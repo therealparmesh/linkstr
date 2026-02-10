@@ -14,9 +14,9 @@ struct ShareExtensionRootView: View {
             .autocorrectionDisabled(true)
         }
 
-        Section("Contact") {
+        Section("Recipient") {
           Picker("Recipient", selection: $viewModel.selectedContact) {
-            Text("Select").tag(ContactSnapshot?.none)
+            Text("Choose contact").tag(ContactSnapshot?.none)
             ForEach(viewModel.contacts) { contact in
               Text(contact.displayName).tag(ContactSnapshot?.some(contact))
             }
@@ -34,7 +34,7 @@ struct ShareExtensionRootView: View {
           }
         }
       }
-      .navigationTitle("Share to linkstr")
+      .navigationTitle("Send with linkstr")
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
           Button("Cancel") { onCancel() }

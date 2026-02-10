@@ -30,11 +30,11 @@ final class ShareExtensionViewModel: ObservableObject {
 
   func send() {
     guard let normalizedURL = LinkstrURLValidator.normalizedWebURL(from: incomingURL) else {
-      errorMessage = "Invalid URL"
+      errorMessage = "Enter a valid URL."
       return
     }
     guard let selectedContact else {
-      errorMessage = "Select a contact"
+      errorMessage = "Choose a contact."
       return
     }
 
@@ -48,7 +48,7 @@ final class ShareExtensionViewModel: ObservableObject {
       try store.appendPendingShare(item)
       errorMessage = nil
     } catch {
-      errorMessage = "Unable to queue share: \(error.localizedDescription)"
+      errorMessage = "Couldn't queue this share. Please try again."
     }
   }
 

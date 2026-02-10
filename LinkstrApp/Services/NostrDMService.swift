@@ -269,11 +269,11 @@ enum NostrServiceError: Error, LocalizedError {
   var errorDescription: String? {
     switch self {
     case .missingIdentity:
-      return "No active identity."
+      return "You're signed out. Sign in to continue."
     case .payloadEncodingFailed:
-      return "Unable to encode linkstr payload."
+      return "Couldn't prepare this message. Try again."
     case .invalidPubkey:
-      return "Invalid recipient pubkey."
+      return "Invalid recipient Contact key (npub)."
     }
   }
 }

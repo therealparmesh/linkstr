@@ -163,11 +163,11 @@ struct ThreadView: View {
       HStack(spacing: 8) {
         Image(systemName: "bubble.left.and.bubble.right")
           .foregroundStyle(LinkstrTheme.textSecondary)
-        Text("\(replies.count) replies")
+        Text(replyCountLabel)
           .font(.caption)
           .foregroundStyle(LinkstrTheme.textSecondary)
         if unreadIncomingReplyCount > 0 {
-          Text("\(unreadIncomingReplyCount) unread")
+          Text(unreadIncomingReplyCountLabel)
             .font(.caption)
             .foregroundStyle(LinkstrTheme.neonAmber)
         }
@@ -199,6 +199,7 @@ struct ThreadView: View {
         Button("Open in Safari") {
           openURL(url)
         }
+        .frame(maxWidth: .infinity)
         .buttonStyle(LinkstrPrimaryButtonStyle())
       }
     }
@@ -295,17 +296,17 @@ struct ThreadView: View {
         mediaSurface {
           InlineVideoPlayer(media: media)
         }
-        HStack(spacing: 8) {
-          Button("Use Embedded Player") {
-            localPlaybackMode = .embedPreferred
-          }
-          .buttonStyle(LinkstrSecondaryButtonStyle())
-
-          Button("Open Embed Fullscreen") {
-            fullScreenWebItem = FullScreenWebItem(url: embedURL)
-          }
-          .buttonStyle(LinkstrSecondaryButtonStyle())
+        Button("Use Embedded Player") {
+          localPlaybackMode = .embedPreferred
         }
+        .frame(maxWidth: .infinity)
+        .buttonStyle(LinkstrSecondaryButtonStyle())
+
+        Button("Open Embed Fullscreen") {
+          fullScreenWebItem = FullScreenWebItem(url: embedURL)
+        }
+        .frame(maxWidth: .infinity)
+        .buttonStyle(LinkstrSecondaryButtonStyle())
       }
       .frame(maxWidth: .infinity, alignment: .leading)
     case .cannotExtract:
@@ -313,7 +314,7 @@ struct ThreadView: View {
     case nil:
       HStack(spacing: 8) {
         ProgressView()
-        Text("Preparing local playback")
+        Text("Preparing video playback…")
           .font(.footnote)
           .foregroundStyle(.secondary)
       }
@@ -328,7 +329,7 @@ struct ThreadView: View {
       }
 
       if let extractionFallbackReason {
-        Text("Local playback unavailable: \(extractionFallbackReason)")
+        Text("Video playback unavailable: \(extractionFallbackReason)")
           .font(.footnote)
           .foregroundStyle(LinkstrTheme.textSecondary)
       }
@@ -343,17 +344,20 @@ struct ThreadView: View {
           }
         }
       }
+      .frame(maxWidth: .infinity)
       .buttonStyle(LinkstrSecondaryButtonStyle())
 
       Button("Open Embed Fullscreen") {
         fullScreenWebItem = FullScreenWebItem(url: embedURL)
       }
+      .frame(maxWidth: .infinity)
       .buttonStyle(LinkstrSecondaryButtonStyle())
 
       if let sourceURL {
         Button("Open Source in Safari") {
           openURL(sourceURL)
         }
+        .frame(maxWidth: .infinity)
         .buttonStyle(LinkstrSecondaryButtonStyle())
       }
     }
@@ -366,6 +370,16 @@ struct ThreadView: View {
       .aspectRatio(mediaAspectRatio, contentMode: .fit)
       .background(LinkstrTheme.panelSoft)
       .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+  }
+
+  private var replyCountLabel: String {
+    replies.count == 1 ? "1 reply" : "\(replies.count) replies"
+  }
+
+  private var unreadIncomingReplyCountLabel: String {
+    unreadIncomingReplyCount == 1
+      ? "1 unread"
+      : "\(unreadIncomingReplyCount) unread"
   }
 }
 

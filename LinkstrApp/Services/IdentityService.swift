@@ -63,11 +63,11 @@ enum IdentityError: Error, LocalizedError {
   var errorDescription: String? {
     switch self {
     case .invalidNsec:
-      return "Invalid nsec key."
+      return "Invalid Secret Key (nsec)."
     case .keyGenerationFailed:
-      return "Unable to generate a new keypair."
+      return "Couldn't create a new account. Please try again."
     case .identityMissing:
-      return "No identity found."
+      return "No account found."
     }
   }
 }

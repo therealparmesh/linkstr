@@ -9,22 +9,15 @@ enum KeychainStoreError: Error, LocalizedError {
 
   var errorDescription: String? {
     switch self {
-    case .saveFailed(let status):
-      return "Failed to save key material: \(Self.message(for: status))."
-    case .readFailed(let status):
-      return "Failed to read key material: \(Self.message(for: status))."
-    case .deleteFailed(let status):
-      return "Failed to delete key material: \(Self.message(for: status))."
+    case .saveFailed:
+      return "Couldn't save account keys on this device."
+    case .readFailed:
+      return "Couldn't load account keys from this device."
+    case .deleteFailed:
+      return "Couldn't remove account keys from this device."
     case .decodeFailed:
-      return "Stored key material is corrupted."
+      return "Stored account keys are unreadable."
     }
-  }
-
-  private static func message(for status: OSStatus) -> String {
-    if let message = SecCopyErrorMessageString(status, nil) as String? {
-      return "\(message) (OSStatus \(status))"
-    }
-    return "OSStatus \(status)"
   }
 }
 

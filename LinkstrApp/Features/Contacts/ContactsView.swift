@@ -104,8 +104,8 @@ private struct ContactDetailView: View {
                 .fill(LinkstrTheme.panelSoft)
             )
 
-          LinkstrSectionHeader(title: "User Key (npub)")
-          TextField("User Key (npub1...)", text: $npub, axis: .vertical)
+          LinkstrSectionHeader(title: "Contact key (npub)")
+          TextField("Contact key (npub1...)", text: $npub, axis: .vertical)
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled(true)
             .lineLimit(2...4)
@@ -194,7 +194,7 @@ struct AddContactSheet: View {
             .buttonStyle(LinkstrSecondaryButtonStyle())
           }
 
-          TextField("User Key (npub1...)", text: $npub)
+          TextField("Contact key (npub1...)", text: $npub)
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled(true)
             .disabled(isNPubPrefilled)
@@ -243,11 +243,11 @@ struct AddContactSheet: View {
       }
       .sheet(isPresented: $isPresentingScanner) {
         LinkstrQRScannerSheet { scannedValue in
-          if let scannedNPub = UserKeyParser.extractNPub(from: scannedValue) {
+          if let scannedNPub = ContactKeyParser.extractNPub(from: scannedValue) {
             npub = scannedNPub
             scannerErrorMessage = nil
           } else {
-            scannerErrorMessage = "No valid User Key (npub) found in that QR code."
+            scannerErrorMessage = "No valid Contact key (npub) found in that QR code."
           }
         }
       }
@@ -255,7 +255,7 @@ struct AddContactSheet: View {
   }
 }
 
-private struct LinkstrQRScannerSheet: View {
+struct LinkstrQRScannerSheet: View {
   @Environment(\.dismiss) private var dismiss
 
   let onScanned: (String) -> Void
@@ -358,7 +358,7 @@ private struct LinkstrQRScannerAccessDeniedView: View {
       Text("Camera Access Required")
         .font(.custom(LinkstrTheme.titleFont, size: 18))
         .foregroundStyle(.white)
-      Text("Enable camera access in Settings to scan a User Key (npub) QR code.")
+      Text("Enable camera access in Settings to scan a Contact key (npub) QR code.")
         .font(.custom(LinkstrTheme.bodyFont, size: 14))
         .foregroundStyle(LinkstrTheme.textSecondary)
         .multilineTextAlignment(.center)

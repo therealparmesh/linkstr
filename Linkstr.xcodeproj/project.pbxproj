@@ -14,7 +14,7 @@
 		1956EBD013DF5C302F70763D /* RelayDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DBA0BC7B47AFD11179DB175 /* RelayDefaults.swift */; };
 		1B217C49CE01F01037AFE198 /* URLMetadataService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7805C59C56EC4D0C6C28B4B /* URLMetadataService.swift */; };
 		24629555B44DBF5E0273B1B6 /* LinkstrApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C63481E39A2827C9A3361C9 /* LinkstrApp.swift */; };
-		281F1A865026BA62008D1E0E /* UserKeyParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F6ACEA4DC02F9BEDF3112F2 /* UserKeyParserTests.swift */; };
+		281F1A865026BA62008D1E0E /* ContactKeyParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F6ACEA4DC02F9BEDF3112F2 /* ContactKeyParserTests.swift */; };
 		2B15250FD913F0FDACA3E00F /* RelayEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE9431738F7A0B23E194B322 /* RelayEntity.swift */; };
 		32FFE423A22C32BFDB47CC49 /* ShareExtensionRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A9F22ECBACE38B17C2622ED /* ShareExtensionRootView.swift */; };
 		356FD19CEAD5CA1800AC4812 /* AppGroupStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D923A2E082640CA1F0C37FF7 /* AppGroupStore.swift */; };
@@ -30,7 +30,7 @@
 		61BE8DAE2BADCD8F36FE84C8 /* AppSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37C24617515D81FAA072295F /* AppSession.swift */; };
 		6C78539BB6DE97B0777D76D8 /* ShareIdentityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F12865F1DBAEB780B3E3EF3 /* ShareIdentityView.swift */; };
 		6EB7676D56763E9FED69A718 /* HLSDownloadManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B818363C936E8DBB7C2F538E /* HLSDownloadManager.swift */; };
-		702E2052109F58F26264BD6F /* UserKeyParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87420526775D753396D8622E /* UserKeyParser.swift */; };
+		702E2052109F58F26264BD6F /* ContactKeyParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87420526775D753396D8622E /* ContactKeyParser.swift */; };
 		703AB880A3B1547E90E1A1D1 /* NostrDMService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB411CF847C9613148DBF8EC /* NostrDMService.swift */; };
 		7592DF283059C72B672E2E44 /* LinkstrPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 069D5C271EC9953A4A85B9C7 /* LinkstrPayload.swift */; };
 		7C63F2D9BC7EE413FBAA9802 /* ConversationID.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2B58768540021D895D6791E /* ConversationID.swift */; };
@@ -97,7 +97,7 @@
 /* Begin PBXFileReference section */
 		069D5C271EC9953A4A85B9C7 /* LinkstrPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkstrPayload.swift; sourceTree = "<group>"; };
 		076BFE5567285D2651D29E76 /* LinkstrPayloadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkstrPayloadTests.swift; sourceTree = "<group>"; };
-		1F6ACEA4DC02F9BEDF3112F2 /* UserKeyParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserKeyParserTests.swift; sourceTree = "<group>"; };
+		1F6ACEA4DC02F9BEDF3112F2 /* ContactKeyParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactKeyParserTests.swift; sourceTree = "<group>"; };
 		22CECBEA34B217B7CA645A04 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		2DBA0BC7B47AFD11179DB175 /* RelayDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayDefaults.swift; sourceTree = "<group>"; };
 		2F12865F1DBAEB780B3E3EF3 /* ShareIdentityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareIdentityView.swift; sourceTree = "<group>"; };
@@ -129,7 +129,7 @@
 		73DB81B29D4FCF3EB0F03DA1 /* RelayStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayStore.swift; sourceTree = "<group>"; };
 		77319D5B63F27BDBC54D4DC3 /* Linkstr.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Linkstr.entitlements; sourceTree = "<group>"; };
 		848DAED86706C32D1050B92C /* ConversationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationsView.swift; sourceTree = "<group>"; };
-		87420526775D753396D8622E /* UserKeyParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserKeyParser.swift; sourceTree = "<group>"; };
+		87420526775D753396D8622E /* ContactKeyParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactKeyParser.swift; sourceTree = "<group>"; };
 		883F83A19614596E085D64F5 /* SocialURLHeuristics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialURLHeuristics.swift; sourceTree = "<group>"; };
 		89C3BB8D54724C74F2D24727 /* ThreadView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadView.swift; sourceTree = "<group>"; };
 		8C14B65A3FC6EC731BBAA10B /* DateLabelFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateLabelFormatter.swift; sourceTree = "<group>"; };
@@ -172,7 +172,7 @@
 				9FED3B5DF5A048969C4C2153 /* IdentityServiceTests.swift */,
 				076BFE5567285D2651D29E76 /* LinkstrPayloadTests.swift */,
 				3DF2BD42808FC977F554891B /* URLClassifierTests.swift */,
-				1F6ACEA4DC02F9BEDF3112F2 /* UserKeyParserTests.swift */,
+				1F6ACEA4DC02F9BEDF3112F2 /* ContactKeyParserTests.swift */,
 			);
 			path = LinkstrTests;
 			sourceTree = "<group>";
@@ -186,7 +186,7 @@
 				47638848BBE7A7042DEA8161 /* QRCodeGenerator.swift */,
 				883F83A19614596E085D64F5 /* SocialURLHeuristics.swift */,
 				68350273DCA0FBB994BE216F /* URLClassifier.swift */,
-				87420526775D753396D8622E /* UserKeyParser.swift */,
+				87420526775D753396D8622E /* ContactKeyParser.swift */,
 			);
 			path = Utils;
 			sourceTree = "<group>";
@@ -514,7 +514,7 @@
 				C09D954BF5807BDC4E25678D /* ThreadView.swift in Sources */,
 				831A7E879E5FAF0EBD56753D /* URLClassifier.swift in Sources */,
 				1B217C49CE01F01037AFE198 /* URLMetadataService.swift in Sources */,
-				702E2052109F58F26264BD6F /* UserKeyParser.swift in Sources */,
+				702E2052109F58F26264BD6F /* ContactKeyParser.swift in Sources */,
 				134ACA05E431DD04BB5CC815 /* VideoCacheService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -542,7 +542,7 @@
 				401F645DC5E055DAB60CA01D /* IdentityServiceTests.swift in Sources */,
 				88DCCA79F01DAC7A398ADF43 /* LinkstrPayloadTests.swift in Sources */,
 				5C081B12920542652F7743FA /* URLClassifierTests.swift in Sources */,
-				281F1A865026BA62008D1E0E /* UserKeyParserTests.swift in Sources */,
+				281F1A865026BA62008D1E0E /* ContactKeyParserTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

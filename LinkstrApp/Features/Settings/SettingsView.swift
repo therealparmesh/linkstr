@@ -186,7 +186,7 @@ struct SettingsView: View {
     DisclosureGroup(isExpanded: $isIdentityExpanded) {
       VStack(alignment: .leading, spacing: 10) {
         if let npub = session.identityService.npub {
-          LinkstrSectionHeader(title: "User Key (npub)")
+          LinkstrSectionHeader(title: "Contact key (npub)")
           Text(npub)
             .font(.custom(LinkstrTheme.bodyFont, size: 12))
             .foregroundStyle(LinkstrTheme.textSecondary)
@@ -230,7 +230,7 @@ struct SettingsView: View {
 
           if isNsecVisible {
             LinkstrSectionHeader(title: "Secret Key (nsec)")
-            Text(revealedNsec.isEmpty ? "Unable to reveal nsec." : revealedNsec)
+            Text(revealedNsec.isEmpty ? "Unable to reveal Secret Key (nsec)." : revealedNsec)
               .font(.custom(LinkstrTheme.bodyFont, size: 12))
               .foregroundStyle(LinkstrTheme.textSecondary)
               .textSelection(.enabled)
@@ -250,7 +250,7 @@ struct SettingsView: View {
           }
           .buttonStyle(LinkstrDangerButtonStyle())
         } else {
-          Text("No identity available.")
+          Text("No account found. Sign in with a Secret Key (nsec) or create one.")
             .font(.custom(LinkstrTheme.bodyFont, size: 12))
             .foregroundStyle(LinkstrTheme.textSecondary)
         }
