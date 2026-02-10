@@ -12,16 +12,16 @@ private struct ConversationSummary: Identifiable {
   let latestNote: String?
   let isArchived: Bool
   let isKnownContact: Bool
-  let unreadItemCount: Int
+  let hasUnread: Bool
 }
 
 private struct ConversationMessageIndex {
   let postsByConversationID: [String: [SessionMessageEntity]]
-  let unreadIncomingRepliesByPostID: [String: Int]
+  let unreadIncomingReplyPostIDs: Set<String>
 
   init(messages: [SessionMessageEntity], myPubkey: String?) {
     var postsByConversationID: [String: [SessionMessageEntity]] = [:]
-    var unreadIncomingRepliesByPostID: [String: Int] = [:]
+    var unreadIncomingReplyPostIDs = Set<String>()
 
     for message in messages {
       switch message.kind {
@@ -29,13 +29,13 @@ private struct ConversationMessageIndex {
         postsByConversationID[message.conversationID, default: []].append(message)
       case .reply:
         if let myPubkey, message.senderPubkey != myPubkey, message.readAt == nil {
-          unreadIncomingRepliesByPostID[message.rootID, default: 0] += 1
+          unreadIncomingReplyPostIDs.insert(message.rootID)
         }
       }
     }
 
     self.postsByConversationID = postsByConversationID
-    self.unreadIncomingRepliesByPostID = unreadIncomingRepliesByPostID
+    self.unreadIncomingReplyPostIDs = unreadIncomingReplyPostIDs
   }
 }
 
@@ -71,15 +71,15 @@ struct ConversationsView: View {
           : (peerNPub ?? session.contactName(for: peerPubkey, contacts: contacts))
         let isArchived = conversationPosts.allSatisfy(\.isArchived)
         let myPubkey = session.identityService.pubkeyHex
-        let unreadItemCount = conversationPosts.reduce(0) { partial, post in
+        let hasUnread = conversationPosts.contains { post in
           let hasUnreadPost: Bool
           if let myPubkey {
             hasUnreadPost = post.senderPubkey != myPubkey && post.readAt == nil
           } else {
             hasUnreadPost = false
           }
-          let hasUnreadReplies = (messageIndex.unreadIncomingRepliesByPostID[post.rootID] ?? 0) > 0
-          return partial + ((hasUnreadPost || hasUnreadReplies) ? 1 : 0)
+          let hasUnreadReplies = messageIndex.unreadIncomingReplyPostIDs.contains(post.rootID)
+          return hasUnreadPost || hasUnreadReplies
         }
 
         return ConversationSummary(
@@ -91,7 +91,7 @@ struct ConversationsView: View {
           latestNote: normalizedNote(latestPost.note),
           isArchived: isArchived,
           isKnownContact: knownContact,
-          unreadItemCount: unreadItemCount
+          hasUnread: hasUnread
         )
       }
       .sorted { $0.latestTimestamp > $1.latestTimestamp }
@@ -241,13 +241,11 @@ private struct ConversationRowView: View {
           .background(LinkstrTheme.neonAmber, in: Capsule())
       }
 
-      if summary.unreadItemCount > 0 {
-        Text("\(summary.unreadItemCount)")
-          .font(.custom(LinkstrTheme.bodyFont, size: 11))
-          .foregroundStyle(Color.white)
-          .padding(.horizontal, 7)
-          .padding(.vertical, 4)
-          .background(LinkstrTheme.neonAmber, in: Capsule())
+      if summary.hasUnread {
+        Circle()
+          .fill(LinkstrTheme.neonAmber)
+          .frame(width: 8, height: 8)
+          .accessibilityLabel("Unread")
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
@@ -300,9 +298,9 @@ private struct SessionPostsView: View {
     posts.sorted { $0.timestamp > $1.timestamp }
   }
 
-  private var unreadIncomingReplyCountByPostID: [String: Int] {
+  private var unreadIncomingReplyPostIDs: Set<String> {
     let rootIDs = Set(posts.map(\.rootID))
-    return messageIndex.unreadIncomingRepliesByPostID.filter { rootIDs.contains($0.key) }
+    return messageIndex.unreadIncomingReplyPostIDs.intersection(rootIDs)
   }
 
   private var sessionComposerContext:
@@ -338,7 +336,7 @@ private struct SessionPostsView: View {
               PostCardView(
                 post: post,
                 replyCount: repliesByPostID[post.rootID]?.count ?? 0,
-                unreadReplyCount: unreadIncomingReplyCountByPostID[post.rootID] ?? 0,
+                hasUnreadReplies: unreadIncomingReplyPostIDs.contains(post.rootID),
                 latestReplyTimestamp: repliesByPostID[post.rootID]?.max(by: {
                   $0.timestamp < $1.timestamp
                 })?.timestamp
@@ -403,7 +401,7 @@ private struct SessionPostsView: View {
 private struct PostCardView: View {
   let post: SessionMessageEntity
   let replyCount: Int
-  let unreadReplyCount: Int
+  let hasUnreadReplies: Bool
   let latestReplyTimestamp: Date?
 
   var body: some View {
@@ -437,10 +435,11 @@ private struct PostCardView: View {
           Text(replyCountLabel)
             .font(.caption)
             .foregroundStyle(LinkstrTheme.textSecondary)
-          if unreadReplyCount > 0 {
-            Text(unreadReplyCountLabel)
-              .font(.caption)
-              .foregroundStyle(LinkstrTheme.neonAmber)
+          if hasUnreadReplies {
+            Circle()
+              .fill(LinkstrTheme.neonAmber)
+              .frame(width: 7, height: 7)
+              .accessibilityLabel("Unread replies")
           }
           Text(post.timestamp.linkstrListTimestampLabel)
             .font(.caption)
@@ -478,10 +477,6 @@ private struct PostCardView: View {
 
   private var replyCountLabel: String {
     replyCount == 1 ? "1 reply" : "\(replyCount) replies"
-  }
-
-  private var unreadReplyCountLabel: String {
-    unreadReplyCount == 1 ? "1 unread" : "\(unreadReplyCount) unread"
   }
 
   @ViewBuilder

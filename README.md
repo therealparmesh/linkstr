@@ -26,7 +26,8 @@
 - Read/unread
   - Opening a session marks inbound posts in that session as read.
   - Opening a post thread marks inbound replies for that post as read.
-  - Session unread count is per-post unread items (no reply double-counting).
+  - Unread status is shown as a dot indicator (no numeric badge).
+  - Session unread state is per-post (no reply double-counting).
 - Relays
   - Add/remove/toggle relays.
   - Relay health status shown by colored dot.

@@ -46,9 +46,9 @@ struct ThreadView: View {
     return session.contactName(for: other, contacts: contacts)
   }
 
-  private var unreadIncomingReplyCount: Int {
-    guard let myPubkey = session.identityService.pubkeyHex else { return 0 }
-    return replies.filter { $0.senderPubkey != myPubkey && $0.readAt == nil }.count
+  private var hasUnreadIncomingReplies: Bool {
+    guard let myPubkey = session.identityService.pubkeyHex else { return false }
+    return replies.contains { $0.senderPubkey != myPubkey && $0.readAt == nil }
   }
 
   private var mediaStrategy: URLClassifier.MediaStrategy {
@@ -166,10 +166,11 @@ struct ThreadView: View {
         Text(replyCountLabel)
           .font(.caption)
           .foregroundStyle(LinkstrTheme.textSecondary)
-        if unreadIncomingReplyCount > 0 {
-          Text(unreadIncomingReplyCountLabel)
-            .font(.caption)
-            .foregroundStyle(LinkstrTheme.neonAmber)
+        if hasUnreadIncomingReplies {
+          Circle()
+            .fill(LinkstrTheme.neonAmber)
+            .frame(width: 7, height: 7)
+            .accessibilityLabel("Unread replies")
         }
       }
     }
@@ -374,12 +375,6 @@ struct ThreadView: View {
 
   private var replyCountLabel: String {
     replies.count == 1 ? "1 reply" : "\(replies.count) replies"
-  }
-
-  private var unreadIncomingReplyCountLabel: String {
-    unreadIncomingReplyCount == 1
-      ? "1 unread"
-      : "\(unreadIncomingReplyCount) unread"
   }
 }
 
