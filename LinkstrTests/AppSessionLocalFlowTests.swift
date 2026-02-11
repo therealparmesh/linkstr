@@ -236,6 +236,103 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertTrue(relays.allSatisfy(\.isEnabled))
   }
 
+  func testRelayConnectivityStateClassification() throws {
+    let (session, _) = try makeSession()
+
+    XCTAssertEqual(session.relayConnectivityState(for: []), .noEnabledRelays)
+    XCTAssertEqual(
+      session.relayConnectivityState(for: [
+        RelayEntity(url: "wss://one.example.com", status: .connected)
+      ]),
+      .online
+    )
+    XCTAssertEqual(
+      session.relayConnectivityState(for: [
+        RelayEntity(url: "wss://one.example.com", status: .readOnly)
+      ]),
+      .online
+    )
+    XCTAssertEqual(
+      session.relayConnectivityState(
+        for: [RelayEntity(url: "wss://one.example.com", status: .reconnecting)]
+      ),
+      .reconnecting
+    )
+    XCTAssertEqual(
+      session.relayConnectivityState(for: [
+        RelayEntity(url: "wss://one.example.com", status: .failed)
+      ]),
+      .offline
+    )
+    XCTAssertEqual(
+      session.relayConnectivityState(
+        for: [
+          RelayEntity(url: "wss://one.example.com", status: .reconnecting),
+          RelayEntity(url: "wss://two.example.com", status: .connected),
+        ]
+      ),
+      .online
+    )
+  }
+
+  func testCreatePostWithOnlyReconnectingRelaysSuppressesOfflineToast() throws {
+    let (session, container) = try makeSession(disableNostrStartupOverride: false)
+    let recipientNPub = try makeNPub()
+    try session.identityService.createNewIdentity()
+
+    let relay = RelayEntity(url: "wss://relay.example.com", status: .reconnecting)
+    container.mainContext.insert(relay)
+    try container.mainContext.save()
+
+    session.composeError = "You're offline. Waiting for a relay connection."
+    let didCreate = session.createPost(
+      url: "https://example.com/path",
+      note: nil,
+      recipientNPub: recipientNPub
+    )
+
+    XCTAssertFalse(didCreate)
+    XCTAssertNil(session.composeError)
+    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
+  }
+
+  func testCreatePostWithOfflineRelaysShowsOfflineToast() throws {
+    let (session, container) = try makeSession(disableNostrStartupOverride: false)
+    let recipientNPub = try makeNPub()
+    try session.identityService.createNewIdentity()
+
+    let relay = RelayEntity(url: "wss://relay.example.com", status: .failed)
+    container.mainContext.insert(relay)
+    try container.mainContext.save()
+
+    let didCreate = session.createPost(
+      url: "https://example.com/path",
+      note: nil,
+      recipientNPub: recipientNPub
+    )
+
+    XCTAssertFalse(didCreate)
+    XCTAssertEqual(session.composeError, "You're offline. Waiting for a relay connection.")
+    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
+  }
+
+  func testCreatePostWithNoEnabledRelaysShowsNoEnabledRelaysMessage() throws {
+    let (session, container) = try makeSession(disableNostrStartupOverride: false)
+    let recipientNPub = try makeNPub()
+    try session.identityService.createNewIdentity()
+
+    let didCreate = session.createPost(
+      url: "https://example.com/path",
+      note: nil,
+      recipientNPub: recipientNPub
+    )
+
+    XCTAssertFalse(didCreate)
+    XCTAssertEqual(
+      session.composeError, "No relays are enabled. Enable at least one relay in Settings.")
+    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
+  }
+
   func testCreatePostPersistsOutgoingRootMessage() throws {
     let (session, container) = try makeSession()
     let recipientNPub = try makeNPub()
@@ -364,7 +461,9 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertEqual(try fetchMessages(in: container.mainContext).count, 1)
   }
 
-  private func makeSession() throws -> (AppSession, ModelContainer) {
+  private func makeSession(disableNostrStartupOverride: Bool? = nil) throws -> (
+    AppSession, ModelContainer
+  ) {
     let schema = Schema([
       ContactEntity.self,
       RelayEntity.self,
@@ -372,7 +471,13 @@ final class AppSessionLocalFlowTests: XCTestCase {
     ])
     let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
     let container = try ModelContainer(for: schema, configurations: [configuration])
-    return (AppSession(modelContext: container.mainContext), container)
+    return (
+      AppSession(
+        modelContext: container.mainContext,
+        disableNostrStartupOverride: disableNostrStartupOverride
+      ),
+      container
+    )
   }
 
   private func fetchContacts(in context: ModelContext) throws -> [ContactEntity] {

@@ -4,12 +4,20 @@ import SwiftData
 
 @MainActor
 final class AppSession: ObservableObject {
+  enum RelayConnectivityState: Equatable {
+    case noEnabledRelays
+    case online
+    case reconnecting
+    case offline
+  }
+
   let identityService: IdentityService
   let nostrService: NostrDMService
   let modelContext: ModelContext
   private let contactStore: ContactStore
   private let relayStore: RelayStore
   private let messageStore: SessionMessageStore
+  private let disableNostrStartupOverride: Bool?
   private let noEnabledRelaysMessage =
     "No relays are enabled. Enable at least one relay in Settings."
   private let relayOfflineMessage = "You're offline. Waiting for a relay connection."
@@ -19,8 +27,9 @@ final class AppSession: ObservableObject {
   @Published private(set) var hasIdentity = false
   @Published private(set) var didFinishBoot = false
 
-  init(modelContext: ModelContext) {
+  init(modelContext: ModelContext, disableNostrStartupOverride: Bool? = nil) {
     self.modelContext = modelContext
+    self.disableNostrStartupOverride = disableNostrStartupOverride
     self.identityService = IdentityService()
     self.nostrService = NostrDMService()
     self.contactStore = ContactStore(modelContext: modelContext)
@@ -65,27 +74,37 @@ final class AppSession: ObservableObject {
     composeError = error.localizedDescription
   }
 
-  private func refreshRelayConnectivityAlert() throws {
-    let enabledRelays = try relayStore.fetchRelays().filter(\.isEnabled)
-    guard !enabledRelays.isEmpty else { return }
+  func relayConnectivityState(for enabledRelays: [RelayEntity]) -> RelayConnectivityState {
+    guard !enabledRelays.isEmpty else { return .noEnabledRelays }
 
-    let hasConnectedRelay = hasConnectedEnabledRelay(enabledRelays)
-
-    if hasConnectedRelay {
-      hasShownOfflineToastForCurrentOutage = false
-      if composeError == relayOfflineMessage {
-        composeError = nil
-      }
-      return
+    if enabledRelays.contains(where: { $0.status == .connected || $0.status == .readOnly }) {
+      return .online
     }
-
-    guard !hasShownOfflineToastForCurrentOutage else { return }
-    composeError = relayOfflineMessage
-    hasShownOfflineToastForCurrentOutage = true
+    if enabledRelays.contains(where: { $0.status == .reconnecting }) {
+      return .reconnecting
+    }
+    return .offline
   }
 
-  private func hasConnectedEnabledRelay(_ enabledRelays: [RelayEntity]) -> Bool {
-    enabledRelays.contains { $0.status == .connected || $0.status == .readOnly }
+  private func clearOfflineToastIfPresent() {
+    hasShownOfflineToastForCurrentOutage = false
+    if composeError == relayOfflineMessage {
+      composeError = nil
+    }
+  }
+
+  private func refreshRelayConnectivityAlert() throws {
+    let enabledRelays = try relayStore.fetchRelays().filter(\.isEnabled)
+    switch relayConnectivityState(for: enabledRelays) {
+    case .online, .reconnecting:
+      clearOfflineToastIfPresent()
+    case .offline:
+      guard !hasShownOfflineToastForCurrentOutage else { return }
+      composeError = relayOfflineMessage
+      hasShownOfflineToastForCurrentOutage = true
+    case .noEnabledRelays:
+      return
+    }
   }
 
   private func ensureRelayReadyForSend() -> Bool {
@@ -101,23 +120,25 @@ final class AppSession: ObservableObject {
       return false
     }
 
-    guard !enabledRelays.isEmpty else {
+    switch relayConnectivityState(for: enabledRelays) {
+    case .noEnabledRelays:
       composeError = noEnabledRelaysMessage
       hasShownOfflineToastForCurrentOutage = false
       return false
-    }
-
-    guard hasConnectedEnabledRelay(enabledRelays) else {
+    case .offline:
       composeError = relayOfflineMessage
       hasShownOfflineToastForCurrentOutage = true
       return false
+    case .reconnecting:
+      clearOfflineToastIfPresent()
+      return false
+    case .online:
+      hasShownOfflineToastForCurrentOutage = false
+      if composeError == relayOfflineMessage || composeError == noEnabledRelaysMessage {
+        composeError = nil
+      }
+      return true
     }
-
-    hasShownOfflineToastForCurrentOutage = false
-    if composeError == relayOfflineMessage || composeError == noEnabledRelaysMessage {
-      composeError = nil
-    }
-    return true
   }
 
   private func makeLocalEventID() -> String {
@@ -130,6 +151,10 @@ final class AppSession: ObservableObject {
   }
 
   private func shouldDisableNostrStartupForCurrentProcess() -> Bool {
+    if let disableNostrStartupOverride {
+      return disableNostrStartupOverride
+    }
+
     let isRunningTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     if !isRunningTests { return false }
     return !isEnvironmentFlagEnabled("LINKSTR_ENABLE_NOSTR_IN_TESTS")

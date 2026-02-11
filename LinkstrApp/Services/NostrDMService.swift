@@ -239,12 +239,12 @@ extension NostrDMService: @preconcurrency RelayDelegate {
       installSubscriptions()
       onRelayStatus?(relay.url.absoluteString, .connected, nil)
     case .connecting:
-      onRelayStatus?(relay.url.absoluteString, .disconnected, nil)
+      onRelayStatus?(relay.url.absoluteString, .reconnecting, nil)
     case .notConnected:
-      onRelayStatus?(relay.url.absoluteString, .disconnected, nil)
+      onRelayStatus?(relay.url.absoluteString, .reconnecting, nil)
       scheduleReconnect()
     case .error(let error):
-      onRelayStatus?(relay.url.absoluteString, .failed, error.localizedDescription)
+      onRelayStatus?(relay.url.absoluteString, .reconnecting, error.localizedDescription)
       scheduleReconnect()
     }
   }

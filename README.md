@@ -32,8 +32,8 @@
   - Add/remove/toggle relays.
   - Relay health status shown by colored dot.
   - Relay disconnect/reconnect chatter is suppressed in toasts.
-  - Offline toast appears only when zero enabled relays are connected.
-  - Sending is blocked while zero enabled relays are connected.
+  - Offline toast appears only when zero enabled relays are online and none are reconnecting.
+  - Sending is blocked while zero enabled relays are online.
   - Pending shares stay queued until a relay connection is available.
   - Relays sorted alphabetically in Settings.
   - Reset to default relays from Settings.
