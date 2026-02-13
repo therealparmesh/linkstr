@@ -34,7 +34,7 @@ struct ContactsView: View {
         systemImage: "person.2.slash",
         description: Text("Add at least one contact to start sharing links.")
       )
-      .padding(.top, 44)
+      .padding(.top, LinkstrTheme.emptyStateTopPadding)
     } else {
       ScrollView {
         LazyVStack(spacing: 0) {

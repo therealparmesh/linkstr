@@ -9,7 +9,7 @@ struct OnboardingView: View {
       ZStack {
         LinkstrBackgroundView()
         ScrollView {
-          VStack(alignment: .leading, spacing: 14) {
+          VStack(alignment: .leading, spacing: 18) {
             Text("linkstr")
               .font(.custom(LinkstrTheme.titleFont, size: 42))
               .foregroundStyle(LinkstrTheme.textPrimary)
@@ -17,7 +17,7 @@ struct OnboardingView: View {
               .font(.custom(LinkstrTheme.bodyFont, size: 14))
               .foregroundStyle(LinkstrTheme.textSecondary)
 
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 12) {
               LinkstrSectionHeader(title: "Sign In")
               TextField("Secret Key (nsec1...)", text: $secretKey)
                 .textInputAutocapitalization(.never)
@@ -35,11 +35,20 @@ struct OnboardingView: View {
               }
               .buttonStyle(LinkstrPrimaryButtonStyle())
               .disabled(secretKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-            .padding(12)
-            .linkstrNeonCard()
 
-            VStack(alignment: .leading, spacing: 10) {
+              HStack(spacing: 10) {
+                Rectangle()
+                  .fill(LinkstrTheme.textSecondary.opacity(0.26))
+                  .frame(height: 1)
+                Text("OR")
+                  .font(.custom(LinkstrTheme.titleFont, size: 13))
+                  .foregroundStyle(LinkstrTheme.textSecondary)
+                Rectangle()
+                  .fill(LinkstrTheme.textSecondary.opacity(0.26))
+                  .frame(height: 1)
+              }
+              .padding(.vertical, 6)
+
               LinkstrSectionHeader(title: "Create Account")
               Button {
                 session.ensureIdentity()
@@ -49,7 +58,7 @@ struct OnboardingView: View {
               }
               .buttonStyle(LinkstrSecondaryButtonStyle())
             }
-            .padding(12)
+            .padding(14)
             .linkstrNeonCard()
           }
           .padding(16)

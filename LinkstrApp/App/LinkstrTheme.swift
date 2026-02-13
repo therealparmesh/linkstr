@@ -13,6 +13,7 @@ enum LinkstrTheme {
 
   static let titleFont = "HelveticaNeue-Medium"
   static let bodyFont = "HelveticaNeue"
+  static let emptyStateTopPadding: CGFloat = 64
 }
 
 struct LinkstrBackgroundView: View {

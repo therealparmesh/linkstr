@@ -136,7 +136,7 @@ struct ConversationsView: View {
         "No Sessions", systemImage: "bubble.left.and.bubble.right",
         description: Text("Share a link to start a session.")
       )
-      .padding(.top, 64)
+      .padding(.top, LinkstrTheme.emptyStateTopPadding)
     } else {
       ScrollView {
         LazyVStack(spacing: 0) {

@@ -26,13 +26,15 @@ struct SettingsView: View {
 
   private var content: some View {
     ScrollView {
-      VStack(alignment: .leading, spacing: 18) {
+      VStack(alignment: .leading, spacing: 26) {
         relaysSection
         storageSection
         identitySection
       }
       .frame(maxWidth: .infinity, alignment: .leading)
-      .padding(12)
+      .padding(.horizontal, 12)
+      .padding(.top, 14)
+      .padding(.bottom, 28)
     }
     .scrollBounceBehavior(.basedOnSize)
     .confirmationDialog(
@@ -290,16 +292,7 @@ struct SettingsView: View {
           .background(LinkstrTheme.panelSoft, in: Capsule())
       }
     }
-    .padding(.horizontal, 10)
-    .padding(.vertical, 8)
-    .background(
-      RoundedRectangle(cornerRadius: 12, style: .continuous)
-        .fill(LinkstrTheme.panelSoft.opacity(0.35))
-    )
-    .overlay(
-      RoundedRectangle(cornerRadius: 12, style: .continuous)
-        .stroke(LinkstrTheme.textSecondary.opacity(0.2), lineWidth: 0.8)
-    )
+    .padding(.horizontal, 2)
   }
 
   private func statusDotColor(_ status: RelayHealthStatus) -> Color {
