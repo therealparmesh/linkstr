@@ -2,6 +2,8 @@ import SwiftData
 import SwiftUI
 
 struct MainTabView: View {
+  @EnvironmentObject private var session: AppSession
+
   private enum AppTab: String, CaseIterable, Identifiable {
     case sessions
     case contacts
@@ -33,8 +35,18 @@ struct MainTabView: View {
   @State private var isPresentingNewPost = false
   @State private var isPresentingAddContact = false
 
-  @Query(sort: [SortDescriptor(\ContactEntity.displayName)])
+  @Query(sort: [SortDescriptor(\ContactEntity.createdAt)])
   private var contacts: [ContactEntity]
+
+  private var scopedContacts: [ContactEntity] {
+    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
+    return
+      contacts
+      .filter { $0.ownerPubkey == ownerPubkey }
+      .sorted {
+        $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+      }
+  }
 
   private let tabBarHeight: CGFloat = 72
   private let tabBarBottomPadding: CGFloat = 8
@@ -69,7 +81,7 @@ struct MainTabView: View {
         .padding(.bottom, tabBarBottomPadding)
     }
     .sheet(isPresented: $isPresentingNewPost) {
-      NewPostSheet(contacts: contacts)
+      NewPostSheet(contacts: scopedContacts)
     }
     .sheet(isPresented: $isPresentingAddContact) {
       AddContactSheet()

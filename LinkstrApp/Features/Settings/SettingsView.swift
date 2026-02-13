@@ -14,7 +14,7 @@ struct SettingsView: View {
   @State private var isRelaysExpanded = true
   @State private var isStorageExpanded = true
   @State private var isIdentityExpanded = true
-  @State private var isPresentingLogoutConfirmation = false
+  @State private var isPresentingLogoutOptions = false
 
   var body: some View {
     ZStack {
@@ -35,14 +35,20 @@ struct SettingsView: View {
       .padding(12)
     }
     .scrollBounceBehavior(.basedOnSize)
-    .alert("Log Out?", isPresented: $isPresentingLogoutConfirmation) {
-      Button("Cancel", role: .cancel) {}
-      Button("Log Out", role: .destructive) {
+    .confirmationDialog(
+      "Log Out", isPresented: $isPresentingLogoutOptions, titleVisibility: .visible
+    ) {
+      Button("Log Out (Keep Local Data)", role: .destructive) {
         session.logout(clearLocalData: false)
       }
+      Button("Log Out and Clear Local Data", role: .destructive) {
+        session.logout(clearLocalData: true)
+      }
+      Button("Cancel", role: .cancel) {}
     } message: {
       Text(
-        "This signs you out but keeps local sessions and contacts on this device.")
+        "Choose whether to keep this account's local contacts/messages on this device or remove them before signing out."
+      )
     }
   }
 
@@ -243,7 +249,7 @@ struct SettingsView: View {
           }
 
           Button(role: .destructive) {
-            isPresentingLogoutConfirmation = true
+            isPresentingLogoutOptions = true
           } label: {
             Label("Log Out", systemImage: "rectangle.portrait.and.arrow.right")
               .frame(maxWidth: .infinity)

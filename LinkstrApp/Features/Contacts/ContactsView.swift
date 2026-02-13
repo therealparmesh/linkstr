@@ -3,8 +3,20 @@ import SwiftData
 import SwiftUI
 
 struct ContactsView: View {
-  @Query(sort: [SortDescriptor(\ContactEntity.displayName)])
+  @EnvironmentObject private var session: AppSession
+
+  @Query(sort: [SortDescriptor(\ContactEntity.createdAt)])
   private var contacts: [ContactEntity]
+
+  private var scopedContacts: [ContactEntity] {
+    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
+    return
+      contacts
+      .filter { $0.ownerPubkey == ownerPubkey }
+      .sorted {
+        $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+      }
+  }
 
   var body: some View {
     ZStack {
@@ -16,7 +28,7 @@ struct ContactsView: View {
 
   @ViewBuilder
   private var content: some View {
-    if contacts.isEmpty {
+    if scopedContacts.isEmpty {
       ContentUnavailableView(
         "No Contacts",
         systemImage: "person.2.slash",
@@ -26,7 +38,7 @@ struct ContactsView: View {
     } else {
       ScrollView {
         LazyVStack(spacing: 0) {
-          ForEach(contacts) { contact in
+          ForEach(scopedContacts) { contact in
             NavigationLink {
               ContactDetailView(contact: contact)
             } label: {

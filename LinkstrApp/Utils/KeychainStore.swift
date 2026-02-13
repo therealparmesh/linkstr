@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Security
 
@@ -162,4 +163,86 @@ final class KeychainStore {
         || status == errSecInteractionNotAllowed
     }
   #endif
+}
+
+enum LocalDataCryptoError: Error, LocalizedError {
+  case invalidKeyMaterial
+  case invalidCiphertext
+  case decryptionFailed
+
+  var errorDescription: String? {
+    switch self {
+    case .invalidKeyMaterial:
+      return "Stored encryption key is invalid."
+    case .invalidCiphertext:
+      return "Stored encrypted data is invalid."
+    case .decryptionFailed:
+      return "Couldn't decrypt local data for this account."
+    }
+  }
+}
+
+final class LocalDataCrypto {
+  static let shared = LocalDataCrypto()
+
+  private let keychain = KeychainStore.shared
+  private let keyPrefix = "local_data_key."
+
+  private init() {}
+
+  func encryptString(_ plaintext: String?, ownerPubkey: String) throws -> String? {
+    guard let plaintext else { return nil }
+    let key = try symmetricKey(for: ownerPubkey)
+    let data = Data(plaintext.utf8)
+    let sealedBox = try AES.GCM.seal(data, using: key)
+    guard let combined = sealedBox.combined else {
+      throw LocalDataCryptoError.invalidCiphertext
+    }
+    return combined.base64EncodedString()
+  }
+
+  func decryptString(_ ciphertext: String?, ownerPubkey: String) -> String? {
+    guard let ciphertext else { return nil }
+    do {
+      let key = try symmetricKey(for: ownerPubkey)
+      guard let combined = Data(base64Encoded: ciphertext) else {
+        throw LocalDataCryptoError.invalidCiphertext
+      }
+      let sealedBox = try AES.GCM.SealedBox(combined: combined)
+      let plaintext = try AES.GCM.open(sealedBox, using: key)
+      guard let value = String(data: plaintext, encoding: .utf8) else {
+        throw LocalDataCryptoError.decryptionFailed
+      }
+      return value
+    } catch {
+      return nil
+    }
+  }
+
+  func clearKey(ownerPubkey: String) throws {
+    try keychain.delete(keyName(for: ownerPubkey))
+  }
+
+  func digestHex(_ value: String) -> String {
+    SHA256.hash(data: Data(value.utf8)).map { String(format: "%02x", $0) }.joined()
+  }
+
+  private func symmetricKey(for ownerPubkey: String) throws -> SymmetricKey {
+    let keyName = keyName(for: ownerPubkey)
+    if let encodedKey = try keychain.get(keyName) {
+      guard let data = Data(base64Encoded: encodedKey), data.count == 32 else {
+        throw LocalDataCryptoError.invalidKeyMaterial
+      }
+      return SymmetricKey(data: data)
+    }
+
+    let key = SymmetricKey(size: .bits256)
+    let keyData = Data(key.withUnsafeBytes { Data($0) })
+    try keychain.set(keyData.base64EncodedString(), for: keyName)
+    return key
+  }
+
+  private func keyName(for ownerPubkey: String) -> String {
+    "\(keyPrefix)\(ownerPubkey)"
+  }
 }

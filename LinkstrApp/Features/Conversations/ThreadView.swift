@@ -24,7 +24,7 @@ struct ThreadView: View {
   @Query(sort: [SortDescriptor(\SessionMessageEntity.timestamp)])
   private var allMessages: [SessionMessageEntity]
 
-  @Query(sort: [SortDescriptor(\ContactEntity.displayName)])
+  @Query(sort: [SortDescriptor(\ContactEntity.createdAt)])
   private var contacts: [ContactEntity]
 
   @State private var replyText = ""
@@ -34,8 +34,23 @@ struct ThreadView: View {
   @State private var fullScreenWebItem: FullScreenWebItem?
   @FocusState private var isComposerFocused: Bool
 
+  private var scopedMessages: [SessionMessageEntity] {
+    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
+    return allMessages.filter { $0.ownerPubkey == ownerPubkey }
+  }
+
+  private var scopedContacts: [ContactEntity] {
+    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
+    return
+      contacts
+      .filter { $0.ownerPubkey == ownerPubkey }
+      .sorted {
+        $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+      }
+  }
+
   private var replies: [SessionMessageEntity] {
-    allMessages.filter { $0.kind == .reply && $0.rootID == post.rootID }
+    scopedMessages.filter { $0.kind == .reply && $0.rootID == post.rootID }
   }
 
   private var threadTitle: String {
@@ -43,7 +58,14 @@ struct ThreadView: View {
       return "Thread"
     }
     let other = post.senderPubkey == myPubkey ? post.receiverPubkey : post.senderPubkey
-    return session.contactName(for: other, contacts: contacts)
+    return session.contactName(for: other, contacts: scopedContacts)
+  }
+
+  private var postSenderLabel: String {
+    if isOutgoing(post) {
+      return "You"
+    }
+    return session.contactName(for: post.senderPubkey, contacts: scopedContacts)
   }
 
   private var hasUnreadIncomingReplies: Bool {
@@ -117,9 +139,14 @@ struct ThreadView: View {
   private var postCard: some View {
     VStack(alignment: .leading, spacing: 10) {
       HStack {
-        Text(contentKindLabel)
-          .font(.caption)
-          .foregroundStyle(LinkstrTheme.textSecondary)
+        VStack(alignment: .leading, spacing: 2) {
+          Text(contentKindLabel)
+            .font(.caption)
+            .foregroundStyle(LinkstrTheme.textSecondary)
+          Text("Sent by \(postSenderLabel)")
+            .font(.caption2)
+            .foregroundStyle(LinkstrTheme.textSecondary)
+        }
 
         Spacer()
 
@@ -398,37 +425,32 @@ private struct ReplyBubbleRow: View {
   let isOutgoing: Bool
 
   var body: some View {
-    HStack(alignment: .bottom, spacing: 8) {
-      if isOutgoing { Spacer(minLength: 40) }
+    VStack(alignment: .leading, spacing: 5) {
+      Text(text)
+        .font(.custom(LinkstrTheme.bodyFont, size: 14))
+        .foregroundStyle(isOutgoing ? LinkstrTheme.bgBottom : LinkstrTheme.textPrimary)
 
-      VStack(alignment: .leading, spacing: 5) {
-        Text(text)
-          .font(.custom(LinkstrTheme.bodyFont, size: 14))
-          .foregroundStyle(isOutgoing ? LinkstrTheme.bgBottom : LinkstrTheme.textPrimary)
-
-        Text(timestamp.linkstrMessageTimestampLabel)
-          .font(.caption2)
-          .foregroundStyle(
-            isOutgoing ? LinkstrTheme.bgBottom.opacity(0.76) : LinkstrTheme.textSecondary)
-      }
-      .padding(.horizontal, 10)
-      .padding(.vertical, 8)
-      .background(
-        RoundedRectangle(cornerRadius: 14, style: .continuous)
-          .fill(isOutgoing ? LinkstrTheme.neonCyan : LinkstrTheme.panel)
-          .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-              .stroke(
-                isOutgoing
-                  ? LinkstrTheme.neonCyan.opacity(0.38) : LinkstrTheme.neonPink.opacity(0.26),
-                lineWidth: 1
-              )
-          )
-          .shadow(color: LinkstrTheme.neonPink.opacity(isOutgoing ? 0.0 : 0.12), radius: 8, y: 2)
-      )
-
-      if !isOutgoing { Spacer(minLength: 40) }
+      Text(timestamp.linkstrMessageTimestampLabel)
+        .font(.caption2)
+        .foregroundStyle(
+          isOutgoing ? LinkstrTheme.bgBottom.opacity(0.76) : LinkstrTheme.textSecondary)
     }
+    .padding(.horizontal, 10)
+    .padding(.vertical, 8)
+    .background(
+      RoundedRectangle(cornerRadius: 14, style: .continuous)
+        .fill(isOutgoing ? LinkstrTheme.neonCyan : LinkstrTheme.panel)
+        .overlay(
+          RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .stroke(
+              isOutgoing
+                ? LinkstrTheme.neonCyan.opacity(0.38) : LinkstrTheme.neonPink.opacity(0.26),
+              lineWidth: 1
+            )
+        )
+        .shadow(color: LinkstrTheme.neonPink.opacity(isOutgoing ? 0.0 : 0.12), radius: 8, y: 2)
+    )
+    .frame(maxWidth: .infinity, alignment: isOutgoing ? .trailing : .leading)
   }
 }
 

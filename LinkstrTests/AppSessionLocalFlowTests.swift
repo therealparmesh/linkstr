@@ -16,6 +16,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
 
   func testAddContactStoresTrimmedValues() throws {
     let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
     let npub = try makeNPub()
 
     let didAdd = session.addContact(npub: "  \(npub)  ", displayName: "  Alice  ")
@@ -25,10 +26,13 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertEqual(contacts.count, 1)
     XCTAssertEqual(contacts.first?.npub, npub)
     XCTAssertEqual(contacts.first?.displayName, "Alice")
+    XCTAssertNotEqual(contacts.first?.encryptedNPub, npub)
+    XCTAssertNotEqual(contacts.first?.encryptedDisplayName, "Alice")
   }
 
   func testAddContactRejectsDuplicateAndInvalidNPub() throws {
     let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
     let npub = try makeNPub()
 
     withExtendedLifetime(container) {
@@ -47,6 +51,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
 
   func testUpdateContactHappyPathAndDuplicateGuard() throws {
     let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
     let firstNPub = try makeNPub()
     let secondNPub = try makeNPub()
     let replacementNPub = try makeNPub()
@@ -77,6 +82,8 @@ final class AppSessionLocalFlowTests: XCTestCase {
 
   func testSetConversationArchivedAffectsOnlyRootMessages() throws {
     let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let ownerPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
     let conversationID = ConversationID.deterministic("sender-a", "sender-b")
 
     let root = makeMessage(
@@ -85,7 +92,8 @@ final class AppSessionLocalFlowTests: XCTestCase {
       rootID: "root-1",
       kind: .root,
       senderPubkey: "sender-a",
-      receiverPubkey: "sender-b"
+      receiverPubkey: "sender-b",
+      ownerPubkey: ownerPubkey
     )
     let reply = makeMessage(
       eventID: "reply-1",
@@ -93,7 +101,8 @@ final class AppSessionLocalFlowTests: XCTestCase {
       rootID: "root-1",
       kind: .reply,
       senderPubkey: "sender-b",
-      receiverPubkey: "sender-a"
+      receiverPubkey: "sender-a",
+      ownerPubkey: ownerPubkey
     )
 
     container.mainContext.insert(root)
@@ -122,7 +131,8 @@ final class AppSessionLocalFlowTests: XCTestCase {
       rootID: "root-inbound",
       kind: .root,
       senderPubkey: peerPubkey,
-      receiverPubkey: myPubkey
+      receiverPubkey: myPubkey,
+      ownerPubkey: myPubkey
     )
     let outboundRoot = makeMessage(
       eventID: "root-outbound",
@@ -130,7 +140,8 @@ final class AppSessionLocalFlowTests: XCTestCase {
       rootID: "root-outbound",
       kind: .root,
       senderPubkey: myPubkey,
-      receiverPubkey: peerPubkey
+      receiverPubkey: peerPubkey,
+      ownerPubkey: myPubkey
     )
     let inboundReply = makeMessage(
       eventID: "reply-inbound",
@@ -138,7 +149,8 @@ final class AppSessionLocalFlowTests: XCTestCase {
       rootID: "root-inbound",
       kind: .reply,
       senderPubkey: peerPubkey,
-      receiverPubkey: myPubkey
+      receiverPubkey: myPubkey,
+      ownerPubkey: myPubkey
     )
 
     container.mainContext.insert(inboundRoot)
@@ -166,7 +178,8 @@ final class AppSessionLocalFlowTests: XCTestCase {
       rootID: "root-target",
       kind: .reply,
       senderPubkey: peerPubkey,
-      receiverPubkey: myPubkey
+      receiverPubkey: myPubkey,
+      ownerPubkey: myPubkey
     )
     let outboundReply = makeMessage(
       eventID: "reply-outbound-target",
@@ -174,7 +187,8 @@ final class AppSessionLocalFlowTests: XCTestCase {
       rootID: "root-target",
       kind: .reply,
       senderPubkey: myPubkey,
-      receiverPubkey: peerPubkey
+      receiverPubkey: peerPubkey,
+      ownerPubkey: myPubkey
     )
     let inboundReplyDifferentRoot = makeMessage(
       eventID: "reply-inbound-other",
@@ -182,7 +196,8 @@ final class AppSessionLocalFlowTests: XCTestCase {
       rootID: "root-other",
       kind: .reply,
       senderPubkey: peerPubkey,
-      receiverPubkey: myPubkey
+      receiverPubkey: myPubkey,
+      ownerPubkey: myPubkey
     )
 
     container.mainContext.insert(inboundReply)
@@ -250,7 +265,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
       session.relayConnectivityState(for: [
         RelayEntity(url: "wss://one.example.com", status: .readOnly)
       ]),
-      .online
+      .readOnly
     )
     XCTAssertEqual(
       session.relayConnectivityState(
@@ -293,6 +308,29 @@ final class AppSessionLocalFlowTests: XCTestCase {
 
     XCTAssertFalse(didCreate)
     XCTAssertNil(session.composeError)
+    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
+  }
+
+  func testCreatePostWithReadOnlyRelaysShowsReadOnlyMessage() throws {
+    let (session, container) = try makeSession(disableNostrStartupOverride: false)
+    let recipientNPub = try makeNPub()
+    try session.identityService.createNewIdentity()
+
+    let relay = RelayEntity(url: "wss://relay.example.com", status: .readOnly)
+    container.mainContext.insert(relay)
+    try container.mainContext.save()
+
+    let didCreate = session.createPost(
+      url: "https://example.com/path",
+      note: nil,
+      recipientNPub: recipientNPub
+    )
+
+    XCTAssertFalse(didCreate)
+    XCTAssertEqual(
+      session.composeError,
+      "Connected relays are read-only. Add a writable relay to send."
+    )
     XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
   }
 
@@ -351,6 +389,8 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertEqual(message.kind, .root)
     XCTAssertEqual(message.url, "https://example.com/path")
     XCTAssertEqual(message.note, "hello")
+    XCTAssertNotEqual(message.encryptedURL, "https://example.com/path")
+    XCTAssertNotEqual(message.encryptedNote, "hello")
     XCTAssertNotNil(message.readAt)
     XCTAssertFalse(message.eventID.isEmpty)
     XCTAssertNil(session.composeError)
@@ -393,7 +433,8 @@ final class AppSessionLocalFlowTests: XCTestCase {
       rootID: "root-abc",
       kind: .root,
       senderPubkey: myPubkey,
-      receiverPubkey: peerPubkey
+      receiverPubkey: peerPubkey,
+      ownerPubkey: myPubkey
     )
     container.mainContext.insert(root)
     try container.mainContext.save()
@@ -424,7 +465,8 @@ final class AppSessionLocalFlowTests: XCTestCase {
       rootID: "message-1",
       kind: .root,
       senderPubkey: "peer",
-      receiverPubkey: "me"
+      receiverPubkey: "me",
+      ownerPubkey: try XCTUnwrap(session.identityService.pubkeyHex)
     )
     container.mainContext.insert(message)
     try container.mainContext.save()
@@ -434,6 +476,34 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertNil(session.identityService.keypair)
     XCTAssertTrue(try fetchContacts(in: container.mainContext).isEmpty)
     XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
+  }
+
+  func testLogoutClearLocalDataRemovesOnlyCurrentAccountPendingShares() throws {
+    let appGroupStore = InMemoryAppGroupStore()
+    let (session, container) = try makeSession(appGroupStore: appGroupStore)
+    _ = container
+    try session.identityService.createNewIdentity()
+    let currentOwner = try XCTUnwrap(session.identityService.pubkeyHex)
+    let otherOwner = try makePubkeyHex()
+
+    appGroupStore.pendingShares = [
+      PendingShareItem(
+        id: "pending-current-owner",
+        ownerPubkey: currentOwner,
+        url: "https://example.com/current",
+        contactNPub: try makeNPub()
+      ),
+      PendingShareItem(
+        id: "pending-other-owner",
+        ownerPubkey: otherOwner,
+        url: "https://example.com/other",
+        contactNPub: try makeNPub()
+      ),
+    ]
+
+    session.logout(clearLocalData: true)
+
+    XCTAssertEqual(appGroupStore.pendingShares.map(\.id), ["pending-other-owner"])
   }
 
   func testLogoutWithoutClearingLocalDataKeepsContactsAndMessages() throws {
@@ -449,7 +519,8 @@ final class AppSessionLocalFlowTests: XCTestCase {
       rootID: "message-2",
       kind: .root,
       senderPubkey: "peer",
-      receiverPubkey: "me"
+      receiverPubkey: "me",
+      ownerPubkey: try XCTUnwrap(session.identityService.pubkeyHex)
     )
     container.mainContext.insert(message)
     try container.mainContext.save()
@@ -461,7 +532,154 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertEqual(try fetchMessages(in: container.mainContext).count, 1)
   }
 
-  private func makeSession(disableNostrStartupOverride: Bool? = nil) throws -> (
+  func testPendingSharesProcessOnlyForCurrentAccount() throws {
+    let appGroupStore = InMemoryAppGroupStore()
+    let (session, container) = try makeSession(appGroupStore: appGroupStore)
+    try session.identityService.createNewIdentity()
+    let currentOwner = try XCTUnwrap(session.identityService.pubkeyHex)
+    let otherOwner = try makePubkeyHex()
+
+    let recipientNPub = try makeNPub()
+    XCTAssertTrue(session.addContact(npub: recipientNPub, displayName: "Alice"))
+
+    appGroupStore.pendingShares = [
+      PendingShareItem(
+        id: "pending-current-owner",
+        ownerPubkey: currentOwner,
+        url: "https://example.com/current",
+        contactNPub: recipientNPub,
+        note: "current-account"
+      ),
+      PendingShareItem(
+        id: "pending-other-owner",
+        ownerPubkey: otherOwner,
+        url: "https://example.com/other",
+        contactNPub: recipientNPub,
+        note: "other-account"
+      ),
+    ]
+
+    session.handleAppDidBecomeActive()
+
+    let messages = try fetchMessages(in: container.mainContext)
+    XCTAssertEqual(messages.count, 1)
+    XCTAssertEqual(messages.first?.url, "https://example.com/current")
+    XCTAssertEqual(messages.first?.note, "current-account")
+    XCTAssertEqual(appGroupStore.pendingShares.map(\.id), ["pending-other-owner"])
+  }
+
+  func testContactSnapshotIncludesOwnerPubkey() throws {
+    let appGroupStore = InMemoryAppGroupStore()
+    let (session, container) = try makeSession(appGroupStore: appGroupStore)
+    _ = container
+    try session.identityService.createNewIdentity()
+    let ownerPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let npub = try makeNPub()
+
+    XCTAssertTrue(session.addContact(npub: npub, displayName: "Alice"))
+
+    XCTAssertEqual(appGroupStore.contactsSnapshot.count, 1)
+    XCTAssertEqual(appGroupStore.contactsSnapshot.first?.ownerPubkey, ownerPubkey)
+    XCTAssertEqual(appGroupStore.contactsSnapshot.first?.npub, npub)
+  }
+
+  func testContactDuplicationIsScopedPerAccount() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let firstOwner = try XCTUnwrap(session.identityService.pubkeyHex)
+    let sharedNPub = try makeNPub()
+    XCTAssertTrue(session.addContact(npub: sharedNPub, displayName: "Alice-A"))
+
+    guard let secondKeypair = Keypair() else {
+      throw TestError.keypairGenerationFailed
+    }
+    session.logout(clearLocalData: false)
+    session.importNsec(secondKeypair.privateKey.nsec)
+    let secondOwner = try XCTUnwrap(session.identityService.pubkeyHex)
+    XCTAssertNotEqual(firstOwner, secondOwner)
+
+    XCTAssertTrue(session.addContact(npub: sharedNPub, displayName: "Alice-B"))
+
+    let contacts = try fetchContacts(in: container.mainContext)
+    XCTAssertEqual(contacts.count, 2)
+    XCTAssertEqual(Set(contacts.map(\.ownerPubkey)).count, 2)
+  }
+
+  func testSameEventIDCanBeStoredForDifferentAccounts() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let firstOwner = try XCTUnwrap(session.identityService.pubkeyHex)
+
+    let firstMessage = makeMessage(
+      eventID: "shared-event-id",
+      conversationID: "conversation-a",
+      rootID: "shared-event-id",
+      kind: .root,
+      senderPubkey: "peer-a",
+      receiverPubkey: firstOwner,
+      ownerPubkey: firstOwner
+    )
+    container.mainContext.insert(firstMessage)
+    try container.mainContext.save()
+
+    guard let secondKeypair = Keypair() else {
+      throw TestError.keypairGenerationFailed
+    }
+    session.logout(clearLocalData: false)
+    session.importNsec(secondKeypair.privateKey.nsec)
+    let secondOwner = try XCTUnwrap(session.identityService.pubkeyHex)
+    XCTAssertNotEqual(firstOwner, secondOwner)
+
+    let secondMessage = makeMessage(
+      eventID: "shared-event-id",
+      conversationID: "conversation-b",
+      rootID: "shared-event-id",
+      kind: .root,
+      senderPubkey: "peer-b",
+      receiverPubkey: secondOwner,
+      ownerPubkey: secondOwner
+    )
+    container.mainContext.insert(secondMessage)
+    XCTAssertNoThrow(try container.mainContext.save())
+
+    let messages = try fetchMessages(in: container.mainContext)
+    XCTAssertEqual(messages.count, 2)
+    XCTAssertEqual(Set(messages.map(\.ownerPubkey)).count, 2)
+    XCTAssertEqual(Set(messages.map(\.storageID)).count, 2)
+  }
+
+  func testBootNormalizationSkipsUndecryptablePeerKeys() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let ownerPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let senderPubkey = try makePubkeyHex()
+    let receiverPubkey = try makePubkeyHex()
+    let legacyConversationID = "legacy-conversation-id"
+
+    let message = makeMessage(
+      eventID: "legacy-normalization-message",
+      conversationID: legacyConversationID,
+      rootID: "legacy-normalization-message",
+      kind: .root,
+      senderPubkey: senderPubkey,
+      receiverPubkey: receiverPubkey,
+      ownerPubkey: ownerPubkey
+    )
+    container.mainContext.insert(message)
+    try container.mainContext.save()
+
+    try LocalDataCrypto.shared.clearKey(ownerPubkey: ownerPubkey)
+
+    session.boot()
+
+    let storedMessage = try XCTUnwrap(try fetchMessages(in: container.mainContext).first)
+    XCTAssertEqual(storedMessage.conversationID, legacyConversationID)
+  }
+
+  private func makeSession(
+    disableNostrStartupOverride: Bool? = nil,
+    appGroupStore: AppGroupStoreProtocol = InMemoryAppGroupStore()
+  ) throws -> (
     AppSession, ModelContainer
   ) {
     let schema = Schema([
@@ -474,7 +692,8 @@ final class AppSessionLocalFlowTests: XCTestCase {
     return (
       AppSession(
         modelContext: container.mainContext,
-        disableNostrStartupOverride: disableNostrStartupOverride
+        disableNostrStartupOverride: disableNostrStartupOverride,
+        appGroupStore: appGroupStore
       ),
       container
     )
@@ -513,10 +732,12 @@ final class AppSessionLocalFlowTests: XCTestCase {
     rootID: String,
     kind: SessionMessageKind,
     senderPubkey: String,
-    receiverPubkey: String
+    receiverPubkey: String,
+    ownerPubkey: String
   ) -> SessionMessageEntity {
-    SessionMessageEntity(
+    try! SessionMessageEntity(
       eventID: eventID,
+      ownerPubkey: ownerPubkey,
       conversationID: conversationID,
       rootID: rootID,
       kind: kind,
@@ -533,4 +754,29 @@ final class AppSessionLocalFlowTests: XCTestCase {
 
 private enum TestError: Error {
   case keypairGenerationFailed
+}
+
+private final class InMemoryAppGroupStore: AppGroupStoreProtocol {
+  var contactsSnapshot: [ContactSnapshot] = []
+  var pendingShares: [PendingShareItem] = []
+
+  func saveContactsSnapshot(_ contacts: [ContactSnapshot]) throws {
+    contactsSnapshot = contacts
+  }
+
+  func loadContactsSnapshot() throws -> [ContactSnapshot] {
+    contactsSnapshot
+  }
+
+  func appendPendingShare(_ item: PendingShareItem) throws {
+    pendingShares.append(item)
+  }
+
+  func loadPendingShares() throws -> [PendingShareItem] {
+    pendingShares
+  }
+
+  func removePendingShares(withIDs ids: Set<String>) throws {
+    pendingShares.removeAll { ids.contains($0.id) }
+  }
 }

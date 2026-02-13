@@ -7,6 +7,7 @@ final class AppSession: ObservableObject {
   enum RelayConnectivityState: Equatable {
     case noEnabledRelays
     case online
+    case readOnly
     case reconnecting
     case offline
   }
@@ -17,19 +18,28 @@ final class AppSession: ObservableObject {
   private let contactStore: ContactStore
   private let relayStore: RelayStore
   private let messageStore: SessionMessageStore
+  private let appGroupStore: AppGroupStoreProtocol
   private let disableNostrStartupOverride: Bool?
   private let noEnabledRelaysMessage =
     "No relays are enabled. Enable at least one relay in Settings."
   private let relayOfflineMessage = "You're offline. Waiting for a relay connection."
+  private let relayReadOnlyMessage =
+    "Connected relays are read-only. Add a writable relay to send."
   private var hasShownOfflineToastForCurrentOutage = false
+  private var isProcessingPendingShares = false
 
   @Published var composeError: String?
   @Published private(set) var hasIdentity = false
   @Published private(set) var didFinishBoot = false
 
-  init(modelContext: ModelContext, disableNostrStartupOverride: Bool? = nil) {
+  init(
+    modelContext: ModelContext,
+    disableNostrStartupOverride: Bool? = nil,
+    appGroupStore: AppGroupStoreProtocol = AppGroupStore.shared
+  ) {
     self.modelContext = modelContext
     self.disableNostrStartupOverride = disableNostrStartupOverride
+    self.appGroupStore = appGroupStore
     self.identityService = IdentityService()
     self.nostrService = NostrDMService()
     self.contactStore = ContactStore(modelContext: modelContext)
@@ -56,9 +66,11 @@ final class AppSession: ObservableObject {
     #endif
 
     do {
-      try messageStore.normalizeConversationIDs()
+      if let ownerPubkey = identityService.pubkeyHex {
+        try messageStore.normalizeConversationIDs(ownerPubkey: ownerPubkey)
+      }
       try relayStore.ensureDefaultRelays()
-      try contactStore.syncContactsSnapshot()
+      try syncContactsSnapshotForCurrentOwner()
     } catch {
       composeError = error.localizedDescription
     }
@@ -77,8 +89,11 @@ final class AppSession: ObservableObject {
   func relayConnectivityState(for enabledRelays: [RelayEntity]) -> RelayConnectivityState {
     guard !enabledRelays.isEmpty else { return .noEnabledRelays }
 
-    if enabledRelays.contains(where: { $0.status == .connected || $0.status == .readOnly }) {
+    if enabledRelays.contains(where: { $0.status == .connected }) {
       return .online
+    }
+    if enabledRelays.contains(where: { $0.status == .readOnly }) {
+      return .readOnly
     }
     if enabledRelays.contains(where: { $0.status == .reconnecting }) {
       return .reconnecting
@@ -96,7 +111,7 @@ final class AppSession: ObservableObject {
   private func refreshRelayConnectivityAlert() throws {
     let enabledRelays = try relayStore.fetchRelays().filter(\.isEnabled)
     switch relayConnectivityState(for: enabledRelays) {
-    case .online, .reconnecting:
+    case .online, .readOnly, .reconnecting:
       clearOfflineToastIfPresent()
     case .offline:
       guard !hasShownOfflineToastForCurrentOutage else { return }
@@ -125,6 +140,10 @@ final class AppSession: ObservableObject {
       composeError = noEnabledRelaysMessage
       hasShownOfflineToastForCurrentOutage = false
       return false
+    case .readOnly:
+      composeError = relayReadOnlyMessage
+      hasShownOfflineToastForCurrentOutage = false
+      return false
     case .offline:
       composeError = relayOfflineMessage
       hasShownOfflineToastForCurrentOutage = true
@@ -134,11 +153,24 @@ final class AppSession: ObservableObject {
       return false
     case .online:
       hasShownOfflineToastForCurrentOutage = false
-      if composeError == relayOfflineMessage || composeError == noEnabledRelaysMessage {
+      if composeError == relayOfflineMessage
+        || composeError == noEnabledRelaysMessage
+        || composeError == relayReadOnlyMessage
+      {
         composeError = nil
       }
       return true
     }
+  }
+
+  private func hasWritableRelayConnection() -> Bool {
+    if shouldDisableNostrStartupForCurrentProcess() {
+      return true
+    }
+    guard let enabledRelays = try? relayStore.fetchRelays().filter(\.isEnabled) else {
+      return false
+    }
+    return enabledRelays.contains(where: { $0.status == .connected })
   }
 
   private func makeLocalEventID() -> String {
@@ -160,11 +192,18 @@ final class AppSession: ObservableObject {
     return !isEnvironmentFlagEnabled("LINKSTR_ENABLE_NOSTR_IN_TESTS")
   }
 
+  private func shouldFetchMetadataForCurrentProcess() -> Bool {
+    let isRunningTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    if !isRunningTests { return true }
+    return isEnvironmentFlagEnabled("LINKSTR_ENABLE_METADATA_IN_TESTS")
+  }
+
   func ensureIdentity() {
     if identityService.keypair == nil {
       do {
         try identityService.createNewIdentity()
         refreshIdentityState()
+        try syncContactsSnapshotForCurrentOwner()
         composeError = nil
         startNostrIfPossible()
       } catch {
@@ -179,6 +218,7 @@ final class AppSession: ObservableObject {
     do {
       try identityService.importNsec(nsec)
       refreshIdentityState()
+      try syncContactsSnapshotForCurrentOwner()
       composeError = nil
       startNostrIfPossible()
     } catch {
@@ -186,7 +226,8 @@ final class AppSession: ObservableObject {
     }
   }
 
-  func logout(clearLocalData: Bool = true) {
+  func logout(clearLocalData: Bool) {
+    let ownerPubkey = identityService.pubkeyHex
     nostrService.stop()
 
     do {
@@ -197,17 +238,35 @@ final class AppSession: ObservableObject {
     }
     refreshIdentityState()
 
-    if clearLocalData {
-      clearCachedVideos()
-      clearMessageCache()
-      clearAllContacts()
+    if let ownerPubkey, clearLocalData {
+      clearCachedVideos(ownerPubkey: ownerPubkey)
+      clearMessageCache(ownerPubkey: ownerPubkey)
+      clearAllContacts(ownerPubkey: ownerPubkey)
+      let pendingShares = (try? appGroupStore.loadPendingShares()) ?? []
+      let idsToRemove = Set(
+        pendingShares
+          .filter { $0.ownerPubkey == ownerPubkey }
+          .map(\.id)
+      )
+      try? appGroupStore.removePendingShares(withIDs: idsToRemove)
+      try? LocalDataCrypto.shared.clearKey(ownerPubkey: ownerPubkey)
     }
+    try? appGroupStore.saveContactsSnapshot([])
 
     composeError = nil
   }
 
   private func refreshIdentityState() {
     hasIdentity = identityService.keypair != nil
+  }
+
+  private func syncContactsSnapshotForCurrentOwner() throws {
+    guard let ownerPubkey = identityService.pubkeyHex else {
+      try appGroupStore.saveContactsSnapshot([])
+      return
+    }
+    let snapshots = try contactStore.contactSnapshots(ownerPubkey: ownerPubkey)
+    try appGroupStore.saveContactsSnapshot(snapshots)
   }
 
   func startNostrIfPossible() {
@@ -259,6 +318,9 @@ final class AppSession: ObservableObject {
               message: message
             )
             try self.refreshRelayConnectivityAlert()
+            if status == .connected {
+              self.processPendingShares()
+            }
           } catch {
             self.report(error: error)
           }
@@ -269,7 +331,11 @@ final class AppSession: ObservableObject {
 
   @discardableResult
   func createPost(url: String, note: String?, contact: ContactEntity) -> Bool {
-    createPost(url: url, note: note, recipientNPub: contact.npub)
+    if let ownerPubkey = identityService.pubkeyHex, contact.ownerPubkey != ownerPubkey {
+      composeError = "Select a contact from the current account."
+      return false
+    }
+    return createPost(url: url, note: note, recipientNPub: contact.npub)
   }
 
   @discardableResult
@@ -280,6 +346,7 @@ final class AppSession: ObservableObject {
     }
 
     guard let keypair = identityService.keypair,
+      let ownerPubkey = identityService.pubkeyHex,
       let recipientPublicKey = PublicKey(npub: recipientNPub)
     else {
       composeError = "Couldn't send. Check your account and recipient Contact key (npub)."
@@ -311,8 +378,9 @@ final class AppSession: ObservableObject {
         eventID = try nostrService.send(payload: payload, to: recipientPublicKey.hex)
       }
 
-      let message = SessionMessageEntity(
+      let message = try SessionMessageEntity(
         eventID: eventID,
+        ownerPubkey: ownerPubkey,
         conversationID: conversationID,
         rootID: eventID,
         kind: .root,
@@ -337,7 +405,7 @@ final class AppSession: ObservableObject {
 
   func sendReply(text: String, post: SessionMessageEntity) {
     guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-    guard let keypair = identityService.keypair else {
+    guard let keypair = identityService.keypair, let ownerPubkey = identityService.pubkeyHex else {
       composeError = "You're signed out. Sign in to send replies."
       return
     }
@@ -365,8 +433,9 @@ final class AppSession: ObservableObject {
       } else {
         eventID = try nostrService.send(payload: payload, to: recipientPubkey)
       }
-      let reply = SessionMessageEntity(
+      let reply = try SessionMessageEntity(
         eventID: eventID,
+        ownerPubkey: ownerPubkey,
         conversationID: post.conversationID,
         rootID: post.rootID,
         kind: .reply,
@@ -387,9 +456,13 @@ final class AppSession: ObservableObject {
 
   @discardableResult
   func addContact(npub: String, displayName: String) -> Bool {
+    guard let ownerPubkey = identityService.pubkeyHex else {
+      composeError = "You're signed out. Sign in to manage contacts."
+      return false
+    }
     do {
-      try contactStore.addContact(npub: npub, displayName: displayName)
-      try contactStore.syncContactsSnapshot()
+      try contactStore.addContact(ownerPubkey: ownerPubkey, npub: npub, displayName: displayName)
+      try syncContactsSnapshotForCurrentOwner()
       composeError = nil
       return true
     } catch {
@@ -400,9 +473,14 @@ final class AppSession: ObservableObject {
 
   @discardableResult
   func updateContact(_ contact: ContactEntity, npub: String, displayName: String) -> Bool {
+    guard let ownerPubkey = identityService.pubkeyHex else {
+      composeError = "You're signed out. Sign in to manage contacts."
+      return false
+    }
     do {
-      try contactStore.updateContact(contact, npub: npub, displayName: displayName)
-      try contactStore.syncContactsSnapshot()
+      try contactStore.updateContact(
+        contact, ownerPubkey: ownerPubkey, npub: npub, displayName: displayName)
+      try syncContactsSnapshotForCurrentOwner()
       composeError = nil
       return true
     } catch {
@@ -412,19 +490,23 @@ final class AppSession: ObservableObject {
   }
 
   func removeContact(_ contact: ContactEntity) {
+    guard let ownerPubkey = identityService.pubkeyHex else {
+      composeError = "You're signed out. Sign in to manage contacts."
+      return
+    }
     do {
-      try contactStore.removeContact(contact)
-      try contactStore.syncContactsSnapshot()
+      try contactStore.removeContact(contact, ownerPubkey: ownerPubkey)
+      try syncContactsSnapshotForCurrentOwner()
       composeError = nil
     } catch {
       report(error: error)
     }
   }
 
-  private func clearAllContacts() {
+  private func clearAllContacts(ownerPubkey: String) {
     do {
-      try contactStore.clearAllContacts()
-      try contactStore.syncContactsSnapshot()
+      try contactStore.clearAllContacts(ownerPubkey: ownerPubkey)
+      try syncContactsSnapshotForCurrentOwner()
       composeError = nil
     } catch {
       report(error: error)
@@ -432,8 +514,13 @@ final class AppSession: ObservableObject {
   }
 
   func setConversationArchived(conversationID: String, archived: Bool) {
+    guard let ownerPubkey = identityService.pubkeyHex else { return }
     do {
-      try messageStore.setConversationArchived(conversationID: conversationID, archived: archived)
+      try messageStore.setConversationArchived(
+        conversationID: conversationID,
+        ownerPubkey: ownerPubkey,
+        archived: archived
+      )
     } catch {
       report(error: error)
     }
@@ -442,7 +529,11 @@ final class AppSession: ObservableObject {
   func markConversationPostsRead(conversationID: String) {
     guard let myPubkey = identityService.pubkeyHex else { return }
     do {
-      try messageStore.markConversationPostsRead(conversationID: conversationID, myPubkey: myPubkey)
+      try messageStore.markConversationPostsRead(
+        conversationID: conversationID,
+        ownerPubkey: myPubkey,
+        myPubkey: myPubkey
+      )
     } catch {
       report(error: error)
     }
@@ -451,7 +542,8 @@ final class AppSession: ObservableObject {
   func markPostRepliesRead(postID: String) {
     guard let myPubkey = identityService.pubkeyHex else { return }
     do {
-      try messageStore.markPostRepliesRead(postID: postID, myPubkey: myPubkey)
+      try messageStore.markPostRepliesRead(
+        postID: postID, ownerPubkey: myPubkey, myPubkey: myPubkey)
     } catch {
       report(error: error)
     }
@@ -497,9 +589,9 @@ final class AppSession: ObservableObject {
     startNostrIfPossible()
   }
 
-  func clearMessageCache() {
+  private func clearMessageCache(ownerPubkey: String) {
     do {
-      try messageStore.clearAllMessages()
+      try messageStore.clearAllMessages(ownerPubkey: ownerPubkey)
       composeError = nil
     } catch {
       report(error: error)
@@ -507,8 +599,16 @@ final class AppSession: ObservableObject {
   }
 
   func clearCachedVideos() {
+    guard let ownerPubkey = identityService.pubkeyHex else {
+      composeError = "You're signed out. Sign in to manage local storage."
+      return
+    }
+    clearCachedVideos(ownerPubkey: ownerPubkey)
+  }
+
+  private func clearCachedVideos(ownerPubkey: String) {
     do {
-      try messageStore.clearCachedVideos()
+      try messageStore.clearCachedVideos(ownerPubkey: ownerPubkey)
       composeError = nil
     } catch {
       report(error: error)
@@ -520,8 +620,9 @@ final class AppSession: ObservableObject {
   }
 
   private func persistIncoming(_ incoming: ReceivedDirectMessage) {
+    guard let ownerPubkey = identityService.pubkeyHex else { return }
     do {
-      if try messageStore.messageExists(eventID: incoming.eventID) {
+      if try messageStore.messageExists(eventID: incoming.eventID, ownerPubkey: ownerPubkey) {
         return
       }
     } catch {
@@ -552,19 +653,27 @@ final class AppSession: ObservableObject {
 
     let isEchoedOutgoing = identityService.pubkeyHex == incoming.senderPubkey
 
-    let message = SessionMessageEntity(
-      eventID: incoming.eventID,
-      conversationID: ConversationID.deterministic(incoming.senderPubkey, incoming.receiverPubkey),
-      rootID: canonicalPostID,
-      kind: incoming.payload.kind == .root ? .root : .reply,
-      senderPubkey: incoming.senderPubkey,
-      receiverPubkey: incoming.receiverPubkey,
-      url: url,
-      note: incoming.payload.note,
-      timestamp: incoming.createdAt,
-      readAt: isEchoedOutgoing ? incoming.createdAt : nil,
-      linkType: url.map(URLClassifier.classify) ?? .generic
-    )
+    let message: SessionMessageEntity
+    do {
+      message = try SessionMessageEntity(
+        eventID: incoming.eventID,
+        ownerPubkey: ownerPubkey,
+        conversationID: ConversationID.deterministic(
+          incoming.senderPubkey, incoming.receiverPubkey),
+        rootID: canonicalPostID,
+        kind: incoming.payload.kind == .root ? .root : .reply,
+        senderPubkey: incoming.senderPubkey,
+        receiverPubkey: incoming.receiverPubkey,
+        url: url,
+        note: incoming.payload.note,
+        timestamp: incoming.createdAt,
+        readAt: isEchoedOutgoing ? incoming.createdAt : nil,
+        linkType: url.map(URLClassifier.classify) ?? .generic
+      )
+    } catch {
+      report(error: error)
+      return
+    }
 
     do {
       try messageStore.insert(message)
@@ -585,7 +694,7 @@ final class AppSession: ObservableObject {
       return
     }
 
-    let contacts = (try? contactStore.fetchContacts()) ?? []
+    let contacts = (try? contactStore.fetchContacts(ownerPubkey: myPubkey)) ?? []
     let senderName = contactName(for: message.senderPubkey, contacts: contacts)
 
     switch message.kind {
@@ -608,13 +717,13 @@ final class AppSession: ObservableObject {
   }
 
   private func updateMetadata(for message: SessionMessageEntity) {
+    guard shouldFetchMetadataForCurrentProcess() else { return }
     guard let url = message.url else { return }
     Task {
       let preview = await URLMetadataService.shared.fetchPreview(for: url)
       await MainActor.run {
-        message.metadataTitle = preview?.title
-        message.thumbnailURL = preview?.thumbnailPath
         do {
+          try message.setMetadata(title: preview?.title, thumbnailURL: preview?.thumbnailPath)
           try self.modelContext.save()
         } catch {
           self.report(error: error)
@@ -624,16 +733,21 @@ final class AppSession: ObservableObject {
   }
 
   private func processPendingShares() {
-    guard identityService.keypair != nil else { return }
+    guard !isProcessingPendingShares else { return }
+    guard let ownerPubkey = identityService.pubkeyHex else { return }
+    guard hasWritableRelayConnection() else { return }
 
-    let pendingItems = (try? AppGroupStore.shared.loadPendingShares()) ?? []
+    isProcessingPendingShares = true
+    defer { isProcessingPendingShares = false }
+    let pendingItems = (try? appGroupStore.loadPendingShares()) ?? []
     guard !pendingItems.isEmpty else { return }
 
-    let contacts = (try? contactStore.fetchContacts()) ?? []
+    let contacts = (try? contactStore.fetchContacts(ownerPubkey: ownerPubkey)) ?? []
     let contactsByNPub = Dictionary(uniqueKeysWithValues: contacts.map { ($0.npub, $0) })
     var processedIDs = Set<String>()
 
     for item in pendingItems {
+      guard item.ownerPubkey == ownerPubkey else { continue }
       guard let contact = contactsByNPub[item.contactNPub] else { continue }
       if createPost(url: item.url, note: item.note, contact: contact) {
         processedIDs.insert(item.id)
@@ -641,7 +755,7 @@ final class AppSession: ObservableObject {
     }
 
     do {
-      try AppGroupStore.shared.removePendingShares(withIDs: processedIDs)
+      try appGroupStore.removePendingShares(withIDs: processedIDs)
     } catch {
       report(error: error)
     }
@@ -667,11 +781,15 @@ final class AppSession: ObservableObject {
         try? identityService.createNewIdentity()
       }
 
+      guard let ownerPubkey = identityService.pubkeyHex else { return }
+
       let contactsDescriptor = FetchDescriptor<ContactEntity>()
-      let contacts = (try? modelContext.fetch(contactsDescriptor)) ?? []
+      let contacts = ((try? modelContext.fetch(contactsDescriptor)) ?? []).filter {
+        $0.ownerPubkey == ownerPubkey
+      }
       let posts = ((try? modelContext.fetch(FetchDescriptor<SessionMessageEntity>())) ?? []).filter
       {
-        $0.kind == .root
+        $0.kind == .root && $0.ownerPubkey == ownerPubkey
       }
 
       var secondaryContact: ContactEntity
@@ -682,7 +800,12 @@ final class AppSession: ObservableObject {
         let npub =
           secondaryKeypair?.publicKey.npub
           ?? "npub1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqk3el7l"
-        let contact = ContactEntity(npub: npub, displayName: "Secondary Test Contact")
+        let contact = try? ContactEntity(
+          ownerPubkey: ownerPubkey,
+          npub: npub,
+          displayName: "Secondary Test Contact"
+        )
+        guard let contact else { return }
         modelContext.insert(contact)
         secondaryContact = contact
       }
@@ -694,8 +817,9 @@ final class AppSession: ObservableObject {
         let sampleURL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
         let sampleEventID = UUID().uuidString.replacingOccurrences(of: "-", with: "")
 
-        let post = SessionMessageEntity(
+        let post = try? SessionMessageEntity(
           eventID: sampleEventID,
+          ownerPubkey: ownerPubkey,
           conversationID: conversationID,
           rootID: sampleEventID,
           kind: .root,
@@ -708,7 +832,9 @@ final class AppSession: ObservableObject {
           linkType: URLClassifier.classify(sampleURL),
           metadataTitle: "Sample Link"
         )
-        modelContext.insert(post)
+        if let post {
+          modelContext.insert(post)
+        }
       }
 
       try? modelContext.save()
@@ -724,68 +850,99 @@ private final class ContactStore {
     self.modelContext = modelContext
   }
 
-  func fetchContacts(sortedByDisplayName: Bool = false) throws -> [ContactEntity] {
-    let sortDescriptor: [SortDescriptor<ContactEntity>] =
-      sortedByDisplayName ? [SortDescriptor(\.displayName)] : [SortDescriptor(\.createdAt)]
-    let descriptor = FetchDescriptor<ContactEntity>(sortBy: sortDescriptor)
-    return try modelContext.fetch(descriptor)
+  func fetchContacts(ownerPubkey: String, sortedByDisplayName: Bool = false) throws
+    -> [ContactEntity]
+  {
+    let descriptor = FetchDescriptor<ContactEntity>(
+      predicate: #Predicate { $0.ownerPubkey == ownerPubkey },
+      sortBy: [SortDescriptor(\.createdAt)]
+    )
+    let contacts = try modelContext.fetch(descriptor)
+    if sortedByDisplayName {
+      return contacts.sorted {
+        $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+      }
+    }
+    return contacts
   }
 
-  func addContact(npub: String, displayName: String) throws {
+  func addContact(ownerPubkey: String, npub: String, displayName: String) throws {
     let normalizedNPub = try normalize(npub: npub)
     let normalizedDisplayName = normalize(displayName: displayName)
 
     guard !normalizedDisplayName.isEmpty else {
       throw ContactStoreError.emptyDisplayName
     }
-    guard !hasContact(withNPub: normalizedNPub) else {
+    guard !hasContact(ownerPubkey: ownerPubkey, withNPub: normalizedNPub) else {
       throw ContactStoreError.duplicateContact
     }
 
-    modelContext.insert(ContactEntity(npub: normalizedNPub, displayName: normalizedDisplayName))
+    modelContext.insert(
+      try ContactEntity(
+        ownerPubkey: ownerPubkey,
+        npub: normalizedNPub,
+        displayName: normalizedDisplayName
+      ))
     try modelContext.save()
   }
 
-  func updateContact(_ contact: ContactEntity, npub: String, displayName: String) throws {
+  func updateContact(
+    _ contact: ContactEntity, ownerPubkey: String, npub: String, displayName: String
+  )
+    throws
+  {
+    guard contact.ownerPubkey == ownerPubkey else {
+      throw ContactStoreError.contactOwnershipMismatch
+    }
     let normalizedNPub = try normalize(npub: npub)
     let normalizedDisplayName = normalize(displayName: displayName)
 
     guard !normalizedDisplayName.isEmpty else {
       throw ContactStoreError.emptyDisplayName
     }
-    guard !hasContact(withNPub: normalizedNPub, excluding: contact.persistentModelID) else {
+    guard
+      !hasContact(
+        ownerPubkey: ownerPubkey, withNPub: normalizedNPub, excluding: contact.persistentModelID)
+    else {
       throw ContactStoreError.duplicateContact
     }
 
-    let previousNPub = contact.npub
-    let previousDisplayName = contact.displayName
-    contact.npub = normalizedNPub
-    contact.displayName = normalizedDisplayName
+    let previousHash = contact.npubHash
+    let previousEncryptedNPub = contact.encryptedNPub
+    let previousEncryptedDisplayName = contact.encryptedDisplayName
+    try contact.updateSecureFields(npub: normalizedNPub, displayName: normalizedDisplayName)
     do {
       try modelContext.save()
     } catch {
-      contact.npub = previousNPub
-      contact.displayName = previousDisplayName
+      contact.npubHash = previousHash
+      contact.encryptedNPub = previousEncryptedNPub
+      contact.encryptedDisplayName = previousEncryptedDisplayName
       throw error
     }
   }
 
-  func removeContact(_ contact: ContactEntity) throws {
+  func removeContact(_ contact: ContactEntity, ownerPubkey: String) throws {
+    guard contact.ownerPubkey == ownerPubkey else {
+      throw ContactStoreError.contactOwnershipMismatch
+    }
     modelContext.delete(contact)
     try modelContext.save()
   }
 
-  func clearAllContacts() throws {
-    let descriptor = FetchDescriptor<ContactEntity>()
+  func clearAllContacts(ownerPubkey: String) throws {
+    let descriptor = FetchDescriptor<ContactEntity>(
+      predicate: #Predicate { $0.ownerPubkey == ownerPubkey }
+    )
     let contacts = try modelContext.fetch(descriptor)
     contacts.forEach(modelContext.delete)
     try modelContext.save()
   }
 
-  func syncContactsSnapshot() throws {
-    let contacts = try fetchContacts(sortedByDisplayName: true)
-    let snapshots = contacts.map { ContactSnapshot(npub: $0.npub, displayName: $0.displayName) }
-    try AppGroupStore.shared.saveContactsSnapshot(snapshots)
+  func contactSnapshots(ownerPubkey: String) throws -> [ContactSnapshot] {
+    let contacts = try fetchContacts(ownerPubkey: ownerPubkey, sortedByDisplayName: true)
+    return contacts.map {
+      ContactSnapshot(ownerPubkey: ownerPubkey, npub: $0.npub, displayName: $0.displayName)
+    }
   }
 
   func contactName(for pubkeyHex: String, contacts: [ContactEntity]) -> String {
@@ -798,10 +955,12 @@ private final class ContactStore {
     return String(pubkeyHex.prefix(12))
   }
 
-  func hasContact(withNPub npub: String, excluding contactID: PersistentIdentifier? = nil) -> Bool {
-    guard let contacts = try? fetchContacts() else { return false }
+  func hasContact(
+    ownerPubkey: String, withNPub npub: String, excluding contactID: PersistentIdentifier? = nil
+  ) -> Bool {
+    guard let contacts = try? fetchContacts(ownerPubkey: ownerPubkey) else { return false }
     return contacts.contains { existing in
-      guard existing.npub == npub else { return false }
+      guard existing.matchesNPub(npub) else { return false }
       if let contactID {
         return existing.persistentModelID != contactID
       }
@@ -826,6 +985,7 @@ private enum ContactStoreError: LocalizedError {
   case invalidNPub
   case emptyDisplayName
   case duplicateContact
+  case contactOwnershipMismatch
 
   var errorDescription: String? {
     switch self {
@@ -835,6 +995,8 @@ private enum ContactStoreError: LocalizedError {
       return "Enter a display name."
     case .duplicateContact:
       return "This contact is already in your list."
+    case .contactOwnershipMismatch:
+      return "This contact belongs to a different account."
     }
   }
 }

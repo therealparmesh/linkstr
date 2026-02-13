@@ -1,4 +1,5 @@
 import Foundation
+import NostrSDK
 import SwiftData
 
 @MainActor
@@ -14,16 +15,17 @@ final class SessionMessageStore {
     try modelContext.save()
   }
 
-  func messageExists(eventID: String) throws -> Bool {
+  func messageExists(eventID: String, ownerPubkey: String) throws -> Bool {
+    let storageID = SessionMessageEntity.storageID(ownerPubkey: ownerPubkey, eventID: eventID)
     let descriptor = FetchDescriptor<SessionMessageEntity>(
-      predicate: #Predicate { $0.eventID == eventID }
+      predicate: #Predicate { $0.storageID == storageID }
     )
     return try modelContext.fetch(descriptor).isEmpty == false
   }
 
-  func setConversationArchived(conversationID: String, archived: Bool) throws {
+  func setConversationArchived(conversationID: String, ownerPubkey: String, archived: Bool) throws {
     let descriptor = FetchDescriptor<SessionMessageEntity>(
-      predicate: #Predicate { $0.conversationID == conversationID }
+      predicate: #Predicate { $0.conversationID == conversationID && $0.ownerPubkey == ownerPubkey }
     )
     let messages = try modelContext.fetch(descriptor)
 
@@ -39,15 +41,17 @@ final class SessionMessageStore {
     }
   }
 
-  func markConversationPostsRead(conversationID: String, myPubkey: String) throws {
+  func markConversationPostsRead(conversationID: String, ownerPubkey: String, myPubkey: String)
+    throws
+  {
     let descriptor = FetchDescriptor<SessionMessageEntity>(
-      predicate: #Predicate { $0.conversationID == conversationID }
+      predicate: #Predicate { $0.conversationID == conversationID && $0.ownerPubkey == ownerPubkey }
     )
     let messages = try modelContext.fetch(descriptor)
 
     var didChange = false
     for message in messages where message.kind == .root {
-      guard message.senderPubkey != myPubkey, message.readAt == nil else { continue }
+      guard !message.senderMatches(myPubkey), message.readAt == nil else { continue }
       message.readAt = .now
       didChange = true
     }
@@ -57,15 +61,15 @@ final class SessionMessageStore {
     }
   }
 
-  func markPostRepliesRead(postID: String, myPubkey: String) throws {
+  func markPostRepliesRead(postID: String, ownerPubkey: String, myPubkey: String) throws {
     let descriptor = FetchDescriptor<SessionMessageEntity>(
-      predicate: #Predicate { $0.rootID == postID }
+      predicate: #Predicate { $0.rootID == postID && $0.ownerPubkey == ownerPubkey }
     )
     let messages = try modelContext.fetch(descriptor)
 
     var didChange = false
     for message in messages where message.kind == .reply {
-      guard message.senderPubkey != myPubkey, message.readAt == nil else { continue }
+      guard !message.senderMatches(myPubkey), message.readAt == nil else { continue }
       message.readAt = .now
       didChange = true
     }
@@ -75,35 +79,49 @@ final class SessionMessageStore {
     }
   }
 
-  func clearAllMessages() throws {
-    let descriptor = FetchDescriptor<SessionMessageEntity>()
+  func clearAllMessages(ownerPubkey: String) throws {
+    let descriptor = FetchDescriptor<SessionMessageEntity>(
+      predicate: #Predicate { $0.ownerPubkey == ownerPubkey }
+    )
     let messages = try modelContext.fetch(descriptor)
     messages.forEach(modelContext.delete)
     try modelContext.save()
   }
 
-  func clearCachedVideos() throws {
-    VideoCacheService.shared.clearAll()
-    let descriptor = FetchDescriptor<SessionMessageEntity>()
+  func clearCachedVideos(ownerPubkey: String) throws {
+    let descriptor = FetchDescriptor<SessionMessageEntity>(
+      predicate: #Predicate { $0.ownerPubkey == ownerPubkey }
+    )
     let messages = try modelContext.fetch(descriptor)
 
+    var didChange = false
     for message in messages where message.cachedMediaPath != nil {
       if let path = message.cachedMediaPath {
         try? FileManager.default.removeItem(at: URL(fileURLWithPath: path))
       }
       message.cachedMediaPath = nil
       message.cachedMediaSourceURL = nil
+      didChange = true
     }
-    try modelContext.save()
+    if didChange {
+      try modelContext.save()
+    }
   }
 
-  func normalizeConversationIDs() throws {
-    let descriptor = FetchDescriptor<SessionMessageEntity>()
+  func normalizeConversationIDs(ownerPubkey: String) throws {
+    let descriptor = FetchDescriptor<SessionMessageEntity>(
+      predicate: #Predicate { $0.ownerPubkey == ownerPubkey }
+    )
     let messages = try modelContext.fetch(descriptor)
 
     var didChange = false
     for message in messages {
-      let canonicalID = ConversationID.deterministic(message.senderPubkey, message.receiverPubkey)
+      let senderPubkey = message.senderPubkey
+      let receiverPubkey = message.receiverPubkey
+      guard PublicKey(hex: senderPubkey) != nil, PublicKey(hex: receiverPubkey) != nil else {
+        continue
+      }
+      let canonicalID = ConversationID.deterministic(senderPubkey, receiverPubkey)
       guard message.conversationID != canonicalID else { continue }
       message.conversationID = canonicalID
       didChange = true
@@ -113,4 +131,5 @@ final class SessionMessageStore {
       try modelContext.save()
     }
   }
+
 }

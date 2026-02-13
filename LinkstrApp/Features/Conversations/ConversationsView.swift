@@ -45,12 +45,27 @@ struct ConversationsView: View {
   @Query(sort: [SortDescriptor(\SessionMessageEntity.timestamp, order: .reverse)])
   private var allMessages: [SessionMessageEntity]
 
-  @Query(sort: [SortDescriptor(\ContactEntity.displayName)])
+  @Query(sort: [SortDescriptor(\ContactEntity.createdAt)])
   private var contacts: [ContactEntity]
+
+  private var scopedMessages: [SessionMessageEntity] {
+    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
+    return allMessages.filter { $0.ownerPubkey == ownerPubkey }
+  }
+
+  private var scopedContacts: [ContactEntity] {
+    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
+    return
+      contacts
+      .filter { $0.ownerPubkey == ownerPubkey }
+      .sorted {
+        $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+      }
+  }
 
   private var messageIndex: ConversationMessageIndex {
     ConversationMessageIndex(
-      messages: allMessages,
+      messages: scopedMessages,
       myPubkey: session.identityService.pubkeyHex
     )
   }
@@ -64,11 +79,11 @@ struct ConversationsView: View {
 
         let peerPubkey = otherPubkey(for: latestPost)
         let peerNPub = PublicKey(hex: peerPubkey)?.npub
-        let knownContact = contacts.contains { PublicKey(npub: $0.npub)?.hex == peerPubkey }
+        let knownContact = scopedContacts.contains { PublicKey(npub: $0.npub)?.hex == peerPubkey }
         let name =
           knownContact
-          ? session.contactName(for: peerPubkey, contacts: contacts)
-          : (peerNPub ?? session.contactName(for: peerPubkey, contacts: contacts))
+          ? session.contactName(for: peerPubkey, contacts: scopedContacts)
+          : (peerNPub ?? session.contactName(for: peerPubkey, contacts: scopedContacts))
         let isArchived = conversationPosts.allSatisfy(\.isArchived)
         let myPubkey = session.identityService.pubkeyHex
         let hasUnread = conversationPosts.contains { post in
@@ -264,7 +279,7 @@ private struct SessionPostsView: View {
   @Query(sort: [SortDescriptor(\SessionMessageEntity.timestamp, order: .reverse)])
   private var allMessages: [SessionMessageEntity]
 
-  @Query(sort: [SortDescriptor(\ContactEntity.displayName)])
+  @Query(sort: [SortDescriptor(\ContactEntity.createdAt)])
   private var contacts: [ContactEntity]
 
   let conversationID: String
@@ -277,9 +292,24 @@ private struct SessionPostsView: View {
 
   private var messageIndex: ConversationMessageIndex {
     ConversationMessageIndex(
-      messages: allMessages,
+      messages: scopedMessages,
       myPubkey: session.identityService.pubkeyHex
     )
+  }
+
+  private var scopedMessages: [SessionMessageEntity] {
+    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
+    return allMessages.filter { $0.ownerPubkey == ownerPubkey }
+  }
+
+  private var scopedContacts: [ContactEntity] {
+    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
+    return
+      contacts
+      .filter { $0.ownerPubkey == ownerPubkey }
+      .sorted {
+        $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+      }
   }
 
   private var posts: [SessionMessageEntity] {
@@ -288,7 +318,7 @@ private struct SessionPostsView: View {
 
   private var repliesByPostID: [String: [SessionMessageEntity]] {
     let postRootIDs = Set(posts.map(\.rootID))
-    let replies = allMessages.filter { message in
+    let replies = scopedMessages.filter { message in
       message.kind == .reply && postRootIDs.contains(message.rootID)
     }
     return Dictionary(grouping: replies, by: \.rootID)
@@ -335,6 +365,8 @@ private struct SessionPostsView: View {
             } label: {
               PostCardView(
                 post: post,
+                senderLabel: senderLabel(for: post),
+                isOutgoing: isOutgoing(post),
                 replyCount: repliesByPostID[post.rootID]?.count ?? 0,
                 hasUnreadReplies: unreadIncomingReplyPostIDs.contains(post.rootID),
                 latestReplyTimestamp: repliesByPostID[post.rootID]?.max(by: {
@@ -378,7 +410,7 @@ private struct SessionPostsView: View {
     }
     .sheet(isPresented: $isPresentingNewPost) {
       NewPostSheet(
-        contacts: contacts,
+        contacts: scopedContacts,
         preselectedContactNPub: sessionComposerContext.preselectedContactNPub,
         lockedRecipient: sessionComposerContext.lockedRecipient
       )
@@ -396,10 +428,24 @@ private struct SessionPostsView: View {
     }
   }
 
+  private func isOutgoing(_ message: SessionMessageEntity) -> Bool {
+    guard let myPubkey = session.identityService.pubkeyHex else { return false }
+    return message.senderPubkey == myPubkey
+  }
+
+  private func senderLabel(for message: SessionMessageEntity) -> String {
+    if isOutgoing(message) {
+      return "You"
+    }
+    return session.contactName(for: message.senderPubkey, contacts: scopedContacts)
+  }
+
 }
 
 private struct PostCardView: View {
   let post: SessionMessageEntity
+  let senderLabel: String
+  let isOutgoing: Bool
   let replyCount: Int
   let hasUnreadReplies: Bool
   let latestReplyTimestamp: Date?
@@ -409,9 +455,15 @@ private struct PostCardView: View {
       thumbnailView
 
       VStack(alignment: .leading, spacing: 6) {
-        Text(contentKindLabel)
-          .font(.caption)
-          .foregroundStyle(LinkstrTheme.textSecondary)
+        HStack(spacing: 8) {
+          Text(contentKindLabel)
+            .font(.caption)
+            .foregroundStyle(LinkstrTheme.textSecondary)
+          Text(isOutgoing ? "Sent by You" : "Sent by \(senderLabel)")
+            .font(.caption2)
+            .foregroundStyle(LinkstrTheme.textSecondary)
+            .lineLimit(1)
+        }
 
         Text(primaryText)
           .font(.custom(LinkstrTheme.titleFont, size: 15))

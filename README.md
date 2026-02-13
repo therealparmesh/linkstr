@@ -11,6 +11,7 @@
   - Log out is available in Settings.
 - Messaging
   - Uses NIP-59 gift-wrap transport through `NostrSDK`.
+  - Message payloads are already encrypted in transit by NIP-59 gift-wrap.
   - App payload is carried in custom inner rumor kind `44001`.
   - Only linkstr payloads (`44001`) are processed.
   - Posts require URL + optional note.
@@ -18,11 +19,15 @@
   - Notifications are local best-effort alerts while the app is active/receiving relay events (no APNs remote push yet).
 - Sessions and contacts
   - Unknown peers appear directly in Sessions (no invite flow).
-  - Contacts are local-only (no follow event is published).
+  - Contacts are local-only (no follow event is published) and scoped per signed-in account.
+  - Messages are scoped per signed-in account.
+  - Contact and message sensitive fields are encrypted at rest locally with a per-account key.
   - Add/edit/delete contacts locally.
   - Add contact flow supports camera QR scan to prefill `Contact key (npub)`.
   - New post composer uses contact selection by default. From inside a known-contact session, recipient is preselected; from inside an unknown-peer session, recipient is locked to that peer.
   - Share extension sends to a selected contact with URL + optional note.
+  - Pending shares are scoped to the account that queued them.
+  - Share-extension snapshots and pending shares in the app-group container are encrypted at rest.
 - Read/unread
   - Opening a session marks inbound posts in that session as read.
   - Opening a post thread marks inbound replies for that post as read.
@@ -31,10 +36,12 @@
 - Relays
   - Add/remove/toggle relays.
   - Relay health status shown by colored dot.
+  - Green relay status means read/write connected; read-only relays are shown separately and cannot send.
   - Relay disconnect/reconnect chatter is suppressed in toasts.
-  - Offline toast appears only when zero enabled relays are online and none are reconnecting.
-  - Sending is blocked while zero enabled relays are online.
-  - Pending shares stay queued until a relay connection is available.
+  - Offline toast appears only when zero enabled relays are connected, zero are read-only, and none are reconnecting.
+  - Sending is blocked unless at least one enabled relay is read/write connected.
+  - Pending shares stay queued until a writable relay connection is available.
+  - On connect/sign-in, the app subscribes live and also backfills relay history (paged) to recover prior messages.
   - Relays sorted alphabetically in Settings.
   - Reset to default relays from Settings.
 - Media
@@ -52,9 +59,14 @@
 - iOS Simulator often cannot provide reliable live camera scanning.
 - If simulator scan is unavailable, use manual paste/entry or test scanning on a physical iPhone.
 
-## Local data and reinstall/switch behavior
+## Local data and account switching
 
 - Contacts, messages, relay settings, and cached media are local app data.
+- Contacts/messages are isolated by account (`pubkey`) on-device. Logging into another account does not merge or expose another account's contacts/messages.
+- Local sensitive fields for contacts/messages are encrypted at rest; decryption happens on read for the active account.
+- `Log Out (Keep Local Data)` signs out and keeps this account's local contacts/messages on-device for that same account to see after signing back in.
+- `Log Out and Clear Local Data` removes this account's local contacts/messages, account-scoped queued shares, cached local video references, and this account's local-data encryption key.
+- Share-extension contact snapshot is cleared on logout and repopulated from the currently signed-in account.
 - Uninstall removes local app data.
 - Identity key is stored in keychain. Keychain entries may survive reinstall on the same device, but do not rely on that for recovery.
 - For reliable recovery across devices/reinstalls, back up your `Secret Key (nsec)` and sign in again.

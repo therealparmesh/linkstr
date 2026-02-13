@@ -18,11 +18,6 @@ final class VideoCacheService {
     }
   }
 
-  func clearAll() {
-    try? fileManager.removeItem(at: cacheDirectory)
-    try? fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
-  }
-
   func cachedFileURL(for remoteURL: URL, preferredExtension: String) -> URL {
     let fileName = remoteURL.absoluteString.sha256Hex
     return cacheDirectory.appendingPathComponent(fileName).appendingPathExtension(

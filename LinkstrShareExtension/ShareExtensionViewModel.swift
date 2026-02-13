@@ -2,13 +2,6 @@ import Foundation
 import UIKit
 import UniformTypeIdentifiers
 
-protocol ShareExtensionStore {
-  func appendPendingShare(_ item: PendingShareItem) throws
-  func loadContactsSnapshot() throws -> [ContactSnapshot]
-}
-
-extension AppGroupStore: ShareExtensionStore {}
-
 @MainActor
 final class ShareExtensionViewModel: ObservableObject {
   @Published var incomingURL: String = ""
@@ -17,9 +10,9 @@ final class ShareExtensionViewModel: ObservableObject {
   @Published var note: String = ""
   @Published var errorMessage: String?
 
-  private let store: ShareExtensionStore
+  private let store: AppGroupStoreProtocol
 
-  init(store: ShareExtensionStore = AppGroupStore.shared) {
+  init(store: AppGroupStoreProtocol = AppGroupStore.shared) {
     self.store = store
   }
 
@@ -40,6 +33,7 @@ final class ShareExtensionViewModel: ObservableObject {
 
     let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
     let item = PendingShareItem(
+      ownerPubkey: selectedContact.ownerPubkey,
       url: normalizedURL,
       contactNPub: selectedContact.npub,
       note: trimmedNote.isEmpty ? nil : trimmedNote
