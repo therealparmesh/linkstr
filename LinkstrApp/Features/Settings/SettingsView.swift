@@ -37,10 +37,8 @@ struct SettingsView: View {
       .padding(.bottom, 28)
     }
     .scrollBounceBehavior(.basedOnSize)
-    .confirmationDialog(
-      "Log Out", isPresented: $isPresentingLogoutOptions, titleVisibility: .visible
-    ) {
-      Button("Log Out (Keep Local Data)", role: .destructive) {
+    .alert("Log Out", isPresented: $isPresentingLogoutOptions) {
+      Button("Log Out (Keep Local Data)") {
         session.logout(clearLocalData: false)
       }
       Button("Log Out and Clear Local Data", role: .destructive) {
