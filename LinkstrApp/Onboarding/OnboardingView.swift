@@ -58,8 +58,7 @@ struct OnboardingView: View {
               }
               .buttonStyle(LinkstrSecondaryButtonStyle())
             }
-            .padding(14)
-            .linkstrNeonCard()
+            .padding(.top, 6)
           }
           .padding(16)
           .padding(.bottom, 32)
