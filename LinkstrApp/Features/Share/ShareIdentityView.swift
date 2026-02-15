@@ -34,7 +34,7 @@ struct ShareIdentityView: View {
                     .stroke(LinkstrTheme.textSecondary.opacity(0.25), lineWidth: 0.8)
                 )
 
-              Text("Scan to add this Contact key (npub)")
+              Text("Scan to add this Contact Key (npub)")
                 .font(.custom(LinkstrTheme.bodyFont, size: 13))
                 .foregroundStyle(LinkstrTheme.textSecondary)
             }
@@ -42,7 +42,7 @@ struct ShareIdentityView: View {
             .padding(.top, 6)
           }
 
-          LinkstrSectionHeader(title: "Your Contact key (npub)")
+          LinkstrSectionHeader(title: "Your Contact Key (npub)")
           Text("Others use this key to send links to you or add you as a contact.")
             .font(.custom(LinkstrTheme.bodyFont, size: 13))
             .foregroundStyle(LinkstrTheme.textSecondary)
@@ -60,7 +60,7 @@ struct ShareIdentityView: View {
           Button {
             UIPasteboard.general.string = npub
           } label: {
-            Label("Copy Contact key (npub)", systemImage: "doc.on.doc")
+            Label("Copy Contact Key (npub)", systemImage: "doc.on.doc")
               .frame(maxWidth: .infinity)
           }
           .buttonStyle(LinkstrPrimaryButtonStyle())

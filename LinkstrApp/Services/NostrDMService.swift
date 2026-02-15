@@ -462,7 +462,7 @@ enum NostrServiceError: Error, LocalizedError {
     case .payloadEncodingFailed:
       return "Couldn't prepare this message. Try again."
     case .invalidPubkey:
-      return "Invalid recipient Contact key (npub)."
+      return "Invalid recipient Contact Key (npub)."
     }
   }
 }

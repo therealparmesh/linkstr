@@ -1,4 +1,3 @@
-import NostrSDK
 import XCTest
 
 @testable import Linkstr
@@ -40,9 +39,7 @@ final class IdentityServiceTests: XCTestCase {
   }
 
   func testImportNsecPersistsAndCanBeReloaded() throws {
-    guard let source = Keypair() else {
-      throw IdentityServiceTestError.keypairGenerationFailed
-    }
+    let source = try TestKeyMaterialFactory.makeKeypair()
     let originalNsec = source.privateKey.nsec
 
     let importing = IdentityService()
@@ -62,8 +59,4 @@ final class IdentityServiceTests: XCTestCase {
       }
     }
   }
-}
-
-private enum IdentityServiceTestError: Error {
-  case keypairGenerationFailed
 }

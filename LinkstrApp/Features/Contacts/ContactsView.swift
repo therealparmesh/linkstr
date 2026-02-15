@@ -116,8 +116,8 @@ private struct ContactDetailView: View {
                 .fill(LinkstrTheme.panelSoft)
             )
 
-          LinkstrSectionHeader(title: "Contact key (npub)")
-          TextField("Contact key (npub1...)", text: $npub, axis: .vertical)
+          LinkstrSectionHeader(title: "Contact Key (npub)")
+          TextField("Contact Key (npub...)", text: $npub, axis: .vertical)
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled(true)
             .lineLimit(2...4)
@@ -184,9 +184,8 @@ struct AddContactSheet: View {
   @State private var scannerErrorMessage: String?
   private let isNPubPrefilled: Bool
 
-  init(prefilledNPub: String? = nil, prefilledDisplayName: String = "") {
+  init(prefilledNPub: String? = nil) {
     _npub = State(initialValue: prefilledNPub ?? "")
-    _displayName = State(initialValue: prefilledDisplayName)
     isNPubPrefilled = !(prefilledNPub ?? "").isEmpty
   }
 
@@ -196,17 +195,21 @@ struct AddContactSheet: View {
         LinkstrBackgroundView()
         VStack(spacing: 12) {
           if !isNPubPrefilled {
-            Button {
-              scannerErrorMessage = nil
-              isPresentingScanner = true
-            } label: {
-              Label("Scan QR Code", systemImage: "qrcode.viewfinder")
-                .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(LinkstrSecondaryButtonStyle())
+            LinkstrInputAssistRow(
+              showClear: !npub.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              onPaste: {
+                pasteFromClipboard()
+                scannerErrorMessage = nil
+              },
+              onScan: {
+                scannerErrorMessage = nil
+                isPresentingScanner = true
+              },
+              onClear: { npub = "" }
+            )
           }
 
-          TextField("Contact key (npub1...)", text: $npub)
+          TextField("Contact Key (npub...)", text: $npub)
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled(true)
             .disabled(isNPubPrefilled)
@@ -259,10 +262,16 @@ struct AddContactSheet: View {
             npub = scannedNPub
             scannerErrorMessage = nil
           } else {
-            scannerErrorMessage = "No valid Contact key (npub) found in that QR code."
+            scannerErrorMessage = "No valid Contact Key (npub) found in that QR code."
           }
         }
       }
+    }
+  }
+
+  private func pasteFromClipboard() {
+    if let clipboardText = UIPasteboard.general.string {
+      npub = clipboardText
     }
   }
 }
@@ -370,7 +379,7 @@ private struct LinkstrQRScannerAccessDeniedView: View {
       Text("Camera Access Required")
         .font(.custom(LinkstrTheme.titleFont, size: 18))
         .foregroundStyle(.white)
-      Text("Enable camera access in Settings to scan a Contact key (npub) QR code.")
+      Text("Enable camera access in Settings to scan a Contact Key (npub) QR code.")
         .font(.custom(LinkstrTheme.bodyFont, size: 14))
         .foregroundStyle(LinkstrTheme.textSecondary)
         .multilineTextAlignment(.center)

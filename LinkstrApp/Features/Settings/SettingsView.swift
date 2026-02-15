@@ -192,7 +192,7 @@ struct SettingsView: View {
     DisclosureGroup(isExpanded: $isIdentityExpanded) {
       VStack(alignment: .leading, spacing: 10) {
         if let npub = session.identityService.npub {
-          LinkstrSectionHeader(title: "Contact key (npub)")
+          LinkstrSectionHeader(title: "Contact Key (npub)")
           Text(npub)
             .font(.custom(LinkstrTheme.bodyFont, size: 12))
             .foregroundStyle(LinkstrTheme.textSecondary)

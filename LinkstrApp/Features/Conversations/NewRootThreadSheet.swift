@@ -1,6 +1,10 @@
 import NostrSDK
 import SwiftUI
 
+#if canImport(UIKit)
+  import UIKit
+#endif
+
 struct LockedRecipientContext {
   let npub: String
   let displayName: String
@@ -128,25 +132,19 @@ struct NewPostSheet: View {
   }
 
   private var recipientPrimaryLabel: String {
-    guard let activeRecipientNPub else {
-      return "Choose recipient"
-    }
-    guard let contact = contacts.first(where: { $0.npub == activeRecipientNPub }) else {
-      return activeRecipientNPub
-    }
-    let trimmedName = contact.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-    return trimmedName.isEmpty ? activeRecipientNPub : trimmedName
+    let displayName = contacts.first(where: { $0.npub == activeRecipientNPub })?.displayName
+    return NewPostRecipientLabelLogic.primaryLabel(
+      activeRecipientNPub: activeRecipientNPub,
+      matchedContactDisplayName: displayName
+    )
   }
 
   private var recipientSecondaryLabel: String? {
-    guard let activeRecipientNPub else {
-      return "Choose a contact or enter a Contact key (npub)."
-    }
-    guard let contact = contacts.first(where: { $0.npub == activeRecipientNPub }) else {
-      return nil
-    }
-    let trimmedName = contact.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-    return trimmedName.isEmpty ? nil : activeRecipientNPub
+    let displayName = contacts.first(where: { $0.npub == activeRecipientNPub })?.displayName
+    return NewPostRecipientLabelLogic.secondaryLabel(
+      activeRecipientNPub: activeRecipientNPub,
+      matchedContactDisplayName: displayName
+    )
   }
 
   private var normalizedURL: String? {
@@ -158,28 +156,67 @@ private struct RecipientSelectionSheet: View {
   let contacts: [ContactEntity]
   @Binding var selectedRecipientNPub: String?
   @Binding var isPresented: Bool
+  @State private var recipientQuery: String
+  @State private var isPresentingScanner = false
+
+  init(
+    contacts: [ContactEntity],
+    selectedRecipientNPub: Binding<String?>,
+    isPresented: Binding<Bool>
+  ) {
+    self.contacts = contacts
+    _selectedRecipientNPub = selectedRecipientNPub
+    _isPresented = isPresented
+    let selectedDisplayName =
+      contacts
+      .first(where: { $0.npub == selectedRecipientNPub.wrappedValue })?
+      .displayName
+    _recipientQuery = State(
+      initialValue: RecipientSelectionLogic.selectedQuery(
+        selectedRecipientNPub: selectedRecipientNPub.wrappedValue,
+        selectedDisplayName: selectedDisplayName
+      ))
+  }
 
   var body: some View {
     NavigationStack {
       List {
-        Section("Contacts") {
-          ForEach(contacts) { contact in
+        Section("To") {
+          TextField("Name or Contact Key (npub...)", text: $recipientQuery)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled(true)
+
+          LinkstrInputAssistRow(
+            showClear: selectedRecipientNPub != nil
+              || !recipientQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            onPaste: pasteFromClipboard,
+            onScan: { isPresentingScanner = true },
+            onClear: {
+              recipientQuery = ""
+              selectedRecipientNPub = nil
+            }
+          )
+        }
+
+        if let customQueryNPub {
+          Section("Use Contact Key") {
             Button {
-              selectedRecipientNPub = contact.npub
+              selectedRecipientNPub = customQueryNPub
               isPresented = false
             } label: {
               HStack(spacing: 10) {
+                LinkstrPeerAvatar(name: customQueryNPub, size: 32)
                 VStack(alignment: .leading, spacing: 2) {
-                  Text(displayName(for: contact))
+                  Text(customQueryNPub)
                     .foregroundStyle(LinkstrTheme.textPrimary)
                     .lineLimit(1)
-                  Text(contact.npub)
+                  Text(customQueryNPub)
                     .font(.footnote)
                     .foregroundStyle(LinkstrTheme.textSecondary)
                     .lineLimit(1)
                 }
                 Spacer()
-                if selectedRecipientNPub == contact.npub {
+                if selectedRecipientNPub == customQueryNPub {
                   Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(LinkstrTheme.neonCyan)
                 }
@@ -189,14 +226,37 @@ private struct RecipientSelectionSheet: View {
           }
         }
 
-        Section {
-          NavigationLink {
-            ManualRecipientEntryView(initialNPub: selectedRecipientNPub ?? "") { normalizedNPub in
-              selectedRecipientNPub = normalizedNPub
-              isPresented = false
+        Section("Contacts") {
+          if filteredContacts.isEmpty {
+            Text("No contacts match. Enter, paste, or scan a Contact Key (npub).")
+              .font(.footnote)
+              .foregroundStyle(LinkstrTheme.textSecondary)
+          } else {
+            ForEach(filteredContacts) { contact in
+              Button {
+                selectedRecipientNPub = contact.npub
+                isPresented = false
+              } label: {
+                HStack(spacing: 10) {
+                  LinkstrPeerAvatar(name: displayName(for: contact), size: 32)
+                  VStack(alignment: .leading, spacing: 2) {
+                    Text(displayName(for: contact))
+                      .foregroundStyle(LinkstrTheme.textPrimary)
+                      .lineLimit(1)
+                    Text(contact.npub)
+                      .font(.footnote)
+                      .foregroundStyle(LinkstrTheme.textSecondary)
+                      .lineLimit(1)
+                  }
+                  Spacer()
+                  if selectedRecipientNPub == contact.npub {
+                    Image(systemName: "checkmark.circle.fill")
+                      .foregroundStyle(LinkstrTheme.neonCyan)
+                  }
+                }
+              }
+              .buttonStyle(.plain)
             }
-          } label: {
-            Label("Enter Contact key (npub)", systemImage: "square.and.pencil")
           }
         }
 
@@ -204,7 +264,6 @@ private struct RecipientSelectionSheet: View {
           Section {
             Button("Clear Recipient", role: .destructive) {
               selectedRecipientNPub = nil
-              isPresented = false
             }
           }
         }
@@ -217,86 +276,146 @@ private struct RecipientSelectionSheet: View {
           }
         }
       }
+      .sheet(isPresented: $isPresentingScanner) {
+        LinkstrQRScannerSheet { scannedValue in
+          if let scannedNPub = ContactKeyParser.extractNPub(from: scannedValue) {
+            recipientQuery = scannedNPub
+          }
+        }
+      }
     }
+  }
+
+  private var filteredContacts: [ContactEntity] {
+    RecipientSelectionLogic.filteredContacts(contacts, query: recipientQuery)
+  }
+
+  private var customQueryNPub: String? {
+    RecipientSelectionLogic.customRecipientNPub(
+      from: recipientQuery,
+      knownNPubs: contacts.map(\.npub)
+    )
   }
 
   private func displayName(for contact: ContactEntity) -> String {
     let trimmed = contact.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
     return trimmed.isEmpty ? contact.npub : trimmed
   }
+
+  private func pasteFromClipboard() {
+    #if canImport(UIKit)
+      if let clipboardText = UIPasteboard.general.string {
+        recipientQuery = clipboardText
+      }
+    #endif
+  }
 }
 
-private struct ManualRecipientEntryView: View {
-  let onSelect: (String) -> Void
-
-  @State private var npubInput: String
-  @State private var errorMessage: String?
-  @State private var isPresentingScanner = false
-
-  init(initialNPub: String, onSelect: @escaping (String) -> Void) {
-    self.onSelect = onSelect
-    _npubInput = State(initialValue: initialNPub)
+enum RecipientSelectionLogic {
+  static func selectedQuery(selectedRecipientNPub: String?, selectedDisplayName: String?) -> String
+  {
+    let trimmedName = selectedDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    if !trimmedName.isEmpty {
+      return trimmedName
+    }
+    return selectedRecipientNPub ?? ""
   }
 
-  var body: some View {
-    Form {
-      Section("Contact key (npub)") {
-        TextField("npub1...", text: $npubInput, axis: .vertical)
-          .textInputAutocapitalization(.never)
-          .autocorrectionDisabled(true)
-      }
+  static func filteredContacts(_ contacts: [ContactEntity], query: String) -> [ContactEntity] {
+    let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedQuery.isEmpty else { return contacts }
 
-      Section {
-        Button {
-          errorMessage = nil
-          isPresentingScanner = true
-        } label: {
-          Label("Scan QR Code", systemImage: "qrcode.viewfinder")
-            .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(LinkstrSecondaryButtonStyle())
-      }
-
-      if let errorMessage {
-        Section {
-          Text(errorMessage)
-            .foregroundStyle(.red)
-        }
-      }
-
-      Section {
-        Button("Use Recipient") {
-          guard let normalizedNPub else {
-            errorMessage = "Invalid Contact key (npub)."
-            return
-          }
-          errorMessage = nil
-          onSelect(normalizedNPub)
-        }
-        .buttonStyle(LinkstrPrimaryButtonStyle())
-        .frame(maxWidth: .infinity)
-      }
-    }
-    .navigationTitle("Enter Contact key (npub)")
-    .sheet(isPresented: $isPresentingScanner) {
-      LinkstrQRScannerSheet { scannedValue in
-        if let scannedNPub = ContactKeyParser.extractNPub(from: scannedValue) {
-          npubInput = scannedNPub
-          errorMessage = nil
-        } else {
-          errorMessage = "No valid Contact key (npub) found in that QR code."
-        }
-      }
+    return contacts.filter {
+      contactMatches(
+        query: trimmedQuery,
+        displayName: $0.displayName,
+        npub: $0.npub
+      )
     }
   }
 
-  private var normalizedNPub: String? {
+  static func normalizedNPub(from query: String) -> String? {
     guard
-      let extractedNPub = ContactKeyParser.extractNPub(from: npubInput),
+      let extractedNPub = ContactKeyParser.extractNPub(from: query),
       let normalized = PublicKey(npub: extractedNPub)?.npub
     else {
       return nil
     }
     return normalized
+  }
+
+  static func customRecipientNPub(from query: String, knownNPubs: [String]) -> String? {
+    guard let normalized = normalizedNPub(from: query) else { return nil }
+    return knownNPubs.contains(normalized) ? nil : normalized
+  }
+
+  static func contactMatches(query: String, displayName: String, npub: String) -> Bool {
+    let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    guard !normalizedQuery.isEmpty else { return true }
+    let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    return name.contains(normalizedQuery) || npub.lowercased().contains(normalizedQuery)
+  }
+}
+
+struct LinkstrInputAssistRow: View {
+  let showClear: Bool
+  let onPaste: () -> Void
+  let onScan: () -> Void
+  let onClear: () -> Void
+
+  var body: some View {
+    HStack(spacing: 14) {
+      actionButton("Paste", systemImage: "doc.on.clipboard", action: onPaste)
+      actionButton("Scan", systemImage: "qrcode.viewfinder", action: onScan)
+      Spacer()
+
+      if showClear {
+        Button("Clear", action: onClear)
+          .buttonStyle(.plain)
+          .foregroundStyle(.red)
+          .font(.footnote)
+      }
+    }
+  }
+
+  private func actionButton(_ title: String, systemImage: String, action: @escaping () -> Void)
+    -> some View
+  {
+    Button(action: action) {
+      HStack(spacing: 6) {
+        Image(systemName: systemImage)
+          .font(.system(size: 14, weight: .semibold))
+          .frame(width: 16, height: 16)
+        Text(title)
+          .font(.footnote)
+      }
+      .foregroundStyle(LinkstrTheme.textPrimary)
+    }
+    .buttonStyle(.plain)
+  }
+}
+
+enum NewPostRecipientLabelLogic {
+  static func primaryLabel(activeRecipientNPub: String?, matchedContactDisplayName: String?)
+    -> String
+  {
+    guard let activeRecipientNPub else {
+      return "Choose recipient"
+    }
+    let trimmedName =
+      matchedContactDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return trimmedName.isEmpty ? activeRecipientNPub : trimmedName
+  }
+
+  static func secondaryLabel(
+    activeRecipientNPub: String?,
+    matchedContactDisplayName: String?
+  ) -> String? {
+    guard let activeRecipientNPub else {
+      return "Choose a contact or enter a Contact Key (npub)."
+    }
+    let trimmedName =
+      matchedContactDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return trimmedName.isEmpty ? nil : activeRecipientNPub
   }
 }

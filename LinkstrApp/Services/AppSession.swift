@@ -349,7 +349,7 @@ final class AppSession: ObservableObject {
       let ownerPubkey = identityService.pubkeyHex,
       let recipientPublicKey = PublicKey(npub: recipientNPub)
     else {
-      composeError = "Couldn't send. Check your account and recipient Contact key (npub)."
+      composeError = "Couldn't send. Check your account and recipient Contact Key (npub)."
       return false
     }
 
@@ -990,7 +990,7 @@ private enum ContactStoreError: LocalizedError {
   var errorDescription: String? {
     switch self {
     case .invalidNPub:
-      return "Invalid Contact key (npub)."
+      return "Invalid Contact Key (npub)."
     case .emptyDisplayName:
       return "Enter a display name."
     case .duplicateContact:

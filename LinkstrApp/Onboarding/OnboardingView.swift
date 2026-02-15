@@ -19,7 +19,7 @@ struct OnboardingView: View {
 
             VStack(alignment: .leading, spacing: 12) {
               LinkstrSectionHeader(title: "Sign In")
-              TextField("Secret Key (nsec1...)", text: $secretKey)
+              TextField("Secret Key (nsec...)", text: $secretKey)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled(true)
                 .padding(12)

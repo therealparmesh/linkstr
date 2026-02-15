@@ -27,7 +27,7 @@
 		<true />
 	</dict>
 	<key>NSCameraUsageDescription</key>
-	<string>Camera access is used to scan Contact key (npub) QR codes.</string>
+	<string>Camera access is used to scan Contact Key (npub) QR codes.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

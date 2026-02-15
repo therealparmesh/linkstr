@@ -35,7 +35,7 @@ targets:
         CFBundleDisplayName: linkstr
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
-        NSCameraUsageDescription: Camera access is used to scan contact User Key (npub) QR codes.
+        NSCameraUsageDescription: Camera access is used to scan Contact Key (npub) QR codes.
         UILaunchStoryboardName: LaunchScreen
         NSAppTransportSecurity:
           NSAllowsArbitraryLoadsInWebContent: true

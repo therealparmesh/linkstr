@@ -6,7 +6,7 @@
 
 - Identity
   - Sign in with `Secret Key (nsec)` or create a new keypair.
-  - `Contact key (npub)` is visible in Share and Settings.
+  - `Contact Key (npub)` is visible in Share and Settings.
   - `Secret Key (nsec)` is reveal/copy only in Settings.
   - Log out is available in Settings.
 - Messaging
@@ -23,8 +23,10 @@
   - Messages are scoped per signed-in account.
   - Contact and message sensitive fields are encrypted at rest locally with a per-account key.
   - Add/edit/delete contacts locally.
-  - Add contact flow supports camera QR scan to prefill `Contact key (npub)`.
-  - New post composer uses contact selection by default. From inside a known-contact session, recipient is preselected; from inside an unknown-peer session, recipient is locked to that peer.
+  - Add contact flow provides the same `Paste` / `Scan` / `Clear` assist row used in recipient selection.
+  - New post composer uses a single recipient picker with one `To` input for contact search and manual `Contact Key (npub)` entry, with matching `Paste` / `Scan` / `Clear` shortcuts.
+  - `Use Contact Key` appears only for valid `Contact Key (npub)` values that are not already saved contacts.
+  - From inside a known-contact session, recipient is preselected; from inside an unknown-peer session, recipient is locked to that peer.
   - Share extension sends to a selected contact with URL + optional note.
   - Pending shares are scoped to the account that queued them.
   - Share-extension snapshots and pending shares in the app-group container are encrypted at rest.

@@ -17,7 +17,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
   func testAddContactStoresTrimmedValues() throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
-    let npub = try makeNPub()
+    let npub = try TestKeyMaterialFactory.makeNPub()
 
     let didAdd = session.addContact(npub: "  \(npub)  ", displayName: "  Alice  ")
     XCTAssertTrue(didAdd)
@@ -33,7 +33,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
   func testAddContactRejectsDuplicateAndInvalidNPub() throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
-    let npub = try makeNPub()
+    let npub = try TestKeyMaterialFactory.makeNPub()
 
     withExtendedLifetime(container) {
       let didAdd = session.addContact(npub: npub, displayName: "Alice")
@@ -45,16 +45,31 @@ final class AppSessionLocalFlowTests: XCTestCase {
 
       let didAddInvalid = session.addContact(npub: "not-an-npub", displayName: "Bob")
       XCTAssertFalse(didAddInvalid)
-      XCTAssertEqual(session.composeError, "Invalid Contact key (npub).")
+      XCTAssertEqual(session.composeError, "Invalid Contact Key (npub).")
+    }
+  }
+
+  func testAddContactRejectsDuplicateAcrossWhitespaceVariant() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let npub = try TestKeyMaterialFactory.makeNPub()
+
+    withExtendedLifetime(container) {
+      let didAdd = session.addContact(npub: npub, displayName: "Alice")
+      XCTAssertTrue(didAdd)
+
+      let didAddDuplicate = session.addContact(npub: "  \(npub)  ", displayName: "Alice 2")
+      XCTAssertFalse(didAddDuplicate)
+      XCTAssertEqual(session.composeError, "This contact is already in your list.")
     }
   }
 
   func testUpdateContactHappyPathAndDuplicateGuard() throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
-    let firstNPub = try makeNPub()
-    let secondNPub = try makeNPub()
-    let replacementNPub = try makeNPub()
+    let firstNPub = try TestKeyMaterialFactory.makeNPub()
+    let secondNPub = try TestKeyMaterialFactory.makeNPub()
+    let replacementNPub = try TestKeyMaterialFactory.makeNPub()
 
     let didAddFirst = session.addContact(npub: firstNPub, displayName: "Alice")
     XCTAssertTrue(didAddFirst)
@@ -122,7 +137,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
     let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
-    let peerPubkey = try makePubkeyHex()
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
     let conversationID = ConversationID.deterministic(myPubkey, peerPubkey)
 
     let inboundRoot = makeMessage(
@@ -169,7 +184,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
     let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
-    let peerPubkey = try makePubkeyHex()
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
     let conversationID = ConversationID.deterministic(myPubkey, peerPubkey)
 
     let inboundReply = makeMessage(
@@ -292,7 +307,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
 
   func testCreatePostWithOnlyReconnectingRelaysSuppressesOfflineToast() throws {
     let (session, container) = try makeSession(disableNostrStartupOverride: false)
-    let recipientNPub = try makeNPub()
+    let recipientNPub = try TestKeyMaterialFactory.makeNPub()
     try session.identityService.createNewIdentity()
 
     let relay = RelayEntity(url: "wss://relay.example.com", status: .reconnecting)
@@ -313,7 +328,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
 
   func testCreatePostWithReadOnlyRelaysShowsReadOnlyMessage() throws {
     let (session, container) = try makeSession(disableNostrStartupOverride: false)
-    let recipientNPub = try makeNPub()
+    let recipientNPub = try TestKeyMaterialFactory.makeNPub()
     try session.identityService.createNewIdentity()
 
     let relay = RelayEntity(url: "wss://relay.example.com", status: .readOnly)
@@ -336,7 +351,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
 
   func testCreatePostWithOfflineRelaysShowsOfflineToast() throws {
     let (session, container) = try makeSession(disableNostrStartupOverride: false)
-    let recipientNPub = try makeNPub()
+    let recipientNPub = try TestKeyMaterialFactory.makeNPub()
     try session.identityService.createNewIdentity()
 
     let relay = RelayEntity(url: "wss://relay.example.com", status: .failed)
@@ -356,7 +371,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
 
   func testCreatePostWithNoEnabledRelaysShowsNoEnabledRelaysMessage() throws {
     let (session, container) = try makeSession(disableNostrStartupOverride: false)
-    let recipientNPub = try makeNPub()
+    let recipientNPub = try TestKeyMaterialFactory.makeNPub()
     try session.identityService.createNewIdentity()
 
     let didCreate = session.createPost(
@@ -373,7 +388,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
 
   func testCreatePostPersistsOutgoingRootMessage() throws {
     let (session, container) = try makeSession()
-    let recipientNPub = try makeNPub()
+    let recipientNPub = try TestKeyMaterialFactory.makeNPub()
     try session.identityService.createNewIdentity()
     session.startNostrIfPossible()
 
@@ -398,7 +413,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
 
   func testCreatePostRejectsInvalidURL() throws {
     let (session, container) = try makeSession()
-    let recipientNPub = try makeNPub()
+    let recipientNPub = try TestKeyMaterialFactory.makeNPub()
     try session.identityService.createNewIdentity()
     session.startNostrIfPossible()
 
@@ -410,7 +425,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
 
   func testCreatePostRejectsUnsupportedScheme() throws {
     let (session, container) = try makeSession()
-    let recipientNPub = try makeNPub()
+    let recipientNPub = try TestKeyMaterialFactory.makeNPub()
     try session.identityService.createNewIdentity()
     session.startNostrIfPossible()
 
@@ -424,7 +439,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
     let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
-    let peerPubkey = try makePubkeyHex()
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
     session.startNostrIfPossible()
 
     let root = makeMessage(
@@ -455,7 +470,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
   func testLogoutClearLocalDataRemovesContactsAndMessages() throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
-    let npub = try makeNPub()
+    let npub = try TestKeyMaterialFactory.makeNPub()
     let didAdd = session.addContact(npub: npub, displayName: "Alice")
     XCTAssertTrue(didAdd)
 
@@ -484,20 +499,20 @@ final class AppSessionLocalFlowTests: XCTestCase {
     _ = container
     try session.identityService.createNewIdentity()
     let currentOwner = try XCTUnwrap(session.identityService.pubkeyHex)
-    let otherOwner = try makePubkeyHex()
+    let otherOwner = try TestKeyMaterialFactory.makePubkeyHex()
 
     appGroupStore.pendingShares = [
       PendingShareItem(
         id: "pending-current-owner",
         ownerPubkey: currentOwner,
         url: "https://example.com/current",
-        contactNPub: try makeNPub()
+        contactNPub: try TestKeyMaterialFactory.makeNPub()
       ),
       PendingShareItem(
         id: "pending-other-owner",
         ownerPubkey: otherOwner,
         url: "https://example.com/other",
-        contactNPub: try makeNPub()
+        contactNPub: try TestKeyMaterialFactory.makeNPub()
       ),
     ]
 
@@ -509,7 +524,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
   func testLogoutWithoutClearingLocalDataKeepsContactsAndMessages() throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
-    let npub = try makeNPub()
+    let npub = try TestKeyMaterialFactory.makeNPub()
     let didAdd = session.addContact(npub: npub, displayName: "Alice")
     XCTAssertTrue(didAdd)
 
@@ -537,9 +552,9 @@ final class AppSessionLocalFlowTests: XCTestCase {
     let (session, container) = try makeSession(appGroupStore: appGroupStore)
     try session.identityService.createNewIdentity()
     let currentOwner = try XCTUnwrap(session.identityService.pubkeyHex)
-    let otherOwner = try makePubkeyHex()
+    let otherOwner = try TestKeyMaterialFactory.makePubkeyHex()
 
-    let recipientNPub = try makeNPub()
+    let recipientNPub = try TestKeyMaterialFactory.makeNPub()
     XCTAssertTrue(session.addContact(npub: recipientNPub, displayName: "Alice"))
 
     appGroupStore.pendingShares = [
@@ -574,7 +589,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
     _ = container
     try session.identityService.createNewIdentity()
     let ownerPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
-    let npub = try makeNPub()
+    let npub = try TestKeyMaterialFactory.makeNPub()
 
     XCTAssertTrue(session.addContact(npub: npub, displayName: "Alice"))
 
@@ -587,12 +602,10 @@ final class AppSessionLocalFlowTests: XCTestCase {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
     let firstOwner = try XCTUnwrap(session.identityService.pubkeyHex)
-    let sharedNPub = try makeNPub()
+    let sharedNPub = try TestKeyMaterialFactory.makeNPub()
     XCTAssertTrue(session.addContact(npub: sharedNPub, displayName: "Alice-A"))
 
-    guard let secondKeypair = Keypair() else {
-      throw TestError.keypairGenerationFailed
-    }
+    let secondKeypair = try TestKeyMaterialFactory.makeKeypair()
     session.logout(clearLocalData: false)
     session.importNsec(secondKeypair.privateKey.nsec)
     let secondOwner = try XCTUnwrap(session.identityService.pubkeyHex)
@@ -622,9 +635,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
     container.mainContext.insert(firstMessage)
     try container.mainContext.save()
 
-    guard let secondKeypair = Keypair() else {
-      throw TestError.keypairGenerationFailed
-    }
+    let secondKeypair = try TestKeyMaterialFactory.makeKeypair()
     session.logout(clearLocalData: false)
     session.importNsec(secondKeypair.privateKey.nsec)
     let secondOwner = try XCTUnwrap(session.identityService.pubkeyHex)
@@ -652,8 +663,8 @@ final class AppSessionLocalFlowTests: XCTestCase {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
     let ownerPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
-    let senderPubkey = try makePubkeyHex()
-    let receiverPubkey = try makePubkeyHex()
+    let senderPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let receiverPubkey = try TestKeyMaterialFactory.makePubkeyHex()
     let legacyConversationID = "legacy-conversation-id"
 
     let message = makeMessage(
@@ -712,20 +723,6 @@ final class AppSessionLocalFlowTests: XCTestCase {
       FetchDescriptor<SessionMessageEntity>(sortBy: [SortDescriptor(\.timestamp)]))
   }
 
-  private func makeNPub() throws -> String {
-    guard let keypair = Keypair() else {
-      throw TestError.keypairGenerationFailed
-    }
-    return keypair.publicKey.npub
-  }
-
-  private func makePubkeyHex() throws -> String {
-    guard let keypair = Keypair() else {
-      throw TestError.keypairGenerationFailed
-    }
-    return keypair.publicKey.hex
-  }
-
   private func makeMessage(
     eventID: String,
     conversationID: String,
@@ -752,7 +749,24 @@ final class AppSessionLocalFlowTests: XCTestCase {
   }
 }
 
-private enum TestError: Error {
+enum TestKeyMaterialFactory {
+  static func makeKeypair() throws -> Keypair {
+    guard let keypair = Keypair() else {
+      throw TestKeyMaterialFactoryError.keypairGenerationFailed
+    }
+    return keypair
+  }
+
+  static func makeNPub() throws -> String {
+    try makeKeypair().publicKey.npub
+  }
+
+  static func makePubkeyHex() throws -> String {
+    try makeKeypair().publicKey.hex
+  }
+}
+
+enum TestKeyMaterialFactoryError: Error {
   case keypairGenerationFailed
 }
 

@@ -59,6 +59,7 @@
 		E80EE0288B8055DA0D775DDE /* NewRootThreadSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E4299AB1D0EC23B53FB8021 /* NewRootThreadSheet.swift */; };
 		E98F8AD0477C0287BF9663F8 /* ConversationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 848DAED86706C32D1050B92C /* ConversationsView.swift */; };
 		EF19FA401BDF74AE61B08BA9 /* AppSessionLocalFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47DB242D6FCB3732EC147A9D /* AppSessionLocalFlowTests.swift */; };
+		F3A52A5F30B01E8B9919C101 /* RecipientSelectionLogicTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4E1D2A93B7F4C0D8A1E2F30 /* RecipientSelectionLogicTests.swift */; };
 		F4F8174F250F6EC15A447D92 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 5B94E88691277DCC6F6DE7E3 /* LaunchScreen.storyboard */; };
 		F50EF62E08CD91E1D4312E6E /* NostrSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 853C8A5E617908C1401BE59A /* NostrSDK */; };
 /* End PBXBuildFile section */
@@ -147,6 +148,7 @@
 		DB411CF847C9613148DBF8EC /* NostrDMService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NostrDMService.swift; sourceTree = "<group>"; };
 		E0A4216669E366D7FA44FAB9 /* LinkstrTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = LinkstrTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E2B58768540021D895D6791E /* ConversationID.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationID.swift; sourceTree = "<group>"; };
+		C4E1D2A93B7F4C0D8A1E2F30 /* RecipientSelectionLogicTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipientSelectionLogicTests.swift; sourceTree = "<group>"; };
 		F0CC043C9F8A923EBC1768E0 /* SessionMessageStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionMessageStore.swift; sourceTree = "<group>"; };
 		F601E426AE9DF9219162BF8C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		F62FC938E7F3697FA5067EA0 /* Linkstr.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Linkstr.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -173,6 +175,7 @@
 				076BFE5567285D2651D29E76 /* LinkstrPayloadTests.swift */,
 				3DF2BD42808FC977F554891B /* URLClassifierTests.swift */,
 				1F6ACEA4DC02F9BEDF3112F2 /* ContactKeyParserTests.swift */,
+				C4E1D2A93B7F4C0D8A1E2F30 /* RecipientSelectionLogicTests.swift */,
 			);
 			path = LinkstrTests;
 			sourceTree = "<group>";
@@ -543,6 +546,7 @@
 				88DCCA79F01DAC7A398ADF43 /* LinkstrPayloadTests.swift in Sources */,
 				5C081B12920542652F7743FA /* URLClassifierTests.swift in Sources */,
 				281F1A865026BA62008D1E0E /* ContactKeyParserTests.swift in Sources */,
+				F3A52A5F30B01E8B9919C101 /* RecipientSelectionLogicTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
