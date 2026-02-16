@@ -27,7 +27,7 @@
   - New post composer uses a single recipient picker with one `To` input for contact search and manual `Contact Key (npub)` entry, with matching `Paste` / `Scan` / `Clear` shortcuts.
   - `Use Contact Key` appears only for valid `Contact Key (npub)` values that are not already saved contacts.
   - From inside a known-contact session, recipient is preselected; from inside an unknown-peer session, recipient is locked to that peer.
-  - Share extension sends to a selected contact with URL + optional note.
+  - Share extension pre-fills the shared URL and uses the same `To` search pattern, but only existing contacts can be selected (no manual custom `Contact Key` target).
   - Pending shares are scoped to the account that queued them.
   - Share-extension snapshots and pending shares in the app-group container are encrypted at rest.
 - Read/unread

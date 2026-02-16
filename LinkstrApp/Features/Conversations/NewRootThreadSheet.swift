@@ -298,8 +298,7 @@ private struct RecipientSelectionSheet: View {
   }
 
   private func displayName(for contact: ContactEntity) -> String {
-    let trimmed = contact.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-    return trimmed.isEmpty ? contact.npub : trimmed
+    RecipientSearchLogic.displayNameOrNPub(displayName: contact.displayName, npub: contact.npub)
   }
 
   private func pasteFromClipboard() {
@@ -314,24 +313,19 @@ private struct RecipientSelectionSheet: View {
 enum RecipientSelectionLogic {
   static func selectedQuery(selectedRecipientNPub: String?, selectedDisplayName: String?) -> String
   {
-    let trimmedName = selectedDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    if !trimmedName.isEmpty {
-      return trimmedName
-    }
-    return selectedRecipientNPub ?? ""
+    RecipientSearchLogic.selectedQuery(
+      selectedRecipientNPub: selectedRecipientNPub,
+      selectedDisplayName: selectedDisplayName
+    )
   }
 
   static func filteredContacts(_ contacts: [ContactEntity], query: String) -> [ContactEntity] {
-    let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmedQuery.isEmpty else { return contacts }
-
-    return contacts.filter {
-      contactMatches(
-        query: trimmedQuery,
-        displayName: $0.displayName,
-        npub: $0.npub
-      )
-    }
+    RecipientSearchLogic.filteredContacts(
+      contacts,
+      query: query,
+      displayName: \.displayName,
+      npub: \.npub
+    )
   }
 
   static func normalizedNPub(from query: String) -> String? {
@@ -347,13 +341,6 @@ enum RecipientSelectionLogic {
   static func customRecipientNPub(from query: String, knownNPubs: [String]) -> String? {
     guard let normalized = normalizedNPub(from: query) else { return nil }
     return knownNPubs.contains(normalized) ? nil : normalized
-  }
-
-  static func contactMatches(query: String, displayName: String, npub: String) -> Bool {
-    let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    guard !normalizedQuery.isEmpty else { return true }
-    let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    return name.contains(normalizedQuery) || npub.lowercased().contains(normalizedQuery)
   }
 }
 

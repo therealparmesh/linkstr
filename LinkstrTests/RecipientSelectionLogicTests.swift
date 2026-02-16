@@ -3,56 +3,6 @@ import XCTest
 @testable import Linkstr
 
 final class RecipientSelectionLogicTests: XCTestCase {
-  func testSelectedQueryPrefersDisplayName() {
-    XCTAssertEqual(
-      RecipientSelectionLogic.selectedQuery(
-        selectedRecipientNPub: "npub1example",
-        selectedDisplayName: "Alice"
-      ),
-      "Alice"
-    )
-  }
-
-  func testSelectedQueryFallsBackToNPub() {
-    XCTAssertEqual(
-      RecipientSelectionLogic.selectedQuery(
-        selectedRecipientNPub: "npub1example",
-        selectedDisplayName: "   "
-      ),
-      "npub1example"
-    )
-  }
-
-  func testContactMatchesMatchesDisplayNameCaseInsensitive() {
-    XCTAssertTrue(
-      RecipientSelectionLogic.contactMatches(
-        query: "alice",
-        displayName: "Alice Smith",
-        npub: "npub1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqk3el7l"
-      )
-    )
-  }
-
-  func testContactMatchesMatchesNPubSubstring() {
-    XCTAssertTrue(
-      RecipientSelectionLogic.contactMatches(
-        query: "npub1test",
-        displayName: "Bob",
-        npub: "npub1testabcdefg12345"
-      )
-    )
-  }
-
-  func testContactMatchesRejectsNonMatchingQuery() {
-    XCTAssertFalse(
-      RecipientSelectionLogic.contactMatches(
-        query: "charlie",
-        displayName: "Alice Smith",
-        npub: "npub1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqk3el7l"
-      )
-    )
-  }
-
   func testNormalizedNPubAcceptsRawAndNostrPrefix() throws {
     let npub = try TestKeyMaterialFactory.makeNPub()
     XCTAssertEqual(RecipientSelectionLogic.normalizedNPub(from: npub), npub)
@@ -122,5 +72,97 @@ final class RecipientSelectionLogicTests: XCTestCase {
         matchedContactDisplayName: nil
       )
     )
+  }
+}
+
+final class RecipientSearchLogicTests: XCTestCase {
+  func testSelectedQueryPrefersDisplayName() {
+    XCTAssertEqual(
+      RecipientSearchLogic.selectedQuery(
+        selectedRecipientNPub: "npub1example",
+        selectedDisplayName: "Alice"
+      ),
+      "Alice"
+    )
+  }
+
+  func testSelectedQueryFallsBackToNPub() {
+    XCTAssertEqual(
+      RecipientSearchLogic.selectedQuery(
+        selectedRecipientNPub: "npub1example",
+        selectedDisplayName: "   "
+      ),
+      "npub1example"
+    )
+  }
+
+  func testDisplayNameOrNPubFallsBackWhenDisplayNameIsEmpty() {
+    XCTAssertEqual(
+      RecipientSearchLogic.displayNameOrNPub(displayName: "   ", npub: "npub1example"),
+      "npub1example"
+    )
+  }
+
+  func testFilteredContactsReturnsAllForEmptyQuery() throws {
+    let contacts = try makeContacts()
+    XCTAssertEqual(
+      RecipientSearchLogic.filteredContacts(
+        contacts,
+        query: "   ",
+        displayName: \.displayName,
+        npub: \.npub
+      )
+      .map(\.npub),
+      contacts.map(\.npub)
+    )
+  }
+
+  func testFilteredContactsMatchesDisplayNameCaseInsensitive() throws {
+    let contacts = try makeContacts()
+    let matches = RecipientSearchLogic.filteredContacts(
+      contacts,
+      query: "alice",
+      displayName: \.displayName,
+      npub: \.npub
+    )
+    XCTAssertEqual(matches.map(\.displayName), ["Alice Smith"])
+  }
+
+  func testFilteredContactsMatchesNPubSubstring() throws {
+    let contacts = try makeContacts()
+    let bobNPub = contacts[1].npub
+    let suffix = String(bobNPub.suffix(10))
+    let matches = RecipientSearchLogic.filteredContacts(
+      contacts,
+      query: suffix,
+      displayName: \.displayName,
+      npub: \.npub
+    )
+    XCTAssertEqual(matches.map(\.npub), [bobNPub])
+  }
+
+  func testContactMatchesRejectsNonMatchingQuery() {
+    XCTAssertFalse(
+      RecipientSearchLogic.contactMatches(
+        query: "charlie",
+        displayName: "Alice Smith",
+        npub: "npub1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqk3el7l"
+      )
+    )
+  }
+
+  private func makeContacts() throws -> [ContactSnapshot] {
+    [
+      ContactSnapshot(
+        ownerPubkey: "owner-a",
+        npub: try TestKeyMaterialFactory.makeNPub(),
+        displayName: "Alice Smith"
+      ),
+      ContactSnapshot(
+        ownerPubkey: "owner-a",
+        npub: try TestKeyMaterialFactory.makeNPub(),
+        displayName: "Bob"
+      ),
+    ]
   }
 }

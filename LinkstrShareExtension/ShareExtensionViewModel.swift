@@ -6,6 +6,11 @@ import UniformTypeIdentifiers
 final class ShareExtensionViewModel: ObservableObject {
   @Published var incomingURL: String = ""
   @Published var contacts: [ContactSnapshot] = []
+  @Published var recipientQuery: String = "" {
+    didSet {
+      syncSelectedContactWithQuery()
+    }
+  }
   @Published var selectedContact: ContactSnapshot?
   @Published var note: String = ""
   @Published var errorMessage: String?
@@ -19,6 +24,42 @@ final class ShareExtensionViewModel: ObservableObject {
   func load(context: NSExtensionContext?) {
     loadContacts()
     loadURL(context: context)
+  }
+
+  var filteredContacts: [ContactSnapshot] {
+    RecipientSearchLogic.filteredContacts(
+      contacts,
+      query: recipientQuery,
+      displayName: { displayName(for: $0) },
+      npub: { $0.npub }
+    )
+  }
+
+  var recipientInputHasValue: Bool {
+    selectedContact != nil
+      || !recipientQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+
+  func selectContact(_ contact: ContactSnapshot) {
+    selectedContact = contact
+    recipientQuery = displayName(for: contact)
+    errorMessage = nil
+  }
+
+  func clearRecipient() {
+    selectedContact = nil
+    recipientQuery = ""
+    errorMessage = nil
+  }
+
+  func displayName(for contact: ContactSnapshot) -> String {
+    RecipientSearchLogic.displayNameOrNPub(displayName: contact.displayName, npub: contact.npub)
+  }
+
+  func pasteRecipientFromClipboard() {
+    if let clipboardText = UIPasteboard.general.string {
+      recipientQuery = clipboardText
+    }
   }
 
   func send() {
@@ -47,7 +88,16 @@ final class ShareExtensionViewModel: ObservableObject {
   }
 
   private func loadContacts() {
-    contacts = (try? store.loadContactsSnapshot()) ?? []
+    let loadedContacts = (try? store.loadContactsSnapshot()) ?? []
+    contacts = loadedContacts.sorted {
+      displayName(for: $0).localizedCaseInsensitiveCompare(displayName(for: $1))
+        == .orderedAscending
+    }
+    if let selectedContact,
+      !contacts.contains(where: { $0.id == selectedContact.id })
+    {
+      self.selectedContact = nil
+    }
   }
 
   private func loadURL(context: NSExtensionContext?) {
@@ -69,6 +119,24 @@ final class ShareExtensionViewModel: ObservableObject {
         }
       }
       return
+    }
+  }
+
+  private func syncSelectedContactWithQuery() {
+    let trimmedQuery = recipientQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedQuery.isEmpty else {
+      selectedContact = nil
+      return
+    }
+
+    guard let selectedContact else { return }
+
+    let normalizedQuery = trimmedQuery.lowercased()
+    let normalizedDisplayName = displayName(for: selectedContact).lowercased()
+    if normalizedDisplayName != normalizedQuery
+      && selectedContact.npub.lowercased() != normalizedQuery
+    {
+      self.selectedContact = nil
     }
   }
 }
