@@ -29,12 +29,11 @@ struct ContactsView: View {
   @ViewBuilder
   private var content: some View {
     if scopedContacts.isEmpty {
-      ContentUnavailableView(
-        "No Contacts",
+      LinkstrCenteredEmptyStateView(
+        title: "No Contacts",
         systemImage: "person.2.slash",
-        description: Text("Add at least one contact to start sharing links.")
+        description: "Add at least one contact to start sharing links."
       )
-      .padding(.top, LinkstrTheme.emptyStateTopPadding)
     } else {
       ScrollView {
         LazyVStack(spacing: 0) {

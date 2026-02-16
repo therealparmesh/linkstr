@@ -26,7 +26,7 @@ struct SettingsView: View {
 
   private var content: some View {
     ScrollView {
-      VStack(alignment: .leading, spacing: 26) {
+      VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
         relaysSection
         storageSection
         identitySection

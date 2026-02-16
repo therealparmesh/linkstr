@@ -132,11 +132,11 @@ struct ConversationsView: View {
   @ViewBuilder
   private var content: some View {
     if summaries.isEmpty {
-      ContentUnavailableView(
-        "No Sessions", systemImage: "bubble.left.and.bubble.right",
-        description: Text("Share a link to start a session.")
+      LinkstrCenteredEmptyStateView(
+        title: "No Sessions",
+        systemImage: "bubble.left.and.bubble.right",
+        description: "Share a link to start a session."
       )
-      .padding(.top, LinkstrTheme.emptyStateTopPadding)
     } else {
       ScrollView {
         LazyVStack(spacing: 0) {

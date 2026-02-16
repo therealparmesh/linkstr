@@ -3,6 +3,7 @@ import SwiftUI
 struct OnboardingView: View {
   @EnvironmentObject private var session: AppSession
   @State private var secretKey = ""
+  private let formRowSpacing: CGFloat = 12
 
   var body: some View {
     NavigationStack {
@@ -17,7 +18,7 @@ struct OnboardingView: View {
               .font(.custom(LinkstrTheme.bodyFont, size: 14))
               .foregroundStyle(LinkstrTheme.textSecondary)
 
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: formRowSpacing) {
               LinkstrSectionHeader(title: "Sign In")
               TextField("Secret Key (nsec...)", text: $secretKey)
                 .textInputAutocapitalization(.never)
@@ -47,7 +48,7 @@ struct OnboardingView: View {
                   .fill(LinkstrTheme.textSecondary.opacity(0.26))
                   .frame(height: 1)
               }
-              .padding(.vertical, 6)
+              .padding(.vertical, LinkstrTheme.sectionStackSpacing - formRowSpacing)
 
               LinkstrSectionHeader(title: "Create Account")
               Button {

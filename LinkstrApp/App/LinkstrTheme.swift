@@ -13,7 +13,7 @@ enum LinkstrTheme {
 
   static let titleFont = "HelveticaNeue-Medium"
   static let bodyFont = "HelveticaNeue"
-  static let emptyStateTopPadding: CGFloat = 64
+  static let sectionStackSpacing: CGFloat = 26
 }
 
 struct LinkstrBackgroundView: View {
@@ -80,6 +80,22 @@ struct LinkstrSectionHeader: View {
       Spacer()
     }
     .padding(.top, 2)
+  }
+}
+
+struct LinkstrCenteredEmptyStateView: View {
+  let title: String
+  let systemImage: String
+  let description: String
+
+  var body: some View {
+    ContentUnavailableView(
+      title,
+      systemImage: systemImage,
+      description: Text(description)
+    )
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+    .padding(.horizontal, 24)
   }
 }
 

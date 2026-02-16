@@ -16,7 +16,7 @@ struct ShareIdentityView: View {
   private var content: some View {
     if let npub = session.identityService.npub {
       ScrollView {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
           if let qrImage = QRCodeGenerator.image(for: npub) {
             VStack(spacing: 10) {
               Image(uiImage: qrImage)
@@ -39,42 +39,42 @@ struct ShareIdentityView: View {
                 .foregroundStyle(LinkstrTheme.textSecondary)
             }
             .frame(maxWidth: .infinity)
-            .padding(.top, 6)
           }
 
-          LinkstrSectionHeader(title: "Your Contact Key (npub)")
-          Text("Others use this key to send links to you or add you as a contact.")
-            .font(.custom(LinkstrTheme.bodyFont, size: 13))
-            .foregroundStyle(LinkstrTheme.textSecondary)
-          Text(npub)
-            .font(.custom(LinkstrTheme.bodyFont, size: 13))
-            .foregroundStyle(LinkstrTheme.textSecondary)
-            .textSelection(.enabled)
-            .padding(10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-              RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(LinkstrTheme.panelSoft)
-            )
+          VStack(alignment: .leading, spacing: 10) {
+            LinkstrSectionHeader(title: "Your Contact Key (npub)")
+            Text("Others use this key to send links to you or add you as a contact.")
+              .font(.custom(LinkstrTheme.bodyFont, size: 13))
+              .foregroundStyle(LinkstrTheme.textSecondary)
+            Text(npub)
+              .font(.custom(LinkstrTheme.bodyFont, size: 13))
+              .foregroundStyle(LinkstrTheme.textSecondary)
+              .textSelection(.enabled)
+              .padding(10)
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                  .fill(LinkstrTheme.panelSoft)
+              )
 
-          Button {
-            UIPasteboard.general.string = npub
-          } label: {
-            Label("Copy Contact Key (npub)", systemImage: "doc.on.doc")
-              .frame(maxWidth: .infinity)
+            Button {
+              UIPasteboard.general.string = npub
+            } label: {
+              Label("Copy Contact Key (npub)", systemImage: "doc.on.doc")
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(LinkstrPrimaryButtonStyle())
           }
-          .buttonStyle(LinkstrPrimaryButtonStyle())
         }
         .padding(12)
       }
       .scrollBounceBehavior(.basedOnSize)
     } else {
-      ContentUnavailableView(
-        "No Identity",
+      LinkstrCenteredEmptyStateView(
+        title: "No Identity",
         systemImage: "person.crop.circle.badge.exclamationmark",
-        description: Text("Create an account or sign in with a Secret Key (nsec) in Settings.")
+        description: "Create an account or sign in with a Secret Key (nsec) in Settings."
       )
-      .padding(.top, 44)
     }
   }
 }
