@@ -11,10 +11,10 @@ struct OnboardingView: View {
         LinkstrBackgroundView()
         ScrollView {
           VStack(alignment: .leading, spacing: 18) {
-            Text("linkstr")
-              .font(.custom(LinkstrTheme.titleFont, size: 42))
+            Text("Welcome To linkstr.")
+              .font(.custom(LinkstrTheme.titleFont, size: 36))
               .foregroundStyle(LinkstrTheme.textPrimary)
-            Text("Private link sessions over Nostr.")
+            Text("Share videos and links privately with people who don’t use social media.")
               .font(.custom(LinkstrTheme.bodyFont, size: 14))
               .foregroundStyle(LinkstrTheme.textSecondary)
 
@@ -66,7 +66,6 @@ struct OnboardingView: View {
         }
         .scrollBounceBehavior(.basedOnSize)
       }
-      .navigationTitle("Welcome")
       .navigationBarTitleDisplayMode(.inline)
       .toolbarColorScheme(.dark, for: .navigationBar)
     }

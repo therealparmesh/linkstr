@@ -1,6 +1,6 @@
 # linkstr (iOS 17+)
 
-`linkstr` is a private, link-first Nostr app for sharing URLs and threaded replies with one session per peer.
+`linkstr` lets you share videos and links privately with people who don’t use social media.
 
 ## Product behavior
 
