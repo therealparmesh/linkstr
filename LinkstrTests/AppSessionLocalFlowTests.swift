@@ -306,7 +306,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
   }
 
   func testCreatePostWithOnlyReconnectingRelaysSuppressesOfflineToast() throws {
-    let (session, container) = try makeSession(disableNostrStartupOverride: false)
+    let (session, container) = try makeSession(testDisableNostrStartupOverride: false)
     let recipientNPub = try TestKeyMaterialFactory.makeNPub()
     try session.identityService.createNewIdentity()
 
@@ -327,7 +327,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
   }
 
   func testCreatePostWithReadOnlyRelaysShowsReadOnlyMessage() throws {
-    let (session, container) = try makeSession(disableNostrStartupOverride: false)
+    let (session, container) = try makeSession(testDisableNostrStartupOverride: false)
     let recipientNPub = try TestKeyMaterialFactory.makeNPub()
     try session.identityService.createNewIdentity()
 
@@ -350,7 +350,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
   }
 
   func testCreatePostWithOfflineRelaysShowsOfflineToast() throws {
-    let (session, container) = try makeSession(disableNostrStartupOverride: false)
+    let (session, container) = try makeSession(testDisableNostrStartupOverride: false)
     let recipientNPub = try TestKeyMaterialFactory.makeNPub()
     try session.identityService.createNewIdentity()
 
@@ -369,8 +369,32 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
   }
 
+  func testCreatePostAllowsSendWhenLiveRelayConnectionExistsDespiteOfflineStoredStatus() throws {
+    let (session, container) = try makeSession(
+      testDisableNostrStartupOverride: false,
+      testHasConnectedRelaysOverride: { true }
+    )
+    let recipientNPub = try TestKeyMaterialFactory.makeNPub()
+    try session.identityService.createNewIdentity()
+
+    let relay = RelayEntity(url: "wss://relay.example.com", status: .failed)
+    container.mainContext.insert(relay)
+    try container.mainContext.save()
+
+    session.startNostrIfPossible()
+    let didCreate = session.createPost(
+      url: "https://example.com/path",
+      note: nil,
+      recipientNPub: recipientNPub
+    )
+
+    XCTAssertTrue(didCreate)
+    XCTAssertNil(session.composeError)
+    XCTAssertEqual(try fetchMessages(in: container.mainContext).count, 1)
+  }
+
   func testCreatePostWithNoEnabledRelaysShowsNoEnabledRelaysMessage() throws {
-    let (session, container) = try makeSession(disableNostrStartupOverride: false)
+    let (session, container) = try makeSession(testDisableNostrStartupOverride: false)
     let recipientNPub = try TestKeyMaterialFactory.makeNPub()
     try session.identityService.createNewIdentity()
 
@@ -583,6 +607,73 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertEqual(appGroupStore.pendingShares.map(\.id), ["pending-other-owner"])
   }
 
+  func testPendingSharesFlushWhenLiveRelayConnectionExistsDespiteOfflineStoredStatus() throws {
+    let appGroupStore = InMemoryAppGroupStore()
+    let (session, container) = try makeSession(
+      testDisableNostrStartupOverride: false,
+      testHasConnectedRelaysOverride: { true },
+      appGroupStore: appGroupStore
+    )
+    try session.identityService.createNewIdentity()
+    let currentOwner = try XCTUnwrap(session.identityService.pubkeyHex)
+    let recipientNPub = try TestKeyMaterialFactory.makeNPub()
+    XCTAssertTrue(session.addContact(npub: recipientNPub, displayName: "Alice"))
+
+    appGroupStore.pendingShares = [
+      PendingShareItem(
+        id: "pending-live-connection",
+        ownerPubkey: currentOwner,
+        url: "https://example.com/current",
+        contactNPub: recipientNPub,
+        note: "current-account"
+      )
+    ]
+
+    let relay = RelayEntity(url: "wss://relay.example.com", status: .failed)
+    container.mainContext.insert(relay)
+    try container.mainContext.save()
+
+    session.handleAppDidBecomeActive()
+
+    let messages = try fetchMessages(in: container.mainContext)
+    XCTAssertEqual(messages.count, 1)
+    XCTAssertEqual(messages.first?.url, "https://example.com/current")
+    XCTAssertEqual(messages.first?.note, "current-account")
+    XCTAssertTrue(appGroupStore.pendingShares.isEmpty)
+  }
+
+  func testPendingSharesDoNotFlushWithOnlyPersistedConnectedStatus() throws {
+    let appGroupStore = InMemoryAppGroupStore()
+    let (session, container) = try makeSession(
+      testDisableNostrStartupOverride: false,
+      testHasConnectedRelaysOverride: { false },
+      appGroupStore: appGroupStore
+    )
+    try session.identityService.createNewIdentity()
+    let currentOwner = try XCTUnwrap(session.identityService.pubkeyHex)
+    let recipientNPub = try TestKeyMaterialFactory.makeNPub()
+    XCTAssertTrue(session.addContact(npub: recipientNPub, displayName: "Alice"))
+
+    appGroupStore.pendingShares = [
+      PendingShareItem(
+        id: "pending-persisted-connected",
+        ownerPubkey: currentOwner,
+        url: "https://example.com/current",
+        contactNPub: recipientNPub,
+        note: "current-account"
+      )
+    ]
+
+    let relay = RelayEntity(url: "wss://relay.example.com", status: .connected)
+    container.mainContext.insert(relay)
+    try container.mainContext.save()
+
+    session.handleAppDidBecomeActive()
+
+    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
+    XCTAssertEqual(appGroupStore.pendingShares.map(\.id), ["pending-persisted-connected"])
+  }
+
   func testContactSnapshotIncludesOwnerPubkey() throws {
     let appGroupStore = InMemoryAppGroupStore()
     let (session, container) = try makeSession(appGroupStore: appGroupStore)
@@ -688,7 +779,8 @@ final class AppSessionLocalFlowTests: XCTestCase {
   }
 
   private func makeSession(
-    disableNostrStartupOverride: Bool? = nil,
+    testDisableNostrStartupOverride: Bool? = nil,
+    testHasConnectedRelaysOverride: (() -> Bool)? = nil,
     appGroupStore: AppGroupStoreProtocol = InMemoryAppGroupStore()
   ) throws -> (
     AppSession, ModelContainer
@@ -703,7 +795,8 @@ final class AppSessionLocalFlowTests: XCTestCase {
     return (
       AppSession(
         modelContext: container.mainContext,
-        disableNostrStartupOverride: disableNostrStartupOverride,
+        testDisableNostrStartupOverride: testDisableNostrStartupOverride,
+        testHasConnectedRelaysOverride: testHasConnectedRelaysOverride,
         appGroupStore: appGroupStore
       ),
       container

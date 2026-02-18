@@ -45,11 +45,29 @@ final class RelayStore {
     try modelContext.save()
   }
 
-  func updateRelayStatus(relayURL: String, status: RelayHealthStatus, message: String?) throws {
+  @discardableResult
+  func updateRelayStatus(relayURL: String, status: RelayHealthStatus, message: String?) throws
+    -> Bool
+  {
     let descriptor = FetchDescriptor<RelayEntity>(predicate: #Predicate { $0.url == relayURL })
-    guard let relay = try modelContext.fetch(descriptor).first else { return }
+    guard let relay = try modelContext.fetch(descriptor).first else { return false }
+
+    let normalizedMessage: String?
+    if let message {
+      let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+      normalizedMessage = trimmed.isEmpty ? nil : trimmed
+    } else {
+      normalizedMessage = nil
+    }
+
+    // Relay status is transient runtime state. Persisting every update is expensive and can block
+    // scene transitions under high reconnect churn.
+    if relay.status == status && relay.lastError == normalizedMessage {
+      return false
+    }
+
     relay.status = status
-    relay.lastError = message
-    try modelContext.save()
+    relay.lastError = normalizedMessage
+    return true
   }
 }

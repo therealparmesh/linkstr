@@ -17,6 +17,18 @@
   - Posts require URL + optional note.
   - Replies are text-only.
   - Notifications are local best-effort alerts while the app is active/receiving relay events (no APNs remote push yet).
+- iMessage extension
+  - Includes an iMessage app extension (`LinkstrMessagesExtension`) for sharing supported video URLs in Messages.
+  - Uses the same runtime URL support matrix as the main app (`URLClassifier` in `SharedKit`).
+  - Encodes bubble payloads in `MSMessage.url` as HTTPS (`https://linkstr.app/messages/open?p=...`).
+  - On send, the extension waits for LinkPresentation metadata for up to 10 seconds.
+  - If metadata fetch times out or fails, send is blocked and the composer shows an error so the user can retry.
+  - If message send itself fails, the extension stays open and shows an error instead of silently dismissing.
+  - After successful send, the extension dismisses and Messages shows the native pending/sent bubble flow.
+  - Selecting a Linkstr bubble auto-attempts opening `linkstr://open?p=...`; if that fails/cancels, `Open in Linkstr` remains available in the extension UI.
+  - iOS controls cross-app launch confirmation from Messages extensions; a system open-app confirmation may appear before Linkstr opens.
+  - Main app handles that deep link and opens an isolated playback-first screen with `Done` to dismiss.
+  - Deep-link flow is intentionally independent of Nostr messaging routes and does not use app-group payload persistence.
 - Sessions and contacts
   - Unknown peers appear directly in Sessions (no invite flow).
   - Contacts are local-only (no follow event is published) and scoped per signed-in account.
@@ -38,11 +50,14 @@
 - Relays
   - Add/remove/toggle relays.
   - Relay health status shown by colored dot.
+  - Relay health/status persistence is foreground-only (no relay-status DB churn while app is backgrounded).
+  - No app-side background cutoff is enforced for relay connections; they continue until iOS suspends/terminates the app.
+  - Foreground resume/send gating prefers live connected relay sockets.
   - Green relay status means read/write connected; read-only relays are shown separately and cannot send.
   - Relay disconnect/reconnect chatter is suppressed in toasts.
   - Offline toast appears only when zero enabled relays are connected, zero are read-only, and none are reconnecting.
-  - Sending is blocked unless at least one enabled relay is read/write connected.
-  - Pending shares stay queued until a writable relay connection is available.
+  - Sending is blocked when no relay connectivity is available (live socket or persisted writable status).
+  - Pending shares stay queued until a live relay socket is connected.
   - On connect/sign-in, the app subscribes live and also backfills relay history (paged) to recover prior messages.
   - Relays sorted alphabetically in Settings.
   - Reset to default relays from Settings.
@@ -86,3 +101,14 @@ xcodebuild test -project Linkstr.xcodeproj -scheme Linkstr -destination 'platfor
 ```
 
 If your installed simulator name differs, replace `name=iPhone 17 Pro` with one available on your machine.
+
+## iMessage manual QA
+
+1. Install and run `Linkstr` on simulator/device.
+2. Open Messages and launch `linkstr` from the app drawer.
+3. Paste a supported video URL and send.
+4. Select the sent Linkstr bubble in the transcript.
+5. Verify Linkstr auto-opens (or use fallback `Open in Linkstr` if iOS canceled/blocked launch).
+6. Verify Linkstr opens to the deep-link player surface (not into Sessions/threads).
+7. Tap `Done` and verify dismissal back to the app root.
+8. Repeat with an unsupported URL and verify send is blocked in the extension.

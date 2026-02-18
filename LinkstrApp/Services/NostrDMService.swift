@@ -40,6 +40,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
   private var keypair: Keypair?
   private var onIncoming: ((ReceivedDirectMessage) -> Void)?
   private var onRelayStatus: ((String, RelayHealthStatus, String?) -> Void)?
+  private var configuredRelayURLs = Set<String>()
 
   private let recipientSubscriptionID = "linkstr-giftwrap-recipient"
   private let authorSubscriptionID = "linkstr-giftwrap-author"
@@ -49,18 +50,40 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
   // App-specific rumor kind carried inside NIP-59 gift wrap events.
   private let linkstrRumorKind = EventKind.unknown(44_001)
 
+  var isRunning: Bool {
+    shouldMaintainConnection && relayPool != nil
+  }
+
+  func hasConnectedRelays() -> Bool {
+    !connectedRelayURLs().isEmpty
+  }
+
+  func isConfigured(for keypair: Keypair, relayURLs: [String]) -> Bool {
+    guard isRunning else { return false }
+    guard self.keypair?.publicKey.hex == keypair.publicKey.hex else { return false }
+    return configuredRelayURLs == Set(relayURLs)
+  }
+
   func start(
     keypair: Keypair,
     relayURLs: [String],
     onIncoming: @escaping (ReceivedDirectMessage) -> Void,
     onRelayStatus: @escaping (String, RelayHealthStatus, String?) -> Void
   ) {
+    if isConfigured(for: keypair, relayURLs: relayURLs) {
+      self.onIncoming = onIncoming
+      self.onRelayStatus = onRelayStatus
+      relayPool?.connect()
+      return
+    }
+
     stop()
     shouldMaintainConnection = true
 
     self.keypair = keypair
     self.onIncoming = onIncoming
     self.onRelayStatus = onRelayStatus
+    configuredRelayURLs = Set(relayURLs)
     activeBackfillStates = [:]
     completedBackfillKinds = []
 
@@ -135,6 +158,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     onIncoming = nil
     onRelayStatus = nil
     keypair = nil
+    configuredRelayURLs.removeAll()
   }
 
   private func scheduleReconnect() {

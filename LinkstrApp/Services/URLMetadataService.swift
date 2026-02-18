@@ -11,11 +11,13 @@ struct LinkPreviewData {
 @MainActor
 final class URLMetadataService {
   static let shared = URLMetadataService()
+  private static let providerTimeout: TimeInterval = 1.0
   private init() {}
 
   func fetchPreview(for urlString: String) async -> LinkPreviewData? {
     guard let url = URL(string: urlString) else { return nil }
     let provider = LPMetadataProvider()
+    provider.timeout = Self.providerTimeout
     do {
       let metadata = try await provider.startFetchingMetadata(for: url)
       let title = metadata.title

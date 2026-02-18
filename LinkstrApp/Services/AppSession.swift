@@ -19,7 +19,8 @@ final class AppSession: ObservableObject {
   private let relayStore: RelayStore
   private let messageStore: SessionMessageStore
   private let appGroupStore: AppGroupStoreProtocol
-  private let disableNostrStartupOverride: Bool?
+  private let testHasConnectedRelaysOverride: (() -> Bool)?
+  private let testDisableNostrStartupOverride: Bool?
   private let noEnabledRelaysMessage =
     "No relays are enabled. Enable at least one relay in Settings."
   private let relayOfflineMessage = "You're offline. Waiting for a relay connection."
@@ -27,6 +28,7 @@ final class AppSession: ObservableObject {
     "Connected relays are read-only. Add a writable relay to send."
   private var hasShownOfflineToastForCurrentOutage = false
   private var isProcessingPendingShares = false
+  private var isForeground = false
 
   @Published var composeError: String?
   @Published private(set) var hasIdentity = false
@@ -34,11 +36,13 @@ final class AppSession: ObservableObject {
 
   init(
     modelContext: ModelContext,
-    disableNostrStartupOverride: Bool? = nil,
+    testDisableNostrStartupOverride: Bool? = nil,
+    testHasConnectedRelaysOverride: (() -> Bool)? = nil,
     appGroupStore: AppGroupStoreProtocol = AppGroupStore.shared
   ) {
     self.modelContext = modelContext
-    self.disableNostrStartupOverride = disableNostrStartupOverride
+    self.testDisableNostrStartupOverride = testDisableNostrStartupOverride
+    self.testHasConnectedRelaysOverride = testHasConnectedRelaysOverride
     self.appGroupStore = appGroupStore
     self.identityService = IdentityService()
     self.nostrService = NostrDMService()
@@ -78,8 +82,13 @@ final class AppSession: ObservableObject {
   }
 
   func handleAppDidBecomeActive() {
+    isForeground = true
     startNostrIfPossible()
     processPendingShares()
+  }
+
+  func handleAppDidLeaveForeground() {
+    isForeground = false
   }
 
   private func report(error: Error) {
@@ -108,6 +117,22 @@ final class AppSession: ObservableObject {
     }
   }
 
+  private func clearRelaySendBlockingErrorIfPresent() {
+    if composeError == relayOfflineMessage
+      || composeError == noEnabledRelaysMessage
+      || composeError == relayReadOnlyMessage
+    {
+      composeError = nil
+    }
+  }
+
+  private func hasConnectedRelays() -> Bool {
+    if let testHasConnectedRelaysOverride {
+      return testHasConnectedRelaysOverride()
+    }
+    return nostrService.hasConnectedRelays()
+  }
+
   private func refreshRelayConnectivityAlert() throws {
     let enabledRelays = try relayStore.fetchRelays().filter(\.isEnabled)
     switch relayConnectivityState(for: enabledRelays) {
@@ -124,6 +149,14 @@ final class AppSession: ObservableObject {
 
   private func ensureRelayReadyForSend() -> Bool {
     if shouldDisableNostrStartupForCurrentProcess() {
+      return true
+    }
+
+    // Prefer live relay socket state when available so foreground resumes can send/flush
+    // immediately, even if persisted relay statuses are stale from background time.
+    if hasConnectedRelays() {
+      hasShownOfflineToastForCurrentOutage = false
+      clearRelaySendBlockingErrorIfPresent()
       return true
     }
 
@@ -153,12 +186,7 @@ final class AppSession: ObservableObject {
       return false
     case .online:
       hasShownOfflineToastForCurrentOutage = false
-      if composeError == relayOfflineMessage
-        || composeError == noEnabledRelaysMessage
-        || composeError == relayReadOnlyMessage
-      {
-        composeError = nil
-      }
+      clearRelaySendBlockingErrorIfPresent()
       return true
     }
   }
@@ -167,10 +195,9 @@ final class AppSession: ObservableObject {
     if shouldDisableNostrStartupForCurrentProcess() {
       return true
     }
-    guard let enabledRelays = try? relayStore.fetchRelays().filter(\.isEnabled) else {
-      return false
-    }
-    return enabledRelays.contains(where: { $0.status == .connected })
+
+    // Pending-share flush must wait for a real live relay socket.
+    return hasConnectedRelays()
   }
 
   private func makeLocalEventID() -> String {
@@ -183,8 +210,8 @@ final class AppSession: ObservableObject {
   }
 
   private func shouldDisableNostrStartupForCurrentProcess() -> Bool {
-    if let disableNostrStartupOverride {
-      return disableNostrStartupOverride
+    if let testDisableNostrStartupOverride {
+      return testDisableNostrStartupOverride
     }
 
     let isRunningTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
@@ -311,12 +338,14 @@ final class AppSession: ObservableObject {
       onRelayStatus: { [weak self] relayURL, status, message in
         Task { @MainActor in
           guard let self else { return }
+          guard self.isForeground else { return }
           do {
-            try self.relayStore.updateRelayStatus(
+            let changed = try self.relayStore.updateRelayStatus(
               relayURL: relayURL,
               status: status,
               message: message
             )
+            guard changed else { return }
             try self.refreshRelayConnectivityAlert()
             if status == .connected {
               self.processPendingShares()
