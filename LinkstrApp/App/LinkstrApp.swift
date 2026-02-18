@@ -7,6 +7,7 @@ struct LinkstrAppMain: App {
 
   private let container: ModelContainer
   @StateObject private var session: AppSession
+  @StateObject private var deepLinkHandler = DeepLinkHandler()
 
   init() {
     let schema = Schema([
@@ -35,12 +36,23 @@ struct LinkstrAppMain: App {
     WindowGroup {
       RootView()
         .environmentObject(session)
+        .environmentObject(deepLinkHandler)
         .onAppear {
           session.boot()
         }
+        .onOpenURL { url in
+          deepLinkHandler.handle(url: url)
+        }
         .onChange(of: scenePhase) { _, newValue in
-          if newValue == .active {
+          switch newValue {
+          case .active:
             session.handleAppDidBecomeActive()
+          case .background:
+            session.handleAppDidLeaveForeground()
+          case .inactive:
+            break
+          @unknown default:
+            break
           }
         }
     }

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RootView: View {
   @EnvironmentObject private var session: AppSession
+  @EnvironmentObject private var deepLinkHandler: DeepLinkHandler
   @State private var toastMessage: String?
   @State private var toastDisplayID = UUID()
 
@@ -51,6 +52,22 @@ struct RootView: View {
       try? await Task.sleep(for: .seconds(2.2))
       withAnimation(.easeOut(duration: 0.18)) {
         toastMessage = nil
+      }
+    }
+    .fullScreenCover(
+      isPresented: Binding(
+        get: { deepLinkHandler.pendingPayload != nil },
+        set: { isPresented in
+          if !isPresented {
+            deepLinkHandler.clear()
+          }
+        }
+      )
+    ) {
+      if let payload = deepLinkHandler.pendingPayload {
+        DeepLinkContainerView(payload: payload)
+      } else {
+        EmptyView()
       }
     }
   }

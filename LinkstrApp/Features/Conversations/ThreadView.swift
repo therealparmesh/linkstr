@@ -1,21 +1,7 @@
-import AVFoundation
-import AVKit
-import SafariServices
 import SwiftData
 import SwiftUI
-import WebKit
 
 struct ThreadView: View {
-  private enum LocalPlaybackMode {
-    case localPreferred
-    case embedPreferred
-  }
-
-  private struct FullScreenWebItem: Identifiable {
-    let id = UUID()
-    let url: URL
-  }
-
   @EnvironmentObject private var session: AppSession
   @Environment(\.openURL) private var openURL
 
@@ -28,10 +14,6 @@ struct ThreadView: View {
   private var contacts: [ContactEntity]
 
   @State private var replyText = ""
-  @State private var extractionState: ExtractionState?
-  @State private var localPlaybackMode: LocalPlaybackMode = .localPreferred
-  @State private var extractionFallbackReason: String?
-  @State private var fullScreenWebItem: FullScreenWebItem?
   @FocusState private var isComposerFocused: Bool
 
   private var scopedMessages: [SessionMessageEntity] {
@@ -77,11 +59,6 @@ struct ThreadView: View {
     URLClassifier.mediaStrategy(for: post.url)
   }
 
-  private var sourceURL: URL? {
-    guard let urlString = post.url else { return nil }
-    return URL(string: urlString)
-  }
-
   private var mediaAspectRatio: CGFloat {
     guard let urlString = post.url, let sourceURL = URL(string: urlString) else {
       return 16.0 / 9.0
@@ -121,13 +98,8 @@ struct ThreadView: View {
       .navigationBarTitleDisplayMode(.inline)
       .toolbar(.visible, for: .navigationBar)
       .toolbarColorScheme(.dark, for: .navigationBar)
-      .fullScreenCover(item: $fullScreenWebItem) { item in
-        FullScreenSafariView(url: item.url)
-          .ignoresSafeArea()
-      }
       .task {
         session.markPostRepliesRead(postID: post.rootID)
-        await prepareMediaIfNeeded()
       }
       .onChange(of: replies.count) { _, _ in
         session.markPostRepliesRead(postID: post.rootID)
@@ -212,24 +184,32 @@ struct ThreadView: View {
   @ViewBuilder
   private var mediaBlock: some View {
     if let urlString = post.url, let url = URL(string: urlString) {
-      switch mediaStrategy {
-      case .extractionPreferred(let embedURL):
-        if localPlaybackMode == .embedPreferred {
-          embedPlaybackBlock(embedURL: embedURL)
-        } else {
-          localPlaybackBlock(embedURL: embedURL)
+      AdaptiveVideoPlaybackView(
+        sourceURL: url,
+        mediaStrategy: mediaStrategy,
+        mediaAspectRatio: mediaAspectRatio,
+        showOpenSourceButtonInEmbedMode: true,
+        openSourceAction: { openURL(url) },
+        resolveCachedLocalMedia: { sourceURL in
+          guard let path = post.cachedMediaPath,
+            post.cachedMediaSourceURL == sourceURL.absoluteString
+          else {
+            return nil
+          }
+          let localURL = URL(fileURLWithPath: path)
+          guard FileManager.default.fileExists(atPath: localURL.path) else {
+            post.cachedMediaPath = nil
+            post.cachedMediaSourceURL = nil
+            return nil
+          }
+          return PlayableMedia(playbackURL: localURL, headers: [:], isLocalFile: true)
+        },
+        persistLocalMedia: { sourceURL, media in
+          guard media.isLocalFile else { return }
+          post.cachedMediaPath = media.playbackURL.path
+          post.cachedMediaSourceURL = sourceURL.absoluteString
         }
-      case .embedOnly(let embedURL):
-        mediaSurface {
-          EmbeddedWebView(url: embedURL)
-        }
-      case .link:
-        Button("Open in Safari") {
-          openURL(url)
-        }
-        .frame(maxWidth: .infinity)
-        .buttonStyle(LinkstrPrimaryButtonStyle())
-      }
+      )
     }
   }
 
@@ -285,135 +265,6 @@ struct ThreadView: View {
     return message.senderPubkey == myPubkey
   }
 
-  private func prepareMediaIfNeeded() async {
-    guard let urlString = post.url, let url = URL(string: urlString) else { return }
-    guard mediaStrategy.allowsLocalPlaybackToggle else { return }
-    guard localPlaybackMode == .localPreferred else { return }
-
-    if let path = post.cachedMediaPath, post.cachedMediaSourceURL == urlString {
-      let local = URL(fileURLWithPath: path)
-      if FileManager.default.fileExists(atPath: local.path) {
-        extractionFallbackReason = nil
-        extractionState = .ready(PlayableMedia(playbackURL: local, headers: [:], isLocalFile: true))
-        return
-      }
-    }
-    post.cachedMediaPath = nil
-    post.cachedMediaSourceURL = nil
-
-    let result = await SocialVideoExtractionService.shared.extractPlayableMedia(from: url)
-    extractionState = result
-
-    if case .ready(let media) = result, media.isLocalFile {
-      post.cachedMediaPath = media.playbackURL.path
-      post.cachedMediaSourceURL = urlString
-      extractionFallbackReason = nil
-    }
-
-    if case .cannotExtract(let reason) = result {
-      extractionFallbackReason = reason
-      localPlaybackMode = .embedPreferred
-    }
-  }
-
-  @ViewBuilder
-  private func localPlaybackBlock(embedURL: URL) -> some View {
-    switch extractionState {
-    case .ready(let media):
-      VStack(alignment: .leading, spacing: 8) {
-        mediaSurface {
-          InlineVideoPlayer(media: media)
-        }
-        HStack(spacing: 8) {
-          Button {
-            localPlaybackMode = .embedPreferred
-          } label: {
-            Text("Use Embedded Player")
-              .frame(maxWidth: .infinity)
-          }
-          .buttonStyle(LinkstrSecondaryButtonStyle())
-
-          Button {
-            fullScreenWebItem = FullScreenWebItem(url: embedURL)
-          } label: {
-            Text("Open Fullscreen")
-              .frame(maxWidth: .infinity)
-          }
-          .buttonStyle(LinkstrSecondaryButtonStyle())
-        }
-      }
-      .frame(maxWidth: .infinity, alignment: .leading)
-    case .cannotExtract:
-      embedPlaybackBlock(embedURL: embedURL)
-    case nil:
-      HStack(spacing: 8) {
-        ProgressView()
-        Text("Preparing video playback…")
-          .font(.footnote)
-          .foregroundStyle(.secondary)
-      }
-      .padding(.vertical, 8)
-    }
-  }
-
-  private func embedPlaybackBlock(embedURL: URL) -> some View {
-    VStack(alignment: .leading, spacing: 8) {
-      mediaSurface {
-        EmbeddedWebView(url: embedURL)
-      }
-
-      if let extractionFallbackReason {
-        Text("Video playback unavailable: \(extractionFallbackReason)")
-          .font(.footnote)
-          .foregroundStyle(LinkstrTheme.textSecondary)
-      }
-
-      HStack(spacing: 8) {
-        Button {
-          Task {
-            localPlaybackMode = .localPreferred
-            if case .cannotExtract = extractionState {
-              extractionState = nil
-              extractionFallbackReason = nil
-              await prepareMediaIfNeeded()
-            }
-          }
-        } label: {
-          Text("Try Local Playback")
-            .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(LinkstrSecondaryButtonStyle())
-
-        Button {
-          fullScreenWebItem = FullScreenWebItem(url: embedURL)
-        } label: {
-          Text("Open Fullscreen")
-            .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(LinkstrSecondaryButtonStyle())
-      }
-
-      if let sourceURL {
-        Button {
-          openURL(sourceURL)
-        } label: {
-          Text("Open Source in Safari")
-            .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(LinkstrSecondaryButtonStyle())
-      }
-    }
-    .frame(maxWidth: .infinity, alignment: .leading)
-  }
-
-  private func mediaSurface<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-    content()
-      .frame(maxWidth: .infinity)
-      .aspectRatio(mediaAspectRatio, contentMode: .fit)
-      .background(LinkstrTheme.panelSoft)
-      .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-  }
-
   private var replyCountLabel: String {
     replies.count == 1 ? "1 reply" : "\(replies.count) replies"
   }
@@ -452,158 +303,4 @@ private struct ReplyBubbleRow: View {
     )
     .frame(maxWidth: .infinity, alignment: isOutgoing ? .trailing : .leading)
   }
-}
-
-private struct InlineVideoPlayer: View {
-  let media: PlayableMedia
-  @State private var player: AVPlayer?
-  @State private var isShowingFullscreenPlayer = false
-
-  var body: some View {
-    ZStack(alignment: .topTrailing) {
-      Group {
-        if let player {
-          VideoPlayer(player: player)
-            .onAppear { player.play() }
-        } else {
-          ProgressView()
-        }
-      }
-
-      Button {
-        isShowingFullscreenPlayer = true
-      } label: {
-        Image(systemName: "arrow.up.left.and.arrow.down.right")
-          .font(.system(size: 14, weight: .semibold))
-          .foregroundStyle(LinkstrTheme.textPrimary)
-          .padding(8)
-          .background(
-            Circle()
-              .fill(LinkstrTheme.panel.opacity(0.84))
-          )
-      }
-      .padding(8)
-    }
-    .fullScreenCover(isPresented: $isShowingFullscreenPlayer) {
-      if let player {
-        FullScreenAVPlayerView(player: player)
-          .ignoresSafeArea()
-          .background(Color.black)
-      }
-    }
-    .task {
-      let item: AVPlayerItem
-      if media.headers.isEmpty {
-        item = AVPlayerItem(url: media.playbackURL)
-      } else {
-        let asset = AVURLAsset(
-          url: media.playbackURL, options: ["AVURLAssetHTTPHeaderFieldsKey": media.headers])
-        item = AVPlayerItem(asset: asset)
-      }
-      player = AVPlayer(playerItem: item)
-    }
-    .onDisappear {
-      player?.pause()
-    }
-  }
-}
-
-private struct EmbeddedWebView: UIViewRepresentable {
-  let url: URL
-
-  final class Coordinator {
-    var loadedURLString: String?
-  }
-
-  func makeCoordinator() -> Coordinator {
-    Coordinator()
-  }
-
-  func makeUIView(context: Context) -> WKWebView {
-    let config = WKWebViewConfiguration()
-    config.allowsInlineMediaPlayback = true
-    config.allowsAirPlayForMediaPlayback = true
-    config.mediaTypesRequiringUserActionForPlayback = []
-    config.defaultWebpagePreferences.allowsContentJavaScript = true
-    let webView = WKWebView(frame: .zero, configuration: config)
-    webView.scrollView.isScrollEnabled = false
-    webView.scrollView.bounces = false
-    webView.isOpaque = false
-    webView.backgroundColor = .clear
-    return webView
-  }
-
-  func updateUIView(_ uiView: WKWebView, context: Context) {
-    guard context.coordinator.loadedURLString != url.absoluteString else { return }
-    context.coordinator.loadedURLString = url.absoluteString
-
-    // Wrap provider URLs in an iframe so allowfullscreen is explicitly enabled.
-    let html = """
-      <!doctype html>
-      <html>
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-        <style>
-          html, body {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            background: #000;
-            overflow: hidden;
-          }
-          iframe {
-            position: absolute;
-            inset: 0;
-            border: 0;
-            width: 100%;
-            height: 100%;
-          }
-        </style>
-      </head>
-      <body>
-        <iframe
-          src="\(url.absoluteString)"
-          allow="autoplay; encrypted-media; picture-in-picture; fullscreen; web-share"
-          allowfullscreen
-          webkitallowfullscreen
-          mozallowfullscreen
-          referrerpolicy="no-referrer-when-downgrade">
-        </iframe>
-      </body>
-      </html>
-      """
-    uiView.loadHTMLString(
-      html, baseURL: URL(string: "\(url.scheme ?? "https")://\(url.host ?? "")"))
-  }
-}
-
-private struct FullScreenAVPlayerView: UIViewControllerRepresentable {
-  let player: AVPlayer
-
-  func makeUIViewController(context: Context) -> AVPlayerViewController {
-    let controller = AVPlayerViewController()
-    controller.showsPlaybackControls = true
-    controller.entersFullScreenWhenPlaybackBegins = true
-    controller.exitsFullScreenWhenPlaybackEnds = false
-    controller.player = player
-    player.play()
-    return controller
-  }
-
-  func updateUIViewController(_ uiViewController: AVPlayerViewController, context: Context) {
-    uiViewController.player = player
-  }
-}
-
-private struct FullScreenSafariView: UIViewControllerRepresentable {
-  let url: URL
-
-  func makeUIViewController(context: Context) -> SFSafariViewController {
-    let controller = SFSafariViewController(url: url)
-    controller.dismissButtonStyle = .close
-    return controller
-  }
-
-  func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
 }
