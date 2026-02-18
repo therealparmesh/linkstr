@@ -6,16 +6,6 @@ enum SessionMessageKind: String, Codable {
   case reply
 }
 
-enum LinkType: String, Codable, CaseIterable {
-  case tiktok
-  case instagram
-  case facebook
-  case youtube
-  case rumble
-  case twitter
-  case generic
-}
-
 @Model
 final class SessionMessageEntity {
   @Attribute(.unique) var storageID: String
