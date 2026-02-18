@@ -451,10 +451,10 @@ private struct PostCardView: View {
   let latestReplyTimestamp: Date?
 
   var body: some View {
-    HStack(spacing: 10) {
+    HStack(alignment: .top, spacing: 10) {
       thumbnailView
 
-      VStack(alignment: .leading, spacing: 6) {
+      VStack(alignment: .leading, spacing: 8) {
         HStack(spacing: 8) {
           Text(contentKindLabel)
             .font(.caption)
@@ -471,7 +471,7 @@ private struct PostCardView: View {
           .lineLimit(2)
 
         if let noteText {
-          HStack(alignment: .top, spacing: 6) {
+          HStack(alignment: .top, spacing: 8) {
             Image(systemName: "note.text")
               .font(.caption)
               .foregroundStyle(LinkstrTheme.neonAmber.opacity(0.9))
@@ -483,20 +483,36 @@ private struct PostCardView: View {
           }
         }
 
-        HStack(spacing: 8) {
+        HStack(alignment: .firstTextBaseline, spacing: 0) {
           Text(replyCountLabel)
             .font(.caption)
             .foregroundStyle(LinkstrTheme.textSecondary)
+            .lineLimit(1)
+
           if hasUnreadReplies {
             Circle()
               .fill(LinkstrTheme.neonAmber)
               .frame(width: 7, height: 7)
+              .padding(.horizontal, 8)
               .accessibilityLabel("Unread replies")
+          } else {
+            Text("•")
+              .font(.caption2)
+              .foregroundStyle(LinkstrTheme.textSecondary)
+              .padding(.horizontal, 8)
           }
+
           Text(post.timestamp.linkstrListTimestampLabel)
             .font(.caption)
             .foregroundStyle(LinkstrTheme.textSecondary)
+            .lineLimit(1)
+
           if let latestReplyTimestamp {
+            Text("•")
+              .font(.caption2)
+              .foregroundStyle(LinkstrTheme.textSecondary)
+              .padding(.horizontal, 8)
+
             Text("Updated \(latestReplyTimestamp.linkstrListTimestampLabel)")
               .font(.caption)
               .foregroundStyle(LinkstrTheme.textSecondary)
