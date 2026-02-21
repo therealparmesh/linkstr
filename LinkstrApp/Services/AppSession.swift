@@ -877,6 +877,15 @@ final class AppSession: ObservableObject {
     }
   }
 
+  func markRootPostRead(postID: String) {
+    guard let myPubkey = identityService.pubkeyHex else { return }
+    do {
+      try messageStore.markRootPostRead(postID: postID, ownerPubkey: myPubkey, myPubkey: myPubkey)
+    } catch {
+      report(error: error)
+    }
+  }
+
   func addRelay(url: String) {
     guard let parsedURL = normalizedRelayURL(from: url)
     else {

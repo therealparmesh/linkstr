@@ -82,6 +82,7 @@ struct ThreadView: View {
       .toolbar(.visible, for: .navigationBar)
       .toolbarColorScheme(.dark, for: .navigationBar)
       .task {
+        session.markRootPostRead(postID: post.rootID)
         session.markPostRepliesRead(postID: post.rootID)
       }
       .onChange(of: replies.count) { _, _ in

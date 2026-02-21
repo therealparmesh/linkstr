@@ -78,6 +78,24 @@ final class SessionMessageStore {
     }
   }
 
+  func markRootPostRead(postID: String, ownerPubkey: String, myPubkey: String) throws {
+    let descriptor = FetchDescriptor<SessionMessageEntity>(
+      predicate: #Predicate { $0.rootID == postID && $0.ownerPubkey == ownerPubkey }
+    )
+    let messages = try modelContext.fetch(descriptor)
+
+    var didChange = false
+    for message in messages where message.kind == .root {
+      guard !message.senderMatches(myPubkey), message.readAt == nil else { continue }
+      message.readAt = .now
+      didChange = true
+    }
+
+    if didChange {
+      try modelContext.save()
+    }
+  }
+
   func markPostRepliesRead(postID: String, ownerPubkey: String, myPubkey: String) throws {
     let descriptor = FetchDescriptor<SessionMessageEntity>(
       predicate: #Predicate { $0.rootID == postID && $0.ownerPubkey == ownerPubkey }

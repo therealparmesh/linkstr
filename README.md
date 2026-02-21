@@ -61,8 +61,11 @@ This document is the behavioral contract for the current app. It is intentionall
 - Sessions support swipe archive/unarchive actions.
 - Archive state is applied at the root-post level; replies are not independently archived.
 - Archive is non-destructive and only changes list placement (`Active` vs `Archived`).
-- Opening a session marks inbound root posts in that session as read.
-- Opening a thread marks inbound replies for that root post as read.
+- Session list shows an unread dot when there is any unread inbound root post or unread inbound reply in that session.
+- Session post cards show an unread dot when the root post is unread and/or when that post has unread replies.
+- Opening a session does not automatically mark root posts as read.
+- Opening a thread marks the inbound root post for that thread as read.
+- Opening a thread also marks inbound replies for that root post as read.
 - Unread indication is dot-only (no numeric badge).
 - Session unread logic is per-root-post and does not double-count replies.
 

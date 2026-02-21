@@ -180,6 +180,64 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertNil(inboundReply.readAt)
   }
 
+  func testMarkRootPostReadMarksOnlyInboundRootForThatPost() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let conversationID = ConversationID.deterministic(myPubkey, peerPubkey)
+
+    let inboundTargetRoot = makeMessage(
+      eventID: "root-inbound-target",
+      conversationID: conversationID,
+      rootID: "root-target",
+      kind: .root,
+      senderPubkey: peerPubkey,
+      receiverPubkey: myPubkey,
+      ownerPubkey: myPubkey
+    )
+    let outboundTargetRoot = makeMessage(
+      eventID: "root-outbound-target",
+      conversationID: conversationID,
+      rootID: "root-target",
+      kind: .root,
+      senderPubkey: myPubkey,
+      receiverPubkey: peerPubkey,
+      ownerPubkey: myPubkey
+    )
+    let inboundOtherRoot = makeMessage(
+      eventID: "root-inbound-other",
+      conversationID: conversationID,
+      rootID: "root-other",
+      kind: .root,
+      senderPubkey: peerPubkey,
+      receiverPubkey: myPubkey,
+      ownerPubkey: myPubkey
+    )
+    let inboundReplyTarget = makeMessage(
+      eventID: "reply-inbound-target",
+      conversationID: conversationID,
+      rootID: "root-target",
+      kind: .reply,
+      senderPubkey: peerPubkey,
+      receiverPubkey: myPubkey,
+      ownerPubkey: myPubkey
+    )
+
+    container.mainContext.insert(inboundTargetRoot)
+    container.mainContext.insert(outboundTargetRoot)
+    container.mainContext.insert(inboundOtherRoot)
+    container.mainContext.insert(inboundReplyTarget)
+    try container.mainContext.save()
+
+    session.markRootPostRead(postID: "root-target")
+
+    XCTAssertNotNil(inboundTargetRoot.readAt)
+    XCTAssertNil(outboundTargetRoot.readAt)
+    XCTAssertNil(inboundOtherRoot.readAt)
+    XCTAssertNil(inboundReplyTarget.readAt)
+  }
+
   func testMarkPostRepliesReadMarksOnlyInboundRepliesForThatPost() throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()

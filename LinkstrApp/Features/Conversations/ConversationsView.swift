@@ -352,6 +352,7 @@ private struct SessionPostsView: View {
                 post: post,
                 senderLabel: senderLabel(for: post),
                 isOutgoing: isOutgoing(post),
+                hasUnreadPost: hasUnreadIncomingRootPost(post),
                 replyCount: repliesByPostID[post.rootID]?.count ?? 0,
                 hasUnreadReplies: unreadIncomingReplyPostIDs.contains(post.rootID),
                 latestReplyTimestamp: repliesByPostID[post.rootID]?.max(by: {
@@ -405,12 +406,6 @@ private struct SessionPostsView: View {
       AddContactSheet(prefilledNPub: peerNPub)
         .environmentObject(session)
     }
-    .task(id: conversationID) {
-      session.markConversationPostsRead(conversationID: conversationID)
-    }
-    .onChange(of: posts.count) { _, _ in
-      session.markConversationPostsRead(conversationID: conversationID)
-    }
   }
 
   private func isOutgoing(_ message: SessionMessageEntity) -> Bool {
@@ -425,12 +420,18 @@ private struct SessionPostsView: View {
     return session.contactName(for: message.senderPubkey, contacts: scopedContacts)
   }
 
+  private func hasUnreadIncomingRootPost(_ post: SessionMessageEntity) -> Bool {
+    guard !isOutgoing(post) else { return false }
+    return post.readAt == nil
+  }
+
 }
 
 private struct PostCardView: View {
   let post: SessionMessageEntity
   let senderLabel: String
   let isOutgoing: Bool
+  let hasUnreadPost: Bool
   let replyCount: Int
   let hasUnreadReplies: Bool
   let latestReplyTimestamp: Date?
@@ -471,12 +472,12 @@ private struct PostCardView: View {
             .foregroundStyle(LinkstrTheme.textSecondary)
             .lineLimit(1)
 
-          if hasUnreadReplies {
+          if hasUnreadPost || hasUnreadReplies {
             Circle()
               .fill(LinkstrTheme.neonAmber)
               .frame(width: 7, height: 7)
               .padding(.horizontal, 8)
-              .accessibilityLabel("Unread replies")
+              .accessibilityLabel("Unread")
           } else {
             Text("•")
               .font(.caption2)
