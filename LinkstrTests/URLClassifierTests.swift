@@ -9,7 +9,11 @@ final class URLClassifierTests: XCTestCase {
     XCTAssertEqual(
       URLClassifier.classify("https://www.instagram.com/reel/C7x5mYfP0R1/"), .instagram)
     XCTAssertEqual(
+      URLClassifier.classify("https://instagr.am/reel/C7x5mYfP0R1/"), .instagram)
+    XCTAssertEqual(
       URLClassifier.classify("https://www.facebook.com/reel/123456789012345"), .facebook)
+    XCTAssertEqual(
+      URLClassifier.classify("https://fb.com/watch/?v=10153231379946729"), .facebook)
     XCTAssertEqual(URLClassifier.classify("https://youtu.be/dQw4w9WgXcQ"), .youtube)
     XCTAssertEqual(URLClassifier.classify("https://rumble.com/v5h7abc-sample.html"), .rumble)
     XCTAssertEqual(URLClassifier.classify("https://x.com/jack/status/20"), .twitter)
@@ -172,6 +176,22 @@ final class URLClassifierTests: XCTestCase {
     assertEmbedOnly(
       "https://www.facebook.com/watch/?v=10153231379946729",
       expectedEmbedPrefix: "https://www.facebook.com/plugins/video.php"
+    )
+    assertEmbedOnly(
+      "https://www.facebook.com/share/v/10153231379946729/",
+      expectedEmbedPrefix: "https://www.facebook.com/plugins/video.php"
+    )
+    assertExtractionPreferred(
+      "https://www.facebook.com/share/r/213286701716863/",
+      expectedEmbedPrefix: "https://www.facebook.com/plugins/video.php"
+    )
+    assertExtractionPreferred(
+      "https://www.instagram.com/share/reel/DUSWiOIDivu/",
+      expectedEmbedPrefix: "https://www.instagram.com/reel/DUSWiOIDivu/embed"
+    )
+    assertEmbedOnly(
+      "https://www.instagram.com/share/p/DUbRe_8EuQY/",
+      expectedEmbedPrefix: "https://www.instagram.com/p/DUbRe_8EuQY/embed"
     )
     assertEmbedOnly(
       "https://www.youtube.com/watch?v=dQw4w9WgXcQ",

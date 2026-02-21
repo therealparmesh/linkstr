@@ -48,8 +48,14 @@ enum URLClassifier {
     }
 
     if host.contains("tiktok.com") { return .tiktok }
-    if host.contains("instagram.com") { return .instagram }
-    if host.contains("facebook.com") || host.contains("fb.watch") { return .facebook }
+    if host.contains("instagram.com") || host.contains("instagr.am") { return .instagram }
+    if host.contains("facebook.com")
+      || host.contains("fb.watch")
+      || host == "fb.com"
+      || host.hasSuffix(".fb.com")
+    {
+      return .facebook
+    }
     if host.contains("youtube.com") || host.contains("youtu.be") { return .youtube }
     if host.contains("rumble.com") || host.contains("rumble.video") { return .rumble }
     if hostMatches(host, domain: "x.com")
@@ -150,10 +156,11 @@ enum URLClassifier {
     let parts = sourceURL.pathComponents.filter { $0 != "/" }
     guard parts.count >= 2 else { return sourceURL }
 
-    let first = parts[0].lowercased()
-    let shortcode = parts[1]
-    if ["reel", "reels", "p", "tv"].contains(first), !shortcode.isEmpty {
-      return URL(string: "https://www.instagram.com/\(first)/\(shortcode)/embed")
+    for index in 0..<(parts.count - 1) {
+      let marker = parts[index].lowercased()
+      let shortcode = parts[index + 1].trimmingCharacters(in: .whitespacesAndNewlines)
+      guard ["reel", "reels", "p", "tv"].contains(marker), !shortcode.isEmpty else { continue }
+      return URL(string: "https://www.instagram.com/\(marker)/\(shortcode)/embed")
     }
     return sourceURL
   }

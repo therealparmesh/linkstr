@@ -23,6 +23,31 @@ final class SessionMessageStore {
     return try modelContext.fetch(descriptor).isEmpty == false
   }
 
+  func message(eventID: String, ownerPubkey: String) throws -> SessionMessageEntity? {
+    let storageID = SessionMessageEntity.storageID(ownerPubkey: ownerPubkey, eventID: eventID)
+    let descriptor = FetchDescriptor<SessionMessageEntity>(
+      predicate: #Predicate { $0.storageID == storageID }
+    )
+    return try modelContext.fetch(descriptor).first
+  }
+
+  func message(storageID: String) throws -> SessionMessageEntity? {
+    let descriptor = FetchDescriptor<SessionMessageEntity>(
+      predicate: #Predicate { $0.storageID == storageID }
+    )
+    return try modelContext.fetch(descriptor).first
+  }
+
+  func rootMessages(ownerPubkey: String) throws -> [SessionMessageEntity] {
+    let rootKindRaw = SessionMessageKind.root.rawValue
+    let descriptor = FetchDescriptor<SessionMessageEntity>(
+      predicate: #Predicate {
+        $0.ownerPubkey == ownerPubkey && $0.kindRaw == rootKindRaw
+      }
+    )
+    return try modelContext.fetch(descriptor)
+  }
+
   func setConversationArchived(conversationID: String, ownerPubkey: String, archived: Bool) throws {
     let descriptor = FetchDescriptor<SessionMessageEntity>(
       predicate: #Predicate { $0.conversationID == conversationID && $0.ownerPubkey == ownerPubkey }

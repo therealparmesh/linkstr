@@ -23,21 +23,35 @@ enum SocialURLHeuristics {
   }
 
   static func isInstagramReelURL(_ url: URL) -> Bool {
-    let parts = normalizedPathComponents(for: url)
-    guard let first = parts.first else { return false }
-    return first == "reel" || first == "reels"
+    pathToken(
+      in: url,
+      markers: ["reel", "reels"],
+      minLength: 5,
+      allowDigitsOnly: false
+    ) != nil
   }
 
   static func isInstagramVideoPostURL(_ url: URL) -> Bool {
-    let parts = normalizedPathComponents(for: url)
-    guard let first = parts.first else { return false }
-    return first == "p" || first == "tv"
+    pathToken(
+      in: url,
+      markers: ["p", "tv"],
+      minLength: 5,
+      allowDigitsOnly: false
+    ) != nil
   }
 
   static func isFacebookReelURL(_ url: URL) -> Bool {
+    if pathToken(
+      in: url,
+      markers: ["reel", "reels", "r"],
+      minLength: 4,
+      allowDigitsOnly: false
+    ) != nil {
+      return true
+    }
+
     let parts = normalizedPathComponents(for: url)
-    guard let first = parts.first else { return false }
-    return first == "reel" || first == "reels"
+    return hasPathSequence(parts, first: "share", second: "r")
   }
 
   static func isFacebookVideoURL(_ url: URL) -> Bool {
@@ -48,6 +62,12 @@ enum SocialURLHeuristics {
 
     let parts = normalizedPathComponents(for: url)
     if parts.contains("videos") {
+      return true
+    }
+    if hasPathSequence(parts, first: "share", second: "v") {
+      return true
+    }
+    if hasPathSequence(parts, first: "watch", second: "v") {
       return true
     }
 
@@ -185,7 +205,7 @@ enum SocialURLHeuristics {
   static func facebookVideoID(from sourceURL: URL) -> String? {
     if let id = pathToken(
       in: sourceURL,
-      markers: ["reel", "videos"],
+      markers: ["reel", "reels", "videos", "v", "r"],
       minLength: 6,
       allowDigitsOnly: true
     ) {
@@ -210,7 +230,7 @@ enum SocialURLHeuristics {
   static func facebookVideoID(fromCandidateURL url: URL) -> String? {
     if let id = pathToken(
       in: url,
-      markers: ["reel", "videos"],
+      markers: ["reel", "reels", "videos", "v", "r"],
       minLength: 6,
       allowDigitsOnly: true
     ) {
@@ -240,6 +260,11 @@ enum SocialURLHeuristics {
     url.pathComponents
       .map { $0.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "/")) }
       .filter { !$0.isEmpty }
+  }
+
+  private static func hasPathSequence(_ parts: [String], first: String, second: String) -> Bool {
+    guard let index = parts.firstIndex(of: first), index + 1 < parts.count else { return false }
+    return parts[index + 1] == second
   }
 
   private static func pathToken(

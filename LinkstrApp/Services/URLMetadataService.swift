@@ -11,7 +11,7 @@ struct LinkPreviewData {
 @MainActor
 final class URLMetadataService {
   static let shared = URLMetadataService()
-  private static let providerTimeout: TimeInterval = 1.0
+  private static let providerTimeout: TimeInterval = 6.0
   private init() {}
 
   func fetchPreview(for urlString: String) async -> LinkPreviewData? {
@@ -54,9 +54,13 @@ final class URLMetadataService {
 
     let digest = SHA256.hash(data: Data(urlString.utf8)).map { String(format: "%02x", $0) }.joined()
     let base =
-      FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+      FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+      ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
       ?? URL(fileURLWithPath: NSTemporaryDirectory())
-    let thumbDir = base.appendingPathComponent("linkstr_thumbnails", isDirectory: true)
+    let thumbDir =
+      base
+      .appendingPathComponent("linkstr", isDirectory: true)
+      .appendingPathComponent("thumbnails", isDirectory: true)
     try? FileManager.default.createDirectory(at: thumbDir, withIntermediateDirectories: true)
     let fileURL = thumbDir.appendingPathComponent(digest).appendingPathExtension("png")
     try data.write(to: fileURL, options: .atomic)

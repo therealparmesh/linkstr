@@ -38,8 +38,10 @@ struct NewPostSheet: View {
       ZStack {
         LinkstrBackgroundView()
         ScrollView {
-          VStack(alignment: .leading, spacing: 14) {
-            composeCard(title: "To") {
+          VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 10) {
+              sectionLabel("To")
+
               if let lockedRecipient {
                 VStack(alignment: .leading, spacing: 6) {
                   Text(lockedRecipient.displayName)
@@ -56,6 +58,12 @@ struct NewPostSheet: View {
                     .font(.custom(LinkstrTheme.bodyFont, size: 12))
                     .foregroundStyle(LinkstrTheme.textSecondary)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                .background(
+                  RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(LinkstrTheme.panelSoft)
+                )
               } else {
                 Button {
                   isPresentingRecipientPicker = true
@@ -82,13 +90,20 @@ struct NewPostSheet: View {
                       .font(.system(size: 12, weight: .semibold))
                       .foregroundStyle(LinkstrTheme.textSecondary.opacity(0.8))
                   }
+                  .padding(12)
+                  .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                      .fill(LinkstrTheme.panelSoft)
+                  )
                 }
                 .buttonStyle(.plain)
                 .disabled(isSending)
               }
             }
 
-            composeCard(title: "Link") {
+            VStack(alignment: .leading, spacing: 10) {
+              sectionLabel("Link")
+
               TextField("https://...", text: $url)
                 .font(.custom(LinkstrTheme.bodyFont, size: 14))
                 .textInputAutocapitalization(.never)
@@ -117,7 +132,9 @@ struct NewPostSheet: View {
                 .accessibilityHidden(urlValidationHint == nil)
             }
 
-            composeCard(title: "Note") {
+            VStack(alignment: .leading, spacing: 10) {
+              sectionLabel("Note")
+
               ZStack(alignment: .topLeading) {
                 if note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                   Text("Optional context for your recipient")
@@ -238,17 +255,10 @@ struct NewPostSheet: View {
     return normalizedURL == nil ? "Enter a valid http(s) URL." : nil
   }
 
-  private func composeCard<Content: View>(title: String, @ViewBuilder content: () -> Content)
-    -> some View
-  {
-    VStack(alignment: .leading, spacing: 10) {
-      Text(title)
-        .font(.custom(LinkstrTheme.titleFont, size: 12))
-        .foregroundStyle(LinkstrTheme.textSecondary)
-      content()
-    }
-    .padding(12)
-    .linkstrNeonCard()
+  private func sectionLabel(_ text: String) -> some View {
+    Text(text)
+      .font(.custom(LinkstrTheme.titleFont, size: 12))
+      .foregroundStyle(LinkstrTheme.textSecondary)
   }
 
   private func sendPost() {

@@ -30,6 +30,9 @@ final class AppSession: ObservableObject {
   private let conversationNormalizationVersion = 1
   private var hasShownOfflineToastForCurrentOutage = false
   private var isForeground = false
+  private var pendingMetadataStorageIDs: [String] = []
+  private var enqueuedMetadataStorageIDs = Set<String>()
+  private var isProcessingMetadataQueue = false
 
   @Published var composeError: String?
   @Published private(set) var hasIdentity = false
@@ -83,6 +86,7 @@ final class AppSession: ObservableObject {
     }
     bootStatusMessage = "Starting session…"
     handleAppDidBecomeActive()
+    hydrateMissingMetadata()
   }
 
   func handleAppDidBecomeActive() {
@@ -338,6 +342,9 @@ final class AppSession: ObservableObject {
       return
     }
     refreshIdentityState()
+    pendingMetadataStorageIDs.removeAll()
+    enqueuedMetadataStorageIDs.removeAll()
+    isProcessingMetadataQueue = false
 
     if let ownerPubkey, clearLocalData {
       clearCachedVideos(ownerPubkey: ownerPubkey)
@@ -474,7 +481,7 @@ final class AppSession: ObservableObject {
       )
       try messageStore.insert(message)
 
-      updateMetadata(for: message)
+      enqueueMetadataRefresh(for: message)
       composeError = nil
       return true
     } catch {
@@ -740,7 +747,12 @@ final class AppSession: ObservableObject {
   private func persistIncoming(_ incoming: ReceivedDirectMessage) {
     guard let ownerPubkey = identityService.pubkeyHex else { return }
     do {
-      if try messageStore.messageExists(eventID: incoming.eventID, ownerPubkey: ownerPubkey) {
+      if let existing = try messageStore.message(
+        eventID: incoming.eventID, ownerPubkey: ownerPubkey)
+      {
+        if existing.kind == .root {
+          enqueueMetadataRefresh(for: existing)
+        }
         return
       }
     } catch {
@@ -803,7 +815,7 @@ final class AppSession: ObservableObject {
     notifyForIncomingMessage(message)
 
     if message.kind == .root {
-      updateMetadata(for: message)
+      enqueueMetadataRefresh(for: message)
     }
   }
 
@@ -834,20 +846,115 @@ final class AppSession: ObservableObject {
     }
   }
 
-  private func updateMetadata(for message: SessionMessageEntity) {
+  private func hydrateMissingMetadata() {
     guard shouldFetchMetadataForCurrentProcess() else { return }
-    guard let url = message.url else { return }
-    Task {
-      let preview = await URLMetadataService.shared.fetchPreview(for: url)
-      await MainActor.run {
+    guard let ownerPubkey = identityService.pubkeyHex else { return }
+
+    do {
+      let roots = try messageStore.rootMessages(ownerPubkey: ownerPubkey)
+      let sortedRoots = roots.sorted { $0.timestamp > $1.timestamp }
+      for message in sortedRoots where needsMetadataRefresh(message) {
+        enqueueMetadataRefresh(for: message)
+      }
+    } catch {
+      report(error: error)
+    }
+  }
+
+  private func enqueueMetadataRefresh(for message: SessionMessageEntity) {
+    guard shouldFetchMetadataForCurrentProcess() else { return }
+    guard message.kind == .root else { return }
+    guard message.url != nil else { return }
+    guard needsMetadataRefresh(message) else { return }
+
+    let storageID = message.storageID
+    guard !enqueuedMetadataStorageIDs.contains(storageID) else { return }
+    enqueuedMetadataStorageIDs.insert(storageID)
+    pendingMetadataStorageIDs.append(storageID)
+    processMetadataQueueIfNeeded()
+  }
+
+  private func processMetadataQueueIfNeeded() {
+    guard !isProcessingMetadataQueue else { return }
+    isProcessingMetadataQueue = true
+
+    Task { @MainActor in
+      while !pendingMetadataStorageIDs.isEmpty {
+        let storageID = pendingMetadataStorageIDs.removeFirst()
+        defer {
+          enqueuedMetadataStorageIDs.remove(storageID)
+        }
+
         do {
-          try message.setMetadata(title: preview?.title, thumbnailURL: preview?.thumbnailPath)
-          try self.modelContext.save()
+          guard let message = try messageStore.message(storageID: storageID) else { continue }
+          try await refreshMetadata(for: message)
         } catch {
-          self.report(error: error)
+          report(error: error)
         }
       }
+
+      isProcessingMetadataQueue = false
+      if !pendingMetadataStorageIDs.isEmpty {
+        processMetadataQueueIfNeeded()
+      }
     }
+  }
+
+  private func refreshMetadata(for message: SessionMessageEntity) async throws {
+    guard let url = message.url else { return }
+    guard needsMetadataRefresh(message) else { return }
+
+    let preview = await URLMetadataService.shared.fetchPreview(for: url)
+    guard let preview else { return }
+
+    let currentTitle = normalizedMetadataTitle(message.metadataTitle)
+    let previewTitle = normalizedMetadataTitle(preview.title)
+    let resolvedTitle = previewTitle ?? currentTitle
+
+    let currentThumbnail = normalizedThumbnailPath(message.thumbnailURL)
+    let previewThumbnail = normalizedThumbnailPath(preview.thumbnailPath)
+    let resolvedThumbnail: String?
+    if let previewThumbnail {
+      resolvedThumbnail = previewThumbnail
+    } else if let currentThumbnail, FileManager.default.fileExists(atPath: currentThumbnail) {
+      resolvedThumbnail = currentThumbnail
+    } else {
+      resolvedThumbnail = nil
+    }
+
+    guard resolvedTitle != currentTitle || resolvedThumbnail != currentThumbnail else {
+      return
+    }
+
+    try message.setMetadata(title: resolvedTitle, thumbnailURL: resolvedThumbnail)
+    try modelContext.save()
+  }
+
+  private func needsMetadataRefresh(_ message: SessionMessageEntity) -> Bool {
+    guard message.kind == .root else { return false }
+    guard message.url != nil else { return false }
+
+    let hasTitle = normalizedMetadataTitle(message.metadataTitle) != nil
+    if !hasTitle {
+      return true
+    }
+
+    guard let thumbnailPath = normalizedThumbnailPath(message.thumbnailURL) else {
+      return false
+    }
+    return !FileManager.default.fileExists(atPath: thumbnailPath)
+  }
+
+  private func normalizedMetadataTitle(_ title: String?) -> String? {
+    guard let title else { return nil }
+    let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
+  }
+
+  private func normalizedThumbnailPath(_ path: String?) -> String? {
+    guard let path else { return nil }
+    let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
   }
 
   private func normalizedRelayURL(from raw: String) -> URL? {
