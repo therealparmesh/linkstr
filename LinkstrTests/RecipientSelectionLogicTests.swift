@@ -1,155 +1,108 @@
+import NostrSDK
 import XCTest
 
 @testable import Linkstr
 
-final class RecipientSelectionLogicTests: XCTestCase {
-  func testNormalizedNPubAcceptsRawAndNostrPrefix() throws {
-    let npub = try TestKeyMaterialFactory.makeNPub()
-    XCTAssertEqual(RecipientSelectionLogic.normalizedNPub(from: npub), npub)
-    XCTAssertEqual(RecipientSelectionLogic.normalizedNPub(from: "nostr:\(npub)"), npub)
-  }
-
-  func testNormalizedNPubRejectsInvalidValue() {
-    XCTAssertNil(RecipientSelectionLogic.normalizedNPub(from: "not-an-npub"))
-  }
-
-  func testCustomRecipientNPubReturnsNilForKnownContactNPub() throws {
-    let known = try TestKeyMaterialFactory.makeNPub()
-    XCTAssertNil(
-      RecipientSelectionLogic.customRecipientNPub(
-        from: known,
-        knownNPubs: [known]
-      )
+final class SessionPayloadValidationTests: XCTestCase {
+  func testSessionCreateValidationRequiresNameAndMembers() throws {
+    let keypair = try XCTUnwrap(Keypair())
+    let valid = LinkstrPayload(
+      conversationID: "session-1",
+      rootID: "op-1",
+      kind: .sessionCreate,
+      url: nil,
+      note: nil,
+      timestamp: 123,
+      sessionName: "Friends",
+      memberPubkeys: [keypair.publicKey.hex]
     )
-  }
+    XCTAssertNoThrow(try valid.validated())
 
-  func testCustomRecipientNPubReturnsNormalizedForUnknownNPub() throws {
-    let known = try TestKeyMaterialFactory.makeNPub()
-    let custom = try TestKeyMaterialFactory.makeNPub()
-    XCTAssertEqual(
-      RecipientSelectionLogic.customRecipientNPub(
-        from: "nostr:\(custom)",
-        knownNPubs: [known]
-      ),
-      custom
+    let missingName = LinkstrPayload(
+      conversationID: "session-1",
+      rootID: "op-2",
+      kind: .sessionCreate,
+      url: nil,
+      note: nil,
+      timestamp: 123,
+      sessionName: "  ",
+      memberPubkeys: [keypair.publicKey.hex]
     )
-  }
+    XCTAssertThrowsError(try missingName.validated())
 
-  func testRecipientLabelPrimaryUsesContactDisplayName() {
-    XCTAssertEqual(
-      NewPostRecipientLabelLogic.primaryLabel(
-        activeRecipientNPub: "npub1example",
-        matchedContactDisplayName: "Alice"
-      ),
-      "Alice"
+    let missingMembers = LinkstrPayload(
+      conversationID: "session-1",
+      rootID: "op-3",
+      kind: .sessionCreate,
+      url: nil,
+      note: nil,
+      timestamp: 123,
+      sessionName: "Friends",
+      memberPubkeys: []
     )
+    XCTAssertThrowsError(try missingMembers.validated())
   }
 
-  func testRecipientLabelPrimaryFallsBackToNPubForUnknownContact() {
-    XCTAssertEqual(
-      NewPostRecipientLabelLogic.primaryLabel(
-        activeRecipientNPub: "npub1example",
-        matchedContactDisplayName: nil
-      ),
-      "npub1example"
+  func testReactionValidationRequiresEmojiAndState() {
+    let valid = LinkstrPayload(
+      conversationID: "session-1",
+      rootID: "root-1",
+      kind: .reaction,
+      url: nil,
+      note: nil,
+      timestamp: 123,
+      emoji: "👍",
+      reactionActive: true
     )
-  }
+    XCTAssertNoThrow(try valid.validated())
 
-  func testRecipientLabelSecondaryShowsNPubWhenDisplayNameExists() {
-    XCTAssertEqual(
-      NewPostRecipientLabelLogic.secondaryLabel(
-        activeRecipientNPub: "npub1example",
-        matchedContactDisplayName: "Alice"
-      ),
-      "npub1example"
+    let missingEmoji = LinkstrPayload(
+      conversationID: "session-1",
+      rootID: "root-1",
+      kind: .reaction,
+      url: nil,
+      note: nil,
+      timestamp: 123,
+      emoji: nil,
+      reactionActive: true
     )
-  }
+    XCTAssertThrowsError(try missingEmoji.validated())
 
-  func testRecipientLabelSecondaryIsNilForUnknownContact() {
-    XCTAssertNil(
-      NewPostRecipientLabelLogic.secondaryLabel(
-        activeRecipientNPub: "npub1example",
-        matchedContactDisplayName: nil
-      )
+    let missingState = LinkstrPayload(
+      conversationID: "session-1",
+      rootID: "root-1",
+      kind: .reaction,
+      url: nil,
+      note: nil,
+      timestamp: 123,
+      emoji: "👍",
+      reactionActive: nil
     )
-  }
-}
-
-final class RecipientSearchLogicTests: XCTestCase {
-  private struct TestContact {
-    let npub: String
-    let displayName: String
+    XCTAssertThrowsError(try missingState.validated())
   }
 
-  func testSelectedQueryPrefersDisplayName() {
-    XCTAssertEqual(
-      RecipientSearchLogic.selectedQuery(
-        selectedRecipientNPub: "npub1example",
-        selectedDisplayName: "Alice"
-      ),
-      "Alice"
+  func testNormalizedMemberPubkeysDedupesAndRejectsInvalid() throws {
+    let keypair = try XCTUnwrap(Keypair())
+    let duplicateMembers = LinkstrPayload(
+      conversationID: "session-1",
+      rootID: "op-1",
+      kind: .sessionMembers,
+      url: nil,
+      note: nil,
+      timestamp: 123,
+      memberPubkeys: [keypair.publicKey.hex, keypair.publicKey.hex]
     )
-  }
+    XCTAssertEqual(duplicateMembers.normalizedMemberPubkeys(), [keypair.publicKey.hex])
 
-  func testSelectedQueryFallsBackToNPub() {
-    XCTAssertEqual(
-      RecipientSearchLogic.selectedQuery(
-        selectedRecipientNPub: "npub1example",
-        selectedDisplayName: "   "
-      ),
-      "npub1example"
+    let invalidMembers = LinkstrPayload(
+      conversationID: "session-1",
+      rootID: "op-2",
+      kind: .sessionMembers,
+      url: nil,
+      note: nil,
+      timestamp: 123,
+      memberPubkeys: ["not-a-pubkey"]
     )
-  }
-
-  func testDisplayNameOrNPubFallsBackWhenDisplayNameIsEmpty() {
-    XCTAssertEqual(
-      RecipientSearchLogic.displayNameOrNPub(displayName: "   ", npub: "npub1example"),
-      "npub1example"
-    )
-  }
-
-  func testFilteredContactsReturnsAllForEmptyQuery() throws {
-    let contacts = try makeContacts()
-    XCTAssertEqual(
-      RecipientSearchLogic.filteredContacts(
-        contacts,
-        query: "   ",
-        displayName: \.displayName,
-        npub: \.npub
-      )
-      .map(\.npub),
-      contacts.map(\.npub)
-    )
-  }
-
-  func testFilteredContactsMatchesDisplayNameCaseInsensitive() throws {
-    let contacts = try makeContacts()
-    let matches = RecipientSearchLogic.filteredContacts(
-      contacts,
-      query: "alice",
-      displayName: \.displayName,
-      npub: \.npub
-    )
-    XCTAssertEqual(matches.map(\.displayName), ["Alice Smith"])
-  }
-
-  func testFilteredContactsMatchesNPubSubstring() throws {
-    let contacts = try makeContacts()
-    let bobNPub = contacts[1].npub
-    let suffix = String(bobNPub.suffix(10))
-    let matches = RecipientSearchLogic.filteredContacts(
-      contacts,
-      query: suffix,
-      displayName: \.displayName,
-      npub: \.npub
-    )
-    XCTAssertEqual(matches.map(\.npub), [bobNPub])
-  }
-
-  private func makeContacts() throws -> [TestContact] {
-    [
-      TestContact(npub: try TestKeyMaterialFactory.makeNPub(), displayName: "Alice Smith"),
-      TestContact(npub: try TestKeyMaterialFactory.makeNPub(), displayName: "Bob"),
-    ]
+    XCTAssertNil(invalidMembers.normalizedMemberPubkeys())
   }
 }

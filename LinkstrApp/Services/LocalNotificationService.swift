@@ -56,6 +56,26 @@ final class LocalNotificationService: NSObject {
     UNUserNotificationCenter.current().add(request)
   }
 
+  func postIncomingReactionNotification(
+    senderName: String,
+    emoji: String,
+    eventID: String,
+    conversationID: String
+  ) {
+    let content = UNMutableNotificationContent()
+    content.title = "\(senderName) reacted"
+    content.body = "\(emoji) on a post"
+    content.sound = .default
+    content.threadIdentifier = conversationID
+
+    let request = UNNotificationRequest(
+      identifier: "linkstr-reaction-\(eventID)",
+      content: content,
+      trigger: UNTimeIntervalNotificationTrigger(timeInterval: 0.1, repeats: false)
+    )
+    UNUserNotificationCenter.current().add(request)
+  }
+
   private func notificationBody(note: String?, fallback: String) -> String {
     let trimmed = note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     return trimmed.isEmpty ? fallback : trimmed

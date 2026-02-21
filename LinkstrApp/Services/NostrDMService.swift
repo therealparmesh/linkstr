@@ -189,17 +189,21 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     }
   }
 
-  func send(payload: LinkstrPayload, to recipientPubkeyHex: String) throws -> String {
+  func send(payload: LinkstrPayload, toMany recipientPubkeyHexes: [String]) throws -> String {
     let events = try buildRumorAndGiftWrapEvents(
-      payload: payload, recipientPubkeyHex: recipientPubkeyHex)
-    relayPool?.publishEvent(events.giftWrapForRecipient)
-    relayPool?.publishEvent(events.giftWrapForSender)
+      payload: payload, recipientPubkeyHexes: recipientPubkeyHexes)
+    for giftWrap in events.giftWrapForRecipients {
+      relayPool?.publishEvent(giftWrap)
+    }
+    if let giftWrapForSender = events.giftWrapForSender {
+      relayPool?.publishEvent(giftWrapForSender)
+    }
     return events.rumorEvent.id
   }
 
   func sendAwaitingRelayAcceptance(
     payload: LinkstrPayload,
-    to recipientPubkeyHex: String,
+    toMany recipientPubkeyHexes: [String],
     timeoutSeconds: TimeInterval = 8
   ) async throws -> String {
     guard relayPool != nil else {
@@ -207,8 +211,10 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     }
 
     let events = try buildRumorAndGiftWrapEvents(
-      payload: payload, recipientPubkeyHex: recipientPubkeyHex)
-    let pendingEventID = events.giftWrapForRecipient.id
+      payload: payload, recipientPubkeyHexes: recipientPubkeyHexes)
+    guard let ackEventID = events.ackEventID else {
+      throw NostrServiceError.relayUnavailable
+    }
     let expectedRelayURLs = connectedRelayURLs()
     guard !expectedRelayURLs.isEmpty else {
       throw NostrServiceError.relayUnavailable
@@ -216,41 +222,56 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
 
     try await withCheckedThrowingContinuation {
       (continuation: CheckedContinuation<Void, Error>) in
-      pendingPublishAcks[pendingEventID] = PendingPublishAck(
+      pendingPublishAcks[ackEventID] = PendingPublishAck(
         expectedRelayURLs: expectedRelayURLs,
         failedRelayMessagesByURL: [:],
         continuation: continuation
       )
 
-      pendingPublishAckTimeoutTasks[pendingEventID] = Task { @MainActor [weak self] in
+      pendingPublishAckTimeoutTasks[ackEventID] = Task { @MainActor [weak self] in
         guard let self else { return }
         try? await Task.sleep(for: .seconds(max(0.1, timeoutSeconds)))
         guard !Task.isCancelled else { return }
         self.finishPendingPublishAck(
-          eventID: pendingEventID,
+          eventID: ackEventID,
           result: .failure(NostrServiceError.publishTimedOut)
         )
       }
 
-      relayPool?.publishEvent(events.giftWrapForRecipient)
-      relayPool?.publishEvent(events.giftWrapForSender)
+      for giftWrap in events.giftWrapForRecipients {
+        relayPool?.publishEvent(giftWrap)
+      }
+      if let giftWrapForSender = events.giftWrapForSender {
+        relayPool?.publishEvent(giftWrapForSender)
+      }
     }
 
     return events.rumorEvent.id
   }
 
-  private func parsePublicKey(_ hex: String) throws -> PublicKey {
-    guard let key = PublicKey(hex: hex) else {
-      throw NostrServiceError.invalidPubkey
+  private func parsePublicKeys(_ pubkeyHexes: [String]) throws -> [PublicKey] {
+    var parsedPublicKeys: [PublicKey] = []
+    var seen = Set<String>()
+    for pubkeyHex in pubkeyHexes {
+      let trimmed = pubkeyHex.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard let key = PublicKey(hex: trimmed) else {
+        throw NostrServiceError.invalidPubkey
+      }
+      guard !seen.contains(key.hex) else { continue }
+      seen.insert(key.hex)
+      parsedPublicKeys.append(key)
     }
-    return key
+    return parsedPublicKeys
   }
 
   private func buildRumorAndGiftWrapEvents(
     payload: LinkstrPayload,
-    recipientPubkeyHex: String
+    recipientPubkeyHexes: [String]
   ) throws -> (
-    rumorEvent: NostrEvent, giftWrapForRecipient: NostrEvent, giftWrapForSender: NostrEvent
+    rumorEvent: NostrEvent,
+    giftWrapForRecipients: [NostrEvent],
+    giftWrapForSender: NostrEvent?,
+    ackEventID: String?
   ) {
     guard let keypair else {
       throw NostrServiceError.missingIdentity
@@ -263,30 +284,45 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
       throw NostrServiceError.payloadEncodingFailed
     }
 
-    let recipientPublicKey = try parsePublicKey(recipientPubkeyHex)
-    let recipientTag = try PubkeyTag(publicKey: recipientPublicKey)
-
     let builder = NostrEvent.Builder<NostrEvent>(kind: linkstrRumorKind)
-      .appendTags(recipientTag.tag)
       .content(content)
 
-    if payload.kind == .reply {
+    if payload.kind == .reply || payload.kind == .reaction {
       let rootTag = try EventTag(eventId: payload.rootID, marker: .root)
       builder.appendTags(rootTag.tag)
     }
 
     let rumorEvent = builder.build(pubkey: keypair.publicKey)
-    let giftWrapForRecipient = try giftWrap(
-      withRumor: rumorEvent,
-      toRecipient: recipientPublicKey,
-      signedBy: keypair
-    )
-    let giftWrapForSender = try giftWrap(
-      withRumor: rumorEvent,
-      toRecipient: keypair.publicKey,
-      signedBy: keypair
-    )
-    return (rumorEvent, giftWrapForRecipient, giftWrapForSender)
+    let recipientPublicKeys = try parsePublicKeys(recipientPubkeyHexes)
+    guard !recipientPublicKeys.isEmpty else {
+      throw NostrServiceError.invalidPubkey
+    }
+
+    var giftWrapForRecipients: [NostrEvent] = []
+    giftWrapForRecipients.reserveCapacity(recipientPublicKeys.count)
+    for recipientPublicKey in recipientPublicKeys {
+      let giftWrap = try giftWrap(
+        withRumor: rumorEvent,
+        toRecipient: recipientPublicKey,
+        signedBy: keypair
+      )
+      giftWrapForRecipients.append(giftWrap)
+    }
+
+    let senderNeedsEcho = recipientPublicKeys.contains { $0.hex == keypair.publicKey.hex } == false
+    let giftWrapForSender: NostrEvent?
+    if senderNeedsEcho {
+      giftWrapForSender = try giftWrap(
+        withRumor: rumorEvent,
+        toRecipient: keypair.publicKey,
+        signedBy: keypair
+      )
+    } else {
+      giftWrapForSender = nil
+    }
+
+    let ackEventID = giftWrapForSender?.id ?? giftWrapForRecipients.first?.id
+    return (rumorEvent, giftWrapForRecipients, giftWrapForSender, ackEventID)
   }
 
   private func backfillSubscriptionID(kind: BackfillSubscriptionKind, page: Int, until: Int?)
@@ -525,8 +561,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
 
     processedEventIDs.insert(rumor.id)
 
-    let peer = rumor.referencedPubkeys.first(where: { $0 != rumor.pubkey }) ?? keypair.publicKey.hex
-    let receiver = rumor.pubkey == keypair.publicKey.hex ? peer : keypair.publicKey.hex
+    let receiver = keypair.publicKey.hex
 
     onIncoming?(
       ReceivedDirectMessage(

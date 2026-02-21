@@ -13,6 +13,9 @@ struct LinkstrAppMain: App {
     let schema = Schema([
       ContactEntity.self,
       RelayEntity.self,
+      SessionEntity.self,
+      SessionMemberEntity.self,
+      SessionReactionEntity.self,
       SessionMessageEntity.self,
     ])
     let container: ModelContainer

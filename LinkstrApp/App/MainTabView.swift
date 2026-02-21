@@ -32,7 +32,7 @@ struct MainTabView: View {
   }
 
   @State private var selectedTab: AppTab = .sessions
-  @State private var isPresentingNewPost = false
+  @State private var isPresentingNewSession = false
   @State private var isPresentingAddContact = false
 
   @Query(sort: [SortDescriptor(\ContactEntity.createdAt)])
@@ -74,8 +74,8 @@ struct MainTabView: View {
         .padding(.top, 8)
         .padding(.bottom, tabBarBottomPadding)
     }
-    .sheet(isPresented: $isPresentingNewPost) {
-      NewPostSheet(contacts: scopedContacts)
+    .sheet(isPresented: $isPresentingNewSession) {
+      NewSessionSheet(contacts: scopedContacts)
     }
     .sheet(isPresented: $isPresentingAddContact) {
       AddContactSheet()
@@ -111,7 +111,7 @@ struct MainTabView: View {
   private var headerAccessory: (icon: String, action: () -> Void)? {
     switch selectedTab {
     case .sessions:
-      return ("plus", { isPresentingNewPost = true })
+      return ("plus", { isPresentingNewSession = true })
     case .contacts:
       return ("person.badge.plus", { isPresentingAddContact = true })
     case .share, .settings:

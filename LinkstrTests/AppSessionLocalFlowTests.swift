@@ -95,11 +95,11 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertEqual(alice.displayName, "Alice Updated")
   }
 
-  func testSetConversationArchivedAffectsOnlyRootMessages() throws {
+  func testSetSessionArchivedAffectsOnlyRootMessages() throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
     let ownerPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
-    let conversationID = ConversationID.deterministic("sender-a", "sender-b")
+    let conversationID = "session-archive"
 
     let root = makeMessage(
       eventID: "root-1",
@@ -124,13 +124,41 @@ final class AppSessionLocalFlowTests: XCTestCase {
     container.mainContext.insert(reply)
     try container.mainContext.save()
 
-    session.setConversationArchived(conversationID: conversationID, archived: true)
+    session.setSessionArchived(sessionID: conversationID, archived: true)
     XCTAssertTrue(root.isArchived)
     XCTAssertFalse(reply.isArchived)
 
-    session.setConversationArchived(conversationID: conversationID, archived: false)
+    session.setSessionArchived(sessionID: conversationID, archived: false)
     XCTAssertFalse(root.isArchived)
     XCTAssertFalse(reply.isArchived)
+  }
+
+  func testUpsertSessionCanPromoteNameFromOlderEventWithoutRewindingTimestamp() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let ownerPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let store = SessionMessageStore(modelContext: container.mainContext)
+
+    let newerDate = Date(timeIntervalSince1970: 200)
+    let olderDate = Date(timeIntervalSince1970: 100)
+
+    _ = try store.upsertSession(
+      ownerPubkey: ownerPubkey,
+      sessionID: "session-name-upgrade",
+      name: "Fallback Name",
+      createdByPubkey: ownerPubkey,
+      updatedAt: newerDate
+    )
+    let updated = try store.upsertSession(
+      ownerPubkey: ownerPubkey,
+      sessionID: "session-name-upgrade",
+      name: "Canonical Session Name",
+      createdByPubkey: ownerPubkey,
+      updatedAt: olderDate
+    )
+
+    XCTAssertEqual(updated.name, "Canonical Session Name")
+    XCTAssertEqual(updated.updatedAt, newerDate)
   }
 
   func testMarkConversationPostsReadMarksOnlyInboundRootPosts() throws {
@@ -138,7 +166,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
     try session.identityService.createNewIdentity()
     let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
     let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
-    let conversationID = ConversationID.deterministic(myPubkey, peerPubkey)
+    let conversationID = "session-mark-all-posts"
 
     let inboundRoot = makeMessage(
       eventID: "root-inbound",
@@ -185,7 +213,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
     try session.identityService.createNewIdentity()
     let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
     let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
-    let conversationID = ConversationID.deterministic(myPubkey, peerPubkey)
+    let conversationID = "session-mark-root"
 
     let inboundTargetRoot = makeMessage(
       eventID: "root-inbound-target",
@@ -243,7 +271,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
     try session.identityService.createNewIdentity()
     let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
     let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
-    let conversationID = ConversationID.deterministic(myPubkey, peerPubkey)
+    let conversationID = "session-mark-replies"
 
     let inboundReply = makeMessage(
       eventID: "reply-inbound-target",
@@ -368,40 +396,25 @@ final class AppSessionLocalFlowTests: XCTestCase {
     )
   }
 
-  func testCreatePostWithOnlyReconnectingRelaysShowsReconnectingMessage() throws {
+  func testCreateSessionPostAwaitingRelayTimesOutWhenRelayNeverConnects() async throws {
     let (session, container) = try makeSession(testDisableNostrStartupOverride: false)
-    let recipientNPub = try TestKeyMaterialFactory.makeNPub()
     try session.identityService.createNewIdentity()
-
-    let relay = RelayEntity(url: "wss://relay.example.com", status: .reconnecting)
-    container.mainContext.insert(relay)
-    try container.mainContext.save()
-
-    session.composeError = "You're offline. Waiting for a relay connection."
-    let didCreate = session.createPost(
-      url: "https://example.com/path",
-      note: nil,
-      recipientNPub: recipientNPub
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionEntity = try insertSessionFixture(
+      in: container.mainContext,
+      ownerPubkey: myPubkey,
+      createdByPubkey: myPubkey,
+      memberPubkeys: [myPubkey, peerPubkey]
     )
 
-    XCTAssertFalse(didCreate)
-    XCTAssertEqual(session.composeError, "Relays are reconnecting. Try again in a moment.")
-    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
-  }
-
-  func testCreatePostAwaitingRelayTimesOutWhenRelayNeverConnects() async throws {
-    let (session, container) = try makeSession(testDisableNostrStartupOverride: false)
-    let recipientNPub = try TestKeyMaterialFactory.makeNPub()
-    try session.identityService.createNewIdentity()
-
-    let relay = RelayEntity(url: "wss://relay.example.com", status: .reconnecting)
-    container.mainContext.insert(relay)
+    container.mainContext.insert(RelayEntity(url: "wss://relay.example.com", status: .reconnecting))
     try container.mainContext.save()
 
-    let didCreate = await session.createPostAwaitingRelay(
+    let didCreate = await session.createSessionPostAwaitingRelay(
       url: "https://example.com/path",
       note: nil,
-      recipientNPub: recipientNPub,
+      session: sessionEntity,
       timeoutSeconds: 0.05,
       pollIntervalSeconds: 0.01
     )
@@ -411,23 +424,29 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
   }
 
-  func testCreatePostAwaitingRelaySendsWhenLiveRelayConnectionExists() async throws {
+  func testCreateSessionPostAwaitingRelaySendsWhenLiveRelayConnectionExists() async throws {
     let (session, container) = try makeSession(
       testDisableNostrStartupOverride: false,
       testHasConnectedRelaysOverride: { true },
       testRelaySendOverride: { _, _ in "await-root-event" }
     )
-    let recipientNPub = try TestKeyMaterialFactory.makeNPub()
     try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionEntity = try insertSessionFixture(
+      in: container.mainContext,
+      ownerPubkey: myPubkey,
+      createdByPubkey: myPubkey,
+      memberPubkeys: [myPubkey, peerPubkey]
+    )
 
-    let relay = RelayEntity(url: "wss://relay.example.com", status: .failed)
-    container.mainContext.insert(relay)
+    container.mainContext.insert(RelayEntity(url: "wss://relay.example.com", status: .failed))
     try container.mainContext.save()
 
-    let didCreate = await session.createPostAwaitingRelay(
+    let didCreate = await session.createSessionPostAwaitingRelay(
       url: "https://example.com/path",
       note: nil,
-      recipientNPub: recipientNPub,
+      session: sessionEntity,
       timeoutSeconds: 0.05,
       pollIntervalSeconds: 0.01
     )
@@ -437,39 +456,27 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertEqual(try fetchMessages(in: container.mainContext).count, 1)
   }
 
-  func testCreatePostWithOnlyPersistedOnlineStatusStillRequiresLiveRelaySocket() throws {
+  func testCreateSessionPostAwaitingRelayWithReadOnlyRelaysShowsReadOnlyMessage() async throws {
     let (session, container) = try makeSession(testDisableNostrStartupOverride: false)
-    let recipientNPub = try TestKeyMaterialFactory.makeNPub()
     try session.identityService.createNewIdentity()
-
-    let relay = RelayEntity(url: "wss://relay.example.com", status: .connected)
-    container.mainContext.insert(relay)
-    try container.mainContext.save()
-
-    let didCreate = session.createPost(
-      url: "https://example.com/path",
-      note: nil,
-      recipientNPub: recipientNPub
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionEntity = try insertSessionFixture(
+      in: container.mainContext,
+      ownerPubkey: myPubkey,
+      createdByPubkey: myPubkey,
+      memberPubkeys: [myPubkey, peerPubkey]
     )
 
-    XCTAssertFalse(didCreate)
-    XCTAssertEqual(session.composeError, "You're offline. Waiting for a relay connection.")
-    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
-  }
-
-  func testCreatePostWithReadOnlyRelaysShowsReadOnlyMessage() throws {
-    let (session, container) = try makeSession(testDisableNostrStartupOverride: false)
-    let recipientNPub = try TestKeyMaterialFactory.makeNPub()
-    try session.identityService.createNewIdentity()
-
-    let relay = RelayEntity(url: "wss://relay.example.com", status: .readOnly)
-    container.mainContext.insert(relay)
+    container.mainContext.insert(RelayEntity(url: "wss://relay.example.com", status: .readOnly))
     try container.mainContext.save()
 
-    let didCreate = session.createPost(
+    let didCreate = await session.createSessionPostAwaitingRelay(
       url: "https://example.com/path",
       note: nil,
-      recipientNPub: recipientNPub
+      session: sessionEntity,
+      timeoutSeconds: 0.05,
+      pollIntervalSeconds: 0.01
     )
 
     XCTAssertFalse(didCreate)
@@ -480,59 +487,26 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
   }
 
-  func testCreatePostWithOfflineRelaysShowsOfflineToast() throws {
+  func testCreateSessionPostAwaitingRelayWithNoEnabledRelaysShowsNoEnabledRelaysMessage()
+    async throws
+  {
     let (session, container) = try makeSession(testDisableNostrStartupOverride: false)
-    let recipientNPub = try TestKeyMaterialFactory.makeNPub()
     try session.identityService.createNewIdentity()
-
-    let relay = RelayEntity(url: "wss://relay.example.com", status: .failed)
-    container.mainContext.insert(relay)
-    try container.mainContext.save()
-
-    let didCreate = session.createPost(
-      url: "https://example.com/path",
-      note: nil,
-      recipientNPub: recipientNPub
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionEntity = try insertSessionFixture(
+      in: container.mainContext,
+      ownerPubkey: myPubkey,
+      createdByPubkey: myPubkey,
+      memberPubkeys: [myPubkey, peerPubkey]
     )
 
-    XCTAssertFalse(didCreate)
-    XCTAssertEqual(session.composeError, "You're offline. Waiting for a relay connection.")
-    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
-  }
-
-  func testCreatePostAllowsSendWhenLiveRelayConnectionExistsDespiteOfflineStoredStatus() throws {
-    let (session, container) = try makeSession(
-      testDisableNostrStartupOverride: false,
-      testHasConnectedRelaysOverride: { true }
-    )
-    let recipientNPub = try TestKeyMaterialFactory.makeNPub()
-    try session.identityService.createNewIdentity()
-
-    let relay = RelayEntity(url: "wss://relay.example.com", status: .failed)
-    container.mainContext.insert(relay)
-    try container.mainContext.save()
-
-    session.startNostrIfPossible()
-    let didCreate = session.createPost(
+    let didCreate = await session.createSessionPostAwaitingRelay(
       url: "https://example.com/path",
       note: nil,
-      recipientNPub: recipientNPub
-    )
-
-    XCTAssertTrue(didCreate)
-    XCTAssertNil(session.composeError)
-    XCTAssertEqual(try fetchMessages(in: container.mainContext).count, 1)
-  }
-
-  func testCreatePostWithNoEnabledRelaysShowsNoEnabledRelaysMessage() throws {
-    let (session, container) = try makeSession(testDisableNostrStartupOverride: false)
-    let recipientNPub = try TestKeyMaterialFactory.makeNPub()
-    try session.identityService.createNewIdentity()
-
-    let didCreate = session.createPost(
-      url: "https://example.com/path",
-      note: nil,
-      recipientNPub: recipientNPub
+      session: sessionEntity,
+      timeoutSeconds: 0.05,
+      pollIntervalSeconds: 0.01
     )
 
     XCTAssertFalse(didCreate)
@@ -541,18 +515,25 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
   }
 
-  func testCreatePostPersistsOutgoingRootMessage() throws {
+  func testCreateSessionPostPersistsOutgoingRootMessage() async throws {
     let (session, container) = try makeSession()
-    let recipientNPub = try TestKeyMaterialFactory.makeNPub()
     try session.identityService.createNewIdentity()
-    session.startNostrIfPossible()
-
-    session.createPost(
-      url: "https://example.com/path",
-      note: "hello",
-      recipientNPub: recipientNPub
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionEntity = try insertSessionFixture(
+      in: container.mainContext,
+      ownerPubkey: myPubkey,
+      createdByPubkey: myPubkey,
+      memberPubkeys: [myPubkey, peerPubkey]
     )
 
+    let didCreate = await session.createSessionPostAwaitingRelay(
+      url: "https://example.com/path",
+      note: "hello",
+      session: sessionEntity
+    )
+
+    XCTAssertTrue(didCreate)
     let messages = try fetchMessages(in: container.mainContext)
     XCTAssertEqual(messages.count, 1)
     let message = try XCTUnwrap(messages.first)
@@ -566,40 +547,67 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertNil(session.composeError)
   }
 
-  func testCreatePostRejectsInvalidURL() throws {
-    let (session, container) = try makeSession()
-    let recipientNPub = try TestKeyMaterialFactory.makeNPub()
-    try session.identityService.createNewIdentity()
-    session.startNostrIfPossible()
-
-    session.createPost(url: "not-a-url", note: nil, recipientNPub: recipientNPub)
-
-    XCTAssertEqual(session.composeError, "Enter a valid URL.")
-    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
-  }
-
-  func testCreatePostRejectsUnsupportedScheme() throws {
-    let (session, container) = try makeSession()
-    let recipientNPub = try TestKeyMaterialFactory.makeNPub()
-    try session.identityService.createNewIdentity()
-    session.startNostrIfPossible()
-
-    session.createPost(url: "ftp://example.com/file.mp4", note: nil, recipientNPub: recipientNPub)
-
-    XCTAssertEqual(session.composeError, "Enter a valid URL.")
-    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
-  }
-
-  func testSendReplyPersistsOutgoingReplyMessage() throws {
+  func testCreateSessionPostRejectsInvalidURL() async throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
     let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
     let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
-    session.startNostrIfPossible()
+    let sessionEntity = try insertSessionFixture(
+      in: container.mainContext,
+      ownerPubkey: myPubkey,
+      createdByPubkey: myPubkey,
+      memberPubkeys: [myPubkey, peerPubkey]
+    )
+
+    let didCreate = await session.createSessionPostAwaitingRelay(
+      url: "not-a-url",
+      note: nil,
+      session: sessionEntity
+    )
+
+    XCTAssertFalse(didCreate)
+    XCTAssertEqual(session.composeError, "Enter a valid URL.")
+    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
+  }
+
+  func testCreateSessionPostRejectsUnsupportedScheme() async throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionEntity = try insertSessionFixture(
+      in: container.mainContext,
+      ownerPubkey: myPubkey,
+      createdByPubkey: myPubkey,
+      memberPubkeys: [myPubkey, peerPubkey]
+    )
+
+    let didCreate = await session.createSessionPostAwaitingRelay(
+      url: "ftp://example.com/file.mp4",
+      note: nil,
+      session: sessionEntity
+    )
+
+    XCTAssertFalse(didCreate)
+    XCTAssertEqual(session.composeError, "Enter a valid URL.")
+    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
+  }
+
+  func testSendReplyAwaitingRelayPersistsOutgoingReplyMessage() async throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionEntity = try insertSessionFixture(
+      in: container.mainContext,
+      ownerPubkey: myPubkey,
+      createdByPubkey: myPubkey,
+      memberPubkeys: [myPubkey, peerPubkey]
+    )
 
     let root = makeMessage(
       eventID: "root-abc",
-      conversationID: ConversationID.deterministic(myPubkey, peerPubkey),
+      conversationID: sessionEntity.sessionID,
       rootID: "root-abc",
       kind: .root,
       senderPubkey: myPubkey,
@@ -609,7 +617,8 @@ final class AppSessionLocalFlowTests: XCTestCase {
     container.mainContext.insert(root)
     try container.mainContext.save()
 
-    session.sendReply(text: "reply text", post: root)
+    let didSend = await session.sendReplyAwaitingRelay(text: "reply text", post: root)
+    XCTAssertTrue(didSend)
 
     let replies = try fetchMessages(in: container.mainContext).filter { $0.kind == .reply }
     XCTAssertEqual(replies.count, 1)
@@ -617,39 +626,9 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertEqual(reply.note, "reply text")
     XCTAssertEqual(reply.rootID, "root-abc")
     XCTAssertEqual(reply.senderPubkey, myPubkey)
-    XCTAssertEqual(reply.receiverPubkey, peerPubkey)
+    XCTAssertEqual(reply.receiverPubkey, myPubkey)
     XCTAssertNotNil(reply.readAt)
     XCTAssertNil(session.composeError)
-  }
-
-  func testSendReplyWithReconnectingRelaysReturnsFalseAndDoesNotPersistReply() throws {
-    let (session, container) = try makeSession(testDisableNostrStartupOverride: false)
-    try session.identityService.createNewIdentity()
-    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
-    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
-
-    let relay = RelayEntity(url: "wss://relay.example.com", status: .reconnecting)
-    container.mainContext.insert(relay)
-
-    let root = makeMessage(
-      eventID: "root-reconnecting",
-      conversationID: ConversationID.deterministic(myPubkey, peerPubkey),
-      rootID: "root-reconnecting",
-      kind: .root,
-      senderPubkey: myPubkey,
-      receiverPubkey: peerPubkey,
-      ownerPubkey: myPubkey
-    )
-    container.mainContext.insert(root)
-    try container.mainContext.save()
-
-    let didSend = session.sendReply(text: "reply text", post: root)
-
-    XCTAssertFalse(didSend)
-    XCTAssertEqual(session.composeError, "Relays are reconnecting. Try again in a moment.")
-    XCTAssertTrue(
-      try fetchMessages(in: container.mainContext).filter { $0.kind == .reply }.isEmpty
-    )
   }
 
   func testSendReplyAwaitingRelayTimesOutWhenRelayNeverConnects() async throws {
@@ -657,13 +636,19 @@ final class AppSessionLocalFlowTests: XCTestCase {
     try session.identityService.createNewIdentity()
     let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
     let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionEntity = try insertSessionFixture(
+      in: container.mainContext,
+      ownerPubkey: myPubkey,
+      createdByPubkey: myPubkey,
+      memberPubkeys: [myPubkey, peerPubkey]
+    )
 
     let relay = RelayEntity(url: "wss://relay.example.com", status: .reconnecting)
     container.mainContext.insert(relay)
 
     let root = makeMessage(
       eventID: "root-await-timeout",
-      conversationID: ConversationID.deterministic(myPubkey, peerPubkey),
+      conversationID: sessionEntity.sessionID,
       rootID: "root-await-timeout",
       kind: .root,
       senderPubkey: myPubkey,
@@ -696,13 +681,19 @@ final class AppSessionLocalFlowTests: XCTestCase {
     try session.identityService.createNewIdentity()
     let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
     let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionEntity = try insertSessionFixture(
+      in: container.mainContext,
+      ownerPubkey: myPubkey,
+      createdByPubkey: myPubkey,
+      memberPubkeys: [myPubkey, peerPubkey]
+    )
 
     let relay = RelayEntity(url: "wss://relay.example.com", status: .failed)
     container.mainContext.insert(relay)
 
     let root = makeMessage(
       eventID: "root-await-success",
-      conversationID: ConversationID.deterministic(myPubkey, peerPubkey),
+      conversationID: sessionEntity.sessionID,
       rootID: "root-await-success",
       kind: .root,
       senderPubkey: myPubkey,
@@ -840,35 +831,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertEqual(Set(messages.map(\.storageID)).count, 2)
   }
 
-  func testBootNormalizationSkipsUndecryptablePeerKeys() throws {
-    let (session, container) = try makeSession()
-    try session.identityService.createNewIdentity()
-    let ownerPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
-    let senderPubkey = try TestKeyMaterialFactory.makePubkeyHex()
-    let receiverPubkey = try TestKeyMaterialFactory.makePubkeyHex()
-    let legacyConversationID = "legacy-conversation-id"
-
-    let message = makeMessage(
-      eventID: "legacy-normalization-message",
-      conversationID: legacyConversationID,
-      rootID: "legacy-normalization-message",
-      kind: .root,
-      senderPubkey: senderPubkey,
-      receiverPubkey: receiverPubkey,
-      ownerPubkey: ownerPubkey
-    )
-    container.mainContext.insert(message)
-    try container.mainContext.save()
-
-    try LocalDataCrypto.shared.clearKey(ownerPubkey: ownerPubkey)
-
-    session.boot()
-
-    let storedMessage = try XCTUnwrap(try fetchMessages(in: container.mainContext).first)
-    XCTAssertEqual(storedMessage.conversationID, legacyConversationID)
-  }
-
-  func testCreatePostAwaitingRelayDoesNotPersistWhenRelayRejectsPublish() async throws {
+  func testCreateSessionPostAwaitingRelayDoesNotPersistWhenRelayRejectsPublish() async throws {
     let (session, container) = try makeSession(
       testDisableNostrStartupOverride: false,
       testHasConnectedRelaysOverride: { true },
@@ -876,17 +839,24 @@ final class AppSessionLocalFlowTests: XCTestCase {
         throw NostrServiceError.publishRejected("blocked: policy")
       }
     )
-    let recipientNPub = try TestKeyMaterialFactory.makeNPub()
     try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionEntity = try insertSessionFixture(
+      in: container.mainContext,
+      ownerPubkey: myPubkey,
+      createdByPubkey: myPubkey,
+      memberPubkeys: [myPubkey, peerPubkey]
+    )
 
     let relay = RelayEntity(url: "wss://relay.example.com", status: .connected)
     container.mainContext.insert(relay)
     try container.mainContext.save()
 
-    let didCreate = await session.createPostAwaitingRelay(
+    let didCreate = await session.createSessionPostAwaitingRelay(
       url: "https://example.com/path",
       note: nil,
-      recipientNPub: recipientNPub,
+      session: sessionEntity,
       timeoutSeconds: 0.05,
       pollIntervalSeconds: 0.01
     )
@@ -907,13 +877,19 @@ final class AppSessionLocalFlowTests: XCTestCase {
     try session.identityService.createNewIdentity()
     let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
     let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionEntity = try insertSessionFixture(
+      in: container.mainContext,
+      ownerPubkey: myPubkey,
+      createdByPubkey: myPubkey,
+      memberPubkeys: [myPubkey, peerPubkey]
+    )
 
     let relay = RelayEntity(url: "wss://relay.example.com", status: .connected)
     container.mainContext.insert(relay)
 
     let root = makeMessage(
       eventID: "root-await-rejected",
-      conversationID: ConversationID.deterministic(myPubkey, peerPubkey),
+      conversationID: sessionEntity.sessionID,
       rootID: "root-await-rejected",
       kind: .root,
       senderPubkey: myPubkey,
@@ -937,6 +913,41 @@ final class AppSessionLocalFlowTests: XCTestCase {
     )
   }
 
+  private func insertSessionFixture(
+    in context: ModelContext,
+    ownerPubkey: String,
+    createdByPubkey: String,
+    memberPubkeys: [String],
+    name: String = "Test Session",
+    sessionID: String = "session-fixture"
+  ) throws -> SessionEntity {
+    let createdAt = Date.now
+    let sessionEntity = try SessionEntity(
+      ownerPubkey: ownerPubkey,
+      sessionID: sessionID,
+      name: name,
+      createdByPubkey: createdByPubkey,
+      createdAt: createdAt,
+      updatedAt: createdAt
+    )
+    context.insert(sessionEntity)
+
+    for memberPubkey in Set(memberPubkeys) {
+      let member = try SessionMemberEntity(
+        ownerPubkey: ownerPubkey,
+        sessionID: sessionID,
+        memberPubkey: memberPubkey,
+        isActive: true,
+        createdAt: createdAt,
+        updatedAt: createdAt
+      )
+      context.insert(member)
+    }
+
+    try context.save()
+    return sessionEntity
+  }
+
   private func makeSession(
     testDisableNostrStartupOverride: Bool? = nil,
     testHasConnectedRelaysOverride: (() -> Bool)? = nil,
@@ -947,6 +958,9 @@ final class AppSessionLocalFlowTests: XCTestCase {
     let schema = Schema([
       ContactEntity.self,
       RelayEntity.self,
+      SessionEntity.self,
+      SessionMemberEntity.self,
+      SessionReactionEntity.self,
       SessionMessageEntity.self,
     ])
     let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
