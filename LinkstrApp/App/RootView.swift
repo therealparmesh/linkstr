@@ -11,9 +11,7 @@ struct RootView: View {
       LinkstrBackgroundView()
       Group {
         if !session.didFinishBoot {
-          ProgressView("Loading account…")
-            .tint(LinkstrTheme.neonCyan)
-            .foregroundStyle(LinkstrTheme.textSecondary)
+          LinkstrBootLoadingView(statusMessage: session.bootStatusMessage)
         } else if !session.hasIdentity {
           OnboardingView()
         } else {
@@ -70,5 +68,27 @@ struct RootView: View {
         EmptyView()
       }
     }
+  }
+}
+
+private struct LinkstrBootLoadingView: View {
+  let statusMessage: String
+
+  var body: some View {
+    VStack(spacing: 14) {
+      Image(systemName: "bolt.horizontal.circle.fill")
+        .font(.system(size: 34))
+        .foregroundStyle(LinkstrTheme.neonCyan)
+
+      ProgressView()
+        .tint(LinkstrTheme.neonCyan)
+
+      Text(statusMessage)
+        .font(.custom(LinkstrTheme.bodyFont, size: 14))
+        .foregroundStyle(LinkstrTheme.textSecondary)
+        .multilineTextAlignment(.center)
+        .padding(.horizontal, 24)
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
   }
 }

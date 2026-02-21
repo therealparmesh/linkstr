@@ -26,6 +26,7 @@ final class KeychainStore {
   static let shared = KeychainStore()
 
   private let service = "com.parmscript.linkstr"
+  private let migratoryAccessibility = kSecAttrAccessibleWhenUnlocked
 
   #if targetEnvironment(simulator)
     // Simulator builds can hit keychain entitlement availability issues.
@@ -36,43 +37,94 @@ final class KeychainStore {
 
   func set(_ value: String, for key: String) throws {
     let data = Data(value.utf8)
-    let query: [String: Any] = [
-      kSecClass as String: kSecClassGenericPassword,
-      kSecAttrService as String: service,
-      kSecAttrAccount as String: key,
-    ]
+    deletePrimaryAndLegacyItems(for: key)
 
-    SecItemDelete(query as CFDictionary)
-
-    var addQuery = query
-    addQuery[kSecValueData as String] = data
-
-    let status = SecItemAdd(addQuery as CFDictionary, nil)
-    if status == errSecSuccess {
+    // Prefer synchronizable storage so encrypted backups + device migration can carry keychain
+    // identity/local-data keys across phones when iCloud Keychain is available.
+    let syncStatus = add(data, for: key, synchronizable: true)
+    if syncStatus == errSecSuccess {
       clearFallback(for: key)
       return
     }
 
-    if setFallbackIfRecoverable(status, value: value, for: key) {
+    // Fallback keeps login available when synchronizable keychain is unavailable on device.
+    let localStatus = add(data, for: key, synchronizable: false)
+    if localStatus == errSecSuccess {
+      clearFallback(for: key)
       return
     }
 
-    throw KeychainStoreError.saveFailed(status)
+    if setFallbackIfRecoverable(localStatus, value: value, for: key)
+      || setFallbackIfRecoverable(syncStatus, value: value, for: key)
+    {
+      return
+    }
+
+    throw KeychainStoreError.saveFailed(localStatus)
   }
 
   func get(_ key: String) throws -> String? {
-    let query: [String: Any] = [
-      kSecClass as String: kSecClassGenericPassword,
-      kSecAttrService as String: service,
-      kSecAttrAccount as String: key,
-      kSecReturnData as String: true,
-      kSecMatchLimit as String: kSecMatchLimitOne,
+    if let value = try readValue(for: key, synchronizableQuery: kSecAttrSynchronizableAny) {
+      return value
+    }
+    if let value = try readValue(for: key, synchronizableQuery: nil) {
+      return value
+    }
+    return fallbackValue(for: key)
+  }
+
+  func delete(_ key: String) throws {
+    let statuses: [OSStatus] = [
+      SecItemDelete(query(for: key, synchronizableQuery: kCFBooleanTrue) as CFDictionary),
+      SecItemDelete(query(for: key, synchronizableQuery: kCFBooleanFalse) as CFDictionary),
+      SecItemDelete(query(for: key, synchronizableQuery: nil) as CFDictionary),
     ]
 
+    if statuses.contains(errSecSuccess) || statuses.allSatisfy({ $0 == errSecItemNotFound }) {
+      clearFallback(for: key)
+      return
+    }
+
+    let firstError =
+      statuses.first(where: { $0 != errSecSuccess && $0 != errSecItemNotFound }) ?? errSecParam
+
+    if deleteFallbackIfRecoverable(firstError, for: key) {
+      return
+    }
+
+    throw KeychainStoreError.deleteFailed(firstError)
+  }
+
+  private func add(_ data: Data, for key: String, synchronizable: Bool) -> OSStatus {
+    var addQuery = query(
+      for: key,
+      synchronizableQuery: synchronizable ? kCFBooleanTrue : kCFBooleanFalse
+    )
+    addQuery[kSecValueData as String] = data
+    addQuery[kSecAttrAccessible as String] = migratoryAccessibility
+    return SecItemAdd(addQuery as CFDictionary, nil)
+  }
+
+  private func deletePrimaryAndLegacyItems(for key: String) {
+    let deleteQueries: [[String: Any]] = [
+      query(for: key, synchronizableQuery: kCFBooleanTrue),
+      query(for: key, synchronizableQuery: kCFBooleanFalse),
+      query(for: key, synchronizableQuery: nil),
+    ]
+    for deleteQuery in deleteQueries {
+      SecItemDelete(deleteQuery as CFDictionary)
+    }
+  }
+
+  private func readValue(for key: String, synchronizableQuery: Any?) throws -> String? {
+    var readQuery = query(for: key, synchronizableQuery: synchronizableQuery)
+    readQuery[kSecReturnData as String] = true
+    readQuery[kSecMatchLimit as String] = kSecMatchLimitOne
+
     var result: AnyObject?
-    let status = SecItemCopyMatching(query as CFDictionary, &result)
+    let status = SecItemCopyMatching(readQuery as CFDictionary, &result)
     if status == errSecItemNotFound {
-      return fallbackValue(for: key)
+      return nil
     }
 
     if status != errSecSuccess {
@@ -88,24 +140,16 @@ final class KeychainStore {
     return value
   }
 
-  func delete(_ key: String) throws {
-    let query: [String: Any] = [
+  private func query(for key: String, synchronizableQuery: Any?) -> [String: Any] {
+    var baseQuery: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrService as String: service,
       kSecAttrAccount as String: key,
     ]
-
-    let status = SecItemDelete(query as CFDictionary)
-    if status == errSecSuccess || status == errSecItemNotFound {
-      clearFallback(for: key)
-      return
+    if let synchronizableQuery {
+      baseQuery[kSecAttrSynchronizable as String] = synchronizableQuery
     }
-
-    if deleteFallbackIfRecoverable(status, for: key) {
-      return
-    }
-
-    throw KeychainStoreError.deleteFailed(status)
+    return baseQuery
   }
 
   private func setFallbackIfRecoverable(_ status: OSStatus, value: String, for key: String) -> Bool

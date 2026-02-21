@@ -64,7 +64,7 @@ struct SettingsView: View {
                 .lineLimit(2)
               Spacer(minLength: 8)
               Circle()
-                .fill(statusDotColor(relay.status))
+                .fill(statusDotColor(for: relay))
                 .frame(width: 10, height: 10)
                 .padding(.top, 4)
             }
@@ -167,7 +167,7 @@ struct SettingsView: View {
       sectionLabel(
         "Relays",
         systemImage: "antenna.radiowaves.left.and.right",
-        badge: "\(relays.count)"
+        badge: "\(connectedRelayCount)/\(relays.count)"
       )
     }
   }
@@ -295,7 +295,18 @@ struct SettingsView: View {
     .padding(.horizontal, 2)
   }
 
-  private func statusDotColor(_ status: RelayHealthStatus) -> Color {
+  private var connectedRelayCount: Int {
+    relays.count {
+      $0.isEnabled && ($0.status == .connected || $0.status == .readOnly)
+    }
+  }
+
+  private func statusDotColor(for relay: RelayEntity) -> Color {
+    if relay.isEnabled == false {
+      return LinkstrTheme.textSecondary.opacity(0.45)
+    }
+
+    let status = relay.status
     switch status {
     case .connected:
       return .green

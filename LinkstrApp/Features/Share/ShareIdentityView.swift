@@ -24,15 +24,6 @@ struct ShareIdentityView: View {
                 .resizable()
                 .scaledToFit()
                 .frame(maxWidth: 300)
-                .padding(16)
-                .background(
-                  RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(LinkstrTheme.panel)
-                )
-                .overlay(
-                  RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(LinkstrTheme.textSecondary.opacity(0.25), lineWidth: 0.8)
-                )
 
               Text("Scan to add this Contact Key (npub)")
                 .font(.custom(LinkstrTheme.bodyFont, size: 13))

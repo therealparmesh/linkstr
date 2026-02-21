@@ -33,6 +33,10 @@ final class RelayStore {
 
   func toggleRelay(_ relay: RelayEntity) throws {
     relay.isEnabled.toggle()
+    if relay.isEnabled == false {
+      relay.status = .disconnected
+      relay.lastError = nil
+    }
     try modelContext.save()
   }
 
@@ -51,6 +55,16 @@ final class RelayStore {
   {
     let descriptor = FetchDescriptor<RelayEntity>(predicate: #Predicate { $0.url == relayURL })
     guard let relay = try modelContext.fetch(descriptor).first else { return false }
+
+    // Ignore transient status callbacks for disabled relays; they are not part of active runtime.
+    if relay.isEnabled == false {
+      if relay.status != .disconnected || relay.lastError != nil {
+        relay.status = .disconnected
+        relay.lastError = nil
+        return true
+      }
+      return false
+    }
 
     let normalizedMessage: String?
     if let message {

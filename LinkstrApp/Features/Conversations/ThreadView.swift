@@ -175,7 +175,6 @@ struct ThreadView: View {
       }
     }
     .padding(12)
-    .linkstrNeonCard()
   }
 
   private var contentKindLabel: String {

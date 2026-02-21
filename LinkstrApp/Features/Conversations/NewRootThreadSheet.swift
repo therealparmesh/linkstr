@@ -37,65 +37,121 @@ struct NewPostSheet: View {
     NavigationStack {
       ZStack {
         LinkstrBackgroundView()
-        Form {
-          Section("Recipient") {
-            if let lockedRecipient {
-              VStack(alignment: .leading, spacing: 4) {
-                Text(lockedRecipient.displayName)
-                  .foregroundStyle(.primary)
-                  .lineLimit(1)
-                Text(lockedRecipient.npub)
-                  .font(.footnote)
-                  .foregroundStyle(LinkstrTheme.textSecondary)
-                  .lineLimit(1)
-              }
-            } else {
-              Button {
-                isPresentingRecipientPicker = true
-              } label: {
-                HStack(spacing: 10) {
-                  VStack(alignment: .leading, spacing: 4) {
-                    Text(recipientPrimaryLabel)
-                      .foregroundStyle(LinkstrTheme.textPrimary)
-                      .lineLimit(1)
-                    if let recipientSecondaryLabel {
-                      Text(recipientSecondaryLabel)
-                        .font(.footnote)
-                        .foregroundStyle(LinkstrTheme.textSecondary)
-                        .lineLimit(1)
-                    }
-                  }
-                  Spacer()
-                  Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(LinkstrTheme.textSecondary.opacity(0.8))
+        ScrollView {
+          VStack(alignment: .leading, spacing: 14) {
+            composeCard(title: "To") {
+              if let lockedRecipient {
+                VStack(alignment: .leading, spacing: 6) {
+                  Text(lockedRecipient.displayName)
+                    .font(.custom(LinkstrTheme.bodyFont, size: 15))
+                    .foregroundStyle(LinkstrTheme.textPrimary)
+                    .lineLimit(1)
+
+                  Text(lockedRecipient.npub)
+                    .font(.custom(LinkstrTheme.bodyFont, size: 12))
+                    .foregroundStyle(LinkstrTheme.textSecondary)
+                    .lineLimit(1)
+
+                  Text("Recipient is locked for this conversation.")
+                    .font(.custom(LinkstrTheme.bodyFont, size: 12))
+                    .foregroundStyle(LinkstrTheme.textSecondary)
                 }
+              } else {
+                Button {
+                  isPresentingRecipientPicker = true
+                } label: {
+                  HStack(spacing: 10) {
+                    LinkstrPeerAvatar(name: recipientPrimaryLabel, size: 34)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                      Text(recipientPrimaryLabel)
+                        .font(.custom(LinkstrTheme.bodyFont, size: 15))
+                        .foregroundStyle(LinkstrTheme.textPrimary)
+                        .lineLimit(1)
+                      if let recipientSecondaryLabel {
+                        Text(recipientSecondaryLabel)
+                          .font(.custom(LinkstrTheme.bodyFont, size: 12))
+                          .foregroundStyle(LinkstrTheme.textSecondary)
+                          .lineLimit(1)
+                      }
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                      .font(.system(size: 12, weight: .semibold))
+                      .foregroundStyle(LinkstrTheme.textSecondary.opacity(0.8))
+                  }
+                }
+                .buttonStyle(.plain)
+                .disabled(isSending)
               }
-              .buttonStyle(.plain)
             }
-          }
 
-          Section("Post Link") {
-            TextField("https://...", text: $url)
-              .textInputAutocapitalization(.never)
-              .keyboardType(.URL)
-              .autocorrectionDisabled(true)
-            LinkstrInputAssistRow(
-              showClear: !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              showScan: false,
-              onPaste: pasteURLFromClipboard,
-              onClear: { url = "" }
-            )
-            TextField("Optional note", text: $note, axis: .vertical)
-          }
+            composeCard(title: "Link") {
+              TextField("https://...", text: $url)
+                .font(.custom(LinkstrTheme.bodyFont, size: 14))
+                .textInputAutocapitalization(.never)
+                .keyboardType(.URL)
+                .autocorrectionDisabled(true)
+                .disabled(isSending)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(
+                  RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(LinkstrTheme.panelSoft)
+                )
 
-          Section {
-            Text("Add a valid URL to send a post. Replies can be text-only.")
-              .font(.footnote)
+              LinkstrInputAssistRow(
+                showClear: !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                showScan: false,
+                onPaste: pasteURLFromClipboard,
+                onClear: { url = "" }
+              )
+
+              Text(urlValidationHint ?? " ")
+                .font(.custom(LinkstrTheme.bodyFont, size: 12))
+                .foregroundStyle(Color.red.opacity(0.92))
+                .frame(maxWidth: .infinity, minHeight: 14, alignment: .leading)
+                .opacity(urlValidationHint == nil ? 0 : 1)
+                .accessibilityHidden(urlValidationHint == nil)
+            }
+
+            composeCard(title: "Note") {
+              ZStack(alignment: .topLeading) {
+                if note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                  Text("Optional context for your recipient")
+                    .font(.custom(LinkstrTheme.bodyFont, size: 14))
+                    .foregroundStyle(LinkstrTheme.textSecondary)
+                    .padding(.top, 12)
+                    .padding(.leading, 12)
+                    .allowsHitTesting(false)
+                }
+
+                TextEditor(text: $note)
+                  .font(.custom(LinkstrTheme.bodyFont, size: 14))
+                  .foregroundStyle(LinkstrTheme.textPrimary)
+                  .scrollContentBackground(.hidden)
+                  .frame(minHeight: 112, maxHeight: 180)
+                  .padding(4)
+                  .disabled(isSending)
+              }
+              .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                  .fill(LinkstrTheme.panelSoft)
+              )
+            }
+
+            Text("Send requires a valid link and recipient. Note is optional.")
+              .font(.custom(LinkstrTheme.bodyFont, size: 12))
               .foregroundStyle(LinkstrTheme.textSecondary)
+              .padding(.horizontal, 2)
           }
         }
-        .scrollContentBackground(.hidden)
+        .padding(.horizontal, 12)
+        .padding(.top, 14)
+        .padding(.bottom, 120)
+        .scrollBounceBehavior(.basedOnSize)
       }
       .navigationTitle("New Post")
       .toolbarColorScheme(.dark, for: .navigationBar)
@@ -104,27 +160,36 @@ struct NewPostSheet: View {
           Button("Cancel") { dismiss() }
             .disabled(isSending)
         }
-        ToolbarItem(placement: .confirmationAction) {
-          Button(isSending ? "Sending..." : "Send") {
-            guard let recipientNPub = activeRecipientNPub else { return }
-            guard let normalizedURL = normalizedURL else { return }
-            let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
-            isSending = true
-            Task { @MainActor in
-              let didCreate = await session.createPostAwaitingRelay(
-                url: normalizedURL,
-                note: trimmedNote.isEmpty ? nil : trimmedNote,
-                recipientNPub: recipientNPub
-              )
-              isSending = false
-              if didCreate {
-                dismiss()
-              }
-            }
+      }
+      .safeAreaInset(edge: .bottom, spacing: 0) {
+        VStack(spacing: 8) {
+          Button(action: sendPost) {
+            Label(isSending ? "Sending…" : "Send Post", systemImage: "paperplane.fill")
+              .frame(maxWidth: .infinity)
           }
-          .disabled(isSending || activeRecipientNPub == nil || normalizedURL == nil)
-          .tint(LinkstrTheme.neonCyan)
+          .buttonStyle(LinkstrPrimaryButtonStyle())
+          .disabled(!canSend)
+
+          Text(isSending ? "Waiting for relay reconnect before sending…" : " ")
+            .font(.custom(LinkstrTheme.bodyFont, size: 12))
+            .foregroundStyle(LinkstrTheme.textSecondary)
+            .frame(maxWidth: .infinity, minHeight: 14, alignment: .center)
+            .opacity(isSending ? 1 : 0)
+            .accessibilityHidden(!isSending)
         }
+        .padding(.horizontal, 12)
+        .padding(.top, 10)
+        .padding(.bottom, 12)
+        .background(
+          Rectangle()
+            .fill(LinkstrTheme.bgBottom.opacity(0.95))
+            .overlay(alignment: .top) {
+              Rectangle()
+                .fill(LinkstrTheme.textSecondary.opacity(0.18))
+                .frame(height: 1)
+            }
+            .ignoresSafeArea(edges: .bottom)
+        )
       }
     }
     .sheet(isPresented: $isPresentingRecipientPicker) {
@@ -161,6 +226,50 @@ struct NewPostSheet: View {
 
   private var normalizedURL: String? {
     LinkstrURLValidator.normalizedWebURL(from: url)
+  }
+
+  private var canSend: Bool {
+    !isSending && activeRecipientNPub != nil && normalizedURL != nil
+  }
+
+  private var urlValidationHint: String? {
+    let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return nil }
+    return normalizedURL == nil ? "Enter a valid http(s) URL." : nil
+  }
+
+  private func composeCard<Content: View>(title: String, @ViewBuilder content: () -> Content)
+    -> some View
+  {
+    VStack(alignment: .leading, spacing: 10) {
+      Text(title)
+        .font(.custom(LinkstrTheme.titleFont, size: 12))
+        .foregroundStyle(LinkstrTheme.textSecondary)
+      content()
+    }
+    .padding(12)
+    .linkstrNeonCard()
+  }
+
+  private func sendPost() {
+    guard let recipientNPub = activeRecipientNPub else { return }
+    guard let normalizedURL else { return }
+    guard !isSending else { return }
+
+    let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
+    isSending = true
+
+    Task { @MainActor in
+      let didCreate = await session.createPostAwaitingRelay(
+        url: normalizedURL,
+        note: trimmedNote.isEmpty ? nil : trimmedNote,
+        recipientNPub: recipientNPub
+      )
+      isSending = false
+      if didCreate {
+        dismiss()
+      }
+    }
   }
 
   private func pasteURLFromClipboard() {

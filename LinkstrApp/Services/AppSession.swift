@@ -27,12 +27,14 @@ final class AppSession: ObservableObject {
   private let relayReadOnlyMessage =
     "Connected relays are read-only. Add a writable relay to send."
   private let relaySendTimeoutMessage = "Couldn't reconnect to relays in time. Try again."
+  private let conversationNormalizationVersion = 1
   private var hasShownOfflineToastForCurrentOutage = false
   private var isForeground = false
 
   @Published var composeError: String?
   @Published private(set) var hasIdentity = false
   @Published private(set) var didFinishBoot = false
+  @Published private(set) var bootStatusMessage = "Loading account…"
 
   init(
     modelContext: ModelContext,
@@ -51,6 +53,7 @@ final class AppSession: ObservableObject {
 
   func boot() {
     didFinishBoot = false
+    bootStatusMessage = "Loading account…"
     defer { didFinishBoot = true }
 
     identityService.loadIdentity()
@@ -62,19 +65,23 @@ final class AppSession: ObservableObject {
 
     #if targetEnvironment(simulator)
       if isEnvironmentFlagEnabled("LINKSTR_SIM_BOOTSTRAP") {
+        bootStatusMessage = "Preparing simulator account…"
         bootstrapSimulatorIfNeeded()
         refreshIdentityState()
       }
     #endif
 
     do {
+      bootStatusMessage = "Preparing local data…"
       if let ownerPubkey = identityService.pubkeyHex {
-        try messageStore.normalizeConversationIDs(ownerPubkey: ownerPubkey)
+        try normalizeConversationIDsIfNeeded(ownerPubkey: ownerPubkey)
       }
+      bootStatusMessage = "Connecting relays…"
       try relayStore.ensureDefaultRelays()
     } catch {
       composeError = error.localizedDescription
     }
+    bootStatusMessage = "Starting session…"
     handleAppDidBecomeActive()
   }
 
@@ -283,6 +290,15 @@ final class AppSession: ObservableObject {
     let isRunningTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     if !isRunningTests { return true }
     return isEnvironmentFlagEnabled("LINKSTR_ENABLE_METADATA_IN_TESTS")
+  }
+
+  private func normalizeConversationIDsIfNeeded(ownerPubkey: String) throws {
+    let defaults = UserDefaults.standard
+    let key =
+      "linkstr.didNormalizeConversationIDs.v\(conversationNormalizationVersion).\(ownerPubkey)"
+    guard defaults.bool(forKey: key) == false else { return }
+    try messageStore.normalizeConversationIDs(ownerPubkey: ownerPubkey)
+    defaults.set(true, forKey: key)
   }
 
   func ensureIdentity() {
