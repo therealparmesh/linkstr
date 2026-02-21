@@ -58,6 +58,9 @@ This document is the behavioral contract for the current app. It is intentionall
 
 - Unknown peers can appear directly in Sessions with no invite flow.
 - Each root post has an associated reply thread.
+- Sessions support swipe archive/unarchive actions.
+- Archive state is applied at the root-post level; replies are not independently archived.
+- Archive is non-destructive and only changes list placement (`Active` vs `Archived`).
 - Opening a session marks inbound root posts in that session as read.
 - Opening a thread marks inbound replies for that root post as read.
 - Unread indication is dot-only (no numeric badge).
@@ -103,7 +106,21 @@ This document is the behavioral contract for the current app. It is intentionall
 - Backfill pagination continues while a page is full; `until` cursor moves to oldest seen event time minus one.
 - Only gift-wrap events that unseal to valid linkstr rumor payloads (`44001`) are accepted.
 - Duplicate events are ignored by event ID deduping.
+- For already-known root events, duplicate re-ingest can still trigger metadata refresh requeueing.
 - Incoming accepted events are persisted locally under active account scope.
+
+### Link Metadata and Preview Hydration
+
+- Root posts use `LinkPresentation` metadata fetch for title/thumbnail enrichment.
+- Metadata fetch runs asynchronously and never blocks compose send completion.
+- Metadata provider requests use a bounded timeout (currently 6 seconds per attempt).
+- On app boot, existing root posts are scanned and missing metadata is re-hydrated.
+- Root messages with missing titles are re-queued for metadata fetch.
+- Root messages with thumbnail paths that no longer exist on disk are re-queued for metadata fetch.
+- Re-ingested duplicate root events can re-queue metadata enrichment for previously stored messages.
+- Metadata updates are non-destructive: existing title/thumbnail values are preserved when fresh fetch results are partial.
+- Stale thumbnail paths are cleared if no valid thumbnail file exists and no replacement thumbnail is returned.
+- Thumbnail files are stored under app `Application Support` in `linkstr/thumbnails`.
 
 ### Notifications
 
@@ -120,17 +137,20 @@ This document is the behavioral contract for the current app. It is intentionall
 
 - Runtime URL classification determines playback strategy.
 - Extraction candidates default to local playback with automatic fallback to official embed.
+- URL classification accepts standard web links only (`http` / `https`).
 - Local extraction candidates include:
   - TikTok video links
-  - Instagram Reels
-  - Facebook Reels
+  - Instagram Reels (including shared reel links)
+  - Facebook Reels (including shared reel links)
   - X/Twitter status video links matching `.../status/<id>/video/...`
 - Embed-only providers include:
   - YouTube (including Shorts)
   - Rumble
-  - Instagram non-Reel video posts
-  - Facebook non-Reel video posts
+  - Instagram non-Reel video posts (including shared post links)
+  - Facebook non-Reel video posts (`videos`, `watch?v=...`, and shared video links)
   - X/Twitter non-video statuses (text/photo)
+- Instagram host variants include `instagram.com` and `instagr.am`.
+- Facebook host variants include `facebook.com`, `fb.com`, and `fb.watch`.
 - X/Twitter embeds are rewritten to `fixupx.com` to improve embed consistency.
 - Local extraction rejects non-HTTPS media URLs.
 - Post label `Video` appears only for extraction candidates; embed-only and generic links display `Link`.
@@ -158,6 +178,7 @@ This document is the behavioral contract for the current app. It is intentionall
 ### Known Limitations and Explicit Non-Goals (Current)
 
 - Offline outbox/retry queue is not in scope today.
+- Message deletion selection mode/bulk delete is not in scope today.
 - Remote push (APNs) is not in scope today.
 - Contact graph publishing/follow events are not in scope today.
 - Public feed/discovery is not in scope; app is DM/session oriented.
