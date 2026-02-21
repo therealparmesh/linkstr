@@ -326,6 +326,26 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
   }
 
+  func testCreatePostWithOnlyPersistedOnlineStatusStillRequiresLiveRelaySocket() throws {
+    let (session, container) = try makeSession(testDisableNostrStartupOverride: false)
+    let recipientNPub = try TestKeyMaterialFactory.makeNPub()
+    try session.identityService.createNewIdentity()
+
+    let relay = RelayEntity(url: "wss://relay.example.com", status: .connected)
+    container.mainContext.insert(relay)
+    try container.mainContext.save()
+
+    let didCreate = session.createPost(
+      url: "https://example.com/path",
+      note: nil,
+      recipientNPub: recipientNPub
+    )
+
+    XCTAssertFalse(didCreate)
+    XCTAssertEqual(session.composeError, "You're offline. Waiting for a relay connection.")
+    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
+  }
+
   func testCreatePostWithReadOnlyRelaysShowsReadOnlyMessage() throws {
     let (session, container) = try makeSession(testDisableNostrStartupOverride: false)
     let recipientNPub = try TestKeyMaterialFactory.makeNPub()

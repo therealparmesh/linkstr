@@ -12,6 +12,19 @@ struct ReceivedDirectMessage {
 
 @MainActor
 final class NostrDMService: NSObject, ObservableObject, EventCreating {
+  private enum RelayConnectionState {
+    case connected
+    case connecting
+    case notConnected
+    case error(String)
+  }
+
+  private enum RelayResponseAction {
+    case eose(String)
+    case closed(String)
+    case readOnly(String)
+  }
+
   private enum BackfillSubscriptionKind: String {
     case recipient
     case author
@@ -36,6 +49,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
   private var reconnectTask: Task<Void, Never>?
   private var reconnectAttempt = 0
   private var shouldMaintainConnection = false
+  private var drainingRelayPools: [ObjectIdentifier: RelayPool] = [:]
 
   private var keypair: Keypair?
   private var onIncoming: ((ReceivedDirectMessage) -> Void)?
@@ -45,6 +59,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
   private let recipientSubscriptionID = "linkstr-giftwrap-recipient"
   private let authorSubscriptionID = "linkstr-giftwrap-author"
   private let backfillPageSize = 500
+  private let relayPoolDrainDelayNanoseconds: UInt64 = 2_000_000_000
   private var activeBackfillStates: [String: BackfillState] = [:]
   private var completedBackfillKinds = Set<BackfillSubscriptionKind>()
   // App-specific rumor kind carried inside NIP-59 gift wrap events.
@@ -148,7 +163,10 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     reconnectAttempt = 0
     eventCancellable?.cancel()
     eventCancellable = nil
-    relayPool?.disconnect()
+    if let relayPool {
+      relayPool.disconnect()
+      retainRelayPoolForDrain(relayPool)
+    }
     relayPool = nil
     processedEventIDs.removeAll()
     recipientFilter = nil
@@ -161,6 +179,17 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     configuredRelayURLs.removeAll()
   }
 
+  private func retainRelayPoolForDrain(_ relayPool: RelayPool) {
+    let key = ObjectIdentifier(relayPool)
+    drainingRelayPools[key] = relayPool
+
+    Task { [weak self] in
+      guard let self else { return }
+      try? await Task.sleep(nanoseconds: relayPoolDrainDelayNanoseconds)
+      self.drainingRelayPools.removeValue(forKey: key)
+    }
+  }
+
   private func scheduleReconnect() {
     guard shouldMaintainConnection else { return }
     reconnectTask?.cancel()
@@ -170,8 +199,12 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
 
     reconnectTask = Task { [weak self] in
       try? await Task.sleep(nanoseconds: delaySeconds * 1_000_000_000)
-      guard let self, self.shouldMaintainConnection else { return }
-      self.relayPool?.connect()
+      guard let self else { return }
+      guard !Task.isCancelled else { return }
+      await MainActor.run {
+        guard self.shouldMaintainConnection else { return }
+        self.relayPool?.connect()
+      }
     }
   }
 
@@ -421,10 +454,8 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
         createdAt: rumor.createdDate
       ))
   }
-}
 
-extension NostrDMService: @preconcurrency RelayDelegate {
-  func relayStateDidChange(_ relay: Relay, state: Relay.State) {
+  private func handleRelayStateDidChange(relayURL: String, state: RelayConnectionState) {
     switch state {
     case .connected:
       // Retry installs after each relay connection. Initial install can race with socket startup.
@@ -433,26 +464,64 @@ extension NostrDMService: @preconcurrency RelayDelegate {
       reconnectAttempt = 0
       installSubscriptions()
       startBackfillIfNeeded()
-      onRelayStatus?(relay.url.absoluteString, .connected, nil)
+      onRelayStatus?(relayURL, .connected, nil)
     case .connecting:
-      onRelayStatus?(relay.url.absoluteString, .reconnecting, nil)
+      onRelayStatus?(relayURL, .reconnecting, nil)
     case .notConnected:
-      pruneRelayFromBackfillWaitlists(relayURL: relay.url.absoluteString)
-      onRelayStatus?(relay.url.absoluteString, .reconnecting, nil)
+      pruneRelayFromBackfillWaitlists(relayURL: relayURL)
+      onRelayStatus?(relayURL, .reconnecting, nil)
       scheduleReconnect()
-    case .error(let error):
-      pruneRelayFromBackfillWaitlists(relayURL: relay.url.absoluteString)
-      onRelayStatus?(relay.url.absoluteString, .reconnecting, error.localizedDescription)
+    case .error(let message):
+      pruneRelayFromBackfillWaitlists(relayURL: relayURL)
+      onRelayStatus?(relayURL, .reconnecting, message)
       scheduleReconnect()
     }
   }
 
-  func relay(_ relay: Relay, didReceive response: RelayResponse) {
+  private func handleRelayResponse(relayURL: String, actions: [RelayResponseAction]) {
+    for action in actions {
+      switch action {
+      case .eose(let subscriptionID):
+        handleBackfillEOSE(relayURL: relayURL, subscriptionID: subscriptionID)
+      case .closed(let subscriptionID):
+        completeBackfillPage(subscriptionID: subscriptionID)
+      case .readOnly(let message):
+        onRelayStatus?(relayURL, .readOnly, message)
+      }
+    }
+  }
+}
+
+extension NostrDMService: @preconcurrency RelayDelegate {
+  nonisolated func relayStateDidChange(_ relay: Relay, state: Relay.State) {
+    let relayURL = relay.url.absoluteString
+    let normalizedState: RelayConnectionState
+    switch state {
+    case .connected:
+      normalizedState = .connected
+    case .connecting:
+      normalizedState = .connecting
+    case .notConnected:
+      normalizedState = .notConnected
+    case .error(let error):
+      normalizedState = .error(error.localizedDescription)
+    }
+
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      self.handleRelayStateDidChange(relayURL: relayURL, state: normalizedState)
+    }
+  }
+
+  nonisolated func relay(_ relay: Relay, didReceive response: RelayResponse) {
+    let relayURL = relay.url.absoluteString
+    var actions: [RelayResponseAction] = []
+
     switch response {
     case .eose(let subscriptionID):
-      handleBackfillEOSE(relayURL: relay.url.absoluteString, subscriptionID: subscriptionID)
+      actions.append(.eose(subscriptionID))
     case .closed(let subscriptionID, _):
-      completeBackfillPage(subscriptionID: subscriptionID)
+      actions.append(.closed(subscriptionID))
     default:
       break
     }
@@ -460,15 +529,21 @@ extension NostrDMService: @preconcurrency RelayDelegate {
     if case .ok(_, let success, let message) = response, !success {
       switch message.prefix {
       case .authRequired, .restricted:
-        onRelayStatus?(relay.url.absoluteString, .readOnly, message.message)
+        actions.append(.readOnly(message.message))
       default:
         // Non-auth publish failures can be relay policy/content checks while the socket is still healthy.
         break
       }
     }
+
+    guard !actions.isEmpty else { return }
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      self.handleRelayResponse(relayURL: relayURL, actions: actions)
+    }
   }
 
-  func relay(_ relay: Relay, didReceive event: RelayEvent) {}
+  nonisolated func relay(_ relay: Relay, didReceive event: RelayEvent) {}
 }
 
 enum NostrServiceError: Error, LocalizedError {

@@ -136,8 +136,12 @@ final class AppSession: ObservableObject {
   private func refreshRelayConnectivityAlert() throws {
     let enabledRelays = try relayStore.fetchRelays().filter(\.isEnabled)
     switch relayConnectivityState(for: enabledRelays) {
-    case .online, .readOnly, .reconnecting:
+    case .online, .readOnly:
       clearOfflineToastIfPresent()
+    case .reconnecting:
+      // Keep outage state while sockets are still flapping between reconnecting/offline.
+      // Clearing here can create repeated toast show/hide loops during relay churn.
+      return
     case .offline:
       guard !hasShownOfflineToastForCurrentOutage else { return }
       composeError = relayOfflineMessage
@@ -152,8 +156,8 @@ final class AppSession: ObservableObject {
       return true
     }
 
-    // Prefer live relay socket state when available so foreground resumes can send/flush
-    // immediately, even if persisted relay statuses are stale from background time.
+    // Require a live relay socket for user-initiated sends to avoid stale persisted
+    // connectivity causing "first send dropped, second send works" behavior.
     if hasConnectedRelays() {
       hasShownOfflineToastForCurrentOutage = false
       clearRelaySendBlockingErrorIfPresent()
@@ -185,9 +189,9 @@ final class AppSession: ObservableObject {
       clearOfflineToastIfPresent()
       return false
     case .online:
-      hasShownOfflineToastForCurrentOutage = false
-      clearRelaySendBlockingErrorIfPresent()
-      return true
+      composeError = relayOfflineMessage
+      hasShownOfflineToastForCurrentOutage = true
+      return false
     }
   }
 

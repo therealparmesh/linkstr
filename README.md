@@ -56,7 +56,7 @@
   - Green relay status means read/write connected; read-only relays are shown separately and cannot send.
   - Relay disconnect/reconnect chatter is suppressed in toasts.
   - Offline toast appears only when zero enabled relays are connected, zero are read-only, and none are reconnecting.
-  - Sending is blocked when no relay connectivity is available (live socket or persisted writable status).
+  - Sending is blocked unless at least one writable relay has a live connected socket.
   - Pending shares stay queued until a live relay socket is connected.
   - On connect/sign-in, the app subscribes live and also backfills relay history (paged) to recover prior messages.
   - Relays sorted alphabetically in Settings.
