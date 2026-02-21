@@ -1,6 +1,6 @@
 # linkstr
 
-`linkstr` is a private link feed for people you trust: share any video or URL, then discuss it in a focused thread - like a tiny private subreddit for you and the people you talk to.
+`linkstr` is a private link feed for people you trust: share videos and other media, then discuss it in a focused thread - like a tiny private subreddit for you and the people you talk to.
 
 ## Product behavior
 

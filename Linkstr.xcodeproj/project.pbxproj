@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 63;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -201,7 +201,7 @@
 		EB2139B36A9CD4633CA3623C /* LinkstrMessagesExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = LinkstrMessagesExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		F0CC043C9F8A923EBC1768E0 /* SessionMessageStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionMessageStore.swift; sourceTree = "<group>"; };
 		F601E426AE9DF9219162BF8C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		F62FC938E7F3697FA5067EA0 /* Linkstr.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Linkstr.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F62FC938E7F3697FA5067EA0 /* Linkstr.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Linkstr.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		FCA43CB5B00E6D91C9A5645E /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/MainInterface.storyboard; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -563,10 +563,16 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					467E28B33E3F4AFDB7AF647F = {
-						DevelopmentTeam = "";
+						DevelopmentTeam = 7654L3CX5L;
+						ProvisioningStyle = Automatic;
+					};
+					497D2EB9507055FF99220B43 = {
+						DevelopmentTeam = 7654L3CX5L;
+						ProvisioningStyle = Automatic;
 					};
 					AF3524FE3A8635657134E64D = {
-						DevelopmentTeam = "";
+						DevelopmentTeam = 7654L3CX5L;
+						ProvisioningStyle = Automatic;
 					};
 				};
 			};
@@ -583,6 +589,7 @@
 			packageReferences = (
 				C3D397ECD58263BFAA7C117F /* XCRemoteSwiftPackageReference "nostr-sdk-ios" */,
 			);
+			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -753,7 +760,8 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = LinkstrApp/Linkstr.entitlements;
-				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 7654L3CX5L;
 				INFOPLIST_FILE = LinkstrApp/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -851,7 +859,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = LinkstrShareExtension/LinkstrShareExtension.entitlements;
-				DEVELOPMENT_TEAM = "";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 7654L3CX5L;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = LinkstrShareExtension/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -870,7 +880,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "iMessage App Icon";
-				DEVELOPMENT_TEAM = "";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 7654L3CX5L;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = LinkstrMessagesExtension/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -907,7 +919,8 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = LinkstrApp/Linkstr.entitlements;
-				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 7654L3CX5L;
 				INFOPLIST_FILE = LinkstrApp/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -925,7 +938,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "iMessage App Icon";
-				DEVELOPMENT_TEAM = "";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 7654L3CX5L;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = LinkstrMessagesExtension/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -1000,7 +1015,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = LinkstrShareExtension/LinkstrShareExtension.entitlements;
-				DEVELOPMENT_TEAM = "";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 7654L3CX5L;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = LinkstrShareExtension/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
