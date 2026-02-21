@@ -37,10 +37,6 @@ targets:
       - path: SharedKit
     dependencies:
       - package: NostrSDK
-      - target: LinkstrShareExtension
-        embed: true
-      - target: LinkstrMessagesExtension
-        embed: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.parmscript.linkstr
@@ -73,65 +69,6 @@ targets:
           - CFBundleURLName: com.parmscript.linkstr.deeplink
             CFBundleURLSchemes:
               - linkstr
-
-  LinkstrShareExtension:
-    type: app-extension
-    platform: iOS
-    deploymentTarget: 17.0
-    sources:
-      - path: LinkstrShareExtension
-      - path: SharedKit/Domain/ContactSnapshot.swift
-      - path: SharedKit/Domain/LinkstrURLValidator.swift
-      - path: SharedKit/Domain/PendingShareItem.swift
-      - path: SharedKit/Storage/AppGroupStore.swift
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.parmscript.linkstr.share
-        CODE_SIGN_ENTITLEMENTS: LinkstrShareExtension/LinkstrShareExtension.entitlements
-        CODE_SIGN_IDENTITY: Apple Development
-        CODE_SIGN_STYLE: Automatic
-        INFOPLIST_FILE: LinkstrShareExtension/Info.plist
-        DEVELOPMENT_TEAM: "7654L3CX5L"
-        GENERATE_INFOPLIST_FILE: NO
-    info:
-      path: LinkstrShareExtension/Info.plist
-      properties:
-        CFBundleDisplayName: linkstr share
-        NSExtension:
-          NSExtensionAttributes:
-            NSExtensionActivationRule:
-              NSExtensionActivationSupportsWebURLWithMaxCount: 1
-          NSExtensionPointIdentifier: com.apple.share-services
-          NSExtensionPrincipalClass: "$(PRODUCT_MODULE_NAME).ShareViewController"
-
-  LinkstrMessagesExtension:
-    type: app-extension.messages
-    platform: iOS
-    deploymentTarget: 17.0
-    sources:
-      - path: LinkstrMessagesExtension
-      - path: SharedKit/Domain/LinkType.swift
-      - path: SharedKit/Domain/LinkstrDeepLinkPayload.swift
-      - path: SharedKit/Domain/LinkstrURLValidator.swift
-      - path: SharedKit/Messaging/LinkstrMessagePayloadCodec.swift
-      - path: SharedKit/Utils/SocialURLHeuristics.swift
-      - path: SharedKit/Utils/URLClassifier.swift
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.parmscript.linkstr.messages
-        CODE_SIGN_IDENTITY: Apple Development
-        CODE_SIGN_STYLE: Automatic
-        INFOPLIST_FILE: LinkstrMessagesExtension/Info.plist
-        DEVELOPMENT_TEAM: "7654L3CX5L"
-        GENERATE_INFOPLIST_FILE: NO
-        ASSETCATALOG_COMPILER_APPICON_NAME: "iMessage App Icon"
-    info:
-      path: LinkstrMessagesExtension/Info.plist
-      properties:
-        CFBundleDisplayName: linkstr
-        NSExtension:
-          NSExtensionMainStoryboard: MainInterface
-          NSExtensionPointIdentifier: com.apple.message-payload-provider
 
   LinkstrTests:
     type: bundle.unit-test

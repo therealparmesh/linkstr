@@ -6,7 +6,7 @@ final class DeepLinkHandler: ObservableObject {
 
   @discardableResult
   func handle(url: URL) -> Bool {
-    guard let payload = LinkstrMessagePayloadCodec.parsePayload(fromAppDeepLink: url) else {
+    guard let payload = LinkstrDeepLinkCodec.parsePayload(fromAppDeepLink: url) else {
       return false
     }
 

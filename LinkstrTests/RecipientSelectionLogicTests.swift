@@ -76,6 +76,11 @@ final class RecipientSelectionLogicTests: XCTestCase {
 }
 
 final class RecipientSearchLogicTests: XCTestCase {
+  private struct TestContact {
+    let npub: String
+    let displayName: String
+  }
+
   func testSelectedQueryPrefersDisplayName() {
     XCTAssertEqual(
       RecipientSearchLogic.selectedQuery(
@@ -151,18 +156,10 @@ final class RecipientSearchLogicTests: XCTestCase {
     )
   }
 
-  private func makeContacts() throws -> [ContactSnapshot] {
+  private func makeContacts() throws -> [TestContact] {
     [
-      ContactSnapshot(
-        ownerPubkey: "owner-a",
-        npub: try TestKeyMaterialFactory.makeNPub(),
-        displayName: "Alice Smith"
-      ),
-      ContactSnapshot(
-        ownerPubkey: "owner-a",
-        npub: try TestKeyMaterialFactory.makeNPub(),
-        displayName: "Bob"
-      ),
+      TestContact(npub: try TestKeyMaterialFactory.makeNPub(), displayName: "Alice Smith"),
+      TestContact(npub: try TestKeyMaterialFactory.makeNPub(), displayName: "Bob"),
     ]
   }
 }

@@ -18,16 +18,15 @@ final class AppSession: ObservableObject {
   private let contactStore: ContactStore
   private let relayStore: RelayStore
   private let messageStore: SessionMessageStore
-  private let appGroupStore: AppGroupStoreProtocol
   private let testHasConnectedRelaysOverride: (() -> Bool)?
   private let testDisableNostrStartupOverride: Bool?
   private let noEnabledRelaysMessage =
     "No relays are enabled. Enable at least one relay in Settings."
   private let relayOfflineMessage = "You're offline. Waiting for a relay connection."
+  private let relayReconnectingMessage = "Relays are reconnecting. Try again in a moment."
   private let relayReadOnlyMessage =
     "Connected relays are read-only. Add a writable relay to send."
   private var hasShownOfflineToastForCurrentOutage = false
-  private var isProcessingPendingShares = false
   private var isForeground = false
 
   @Published var composeError: String?
@@ -37,13 +36,11 @@ final class AppSession: ObservableObject {
   init(
     modelContext: ModelContext,
     testDisableNostrStartupOverride: Bool? = nil,
-    testHasConnectedRelaysOverride: (() -> Bool)? = nil,
-    appGroupStore: AppGroupStoreProtocol = AppGroupStore.shared
+    testHasConnectedRelaysOverride: (() -> Bool)? = nil
   ) {
     self.modelContext = modelContext
     self.testDisableNostrStartupOverride = testDisableNostrStartupOverride
     self.testHasConnectedRelaysOverride = testHasConnectedRelaysOverride
-    self.appGroupStore = appGroupStore
     self.identityService = IdentityService()
     self.nostrService = NostrDMService()
     self.contactStore = ContactStore(modelContext: modelContext)
@@ -74,7 +71,6 @@ final class AppSession: ObservableObject {
         try messageStore.normalizeConversationIDs(ownerPubkey: ownerPubkey)
       }
       try relayStore.ensureDefaultRelays()
-      try syncContactsSnapshotForCurrentOwner()
     } catch {
       composeError = error.localizedDescription
     }
@@ -83,8 +79,7 @@ final class AppSession: ObservableObject {
 
   func handleAppDidBecomeActive() {
     isForeground = true
-    startNostrIfPossible()
-    processPendingShares()
+    startNostrIfPossible(forceRestart: true)
   }
 
   func handleAppDidLeaveForeground() {
@@ -117,8 +112,15 @@ final class AppSession: ObservableObject {
     }
   }
 
+  private func showOfflineToastForCurrentOutageIfNeeded() {
+    guard !hasShownOfflineToastForCurrentOutage else { return }
+    composeError = relayOfflineMessage
+    hasShownOfflineToastForCurrentOutage = true
+  }
+
   private func clearRelaySendBlockingErrorIfPresent() {
     if composeError == relayOfflineMessage
+      || composeError == relayReconnectingMessage
       || composeError == noEnabledRelaysMessage
       || composeError == relayReadOnlyMessage
     {
@@ -143,9 +145,7 @@ final class AppSession: ObservableObject {
       // Clearing here can create repeated toast show/hide loops during relay churn.
       return
     case .offline:
-      guard !hasShownOfflineToastForCurrentOutage else { return }
-      composeError = relayOfflineMessage
-      hasShownOfflineToastForCurrentOutage = true
+      showOfflineToastForCurrentOutageIfNeeded()
     case .noEnabledRelays:
       return
     }
@@ -181,27 +181,15 @@ final class AppSession: ObservableObject {
       composeError = relayReadOnlyMessage
       hasShownOfflineToastForCurrentOutage = false
       return false
-    case .offline:
-      composeError = relayOfflineMessage
-      hasShownOfflineToastForCurrentOutage = true
-      return false
     case .reconnecting:
-      clearOfflineToastIfPresent()
+      composeError = relayReconnectingMessage
+      hasShownOfflineToastForCurrentOutage = false
       return false
-    case .online:
+    case .online, .offline:
       composeError = relayOfflineMessage
       hasShownOfflineToastForCurrentOutage = true
       return false
     }
-  }
-
-  private func hasWritableRelayConnection() -> Bool {
-    if shouldDisableNostrStartupForCurrentProcess() {
-      return true
-    }
-
-    // Pending-share flush must wait for a real live relay socket.
-    return hasConnectedRelays()
   }
 
   private func makeLocalEventID() -> String {
@@ -234,7 +222,6 @@ final class AppSession: ObservableObject {
       do {
         try identityService.createNewIdentity()
         refreshIdentityState()
-        try syncContactsSnapshotForCurrentOwner()
         composeError = nil
         startNostrIfPossible()
       } catch {
@@ -249,7 +236,6 @@ final class AppSession: ObservableObject {
     do {
       try identityService.importNsec(nsec)
       refreshIdentityState()
-      try syncContactsSnapshotForCurrentOwner()
       composeError = nil
       startNostrIfPossible()
     } catch {
@@ -273,16 +259,8 @@ final class AppSession: ObservableObject {
       clearCachedVideos(ownerPubkey: ownerPubkey)
       clearMessageCache(ownerPubkey: ownerPubkey)
       clearAllContacts(ownerPubkey: ownerPubkey)
-      let pendingShares = (try? appGroupStore.loadPendingShares()) ?? []
-      let idsToRemove = Set(
-        pendingShares
-          .filter { $0.ownerPubkey == ownerPubkey }
-          .map(\.id)
-      )
-      try? appGroupStore.removePendingShares(withIDs: idsToRemove)
       try? LocalDataCrypto.shared.clearKey(ownerPubkey: ownerPubkey)
     }
-    try? appGroupStore.saveContactsSnapshot([])
 
     composeError = nil
   }
@@ -291,17 +269,14 @@ final class AppSession: ObservableObject {
     hasIdentity = identityService.keypair != nil
   }
 
-  private func syncContactsSnapshotForCurrentOwner() throws {
-    guard let ownerPubkey = identityService.pubkeyHex else {
-      try appGroupStore.saveContactsSnapshot([])
-      return
-    }
-    let snapshots = try contactStore.contactSnapshots(ownerPubkey: ownerPubkey)
-    try appGroupStore.saveContactsSnapshot(snapshots)
-  }
-
-  func startNostrIfPossible() {
+  func startNostrIfPossible(forceRestart: Bool = false) {
     guard let keypair = identityService.keypair else { return }
+
+    if forceRestart {
+      // iOS may suspend sockets while backgrounded; on foreground always rebuild the relay
+      // session so send-gating reflects fresh connection state instead of stale sockets.
+      nostrService.stop()
+    }
 
     if shouldDisableNostrStartupForCurrentProcess() {
       // Keep local send paths available in tests without opening relay connections.
@@ -351,11 +326,8 @@ final class AppSession: ObservableObject {
             )
             guard changed else { return }
             try self.refreshRelayConnectivityAlert()
-            if status == .connected {
-              self.processPendingShares()
-            }
           } catch {
-            self.report(error: error)
+            NSLog("Ignoring relay status persistence error: \(error.localizedDescription)")
           }
         }
       }
@@ -436,11 +408,12 @@ final class AppSession: ObservableObject {
     }
   }
 
-  func sendReply(text: String, post: SessionMessageEntity) {
-    guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+  @discardableResult
+  func sendReply(text: String, post: SessionMessageEntity) -> Bool {
+    guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
     guard let keypair = identityService.keypair, let ownerPubkey = identityService.pubkeyHex else {
       composeError = "You're signed out. Sign in to send replies."
-      return
+      return false
     }
 
     let recipientPubkey =
@@ -456,7 +429,7 @@ final class AppSession: ObservableObject {
     )
 
     guard ensureRelayReadyForSend() else {
-      return
+      return false
     }
 
     do {
@@ -482,8 +455,10 @@ final class AppSession: ObservableObject {
       )
       try messageStore.insert(reply)
       composeError = nil
+      return true
     } catch {
       report(error: error)
+      return false
     }
   }
 
@@ -495,7 +470,6 @@ final class AppSession: ObservableObject {
     }
     do {
       try contactStore.addContact(ownerPubkey: ownerPubkey, npub: npub, displayName: displayName)
-      try syncContactsSnapshotForCurrentOwner()
       composeError = nil
       return true
     } catch {
@@ -513,7 +487,6 @@ final class AppSession: ObservableObject {
     do {
       try contactStore.updateContact(
         contact, ownerPubkey: ownerPubkey, npub: npub, displayName: displayName)
-      try syncContactsSnapshotForCurrentOwner()
       composeError = nil
       return true
     } catch {
@@ -529,7 +502,6 @@ final class AppSession: ObservableObject {
     }
     do {
       try contactStore.removeContact(contact, ownerPubkey: ownerPubkey)
-      try syncContactsSnapshotForCurrentOwner()
       composeError = nil
     } catch {
       report(error: error)
@@ -539,7 +511,6 @@ final class AppSession: ObservableObject {
   private func clearAllContacts(ownerPubkey: String) {
     do {
       try contactStore.clearAllContacts(ownerPubkey: ownerPubkey)
-      try syncContactsSnapshotForCurrentOwner()
       composeError = nil
     } catch {
       report(error: error)
@@ -765,35 +736,6 @@ final class AppSession: ObservableObject {
     }
   }
 
-  private func processPendingShares() {
-    guard !isProcessingPendingShares else { return }
-    guard let ownerPubkey = identityService.pubkeyHex else { return }
-    guard hasWritableRelayConnection() else { return }
-
-    isProcessingPendingShares = true
-    defer { isProcessingPendingShares = false }
-    let pendingItems = (try? appGroupStore.loadPendingShares()) ?? []
-    guard !pendingItems.isEmpty else { return }
-
-    let contacts = (try? contactStore.fetchContacts(ownerPubkey: ownerPubkey)) ?? []
-    let contactsByNPub = Dictionary(uniqueKeysWithValues: contacts.map { ($0.npub, $0) })
-    var processedIDs = Set<String>()
-
-    for item in pendingItems {
-      guard item.ownerPubkey == ownerPubkey else { continue }
-      guard let contact = contactsByNPub[item.contactNPub] else { continue }
-      if createPost(url: item.url, note: item.note, contact: contact) {
-        processedIDs.insert(item.id)
-      }
-    }
-
-    do {
-      try appGroupStore.removePendingShares(withIDs: processedIDs)
-    } catch {
-      report(error: error)
-    }
-  }
-
   private func normalizedRelayURL(from raw: String) -> URL? {
     let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return nil }
@@ -969,13 +911,6 @@ private final class ContactStore {
     let contacts = try modelContext.fetch(descriptor)
     contacts.forEach(modelContext.delete)
     try modelContext.save()
-  }
-
-  func contactSnapshots(ownerPubkey: String) throws -> [ContactSnapshot] {
-    let contacts = try fetchContacts(ownerPubkey: ownerPubkey, sortedByDisplayName: true)
-    return contacts.map {
-      ContactSnapshot(ownerPubkey: ownerPubkey, npub: $0.npub, displayName: $0.displayName)
-    }
   }
 
   func contactName(for pubkeyHex: String, contacts: [ContactEntity]) -> String {

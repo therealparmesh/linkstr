@@ -19,12 +19,6 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     case error(String)
   }
 
-  private enum RelayResponseAction {
-    case eose(String)
-    case closed(String)
-    case readOnly(String)
-  }
-
   private enum BackfillSubscriptionKind: String {
     case recipient
     case author
@@ -65,16 +59,12 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
   // App-specific rumor kind carried inside NIP-59 gift wrap events.
   private let linkstrRumorKind = EventKind.unknown(44_001)
 
-  var isRunning: Bool {
-    shouldMaintainConnection && relayPool != nil
-  }
-
   func hasConnectedRelays() -> Bool {
     !connectedRelayURLs().isEmpty
   }
 
   func isConfigured(for keypair: Keypair, relayURLs: [String]) -> Bool {
-    guard isRunning else { return false }
+    guard shouldMaintainConnection, relayPool != nil else { return false }
     guard self.keypair?.publicKey.hex == keypair.publicKey.hex else { return false }
     return configuredRelayURLs == Set(relayURLs)
   }
@@ -197,14 +187,11 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     let cappedAttempt = min(reconnectAttempt, 5)
     let delaySeconds = UInt64(1 << cappedAttempt)
 
-    reconnectTask = Task { [weak self] in
+    reconnectTask = Task { @MainActor [weak self] in
       try? await Task.sleep(nanoseconds: delaySeconds * 1_000_000_000)
-      guard let self else { return }
       guard !Task.isCancelled else { return }
-      await MainActor.run {
-        guard self.shouldMaintainConnection else { return }
-        self.relayPool?.connect()
-      }
+      guard let self, self.shouldMaintainConnection else { return }
+      self.relayPool?.connect()
     }
   }
 
@@ -478,21 +465,25 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     }
   }
 
-  private func handleRelayResponse(relayURL: String, actions: [RelayResponseAction]) {
-    for action in actions {
-      switch action {
-      case .eose(let subscriptionID):
-        handleBackfillEOSE(relayURL: relayURL, subscriptionID: subscriptionID)
-      case .closed(let subscriptionID):
-        completeBackfillPage(subscriptionID: subscriptionID)
-      case .readOnly(let message):
-        onRelayStatus?(relayURL, .readOnly, message)
-      }
+  private func handleRelayResponse(
+    relayURL: String,
+    eoseSubscriptionID: String?,
+    closedSubscriptionID: String?,
+    readOnlyMessage: String?
+  ) {
+    if let eoseSubscriptionID {
+      handleBackfillEOSE(relayURL: relayURL, subscriptionID: eoseSubscriptionID)
+    }
+    if let closedSubscriptionID {
+      completeBackfillPage(subscriptionID: closedSubscriptionID)
+    }
+    if let readOnlyMessage {
+      onRelayStatus?(relayURL, .readOnly, readOnlyMessage)
     }
   }
 }
 
-extension NostrDMService: @preconcurrency RelayDelegate {
+extension NostrDMService: RelayDelegate {
   nonisolated func relayStateDidChange(_ relay: Relay, state: Relay.State) {
     let relayURL = relay.url.absoluteString
     let normalizedState: RelayConnectionState
@@ -515,13 +506,15 @@ extension NostrDMService: @preconcurrency RelayDelegate {
 
   nonisolated func relay(_ relay: Relay, didReceive response: RelayResponse) {
     let relayURL = relay.url.absoluteString
-    var actions: [RelayResponseAction] = []
+    var eoseSubscriptionID: String?
+    var closedSubscriptionID: String?
+    var readOnlyMessage: String?
 
     switch response {
     case .eose(let subscriptionID):
-      actions.append(.eose(subscriptionID))
+      eoseSubscriptionID = subscriptionID
     case .closed(let subscriptionID, _):
-      actions.append(.closed(subscriptionID))
+      closedSubscriptionID = subscriptionID
     default:
       break
     }
@@ -529,17 +522,25 @@ extension NostrDMService: @preconcurrency RelayDelegate {
     if case .ok(_, let success, let message) = response, !success {
       switch message.prefix {
       case .authRequired, .restricted:
-        actions.append(.readOnly(message.message))
+        readOnlyMessage = message.message
       default:
         // Non-auth publish failures can be relay policy/content checks while the socket is still healthy.
         break
       }
     }
 
-    guard !actions.isEmpty else { return }
+    guard eoseSubscriptionID != nil || closedSubscriptionID != nil || readOnlyMessage != nil else {
+      return
+    }
+
     Task { @MainActor [weak self] in
       guard let self else { return }
-      self.handleRelayResponse(relayURL: relayURL, actions: actions)
+      self.handleRelayResponse(
+        relayURL: relayURL,
+        eoseSubscriptionID: eoseSubscriptionID,
+        closedSubscriptionID: closedSubscriptionID,
+        readOnlyMessage: readOnlyMessage
+      )
     }
   }
 

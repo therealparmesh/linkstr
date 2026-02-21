@@ -101,12 +101,12 @@ struct NewPostSheet: View {
             guard let recipientNPub = activeRecipientNPub else { return }
             guard let normalizedURL = normalizedURL else { return }
             let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
-            session.createPost(
+            let didCreate = session.createPost(
               url: normalizedURL,
               note: trimmedNote.isEmpty ? nil : trimmedNote,
               recipientNPub: recipientNPub
             )
-            if session.composeError == nil {
+            if didCreate {
               dismiss()
             }
           }

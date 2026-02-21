@@ -248,7 +248,7 @@ struct ThreadView: View {
     let text = replyText.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !text.isEmpty else { return }
 
-    session.sendReply(text: text, post: post)
+    guard session.sendReply(text: text, post: post) else { return }
     replyText = ""
     isComposerFocused = false
     scrollToBottom(using: proxy)

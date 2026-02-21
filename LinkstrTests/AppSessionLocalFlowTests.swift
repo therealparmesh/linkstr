@@ -305,7 +305,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
     )
   }
 
-  func testCreatePostWithOnlyReconnectingRelaysSuppressesOfflineToast() throws {
+  func testCreatePostWithOnlyReconnectingRelaysShowsReconnectingMessage() throws {
     let (session, container) = try makeSession(testDisableNostrStartupOverride: false)
     let recipientNPub = try TestKeyMaterialFactory.makeNPub()
     try session.identityService.createNewIdentity()
@@ -322,7 +322,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
     )
 
     XCTAssertFalse(didCreate)
-    XCTAssertNil(session.composeError)
+    XCTAssertEqual(session.composeError, "Relays are reconnecting. Try again in a moment.")
     XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
   }
 
@@ -511,6 +511,36 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertNil(session.composeError)
   }
 
+  func testSendReplyWithReconnectingRelaysReturnsFalseAndDoesNotPersistReply() throws {
+    let (session, container) = try makeSession(testDisableNostrStartupOverride: false)
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+
+    let relay = RelayEntity(url: "wss://relay.example.com", status: .reconnecting)
+    container.mainContext.insert(relay)
+
+    let root = makeMessage(
+      eventID: "root-reconnecting",
+      conversationID: ConversationID.deterministic(myPubkey, peerPubkey),
+      rootID: "root-reconnecting",
+      kind: .root,
+      senderPubkey: myPubkey,
+      receiverPubkey: peerPubkey,
+      ownerPubkey: myPubkey
+    )
+    container.mainContext.insert(root)
+    try container.mainContext.save()
+
+    let didSend = session.sendReply(text: "reply text", post: root)
+
+    XCTAssertFalse(didSend)
+    XCTAssertEqual(session.composeError, "Relays are reconnecting. Try again in a moment.")
+    XCTAssertTrue(
+      try fetchMessages(in: container.mainContext).filter { $0.kind == .reply }.isEmpty
+    )
+  }
+
   func testLogoutClearLocalDataRemovesContactsAndMessages() throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
@@ -537,34 +567,6 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
   }
 
-  func testLogoutClearLocalDataRemovesOnlyCurrentAccountPendingShares() throws {
-    let appGroupStore = InMemoryAppGroupStore()
-    let (session, container) = try makeSession(appGroupStore: appGroupStore)
-    _ = container
-    try session.identityService.createNewIdentity()
-    let currentOwner = try XCTUnwrap(session.identityService.pubkeyHex)
-    let otherOwner = try TestKeyMaterialFactory.makePubkeyHex()
-
-    appGroupStore.pendingShares = [
-      PendingShareItem(
-        id: "pending-current-owner",
-        ownerPubkey: currentOwner,
-        url: "https://example.com/current",
-        contactNPub: try TestKeyMaterialFactory.makeNPub()
-      ),
-      PendingShareItem(
-        id: "pending-other-owner",
-        ownerPubkey: otherOwner,
-        url: "https://example.com/other",
-        contactNPub: try TestKeyMaterialFactory.makeNPub()
-      ),
-    ]
-
-    session.logout(clearLocalData: true)
-
-    XCTAssertEqual(appGroupStore.pendingShares.map(\.id), ["pending-other-owner"])
-  }
-
   func testLogoutWithoutClearingLocalDataKeepsContactsAndMessages() throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
@@ -589,124 +591,6 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertNil(session.identityService.keypair)
     XCTAssertEqual(try fetchContacts(in: container.mainContext).count, 1)
     XCTAssertEqual(try fetchMessages(in: container.mainContext).count, 1)
-  }
-
-  func testPendingSharesProcessOnlyForCurrentAccount() throws {
-    let appGroupStore = InMemoryAppGroupStore()
-    let (session, container) = try makeSession(appGroupStore: appGroupStore)
-    try session.identityService.createNewIdentity()
-    let currentOwner = try XCTUnwrap(session.identityService.pubkeyHex)
-    let otherOwner = try TestKeyMaterialFactory.makePubkeyHex()
-
-    let recipientNPub = try TestKeyMaterialFactory.makeNPub()
-    XCTAssertTrue(session.addContact(npub: recipientNPub, displayName: "Alice"))
-
-    appGroupStore.pendingShares = [
-      PendingShareItem(
-        id: "pending-current-owner",
-        ownerPubkey: currentOwner,
-        url: "https://example.com/current",
-        contactNPub: recipientNPub,
-        note: "current-account"
-      ),
-      PendingShareItem(
-        id: "pending-other-owner",
-        ownerPubkey: otherOwner,
-        url: "https://example.com/other",
-        contactNPub: recipientNPub,
-        note: "other-account"
-      ),
-    ]
-
-    session.handleAppDidBecomeActive()
-
-    let messages = try fetchMessages(in: container.mainContext)
-    XCTAssertEqual(messages.count, 1)
-    XCTAssertEqual(messages.first?.url, "https://example.com/current")
-    XCTAssertEqual(messages.first?.note, "current-account")
-    XCTAssertEqual(appGroupStore.pendingShares.map(\.id), ["pending-other-owner"])
-  }
-
-  func testPendingSharesFlushWhenLiveRelayConnectionExistsDespiteOfflineStoredStatus() throws {
-    let appGroupStore = InMemoryAppGroupStore()
-    let (session, container) = try makeSession(
-      testDisableNostrStartupOverride: false,
-      testHasConnectedRelaysOverride: { true },
-      appGroupStore: appGroupStore
-    )
-    try session.identityService.createNewIdentity()
-    let currentOwner = try XCTUnwrap(session.identityService.pubkeyHex)
-    let recipientNPub = try TestKeyMaterialFactory.makeNPub()
-    XCTAssertTrue(session.addContact(npub: recipientNPub, displayName: "Alice"))
-
-    appGroupStore.pendingShares = [
-      PendingShareItem(
-        id: "pending-live-connection",
-        ownerPubkey: currentOwner,
-        url: "https://example.com/current",
-        contactNPub: recipientNPub,
-        note: "current-account"
-      )
-    ]
-
-    let relay = RelayEntity(url: "wss://relay.example.com", status: .failed)
-    container.mainContext.insert(relay)
-    try container.mainContext.save()
-
-    session.handleAppDidBecomeActive()
-
-    let messages = try fetchMessages(in: container.mainContext)
-    XCTAssertEqual(messages.count, 1)
-    XCTAssertEqual(messages.first?.url, "https://example.com/current")
-    XCTAssertEqual(messages.first?.note, "current-account")
-    XCTAssertTrue(appGroupStore.pendingShares.isEmpty)
-  }
-
-  func testPendingSharesDoNotFlushWithOnlyPersistedConnectedStatus() throws {
-    let appGroupStore = InMemoryAppGroupStore()
-    let (session, container) = try makeSession(
-      testDisableNostrStartupOverride: false,
-      testHasConnectedRelaysOverride: { false },
-      appGroupStore: appGroupStore
-    )
-    try session.identityService.createNewIdentity()
-    let currentOwner = try XCTUnwrap(session.identityService.pubkeyHex)
-    let recipientNPub = try TestKeyMaterialFactory.makeNPub()
-    XCTAssertTrue(session.addContact(npub: recipientNPub, displayName: "Alice"))
-
-    appGroupStore.pendingShares = [
-      PendingShareItem(
-        id: "pending-persisted-connected",
-        ownerPubkey: currentOwner,
-        url: "https://example.com/current",
-        contactNPub: recipientNPub,
-        note: "current-account"
-      )
-    ]
-
-    let relay = RelayEntity(url: "wss://relay.example.com", status: .connected)
-    container.mainContext.insert(relay)
-    try container.mainContext.save()
-
-    session.handleAppDidBecomeActive()
-
-    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
-    XCTAssertEqual(appGroupStore.pendingShares.map(\.id), ["pending-persisted-connected"])
-  }
-
-  func testContactSnapshotIncludesOwnerPubkey() throws {
-    let appGroupStore = InMemoryAppGroupStore()
-    let (session, container) = try makeSession(appGroupStore: appGroupStore)
-    _ = container
-    try session.identityService.createNewIdentity()
-    let ownerPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
-    let npub = try TestKeyMaterialFactory.makeNPub()
-
-    XCTAssertTrue(session.addContact(npub: npub, displayName: "Alice"))
-
-    XCTAssertEqual(appGroupStore.contactsSnapshot.count, 1)
-    XCTAssertEqual(appGroupStore.contactsSnapshot.first?.ownerPubkey, ownerPubkey)
-    XCTAssertEqual(appGroupStore.contactsSnapshot.first?.npub, npub)
   }
 
   func testContactDuplicationIsScopedPerAccount() throws {
@@ -800,8 +684,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
 
   private func makeSession(
     testDisableNostrStartupOverride: Bool? = nil,
-    testHasConnectedRelaysOverride: (() -> Bool)? = nil,
-    appGroupStore: AppGroupStoreProtocol = InMemoryAppGroupStore()
+    testHasConnectedRelaysOverride: (() -> Bool)? = nil
   ) throws -> (
     AppSession, ModelContainer
   ) {
@@ -816,8 +699,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
       AppSession(
         modelContext: container.mainContext,
         testDisableNostrStartupOverride: testDisableNostrStartupOverride,
-        testHasConnectedRelaysOverride: testHasConnectedRelaysOverride,
-        appGroupStore: appGroupStore
+        testHasConnectedRelaysOverride: testHasConnectedRelaysOverride
       ),
       container
     )
@@ -881,29 +763,4 @@ enum TestKeyMaterialFactory {
 
 enum TestKeyMaterialFactoryError: Error {
   case keypairGenerationFailed
-}
-
-private final class InMemoryAppGroupStore: AppGroupStoreProtocol {
-  var contactsSnapshot: [ContactSnapshot] = []
-  var pendingShares: [PendingShareItem] = []
-
-  func saveContactsSnapshot(_ contacts: [ContactSnapshot]) throws {
-    contactsSnapshot = contacts
-  }
-
-  func loadContactsSnapshot() throws -> [ContactSnapshot] {
-    contactsSnapshot
-  }
-
-  func appendPendingShare(_ item: PendingShareItem) throws {
-    pendingShares.append(item)
-  }
-
-  func loadPendingShares() throws -> [PendingShareItem] {
-    pendingShares
-  }
-
-  func removePendingShares(withIDs ids: Set<String>) throws {
-    pendingShares.removeAll { ids.contains($0.id) }
-  }
 }
