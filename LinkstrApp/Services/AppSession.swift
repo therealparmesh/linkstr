@@ -17,6 +17,26 @@ final class AppSession: ObservableObject {
     var message: String?
   }
 
+  private struct RootPostDraft {
+    let payload: LinkstrPayload
+    let ownerPubkey: String
+    let senderPubkey: String
+    let recipientPubkey: String
+    let conversationID: String
+    let normalizedURL: String
+    let normalizedNote: String?
+  }
+
+  private struct ReplyDraft {
+    let payload: LinkstrPayload
+    let ownerPubkey: String
+    let senderPubkey: String
+    let recipientPubkey: String
+    let conversationID: String
+    let rootID: String
+    let text: String
+  }
+
   let identityService: IdentityService
   let nostrService: NostrDMService
   let modelContext: ModelContext
@@ -507,31 +527,9 @@ final class AppSession: ObservableObject {
 
   @discardableResult
   func createPost(url: String, note: String?, recipientNPub: String) -> Bool {
-    guard let normalizedURL = LinkstrURLValidator.normalizedWebURL(from: url) else {
-      composeError = "Enter a valid URL."
+    guard let draft = makeRootPostDraft(url: url, note: note, recipientNPub: recipientNPub) else {
       return false
     }
-
-    guard let keypair = identityService.keypair,
-      let ownerPubkey = identityService.pubkeyHex,
-      let recipientPublicKey = PublicKey(npub: recipientNPub)
-    else {
-      composeError = "Couldn't send. Check your account and recipient Contact Key (npub)."
-      return false
-    }
-
-    let conversationID = ConversationID.deterministic(keypair.publicKey.hex, recipientPublicKey.hex)
-    let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines)
-    let normalizedNote = (trimmedNote?.isEmpty == false) ? trimmedNote : nil
-
-    let payload = LinkstrPayload(
-      conversationID: conversationID,
-      rootID: makeLocalEventID(),
-      kind: .root,
-      url: normalizedURL,
-      note: normalizedNote,
-      timestamp: Int64(Date.now.timeIntervalSince1970)
-    )
 
     guard ensureRelayReadyForSend() else {
       return false
@@ -542,26 +540,9 @@ final class AppSession: ObservableObject {
       if shouldDisableNostrStartupForCurrentProcess() {
         eventID = makeLocalEventID()
       } else {
-        eventID = try nostrService.send(payload: payload, to: recipientPublicKey.hex)
+        eventID = try nostrService.send(payload: draft.payload, to: draft.recipientPubkey)
       }
-
-      let message = try SessionMessageEntity(
-        eventID: eventID,
-        ownerPubkey: ownerPubkey,
-        conversationID: conversationID,
-        rootID: eventID,
-        kind: .root,
-        senderPubkey: keypair.publicKey.hex,
-        receiverPubkey: recipientPublicKey.hex,
-        url: normalizedURL,
-        note: normalizedNote,
-        timestamp: .now,
-        readAt: .now,
-        linkType: URLClassifier.classify(normalizedURL)
-      )
-      try messageStore.insert(message)
-
-      enqueueMetadataRefresh(for: message)
+      try persistSentRootPost(draft, eventID: eventID)
       composeError = nil
       return true
     } catch {
@@ -595,23 +576,9 @@ final class AppSession: ObservableObject {
 
   @discardableResult
   func sendReply(text: String, post: SessionMessageEntity) -> Bool {
-    guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
-    guard let keypair = identityService.keypair, let ownerPubkey = identityService.pubkeyHex else {
-      composeError = "You're signed out. Sign in to send replies."
+    guard let draft = makeReplyDraft(text: text, post: post) else {
       return false
     }
-
-    let recipientPubkey =
-      post.senderPubkey == keypair.publicKey.hex ? post.receiverPubkey : post.senderPubkey
-
-    let payload = LinkstrPayload(
-      conversationID: post.conversationID,
-      rootID: post.rootID,
-      kind: .reply,
-      url: nil,
-      note: text,
-      timestamp: Int64(Date.now.timeIntervalSince1970)
-    )
 
     guard ensureRelayReadyForSend() else {
       return false
@@ -622,23 +589,9 @@ final class AppSession: ObservableObject {
       if shouldDisableNostrStartupForCurrentProcess() {
         eventID = makeLocalEventID()
       } else {
-        eventID = try nostrService.send(payload: payload, to: recipientPubkey)
+        eventID = try nostrService.send(payload: draft.payload, to: draft.recipientPubkey)
       }
-      let reply = try SessionMessageEntity(
-        eventID: eventID,
-        ownerPubkey: ownerPubkey,
-        conversationID: post.conversationID,
-        rootID: post.rootID,
-        kind: .reply,
-        senderPubkey: keypair.publicKey.hex,
-        receiverPubkey: recipientPubkey,
-        url: nil,
-        note: text,
-        timestamp: .now,
-        readAt: .now,
-        linkType: .generic
-      )
-      try messageStore.insert(reply)
+      try persistSentReply(draft, eventID: eventID)
       composeError = nil
       return true
     } catch {
@@ -674,55 +627,16 @@ final class AppSession: ObservableObject {
     note: String?,
     recipientNPub: String
   ) async -> Bool {
-    guard let normalizedURL = LinkstrURLValidator.normalizedWebURL(from: url) else {
-      composeError = "Enter a valid URL."
+    guard let draft = makeRootPostDraft(url: url, note: note, recipientNPub: recipientNPub) else {
       return false
     }
-
-    guard let keypair = identityService.keypair,
-      let ownerPubkey = identityService.pubkeyHex,
-      let recipientPublicKey = PublicKey(npub: recipientNPub)
-    else {
-      composeError = "Couldn't send. Check your account and recipient Contact Key (npub)."
-      return false
-    }
-
-    let conversationID = ConversationID.deterministic(keypair.publicKey.hex, recipientPublicKey.hex)
-    let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines)
-    let normalizedNote = (trimmedNote?.isEmpty == false) ? trimmedNote : nil
-
-    let payload = LinkstrPayload(
-      conversationID: conversationID,
-      rootID: makeLocalEventID(),
-      kind: .root,
-      url: normalizedURL,
-      note: normalizedNote,
-      timestamp: Int64(Date.now.timeIntervalSince1970)
-    )
 
     do {
       let eventID = try await sendPayloadAwaitingRelayAcceptance(
-        payload: payload,
-        recipientPubkeyHex: recipientPublicKey.hex
+        payload: draft.payload,
+        recipientPubkeyHex: draft.recipientPubkey
       )
-
-      let message = try SessionMessageEntity(
-        eventID: eventID,
-        ownerPubkey: ownerPubkey,
-        conversationID: conversationID,
-        rootID: eventID,
-        kind: .root,
-        senderPubkey: keypair.publicKey.hex,
-        receiverPubkey: recipientPublicKey.hex,
-        url: normalizedURL,
-        note: normalizedNote,
-        timestamp: .now,
-        readAt: .now,
-        linkType: URLClassifier.classify(normalizedURL)
-      )
-      try messageStore.insert(message)
-
-      enqueueMetadataRefresh(for: message)
+      try persistSentRootPost(draft, eventID: eventID)
       composeError = nil
       return true
     } catch {
@@ -736,51 +650,127 @@ final class AppSession: ObservableObject {
     post: SessionMessageEntity
   ) async -> Bool {
     let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmedText.isEmpty else { return false }
-    guard let keypair = identityService.keypair, let ownerPubkey = identityService.pubkeyHex else {
-      composeError = "You're signed out. Sign in to send replies."
+    guard let draft = makeReplyDraft(text: trimmedText, post: post) else {
       return false
     }
 
-    let recipientPubkey =
-      post.senderPubkey == keypair.publicKey.hex ? post.receiverPubkey : post.senderPubkey
-
-    let payload = LinkstrPayload(
-      conversationID: post.conversationID,
-      rootID: post.rootID,
-      kind: .reply,
-      url: nil,
-      note: trimmedText,
-      timestamp: Int64(Date.now.timeIntervalSince1970)
-    )
-
     do {
       let eventID = try await sendPayloadAwaitingRelayAcceptance(
-        payload: payload,
-        recipientPubkeyHex: recipientPubkey
+        payload: draft.payload,
+        recipientPubkeyHex: draft.recipientPubkey
       )
-
-      let reply = try SessionMessageEntity(
-        eventID: eventID,
-        ownerPubkey: ownerPubkey,
-        conversationID: post.conversationID,
-        rootID: post.rootID,
-        kind: .reply,
-        senderPubkey: keypair.publicKey.hex,
-        receiverPubkey: recipientPubkey,
-        url: nil,
-        note: trimmedText,
-        timestamp: .now,
-        readAt: .now,
-        linkType: .generic
-      )
-      try messageStore.insert(reply)
+      try persistSentReply(draft, eventID: eventID)
       composeError = nil
       return true
     } catch {
       report(error: error)
       return false
     }
+  }
+
+  private func makeRootPostDraft(
+    url: String,
+    note: String?,
+    recipientNPub: String
+  ) -> RootPostDraft? {
+    guard let normalizedURL = LinkstrURLValidator.normalizedWebURL(from: url) else {
+      composeError = "Enter a valid URL."
+      return nil
+    }
+
+    guard let keypair = identityService.keypair,
+      let ownerPubkey = identityService.pubkeyHex,
+      let recipientPublicKey = PublicKey(npub: recipientNPub)
+    else {
+      composeError = "Couldn't send. Check your account and recipient Contact Key (npub)."
+      return nil
+    }
+
+    let conversationID = ConversationID.deterministic(keypair.publicKey.hex, recipientPublicKey.hex)
+    let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let normalizedNote = (trimmedNote?.isEmpty == false) ? trimmedNote : nil
+
+    return RootPostDraft(
+      payload: LinkstrPayload(
+        conversationID: conversationID,
+        rootID: makeLocalEventID(),
+        kind: .root,
+        url: normalizedURL,
+        note: normalizedNote,
+        timestamp: Int64(Date.now.timeIntervalSince1970)
+      ),
+      ownerPubkey: ownerPubkey,
+      senderPubkey: keypair.publicKey.hex,
+      recipientPubkey: recipientPublicKey.hex,
+      conversationID: conversationID,
+      normalizedURL: normalizedURL,
+      normalizedNote: normalizedNote
+    )
+  }
+
+  private func persistSentRootPost(_ draft: RootPostDraft, eventID: String) throws {
+    let message = try SessionMessageEntity(
+      eventID: eventID,
+      ownerPubkey: draft.ownerPubkey,
+      conversationID: draft.conversationID,
+      rootID: eventID,
+      kind: .root,
+      senderPubkey: draft.senderPubkey,
+      receiverPubkey: draft.recipientPubkey,
+      url: draft.normalizedURL,
+      note: draft.normalizedNote,
+      timestamp: .now,
+      readAt: .now,
+      linkType: URLClassifier.classify(draft.normalizedURL)
+    )
+    try messageStore.insert(message)
+    enqueueMetadataRefresh(for: message)
+  }
+
+  private func makeReplyDraft(text: String, post: SessionMessageEntity) -> ReplyDraft? {
+    guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+    guard let keypair = identityService.keypair, let ownerPubkey = identityService.pubkeyHex else {
+      composeError = "You're signed out. Sign in to send replies."
+      return nil
+    }
+
+    let recipientPubkey =
+      post.senderPubkey == keypair.publicKey.hex ? post.receiverPubkey : post.senderPubkey
+
+    return ReplyDraft(
+      payload: LinkstrPayload(
+        conversationID: post.conversationID,
+        rootID: post.rootID,
+        kind: .reply,
+        url: nil,
+        note: text,
+        timestamp: Int64(Date.now.timeIntervalSince1970)
+      ),
+      ownerPubkey: ownerPubkey,
+      senderPubkey: keypair.publicKey.hex,
+      recipientPubkey: recipientPubkey,
+      conversationID: post.conversationID,
+      rootID: post.rootID,
+      text: text
+    )
+  }
+
+  private func persistSentReply(_ draft: ReplyDraft, eventID: String) throws {
+    let reply = try SessionMessageEntity(
+      eventID: eventID,
+      ownerPubkey: draft.ownerPubkey,
+      conversationID: draft.conversationID,
+      rootID: draft.rootID,
+      kind: .reply,
+      senderPubkey: draft.senderPubkey,
+      receiverPubkey: draft.recipientPubkey,
+      url: nil,
+      note: draft.text,
+      timestamp: .now,
+      readAt: .now,
+      linkType: .generic
+    )
+    try messageStore.insert(reply)
   }
 
   private func sendPayloadAwaitingRelayAcceptance(
@@ -1250,156 +1240,4 @@ final class AppSession: ObservableObject {
       try? modelContext.save()
     }
   #endif
-}
-
-@MainActor
-private final class ContactStore {
-  private let modelContext: ModelContext
-
-  init(modelContext: ModelContext) {
-    self.modelContext = modelContext
-  }
-
-  func fetchContacts(ownerPubkey: String, sortedByDisplayName: Bool = false) throws
-    -> [ContactEntity]
-  {
-    let descriptor = FetchDescriptor<ContactEntity>(
-      predicate: #Predicate { $0.ownerPubkey == ownerPubkey },
-      sortBy: [SortDescriptor(\.createdAt)]
-    )
-    let contacts = try modelContext.fetch(descriptor)
-    if sortedByDisplayName {
-      return contacts.sorted {
-        $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
-      }
-    }
-    return contacts
-  }
-
-  func addContact(ownerPubkey: String, npub: String, displayName: String) throws {
-    let normalizedNPub = try normalize(npub: npub)
-    let normalizedDisplayName = normalize(displayName: displayName)
-
-    guard !normalizedDisplayName.isEmpty else {
-      throw ContactStoreError.emptyDisplayName
-    }
-    guard !hasContact(ownerPubkey: ownerPubkey, withNPub: normalizedNPub) else {
-      throw ContactStoreError.duplicateContact
-    }
-
-    modelContext.insert(
-      try ContactEntity(
-        ownerPubkey: ownerPubkey,
-        npub: normalizedNPub,
-        displayName: normalizedDisplayName
-      ))
-    try modelContext.save()
-  }
-
-  func updateContact(
-    _ contact: ContactEntity, ownerPubkey: String, npub: String, displayName: String
-  )
-    throws
-  {
-    guard contact.ownerPubkey == ownerPubkey else {
-      throw ContactStoreError.contactOwnershipMismatch
-    }
-    let normalizedNPub = try normalize(npub: npub)
-    let normalizedDisplayName = normalize(displayName: displayName)
-
-    guard !normalizedDisplayName.isEmpty else {
-      throw ContactStoreError.emptyDisplayName
-    }
-    guard
-      !hasContact(
-        ownerPubkey: ownerPubkey, withNPub: normalizedNPub, excluding: contact.persistentModelID)
-    else {
-      throw ContactStoreError.duplicateContact
-    }
-
-    let previousHash = contact.npubHash
-    let previousEncryptedNPub = contact.encryptedNPub
-    let previousEncryptedDisplayName = contact.encryptedDisplayName
-    try contact.updateSecureFields(npub: normalizedNPub, displayName: normalizedDisplayName)
-    do {
-      try modelContext.save()
-    } catch {
-      contact.npubHash = previousHash
-      contact.encryptedNPub = previousEncryptedNPub
-      contact.encryptedDisplayName = previousEncryptedDisplayName
-      throw error
-    }
-  }
-
-  func removeContact(_ contact: ContactEntity, ownerPubkey: String) throws {
-    guard contact.ownerPubkey == ownerPubkey else {
-      throw ContactStoreError.contactOwnershipMismatch
-    }
-    modelContext.delete(contact)
-    try modelContext.save()
-  }
-
-  func clearAllContacts(ownerPubkey: String) throws {
-    let descriptor = FetchDescriptor<ContactEntity>(
-      predicate: #Predicate { $0.ownerPubkey == ownerPubkey }
-    )
-    let contacts = try modelContext.fetch(descriptor)
-    contacts.forEach(modelContext.delete)
-    try modelContext.save()
-  }
-
-  func contactName(for pubkeyHex: String, contacts: [ContactEntity]) -> String {
-    for contact in contacts where PublicKey(npub: contact.npub)?.hex == pubkeyHex {
-      return contact.displayName
-    }
-    if let npub = PublicKey(hex: pubkeyHex)?.npub {
-      return npub
-    }
-    return String(pubkeyHex.prefix(12))
-  }
-
-  func hasContact(
-    ownerPubkey: String, withNPub npub: String, excluding contactID: PersistentIdentifier? = nil
-  ) -> Bool {
-    guard let contacts = try? fetchContacts(ownerPubkey: ownerPubkey) else { return false }
-    return contacts.contains { existing in
-      guard existing.matchesNPub(npub) else { return false }
-      if let contactID {
-        return existing.persistentModelID != contactID
-      }
-      return true
-    }
-  }
-
-  private func normalize(npub: String) throws -> String {
-    let trimmed = npub.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard let parsedPublicKey = PublicKey(npub: trimmed) else {
-      throw ContactStoreError.invalidNPub
-    }
-    return parsedPublicKey.npub
-  }
-
-  private func normalize(displayName: String) -> String {
-    displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-  }
-}
-
-private enum ContactStoreError: LocalizedError {
-  case invalidNPub
-  case emptyDisplayName
-  case duplicateContact
-  case contactOwnershipMismatch
-
-  var errorDescription: String? {
-    switch self {
-    case .invalidNPub:
-      return "Invalid Contact Key (npub)."
-    case .emptyDisplayName:
-      return "Enter a display name."
-    case .duplicateContact:
-      return "This contact is already in your list."
-    case .contactOwnershipMismatch:
-      return "This contact belongs to a different account."
-    }
-  }
 }

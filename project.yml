@@ -34,7 +34,6 @@ targets:
     deploymentTarget: 17.0
     sources:
       - path: LinkstrApp
-      - path: SharedKit
     dependencies:
       - package: NostrSDK
     settings:
