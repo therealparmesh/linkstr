@@ -6,7 +6,7 @@
 
 This document is the behavioral contract for the current app. It is intentionally detailed.
 
-### 1) Identity and Account Lifecycle
+### Identity and Account Lifecycle
 
 - A user can either create a fresh keypair or import an existing `Secret Key (nsec)`.
 - Once authenticated, the app treats that keypair as the active account context for all scoped data.
@@ -17,7 +17,7 @@ This document is the behavioral contract for the current app. It is intentionall
 - `Log Out (Keep Local Data)` clears active identity from keychain/session state but preserves that account's local contacts/messages for future re-login.
 - `Log Out and Clear Local Data` removes identity session and deletes that account's local contacts/messages/cached local media references/local-data encryption key.
 
-### 2) Contacts and Recipient Selection
+### Contacts and Recipient Selection
 
 - Contacts are local-only records; no social/contact/follow event is published to relays.
 - Contacts are account-scoped; contacts from one account are not visible under another account.
@@ -32,7 +32,7 @@ This document is the behavioral contract for the current app. It is intentionall
 - When entering composer from a known-contact conversation, recipient is preselected.
 - When entering composer from an unknown-peer conversation, recipient is locked to that peer.
 
-### 3) Creating a Post (Root Message)
+### Creating a Post (Root Message)
 
 - A post requires a valid web URL and a selected/locked recipient `npub`.
 - URL input is normalized and validated; unsupported/malformed values are rejected.
@@ -45,7 +45,7 @@ This document is the behavioral contract for the current app. It is intentionall
 - On success, post is persisted locally and composer dismisses.
 - On failure/timeout, composer stays open and user receives error toast.
 
-### 4) Replying in a Thread
+### Replying in a Thread
 
 - Reply content is text-only.
 - Empty/whitespace-only replies are not sent.
@@ -54,7 +54,7 @@ This document is the behavioral contract for the current app. It is intentionall
 - If send succeeds, reply input clears, focus is dismissed, and thread scrolls to bottom.
 - If send fails or times out, reply text remains in input for retry/edit.
 
-### 5) Sessions, Threads, and Unread Semantics
+### Sessions, Threads, and Unread Semantics
 
 - Unknown peers can appear directly in Sessions with no invite flow.
 - Each root post has an associated reply thread.
@@ -63,7 +63,7 @@ This document is the behavioral contract for the current app. It is intentionall
 - Unread indication is dot-only (no numeric badge).
 - Session unread logic is per-root-post and does not double-count replies.
 
-### 6) Relay Configuration in Settings
+### Relay Configuration in Settings
 
 - Users can add, remove, and enable/disable relays.
 - Relay URL add validation accepts only `ws://` or `wss://` URLs with valid host.
@@ -78,7 +78,7 @@ This document is the behavioral contract for the current app. It is intentionall
 - Relay row displays health indicator and optional status/error detail.
 - Relay inline error slot reserves layout space to prevent row jitter when messages appear/disappear.
 
-### 7) Relay Runtime Lifecycle and Send Gating
+### Relay Runtime Lifecycle and Send Gating
 
 - Relay runtime is started when identity is available and app is active.
 - On foreground re-entry, relay session is force-restarted to avoid stale-socket assumptions.
@@ -94,7 +94,7 @@ This document is the behavioral contract for the current app. It is intentionall
 - No offline outbox queue is implemented.
 - Failed sends are not auto-retried after future reconnect.
 
-### 8) Incoming Event Ingestion and Backfill
+### Incoming Event Ingestion and Backfill
 
 - App subscribes to gift-wrap events for both recipient and author filters.
 - On relay connect, subscriptions are (re)installed to handle socket-start races.
@@ -105,7 +105,7 @@ This document is the behavioral contract for the current app. It is intentionall
 - Duplicate events are ignored by event ID deduping.
 - Incoming accepted events are persisted locally under active account scope.
 
-### 9) Notifications
+### Notifications
 
 - Notifications are local best-effort notifications driven by incoming relay events.
 - APNs remote push is not implemented.
@@ -116,7 +116,7 @@ This document is the behavioral contract for the current app. It is intentionall
 - Notifications are grouped by conversation using `threadIdentifier`.
 - When app is open, notifications are still presented as banner/list/sound.
 
-### 10) Media and Link Playback Behavior
+### Media and Link Playback Behavior
 
 - Runtime URL classification determines playback strategy.
 - Extraction candidates default to local playback with automatic fallback to official embed.
@@ -135,13 +135,13 @@ This document is the behavioral contract for the current app. It is intentionall
 - Local extraction rejects non-HTTPS media URLs.
 - Post label `Video` appears only for extraction candidates; embed-only and generic links display `Link`.
 
-### 11) Deep Links
+### Deep Links
 
 - App handles deep links in the `linkstr://open?p=...` format.
 - Deep-link payload opens a dedicated playback-first full-screen experience.
 - User exits deep-link experience with `Done`.
 
-### 12) Data Storage, Isolation, and Security
+### Data Storage, Isolation, and Security
 
 - Contacts, messages, relay settings, and cached media are stored locally on device.
 - Contacts/messages are account-isolated by owner pubkey.
@@ -155,7 +155,7 @@ This document is the behavioral contract for the current app. It is intentionall
 - Uninstall removes app-local data.
 - Reliable cross-device/reinstall recovery requires user backup of `Secret Key (nsec)`.
 
-### 13) Known Limitations and Explicit Non-Goals (Current)
+### Known Limitations and Explicit Non-Goals (Current)
 
 - Offline outbox/retry queue is not in scope today.
 - Remote push (APNs) is not in scope today.
