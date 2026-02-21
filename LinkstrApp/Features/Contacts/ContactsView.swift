@@ -225,12 +225,12 @@ struct AddContactSheet: View {
                 .fill(LinkstrTheme.panelSoft)
             )
 
-          if let scannerErrorMessage {
-            Text(scannerErrorMessage)
-              .font(.custom(LinkstrTheme.bodyFont, size: 12))
-              .foregroundStyle(Color.red.opacity(0.9))
-              .frame(maxWidth: .infinity, alignment: .leading)
-          }
+          Text(normalizedScannerErrorMessage.isEmpty ? " " : normalizedScannerErrorMessage)
+            .font(.custom(LinkstrTheme.bodyFont, size: 12))
+            .foregroundStyle(Color.red.opacity(0.9))
+            .frame(maxWidth: .infinity, minHeight: 20, alignment: .leading)
+            .opacity(normalizedScannerErrorMessage.isEmpty ? 0 : 1)
+            .accessibilityHidden(normalizedScannerErrorMessage.isEmpty)
 
           Spacer()
         }
@@ -272,6 +272,11 @@ struct AddContactSheet: View {
     if let clipboardText = UIPasteboard.general.string {
       npub = clipboardText
     }
+  }
+
+  private var normalizedScannerErrorMessage: String {
+    guard let scannerErrorMessage else { return "" }
+    return scannerErrorMessage.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 }
 

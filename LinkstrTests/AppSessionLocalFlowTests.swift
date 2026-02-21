@@ -588,6 +588,80 @@ final class AppSessionLocalFlowTests: XCTestCase {
     )
   }
 
+  func testSendReplyAwaitingRelayTimesOutWhenRelayNeverConnects() async throws {
+    let (session, container) = try makeSession(testDisableNostrStartupOverride: false)
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+
+    let relay = RelayEntity(url: "wss://relay.example.com", status: .reconnecting)
+    container.mainContext.insert(relay)
+
+    let root = makeMessage(
+      eventID: "root-await-timeout",
+      conversationID: ConversationID.deterministic(myPubkey, peerPubkey),
+      rootID: "root-await-timeout",
+      kind: .root,
+      senderPubkey: myPubkey,
+      receiverPubkey: peerPubkey,
+      ownerPubkey: myPubkey
+    )
+    container.mainContext.insert(root)
+    try container.mainContext.save()
+
+    let didSend = await session.sendReplyAwaitingRelay(
+      text: "reply text",
+      post: root,
+      timeoutSeconds: 0.05,
+      pollIntervalSeconds: 0.01
+    )
+
+    XCTAssertFalse(didSend)
+    XCTAssertEqual(session.composeError, "Couldn't reconnect to relays in time. Try again.")
+    XCTAssertTrue(
+      try fetchMessages(in: container.mainContext).filter { $0.kind == .reply }.isEmpty
+    )
+  }
+
+  func testSendReplyAwaitingRelaySendsWhenLiveRelayConnectionExists() async throws {
+    let (session, container) = try makeSession(
+      testDisableNostrStartupOverride: false,
+      testHasConnectedRelaysOverride: { true }
+    )
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+
+    let relay = RelayEntity(url: "wss://relay.example.com", status: .failed)
+    container.mainContext.insert(relay)
+
+    let root = makeMessage(
+      eventID: "root-await-success",
+      conversationID: ConversationID.deterministic(myPubkey, peerPubkey),
+      rootID: "root-await-success",
+      kind: .root,
+      senderPubkey: myPubkey,
+      receiverPubkey: peerPubkey,
+      ownerPubkey: myPubkey
+    )
+    container.mainContext.insert(root)
+    try container.mainContext.save()
+
+    let didSend = await session.sendReplyAwaitingRelay(
+      text: "reply text",
+      post: root,
+      timeoutSeconds: 0.05,
+      pollIntervalSeconds: 0.01
+    )
+
+    XCTAssertTrue(didSend)
+    XCTAssertNil(session.composeError)
+    XCTAssertEqual(
+      try fetchMessages(in: container.mainContext).filter { $0.kind == .reply }.count,
+      1
+    )
+  }
+
   func testLogoutClearLocalDataRemovesContactsAndMessages() throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()

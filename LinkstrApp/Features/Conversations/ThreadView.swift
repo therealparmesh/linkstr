@@ -14,6 +14,7 @@ struct ThreadView: View {
   private var contacts: [ContactEntity]
 
   @State private var replyText = ""
+  @State private var isSendingReply = false
   @FocusState private var isComposerFocused: Bool
 
   private var scopedMessages: [SessionMessageEntity] {
@@ -224,6 +225,7 @@ struct ThreadView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .focused($isComposerFocused)
+        .disabled(isSendingReply)
         .background(
           RoundedRectangle(cornerRadius: 20, style: .continuous)
             .fill(LinkstrTheme.panelSoft)
@@ -237,7 +239,7 @@ struct ThreadView: View {
           .font(.system(size: 30))
           .foregroundStyle(LinkstrTheme.neonCyan)
       }
-      .disabled(replyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+      .disabled(isSendingReply || replyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
     .padding(.horizontal, 10)
     .padding(.vertical, 8)
@@ -247,11 +249,17 @@ struct ThreadView: View {
   private func sendReply(using proxy: ScrollViewProxy) {
     let text = replyText.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !text.isEmpty else { return }
+    guard !isSendingReply else { return }
 
-    guard session.sendReply(text: text, post: post) else { return }
-    replyText = ""
-    isComposerFocused = false
-    scrollToBottom(using: proxy)
+    isSendingReply = true
+    Task { @MainActor in
+      let didSend = await session.sendReplyAwaitingRelay(text: text, post: post)
+      isSendingReply = false
+      guard didSend else { return }
+      replyText = ""
+      isComposerFocused = false
+      scrollToBottom(using: proxy)
+    }
   }
 
   private func scrollToBottom(using proxy: ScrollViewProxy) {

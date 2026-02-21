@@ -146,16 +146,6 @@ final class RecipientSearchLogicTests: XCTestCase {
     XCTAssertEqual(matches.map(\.npub), [bobNPub])
   }
 
-  func testContactMatchesRejectsNonMatchingQuery() {
-    XCTAssertFalse(
-      RecipientSearchLogic.contactMatches(
-        query: "charlie",
-        displayName: "Alice Smith",
-        npub: "npub1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqk3el7l"
-      )
-    )
-  }
-
   private func makeContacts() throws -> [TestContact] {
     [
       TestContact(npub: try TestKeyMaterialFactory.makeNPub(), displayName: "Alice Smith"),

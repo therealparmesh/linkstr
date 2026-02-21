@@ -89,12 +89,14 @@ struct SettingsView: View {
             }
             .padding(.trailing, 4)
 
-            if let error = relay.lastError, !error.isEmpty {
-              Text(error)
-                .font(.custom(LinkstrTheme.bodyFont, size: 12))
-                .foregroundStyle(LinkstrTheme.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-            }
+            let relayErrorText = normalizedInlineMessage(relay.lastError)
+            Text(relayErrorText.isEmpty ? " " : relayErrorText)
+              .font(.custom(LinkstrTheme.bodyFont, size: 12))
+              .foregroundStyle(LinkstrTheme.textSecondary)
+              .fixedSize(horizontal: false, vertical: true)
+              .frame(maxWidth: .infinity, minHeight: 30, alignment: .topLeading)
+              .opacity(relayErrorText.isEmpty ? 0 : 1)
+              .accessibilityHidden(relayErrorText.isEmpty)
 
             HStack {
               Spacer()
@@ -312,5 +314,10 @@ struct SettingsView: View {
     relays.sorted {
       $0.url.localizedCaseInsensitiveCompare($1.url) == .orderedAscending
     }
+  }
+
+  private func normalizedInlineMessage(_ message: String?) -> String {
+    guard let message else { return "" }
+    return message.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 }

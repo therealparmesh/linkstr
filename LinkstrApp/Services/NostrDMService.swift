@@ -12,13 +12,6 @@ struct ReceivedDirectMessage {
 
 @MainActor
 final class NostrDMService: NSObject, ObservableObject, EventCreating {
-  private enum RelayConnectionState {
-    case connected
-    case connecting
-    case notConnected
-    case error(String)
-  }
-
   private enum BackfillSubscriptionKind: String {
     case recipient
     case author
@@ -41,9 +34,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
   private var recipientFilter: Filter?
   private var authorFilter: Filter?
   private var reconnectTask: Task<Void, Never>?
-  private var reconnectAttempt = 0
   private var shouldMaintainConnection = false
-  private var drainingRelayPools: [ObjectIdentifier: RelayPool] = [:]
 
   private var keypair: Keypair?
   private var onIncoming: ((ReceivedDirectMessage) -> Void)?
@@ -53,14 +44,18 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
   private let recipientSubscriptionID = "linkstr-giftwrap-recipient"
   private let authorSubscriptionID = "linkstr-giftwrap-author"
   private let backfillPageSize = 500
-  private let relayPoolDrainDelayNanoseconds: UInt64 = 2_000_000_000
+  private let reconnectDelayNanoseconds: UInt64 = 2_000_000_000
   private var activeBackfillStates: [String: BackfillState] = [:]
   private var completedBackfillKinds = Set<BackfillSubscriptionKind>()
   // App-specific rumor kind carried inside NIP-59 gift wrap events.
   private let linkstrRumorKind = EventKind.unknown(44_001)
 
   func hasConnectedRelays() -> Bool {
-    !connectedRelayURLs().isEmpty
+    guard let relayPool else { return false }
+    return relayPool.relays.contains { relay in
+      if case .connected = relay.state { return true }
+      return false
+    }
   }
 
   func isConfigured(for keypair: Keypair, relayURLs: [String]) -> Bool {
@@ -150,13 +145,9 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     shouldMaintainConnection = false
     reconnectTask?.cancel()
     reconnectTask = nil
-    reconnectAttempt = 0
     eventCancellable?.cancel()
     eventCancellable = nil
-    if let relayPool {
-      relayPool.disconnect()
-      retainRelayPoolForDrain(relayPool)
-    }
+    relayPool?.disconnect()
     relayPool = nil
     processedEventIDs.removeAll()
     recipientFilter = nil
@@ -169,28 +160,16 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     configuredRelayURLs.removeAll()
   }
 
-  private func retainRelayPoolForDrain(_ relayPool: RelayPool) {
-    let key = ObjectIdentifier(relayPool)
-    drainingRelayPools[key] = relayPool
-
-    Task { [weak self] in
-      guard let self else { return }
-      try? await Task.sleep(nanoseconds: relayPoolDrainDelayNanoseconds)
-      self.drainingRelayPools.removeValue(forKey: key)
-    }
-  }
-
   private func scheduleReconnect() {
     guard shouldMaintainConnection else { return }
-    reconnectTask?.cancel()
-    reconnectAttempt += 1
-    let cappedAttempt = min(reconnectAttempt, 5)
-    let delaySeconds = UInt64(1 << cappedAttempt)
+    guard reconnectTask == nil else { return }
 
     reconnectTask = Task { @MainActor [weak self] in
-      try? await Task.sleep(nanoseconds: delaySeconds * 1_000_000_000)
+      guard let self else { return }
+      defer { self.reconnectTask = nil }
+      try? await Task.sleep(nanoseconds: self.reconnectDelayNanoseconds)
       guard !Task.isCancelled else { return }
-      guard let self, self.shouldMaintainConnection else { return }
+      guard self.shouldMaintainConnection else { return }
       self.relayPool?.connect()
     }
   }
@@ -282,12 +261,13 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
   private func connectedRelayURLs() -> Set<String> {
     guard let relayPool else { return [] }
     return Set(
-      relayPool.relays
-        .filter { relay in
-          if case .connected = relay.state { return true }
-          return false
+      relayPool.relays.compactMap { relay in
+        if case .connected = relay.state {
+          return relay.url.absoluteString
         }
-        .map { $0.url.absoluteString })
+        return nil
+      }
+    )
   }
 
   private func startBackfillIfNeeded() {
@@ -442,13 +422,12 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
       ))
   }
 
-  private func handleRelayStateDidChange(relayURL: String, state: RelayConnectionState) {
+  private func handleRelayStateDidChange(relayURL: String, state: Relay.State) {
     switch state {
     case .connected:
       // Retry installs after each relay connection. Initial install can race with socket startup.
       reconnectTask?.cancel()
       reconnectTask = nil
-      reconnectAttempt = 0
       installSubscriptions()
       startBackfillIfNeeded()
       onRelayStatus?(relayURL, .connected, nil)
@@ -458,9 +437,9 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
       pruneRelayFromBackfillWaitlists(relayURL: relayURL)
       onRelayStatus?(relayURL, .reconnecting, nil)
       scheduleReconnect()
-    case .error(let message):
+    case .error(let error):
       pruneRelayFromBackfillWaitlists(relayURL: relayURL)
-      onRelayStatus?(relayURL, .reconnecting, message)
+      onRelayStatus?(relayURL, .reconnecting, error.localizedDescription)
       scheduleReconnect()
     }
   }
@@ -486,21 +465,9 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
 extension NostrDMService: RelayDelegate {
   nonisolated func relayStateDidChange(_ relay: Relay, state: Relay.State) {
     let relayURL = relay.url.absoluteString
-    let normalizedState: RelayConnectionState
-    switch state {
-    case .connected:
-      normalizedState = .connected
-    case .connecting:
-      normalizedState = .connecting
-    case .notConnected:
-      normalizedState = .notConnected
-    case .error(let error):
-      normalizedState = .error(error.localizedDescription)
-    }
-
     Task { @MainActor [weak self] in
       guard let self else { return }
-      self.handleRelayStateDidChange(relayURL: relayURL, state: normalizedState)
+      self.handleRelayStateDidChange(relayURL: relayURL, state: state)
     }
   }
 

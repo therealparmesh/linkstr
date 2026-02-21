@@ -23,20 +23,11 @@ enum RecipientSearchLogic {
   ) -> [Contact] {
     let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmedQuery.isEmpty else { return contacts }
+    let normalizedQuery = trimmedQuery.lowercased()
 
     return contacts.filter { contact in
-      contactMatches(
-        query: trimmedQuery,
-        displayName: displayName(contact),
-        npub: npub(contact)
-      )
+      let name = displayName(contact).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+      return name.contains(normalizedQuery) || npub(contact).lowercased().contains(normalizedQuery)
     }
-  }
-
-  static func contactMatches(query: String, displayName: String, npub: String) -> Bool {
-    let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    guard !normalizedQuery.isEmpty else { return true }
-    let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    return name.contains(normalizedQuery) || npub.lowercased().contains(normalizedQuery)
   }
 }

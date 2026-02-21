@@ -22,7 +22,6 @@
 		401F645DC5E055DAB60CA01D /* IdentityServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FED3B5DF5A048969C4C2153 /* IdentityServiceTests.swift */; };
 		44CF9CF4B0623913AB1F02F2 /* LinkstrErrorToast.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71EA6AFE00388F8A47E323AB /* LinkstrErrorToast.swift */; };
 		4720DE0540BECD7B8B8DDEB8 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F601E426AE9DF9219162BF8C /* Assets.xcassets */; };
-		4A01DFBDAB412799B73E2DFA /* RecipientSearchLogic.swift in Sources */ = {isa = PBXBuildFile; fileRef = D470CB76AE020352FB2661AC /* RecipientSearchLogic.swift */; };
 		5C081B12920542652F7743FA /* URLClassifierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DF2BD42808FC977F554891B /* URLClassifierTests.swift */; };
 		5F537D896C188FD991549A9B /* LocalNotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6ED18846C164D6CF5E1A03D6 /* LocalNotificationService.swift */; };
 		61BE8DAE2BADCD8F36FE84C8 /* AppSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37C24617515D81FAA072295F /* AppSession.swift */; };
@@ -48,6 +47,7 @@
 		AC3F55C6C507A8D7EBAD4B40 /* ContactEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 572F5BEA562DB0F3E6DB2188 /* ContactEntity.swift */; };
 		AD4F22E0BD89248923FABA9A /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22CECBEA34B217B7CA645A04 /* OnboardingView.swift */; };
 		BE9025C7D76C0741DFDEAFE1 /* RelayStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73DB81B29D4FCF3EB0F03DA1 /* RelayStore.swift */; };
+		BF9CDA3FA5F441195AF2FC62 /* RecipientSearchLogic.swift in Sources */ = {isa = PBXBuildFile; fileRef = B704DE821A9D698172A93F4C /* RecipientSearchLogic.swift */; };
 		C09D954BF5807BDC4E25678D /* ThreadView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89C3BB8D54724C74F2D24727 /* ThreadView.swift */; };
 		C2D877FBED10FC9641EB2A59 /* LinkstrDeepLinkPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6529D628D1F11A596110C5A9 /* LinkstrDeepLinkPayload.swift */; };
 		CABAAF73A10AD588AD2A5486 /* IdentityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7062F43FAE1972AB3EC5D121 /* IdentityService.swift */; };
@@ -120,11 +120,11 @@
 		A337208561EE745583B8225D /* DeepLinkContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLinkContainerView.swift; sourceTree = "<group>"; };
 		AE9431738F7A0B23E194B322 /* RelayEntity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayEntity.swift; sourceTree = "<group>"; };
 		B09547E4A4B6A981A7FF4FD0 /* ContactsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactsView.swift; sourceTree = "<group>"; };
+		B704DE821A9D698172A93F4C /* RecipientSearchLogic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipientSearchLogic.swift; sourceTree = "<group>"; };
 		B818363C936E8DBB7C2F538E /* HLSDownloadManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HLSDownloadManager.swift; sourceTree = "<group>"; };
 		BF6BDEF486E9344C4611336E /* DeepLinkHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLinkHandler.swift; sourceTree = "<group>"; };
 		C7805C59C56EC4D0C6C28B4B /* URLMetadataService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = URLMetadataService.swift; sourceTree = "<group>"; };
 		D3E55FD1E2DA44178AA72B96 /* ContactKeyParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactKeyParserTests.swift; sourceTree = "<group>"; };
-		D470CB76AE020352FB2661AC /* RecipientSearchLogic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipientSearchLogic.swift; sourceTree = "<group>"; };
 		D476799C5446331193088652 /* SocialURLHeuristics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialURLHeuristics.swift; sourceTree = "<group>"; };
 		D8CC474675B4FD0B86052DBD /* DeepLinkCodecTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLinkCodecTests.swift; sourceTree = "<group>"; };
 		D9DE3286769E2B99896B67D7 /* SessionMessageEntity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionMessageEntity.swift; sourceTree = "<group>"; };
@@ -204,7 +204,6 @@
 				069D5C271EC9953A4A85B9C7 /* LinkstrPayload.swift */,
 				5D70EA118D8EE22066AD879B /* LinkstrURLValidator.swift */,
 				3F31341E3770E2FF80FF9A9B /* LinkType.swift */,
-				D470CB76AE020352FB2661AC /* RecipientSearchLogic.swift */,
 			);
 			path = Domain;
 			sourceTree = "<group>";
@@ -274,6 +273,7 @@
 			children = (
 				848DAED86706C32D1050B92C /* ConversationsView.swift */,
 				9E4299AB1D0EC23B53FB8021 /* NewRootThreadSheet.swift */,
+				B704DE821A9D698172A93F4C /* RecipientSearchLogic.swift */,
 				89C3BB8D54724C74F2D24727 /* ThreadView.swift */,
 			);
 			path = Conversations;
@@ -484,7 +484,7 @@
 				703AB880A3B1547E90E1A1D1 /* NostrDMService.swift in Sources */,
 				AD4F22E0BD89248923FABA9A /* OnboardingView.swift in Sources */,
 				9F7DFE59B6B0B570CDE2C8A7 /* QRCodeGenerator.swift in Sources */,
-				4A01DFBDAB412799B73E2DFA /* RecipientSearchLogic.swift in Sources */,
+				BF9CDA3FA5F441195AF2FC62 /* RecipientSearchLogic.swift in Sources */,
 				1956EBD013DF5C302F70763D /* RelayDefaults.swift in Sources */,
 				2B15250FD913F0FDACA3E00F /* RelayEntity.swift in Sources */,
 				BE9025C7D76C0741DFDEAFE1 /* RelayStore.swift in Sources */,

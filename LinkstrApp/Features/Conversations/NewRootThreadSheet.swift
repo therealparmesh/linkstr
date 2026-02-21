@@ -80,6 +80,12 @@ struct NewPostSheet: View {
               .textInputAutocapitalization(.never)
               .keyboardType(.URL)
               .autocorrectionDisabled(true)
+            LinkstrInputAssistRow(
+              showClear: !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              showScan: false,
+              onPaste: pasteURLFromClipboard,
+              onClear: { url = "" }
+            )
             TextField("Optional note", text: $note, axis: .vertical)
           }
 
@@ -156,6 +162,14 @@ struct NewPostSheet: View {
   private var normalizedURL: String? {
     LinkstrURLValidator.normalizedWebURL(from: url)
   }
+
+  private func pasteURLFromClipboard() {
+    #if canImport(UIKit)
+      if let clipboardText = UIPasteboard.general.string {
+        url = clipboardText
+      }
+    #endif
+  }
 }
 
 private struct RecipientSelectionSheet: View {
@@ -178,7 +192,7 @@ private struct RecipientSelectionSheet: View {
       .first(where: { $0.npub == selectedRecipientNPub.wrappedValue })?
       .displayName
     _recipientQuery = State(
-      initialValue: RecipientSelectionLogic.selectedQuery(
+      initialValue: RecipientSearchLogic.selectedQuery(
         selectedRecipientNPub: selectedRecipientNPub.wrappedValue,
         selectedDisplayName: selectedDisplayName
       ))
@@ -293,7 +307,12 @@ private struct RecipientSelectionSheet: View {
   }
 
   private var filteredContacts: [ContactEntity] {
-    RecipientSelectionLogic.filteredContacts(contacts, query: recipientQuery)
+    RecipientSearchLogic.filteredContacts(
+      contacts,
+      query: recipientQuery,
+      displayName: \.displayName,
+      npub: \.npub
+    )
   }
 
   private var customQueryNPub: String? {
@@ -317,23 +336,6 @@ private struct RecipientSelectionSheet: View {
 }
 
 enum RecipientSelectionLogic {
-  static func selectedQuery(selectedRecipientNPub: String?, selectedDisplayName: String?) -> String
-  {
-    RecipientSearchLogic.selectedQuery(
-      selectedRecipientNPub: selectedRecipientNPub,
-      selectedDisplayName: selectedDisplayName
-    )
-  }
-
-  static func filteredContacts(_ contacts: [ContactEntity], query: String) -> [ContactEntity] {
-    RecipientSearchLogic.filteredContacts(
-      contacts,
-      query: query,
-      displayName: \.displayName,
-      npub: \.npub
-    )
-  }
-
   static func normalizedNPub(from query: String) -> String? {
     guard
       let extractedNPub = ContactKeyParser.extractNPub(from: query),
@@ -352,14 +354,17 @@ enum RecipientSelectionLogic {
 
 struct LinkstrInputAssistRow: View {
   let showClear: Bool
+  var showScan = true
   let onPaste: () -> Void
-  let onScan: () -> Void
+  var onScan: (() -> Void)? = nil
   let onClear: () -> Void
 
   var body: some View {
     HStack(spacing: 14) {
       actionButton("Paste", systemImage: "doc.on.clipboard", action: onPaste)
-      actionButton("Scan", systemImage: "qrcode.viewfinder", action: onScan)
+      if showScan, let onScan {
+        actionButton("Scan", systemImage: "qrcode.viewfinder", action: onScan)
+      }
       Spacer()
 
       if showClear {

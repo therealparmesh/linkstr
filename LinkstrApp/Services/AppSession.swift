@@ -542,6 +542,25 @@ final class AppSession: ObservableObject {
   }
 
   @discardableResult
+  func sendReplyAwaitingRelay(
+    text: String,
+    post: SessionMessageEntity,
+    timeoutSeconds: TimeInterval = 12,
+    pollIntervalSeconds: TimeInterval = 0.35
+  ) async -> Bool {
+    guard
+      await awaitRelayReadyForSend(
+        timeoutSeconds: timeoutSeconds,
+        pollIntervalSeconds: pollIntervalSeconds
+      )
+    else {
+      return false
+    }
+    startNostrIfPossible()
+    return sendReply(text: text, post: post)
+  }
+
+  @discardableResult
   func addContact(npub: String, displayName: String) -> Bool {
     guard let ownerPubkey = identityService.pubkeyHex else {
       composeError = "You're signed out. Sign in to manage contacts."
