@@ -153,7 +153,7 @@ This document is the behavioral contract for the current app. It is intentionall
 - Facebook host variants include `facebook.com`, `fb.com`, and `fb.watch`.
 - X/Twitter embeds are rewritten to `fixupx.com` to improve embed consistency.
 - Local extraction rejects non-HTTPS media URLs.
-- Post label `Video` appears only for extraction candidates; embed-only and generic links display `Link`.
+- Post cards no longer show a `Video`/`Link` kind label.
 
 ### Deep Links
 

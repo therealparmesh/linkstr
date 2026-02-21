@@ -12,6 +12,11 @@ final class AppSession: ObservableObject {
     case offline
   }
 
+  private struct RelayRuntimeStatus {
+    var status: RelayHealthStatus
+    var message: String?
+  }
+
   let identityService: IdentityService
   let nostrService: NostrDMService
   let modelContext: ModelContext
@@ -20,6 +25,7 @@ final class AppSession: ObservableObject {
   private let messageStore: SessionMessageStore
   private let testHasConnectedRelaysOverride: (() -> Bool)?
   private let testDisableNostrStartupOverride: Bool?
+  private let testRelaySendOverride: ((LinkstrPayload, String) async throws -> String)?
   private let noEnabledRelaysMessage =
     "No relays are enabled. Enable at least one relay in Settings."
   private let relayOfflineMessage = "You're offline. Waiting for a relay connection."
@@ -33,6 +39,7 @@ final class AppSession: ObservableObject {
   private var pendingMetadataStorageIDs: [String] = []
   private var enqueuedMetadataStorageIDs = Set<String>()
   private var isProcessingMetadataQueue = false
+  private var relayRuntimeStatusByURL: [String: RelayRuntimeStatus] = [:]
 
   @Published var composeError: String?
   @Published private(set) var hasIdentity = false
@@ -42,11 +49,13 @@ final class AppSession: ObservableObject {
   init(
     modelContext: ModelContext,
     testDisableNostrStartupOverride: Bool? = nil,
-    testHasConnectedRelaysOverride: (() -> Bool)? = nil
+    testHasConnectedRelaysOverride: (() -> Bool)? = nil,
+    testRelaySendOverride: ((LinkstrPayload, String) async throws -> String)? = nil
   ) {
     self.modelContext = modelContext
     self.testDisableNostrStartupOverride = testDisableNostrStartupOverride
     self.testHasConnectedRelaysOverride = testHasConnectedRelaysOverride
+    self.testRelaySendOverride = testRelaySendOverride
     self.identityService = IdentityService()
     self.nostrService = NostrDMService()
     self.contactStore = ContactStore(modelContext: modelContext)
@@ -81,6 +90,7 @@ final class AppSession: ObservableObject {
       }
       bootStatusMessage = "Connecting relays…"
       try relayStore.ensureDefaultRelays()
+      pruneRuntimeRelayStatusCache()
     } catch {
       composeError = error.localizedDescription
     }
@@ -105,13 +115,13 @@ final class AppSession: ObservableObject {
   func relayConnectivityState(for enabledRelays: [RelayEntity]) -> RelayConnectivityState {
     guard !enabledRelays.isEmpty else { return .noEnabledRelays }
 
-    if enabledRelays.contains(where: { $0.status == .connected }) {
+    if enabledRelays.contains(where: { effectiveRelayStatus(for: $0) == .connected }) {
       return .online
     }
-    if enabledRelays.contains(where: { $0.status == .readOnly }) {
+    if enabledRelays.contains(where: { effectiveRelayStatus(for: $0) == .readOnly }) {
       return .readOnly
     }
-    if enabledRelays.contains(where: { $0.status == .reconnecting }) {
+    if enabledRelays.contains(where: { effectiveRelayStatus(for: $0) == .reconnecting }) {
       return .reconnecting
     }
     return .offline
@@ -145,6 +155,77 @@ final class AppSession: ObservableObject {
       return testHasConnectedRelaysOverride()
     }
     return nostrService.hasConnectedRelays()
+  }
+
+  func relayStatus(for relay: RelayEntity) -> RelayHealthStatus {
+    if relay.isEnabled == false {
+      return .disconnected
+    }
+    return effectiveRelayStatus(for: relay)
+  }
+
+  func relayErrorMessage(for relay: RelayEntity) -> String? {
+    guard relay.isEnabled else { return nil }
+    let runtime = relayRuntimeStatusByURL[relay.url]?.message
+    let trimmedRuntime = runtime?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    if !trimmedRuntime.isEmpty {
+      return trimmedRuntime
+    }
+    guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil else {
+      return nil
+    }
+    let persisted = relay.lastError?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return persisted.isEmpty ? nil : persisted
+  }
+
+  func connectedRelayCount(for relays: [RelayEntity]) -> Int {
+    relays.count { relay in
+      relay.isEnabled
+        && (relayStatus(for: relay) == .connected || relayStatus(for: relay) == .readOnly)
+    }
+  }
+
+  func scopedContacts(from contacts: [ContactEntity]) -> [ContactEntity] {
+    guard let ownerPubkey = identityService.pubkeyHex else { return [] }
+    return
+      contacts
+      .filter { $0.ownerPubkey == ownerPubkey }
+      .sorted {
+        $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+      }
+  }
+
+  func scopedMessages(from messages: [SessionMessageEntity]) -> [SessionMessageEntity] {
+    guard let ownerPubkey = identityService.pubkeyHex else { return [] }
+    return messages.filter { $0.ownerPubkey == ownerPubkey }
+  }
+
+  private func effectiveRelayStatus(for relay: RelayEntity) -> RelayHealthStatus {
+    if let runtimeStatus = relayRuntimeStatusByURL[relay.url]?.status {
+      return runtimeStatus
+    }
+    if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+      return relay.status
+    }
+    return .disconnected
+  }
+
+  private func updateRuntimeRelayStatus(
+    relayURL: String,
+    status: RelayHealthStatus,
+    message: String?
+  ) {
+    let trimmedMessage = message?.trimmingCharacters(in: .whitespacesAndNewlines)
+    relayRuntimeStatusByURL[relayURL] = RelayRuntimeStatus(
+      status: status,
+      message: (trimmedMessage?.isEmpty == false) ? trimmedMessage : nil
+    )
+  }
+
+  private func pruneRuntimeRelayStatusCache() {
+    let relays = (try? relayStore.fetchRelays()) ?? []
+    let enabledURLs = Set(relays.filter(\.isEnabled).map(\.url))
+    relayRuntimeStatusByURL = relayRuntimeStatusByURL.filter { enabledURLs.contains($0.key) }
   }
 
   private func refreshRelayConnectivityAlert() throws {
@@ -345,6 +426,7 @@ final class AppSession: ObservableObject {
     pendingMetadataStorageIDs.removeAll()
     enqueuedMetadataStorageIDs.removeAll()
     isProcessingMetadataQueue = false
+    relayRuntimeStatusByURL.removeAll()
 
     if let ownerPubkey, clearLocalData {
       clearCachedVideos(ownerPubkey: ownerPubkey)
@@ -371,6 +453,7 @@ final class AppSession: ObservableObject {
 
     if shouldDisableNostrStartupForCurrentProcess() {
       // Keep local send paths available in tests without opening relay connections.
+      relayRuntimeStatusByURL.removeAll()
       nostrService.start(
         keypair: keypair,
         relayURLs: [],
@@ -389,6 +472,7 @@ final class AppSession: ObservableObject {
     }
     if relayURLs.isEmpty {
       nostrService.stop()
+      relayRuntimeStatusByURL.removeAll()
       composeError = noEnabledRelaysMessage
       hasShownOfflineToastForCurrentOutage = false
       return
@@ -396,6 +480,7 @@ final class AppSession: ObservableObject {
     if composeError == noEnabledRelaysMessage {
       composeError = nil
     }
+    relayRuntimeStatusByURL = relayRuntimeStatusByURL.filter { relayURLs.contains($0.key) }
 
     nostrService.start(
       keypair: keypair,
@@ -409,17 +494,12 @@ final class AppSession: ObservableObject {
         Task { @MainActor in
           guard let self else { return }
           guard self.isForeground else { return }
-          do {
-            let changed = try self.relayStore.updateRelayStatus(
-              relayURL: relayURL,
-              status: status,
-              message: message
-            )
-            guard changed else { return }
-            try self.refreshRelayConnectivityAlert()
-          } catch {
-            NSLog("Ignoring relay status persistence error: \(error.localizedDescription)")
-          }
+          self.updateRuntimeRelayStatus(
+            relayURL: relayURL,
+            status: status,
+            message: message
+          )
+          try? self.refreshRelayConnectivityAlert()
         }
       }
     )
@@ -507,7 +587,10 @@ final class AppSession: ObservableObject {
       return false
     }
     startNostrIfPossible()
-    return createPost(url: url, note: note, recipientNPub: recipientNPub)
+    if shouldDisableNostrStartupForCurrentProcess() {
+      return createPost(url: url, note: note, recipientNPub: recipientNPub)
+    }
+    return await createPostAwaitingRelayDelivery(url: url, note: note, recipientNPub: recipientNPub)
   }
 
   @discardableResult
@@ -580,7 +663,137 @@ final class AppSession: ObservableObject {
       return false
     }
     startNostrIfPossible()
-    return sendReply(text: text, post: post)
+    if shouldDisableNostrStartupForCurrentProcess() {
+      return sendReply(text: text, post: post)
+    }
+    return await sendReplyAwaitingRelayDelivery(text: text, post: post)
+  }
+
+  private func createPostAwaitingRelayDelivery(
+    url: String,
+    note: String?,
+    recipientNPub: String
+  ) async -> Bool {
+    guard let normalizedURL = LinkstrURLValidator.normalizedWebURL(from: url) else {
+      composeError = "Enter a valid URL."
+      return false
+    }
+
+    guard let keypair = identityService.keypair,
+      let ownerPubkey = identityService.pubkeyHex,
+      let recipientPublicKey = PublicKey(npub: recipientNPub)
+    else {
+      composeError = "Couldn't send. Check your account and recipient Contact Key (npub)."
+      return false
+    }
+
+    let conversationID = ConversationID.deterministic(keypair.publicKey.hex, recipientPublicKey.hex)
+    let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let normalizedNote = (trimmedNote?.isEmpty == false) ? trimmedNote : nil
+
+    let payload = LinkstrPayload(
+      conversationID: conversationID,
+      rootID: makeLocalEventID(),
+      kind: .root,
+      url: normalizedURL,
+      note: normalizedNote,
+      timestamp: Int64(Date.now.timeIntervalSince1970)
+    )
+
+    do {
+      let eventID = try await sendPayloadAwaitingRelayAcceptance(
+        payload: payload,
+        recipientPubkeyHex: recipientPublicKey.hex
+      )
+
+      let message = try SessionMessageEntity(
+        eventID: eventID,
+        ownerPubkey: ownerPubkey,
+        conversationID: conversationID,
+        rootID: eventID,
+        kind: .root,
+        senderPubkey: keypair.publicKey.hex,
+        receiverPubkey: recipientPublicKey.hex,
+        url: normalizedURL,
+        note: normalizedNote,
+        timestamp: .now,
+        readAt: .now,
+        linkType: URLClassifier.classify(normalizedURL)
+      )
+      try messageStore.insert(message)
+
+      enqueueMetadataRefresh(for: message)
+      composeError = nil
+      return true
+    } catch {
+      report(error: error)
+      return false
+    }
+  }
+
+  private func sendReplyAwaitingRelayDelivery(
+    text: String,
+    post: SessionMessageEntity
+  ) async -> Bool {
+    let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedText.isEmpty else { return false }
+    guard let keypair = identityService.keypair, let ownerPubkey = identityService.pubkeyHex else {
+      composeError = "You're signed out. Sign in to send replies."
+      return false
+    }
+
+    let recipientPubkey =
+      post.senderPubkey == keypair.publicKey.hex ? post.receiverPubkey : post.senderPubkey
+
+    let payload = LinkstrPayload(
+      conversationID: post.conversationID,
+      rootID: post.rootID,
+      kind: .reply,
+      url: nil,
+      note: trimmedText,
+      timestamp: Int64(Date.now.timeIntervalSince1970)
+    )
+
+    do {
+      let eventID = try await sendPayloadAwaitingRelayAcceptance(
+        payload: payload,
+        recipientPubkeyHex: recipientPubkey
+      )
+
+      let reply = try SessionMessageEntity(
+        eventID: eventID,
+        ownerPubkey: ownerPubkey,
+        conversationID: post.conversationID,
+        rootID: post.rootID,
+        kind: .reply,
+        senderPubkey: keypair.publicKey.hex,
+        receiverPubkey: recipientPubkey,
+        url: nil,
+        note: trimmedText,
+        timestamp: .now,
+        readAt: .now,
+        linkType: .generic
+      )
+      try messageStore.insert(reply)
+      composeError = nil
+      return true
+    } catch {
+      report(error: error)
+      return false
+    }
+  }
+
+  private func sendPayloadAwaitingRelayAcceptance(
+    payload: LinkstrPayload,
+    recipientPubkeyHex: String
+  ) async throws -> String {
+    if let testRelaySendOverride {
+      return try await testRelaySendOverride(payload, recipientPubkeyHex)
+    }
+    return try await nostrService.sendAwaitingRelayAcceptance(
+      payload: payload,
+      to: recipientPubkeyHex
+    )
   }
 
   @discardableResult
@@ -711,6 +924,7 @@ final class AppSession: ObservableObject {
       report(error: error)
       return
     }
+    pruneRuntimeRelayStatusCache()
     startNostrIfPossible()
   }
 

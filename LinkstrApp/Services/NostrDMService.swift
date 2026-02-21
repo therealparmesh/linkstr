@@ -28,6 +28,12 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     var receivedGiftWrapCount = 0
   }
 
+  private struct PendingPublishAck {
+    var expectedRelayURLs: Set<String>
+    var failedRelayMessagesByURL: [String: String]
+    let continuation: CheckedContinuation<Void, Error>
+  }
+
   private var relayPool: RelayPool?
   private var eventCancellable: AnyCancellable?
   private var processedEventIDs = Set<String>()
@@ -35,6 +41,8 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
   private var authorFilter: Filter?
   private var reconnectTask: Task<Void, Never>?
   private var shouldMaintainConnection = false
+  private var pendingPublishAcks: [String: PendingPublishAck] = [:]
+  private var pendingPublishAckTimeoutTasks: [String: Task<Void, Never>] = [:]
 
   private var keypair: Keypair?
   private var onIncoming: ((ReceivedDirectMessage) -> Void)?
@@ -154,6 +162,13 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     authorFilter = nil
     activeBackfillStates.removeAll()
     completedBackfillKinds.removeAll()
+    let pendingEventIDs = Array(pendingPublishAcks.keys)
+    for eventID in pendingEventIDs {
+      finishPendingPublishAck(
+        eventID: eventID,
+        result: .failure(NostrServiceError.relayUnavailable)
+      )
+    }
     onIncoming = nil
     onRelayStatus = nil
     keypair = nil
@@ -175,11 +190,70 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
   }
 
   func send(payload: LinkstrPayload, to recipientPubkeyHex: String) throws -> String {
-    guard let keypair else {
-      throw NostrServiceError.missingIdentity
-    }
+    let events = try buildRumorAndGiftWrapEvents(
+      payload: payload, recipientPubkeyHex: recipientPubkeyHex)
+    relayPool?.publishEvent(events.giftWrapForRecipient)
+    relayPool?.publishEvent(events.giftWrapForSender)
+    return events.rumorEvent.id
+  }
+
+  func sendAwaitingRelayAcceptance(
+    payload: LinkstrPayload,
+    to recipientPubkeyHex: String,
+    timeoutSeconds: TimeInterval = 8
+  ) async throws -> String {
     guard relayPool != nil else {
       throw NostrServiceError.relayUnavailable
+    }
+
+    let events = try buildRumorAndGiftWrapEvents(
+      payload: payload, recipientPubkeyHex: recipientPubkeyHex)
+    let pendingEventID = events.giftWrapForRecipient.id
+    let expectedRelayURLs = connectedRelayURLs()
+    guard !expectedRelayURLs.isEmpty else {
+      throw NostrServiceError.relayUnavailable
+    }
+
+    try await withCheckedThrowingContinuation {
+      (continuation: CheckedContinuation<Void, Error>) in
+      pendingPublishAcks[pendingEventID] = PendingPublishAck(
+        expectedRelayURLs: expectedRelayURLs,
+        failedRelayMessagesByURL: [:],
+        continuation: continuation
+      )
+
+      pendingPublishAckTimeoutTasks[pendingEventID] = Task { @MainActor [weak self] in
+        guard let self else { return }
+        try? await Task.sleep(for: .seconds(max(0.1, timeoutSeconds)))
+        guard !Task.isCancelled else { return }
+        self.finishPendingPublishAck(
+          eventID: pendingEventID,
+          result: .failure(NostrServiceError.publishTimedOut)
+        )
+      }
+
+      relayPool?.publishEvent(events.giftWrapForRecipient)
+      relayPool?.publishEvent(events.giftWrapForSender)
+    }
+
+    return events.rumorEvent.id
+  }
+
+  private func parsePublicKey(_ hex: String) throws -> PublicKey {
+    guard let key = PublicKey(hex: hex) else {
+      throw NostrServiceError.invalidPubkey
+    }
+    return key
+  }
+
+  private func buildRumorAndGiftWrapEvents(
+    payload: LinkstrPayload,
+    recipientPubkeyHex: String
+  ) throws -> (
+    rumorEvent: NostrEvent, giftWrapForRecipient: NostrEvent, giftWrapForSender: NostrEvent
+  ) {
+    guard let keypair else {
+      throw NostrServiceError.missingIdentity
     }
 
     try payload.validated()
@@ -202,30 +276,17 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     }
 
     let rumorEvent = builder.build(pubkey: keypair.publicKey)
-
     let giftWrapForRecipient = try giftWrap(
       withRumor: rumorEvent,
       toRecipient: recipientPublicKey,
       signedBy: keypair
     )
-
     let giftWrapForSender = try giftWrap(
       withRumor: rumorEvent,
       toRecipient: keypair.publicKey,
       signedBy: keypair
     )
-
-    relayPool?.publishEvent(giftWrapForRecipient)
-    relayPool?.publishEvent(giftWrapForSender)
-
-    return rumorEvent.id
-  }
-
-  private func parsePublicKey(_ hex: String) throws -> PublicKey {
-    guard let key = PublicKey(hex: hex) else {
-      throw NostrServiceError.invalidPubkey
-    }
-    return key
+    return (rumorEvent, giftWrapForRecipient, giftWrapForSender)
   }
 
   private func backfillSubscriptionID(kind: BackfillSubscriptionKind, page: Int, until: Int?)
@@ -268,6 +329,61 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
         return nil
       }
     )
+  }
+
+  private func finishPendingPublishAck(eventID: String, result: Result<Void, Error>) {
+    guard let pending = pendingPublishAcks.removeValue(forKey: eventID) else { return }
+    pendingPublishAckTimeoutTasks.removeValue(forKey: eventID)?.cancel()
+
+    switch result {
+    case .success:
+      pending.continuation.resume()
+    case .failure(let error):
+      pending.continuation.resume(throwing: error)
+    }
+  }
+
+  private func handlePublishAck(
+    relayURL: String,
+    eventID: String,
+    success: Bool,
+    message: String
+  ) {
+    guard var pending = pendingPublishAcks[eventID] else { return }
+
+    if success {
+      finishPendingPublishAck(eventID: eventID, result: .success(()))
+      return
+    }
+
+    pending.failedRelayMessagesByURL[relayURL] = message
+    pending.expectedRelayURLs.remove(relayURL)
+    pendingPublishAcks[eventID] = pending
+
+    if pending.expectedRelayURLs.isEmpty {
+      let fallbackMessage =
+        pending.failedRelayMessagesByURL.values.first ?? "Relays rejected this message."
+      finishPendingPublishAck(
+        eventID: eventID,
+        result: .failure(NostrServiceError.publishRejected(fallbackMessage))
+      )
+    }
+  }
+
+  private func pruneRelayFromPublishWaitlists(relayURL: String) {
+    for eventID in Array(pendingPublishAcks.keys) {
+      guard var pending = pendingPublishAcks[eventID] else { continue }
+      guard pending.expectedRelayURLs.remove(relayURL) != nil else { continue }
+      pendingPublishAcks[eventID] = pending
+
+      if pending.expectedRelayURLs.isEmpty {
+        let message = pending.failedRelayMessagesByURL.values.first ?? "Relay connection dropped."
+        finishPendingPublishAck(
+          eventID: eventID,
+          result: .failure(NostrServiceError.publishRejected(message))
+        )
+      }
+    }
   }
 
   private func startBackfillIfNeeded() {
@@ -435,11 +551,13 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
       onRelayStatus?(relayURL, .reconnecting, nil)
     case .notConnected:
       pruneRelayFromBackfillWaitlists(relayURL: relayURL)
+      pruneRelayFromPublishWaitlists(relayURL: relayURL)
       onRelayStatus?(relayURL, .reconnecting, nil)
       scheduleReconnect()
     case .error(let error):
       pruneRelayFromBackfillWaitlists(relayURL: relayURL)
-      onRelayStatus?(relayURL, .reconnecting, error.localizedDescription)
+      pruneRelayFromPublishWaitlists(relayURL: relayURL)
+      onRelayStatus?(relayURL, .failed, error.localizedDescription)
       scheduleReconnect()
     }
   }
@@ -448,7 +566,10 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     relayURL: String,
     eoseSubscriptionID: String?,
     closedSubscriptionID: String?,
-    readOnlyMessage: String?
+    readOnlyMessage: String?,
+    okEventID: String?,
+    okSuccess: Bool?,
+    okMessage: String?
   ) {
     if let eoseSubscriptionID {
       handleBackfillEOSE(relayURL: relayURL, subscriptionID: eoseSubscriptionID)
@@ -458,6 +579,14 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     }
     if let readOnlyMessage {
       onRelayStatus?(relayURL, .readOnly, readOnlyMessage)
+    }
+    if let okEventID, let okSuccess, let okMessage {
+      handlePublishAck(
+        relayURL: relayURL,
+        eventID: okEventID,
+        success: okSuccess,
+        message: okMessage
+      )
     }
   }
 }
@@ -476,27 +605,38 @@ extension NostrDMService: RelayDelegate {
     var eoseSubscriptionID: String?
     var closedSubscriptionID: String?
     var readOnlyMessage: String?
+    var okEventID: String?
+    var okSuccess: Bool?
+    var okMessage: String?
 
     switch response {
     case .eose(let subscriptionID):
       eoseSubscriptionID = subscriptionID
     case .closed(let subscriptionID, _):
       closedSubscriptionID = subscriptionID
+    case .ok(let eventID, let success, let message):
+      okEventID = eventID
+      okSuccess = success
+      okMessage = message.message
+      if !success {
+        switch message.prefix {
+        case .authRequired, .restricted:
+          readOnlyMessage = message.message
+        default:
+          // Non-auth publish failures can be relay policy/content checks while the socket is still healthy.
+          break
+        }
+      }
     default:
       break
     }
 
-    if case .ok(_, let success, let message) = response, !success {
-      switch message.prefix {
-      case .authRequired, .restricted:
-        readOnlyMessage = message.message
-      default:
-        // Non-auth publish failures can be relay policy/content checks while the socket is still healthy.
-        break
-      }
-    }
-
-    guard eoseSubscriptionID != nil || closedSubscriptionID != nil || readOnlyMessage != nil else {
+    guard
+      eoseSubscriptionID != nil
+        || closedSubscriptionID != nil
+        || readOnlyMessage != nil
+        || okEventID != nil
+    else {
       return
     }
 
@@ -506,7 +646,10 @@ extension NostrDMService: RelayDelegate {
         relayURL: relayURL,
         eoseSubscriptionID: eoseSubscriptionID,
         closedSubscriptionID: closedSubscriptionID,
-        readOnlyMessage: readOnlyMessage
+        readOnlyMessage: readOnlyMessage,
+        okEventID: okEventID,
+        okSuccess: okSuccess,
+        okMessage: okMessage
       )
     }
   }
@@ -519,6 +662,8 @@ enum NostrServiceError: Error, LocalizedError {
   case relayUnavailable
   case payloadEncodingFailed
   case invalidPubkey
+  case publishRejected(String)
+  case publishTimedOut
 
   var errorDescription: String? {
     switch self {
@@ -530,6 +675,12 @@ enum NostrServiceError: Error, LocalizedError {
       return "Couldn't prepare this message. Try again."
     case .invalidPubkey:
       return "Invalid recipient Contact Key (npub)."
+    case .publishRejected(let message):
+      return message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        ? "Relay rejected this message."
+        : message
+    case .publishTimedOut:
+      return "Couldn't confirm send with relays. Try again."
     }
   }
 }

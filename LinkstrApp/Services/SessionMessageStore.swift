@@ -15,14 +15,6 @@ final class SessionMessageStore {
     try modelContext.save()
   }
 
-  func messageExists(eventID: String, ownerPubkey: String) throws -> Bool {
-    let storageID = SessionMessageEntity.storageID(ownerPubkey: ownerPubkey, eventID: eventID)
-    let descriptor = FetchDescriptor<SessionMessageEntity>(
-      predicate: #Predicate { $0.storageID == storageID }
-    )
-    return try modelContext.fetch(descriptor).isEmpty == false
-  }
-
   func message(eventID: String, ownerPubkey: String) throws -> SessionMessageEntity? {
     let storageID = SessionMessageEntity.storageID(ownerPubkey: ownerPubkey, eventID: eventID)
     let descriptor = FetchDescriptor<SessionMessageEntity>(

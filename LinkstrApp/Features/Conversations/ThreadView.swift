@@ -18,18 +18,11 @@ struct ThreadView: View {
   @FocusState private var isComposerFocused: Bool
 
   private var scopedMessages: [SessionMessageEntity] {
-    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
-    return allMessages.filter { $0.ownerPubkey == ownerPubkey }
+    session.scopedMessages(from: allMessages)
   }
 
   private var scopedContacts: [ContactEntity] {
-    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
-    return
-      contacts
-      .filter { $0.ownerPubkey == ownerPubkey }
-      .sorted {
-        $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
-      }
+    session.scopedContacts(from: contacts)
   }
 
   private var replies: [SessionMessageEntity] {

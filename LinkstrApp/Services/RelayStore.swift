@@ -22,7 +22,13 @@ final class RelayStore {
   }
 
   func addRelay(url: URL) throws {
-    modelContext.insert(RelayEntity(url: url.absoluteString))
+    let relayURL = canonicalRelayURLString(from: url)
+    let existingRelayURLs = try fetchRelays().map(\.url)
+    if existingRelayURLs.contains(where: { canonicalRelayURLString(from: $0) == relayURL }) {
+      throw RelayStoreError.duplicateRelay
+    }
+
+    modelContext.insert(RelayEntity(url: relayURL))
     try modelContext.save()
   }
 
@@ -49,39 +55,32 @@ final class RelayStore {
     try modelContext.save()
   }
 
-  @discardableResult
-  func updateRelayStatus(relayURL: String, status: RelayHealthStatus, message: String?) throws
-    -> Bool
-  {
-    let descriptor = FetchDescriptor<RelayEntity>(predicate: #Predicate { $0.url == relayURL })
-    guard let relay = try modelContext.fetch(descriptor).first else { return false }
-
-    // Ignore transient status callbacks for disabled relays; they are not part of active runtime.
-    if relay.isEnabled == false {
-      if relay.status != .disconnected || relay.lastError != nil {
-        relay.status = .disconnected
-        relay.lastError = nil
-        return true
-      }
-      return false
+  private func canonicalRelayURLString(from url: URL) -> String {
+    guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+      return url.absoluteString
     }
-
-    let normalizedMessage: String?
-    if let message {
-      let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
-      normalizedMessage = trimmed.isEmpty ? nil : trimmed
-    } else {
-      normalizedMessage = nil
+    components.scheme = components.scheme?.lowercased()
+    components.host = components.host?.lowercased()
+    components.fragment = nil
+    if components.path == "/" {
+      components.path = ""
     }
+    return components.url?.absoluteString ?? url.absoluteString
+  }
 
-    // Relay status is transient runtime state. Persisting every update is expensive and can block
-    // scene transitions under high reconnect churn.
-    if relay.status == status && relay.lastError == normalizedMessage {
-      return false
+  private func canonicalRelayURLString(from rawValue: String) -> String {
+    guard let url = URL(string: rawValue) else { return rawValue.lowercased() }
+    return canonicalRelayURLString(from: url)
+  }
+}
+
+private enum RelayStoreError: LocalizedError {
+  case duplicateRelay
+
+  var errorDescription: String? {
+    switch self {
+    case .duplicateRelay:
+      return "That relay is already in your list."
     }
-
-    relay.status = status
-    relay.lastError = normalizedMessage
-    return true
   }
 }

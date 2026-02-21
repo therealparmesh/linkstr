@@ -1,7 +1,6 @@
 import NostrSDK
 import SwiftData
 import SwiftUI
-import UIKit
 
 private struct ConversationSummary: Identifiable {
   let id: String
@@ -49,18 +48,11 @@ struct ConversationsView: View {
   private var contacts: [ContactEntity]
 
   private var scopedMessages: [SessionMessageEntity] {
-    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
-    return allMessages.filter { $0.ownerPubkey == ownerPubkey }
+    session.scopedMessages(from: allMessages)
   }
 
   private var scopedContacts: [ContactEntity] {
-    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
-    return
-      contacts
-      .filter { $0.ownerPubkey == ownerPubkey }
-      .sorted {
-        $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
-      }
+    session.scopedContacts(from: contacts)
   }
 
   private var messageIndex: ConversationMessageIndex {
@@ -298,18 +290,11 @@ private struct SessionPostsView: View {
   }
 
   private var scopedMessages: [SessionMessageEntity] {
-    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
-    return allMessages.filter { $0.ownerPubkey == ownerPubkey }
+    session.scopedMessages(from: allMessages)
   }
 
   private var scopedContacts: [ContactEntity] {
-    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
-    return
-      contacts
-      .filter { $0.ownerPubkey == ownerPubkey }
-      .sorted {
-        $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
-      }
+    session.scopedContacts(from: contacts)
   }
 
   private var posts: [SessionMessageEntity] {

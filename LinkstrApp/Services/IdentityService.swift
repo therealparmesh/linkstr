@@ -21,7 +21,7 @@ final class IdentityService: ObservableObject {
       guard let nsec = try keychain.get(keychainKey) else { return }
       keypair = Keypair(nsec: nsec)
     } catch {
-      print("Failed loading identity: \(error)")
+      NSLog("Failed loading identity: \(error.localizedDescription)")
     }
   }
 

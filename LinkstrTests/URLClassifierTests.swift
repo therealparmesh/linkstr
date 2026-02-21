@@ -113,7 +113,6 @@ final class URLClassifierTests: XCTestCase {
     let strategy = URLClassifier.mediaStrategy(for: "https://example.com/article")
     XCTAssertEqual(strategy, .link)
     XCTAssertFalse(strategy.allowsLocalPlaybackToggle)
-    XCTAssertNil(strategy.embedURL)
 
     let instagramProfile = URLClassifier.mediaStrategy(for: "https://www.instagram.com/nasa/")
     XCTAssertEqual(instagramProfile, .link)

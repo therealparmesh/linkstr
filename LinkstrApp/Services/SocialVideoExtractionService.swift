@@ -13,7 +13,6 @@ enum ExtractionState {
   case cannotExtract(String)
 }
 
-@MainActor
 final class SocialVideoExtractionService: NSObject {
   static let shared = SocialVideoExtractionService()
 
@@ -193,6 +192,7 @@ final class SocialVideoExtractionService: NSObject {
     }
   }
 
+  @MainActor
   private func sniffMediaURLs(from sourceURL: URL, userAgent: String) async -> (
     urls: [URL], cookies: [HTTPCookie]
   ) {

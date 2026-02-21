@@ -89,7 +89,7 @@ struct SettingsView: View {
             }
             .padding(.trailing, 4)
 
-            let relayErrorText = normalizedInlineMessage(relay.lastError)
+            let relayErrorText = normalizedInlineMessage(session.relayErrorMessage(for: relay))
             Text(relayErrorText.isEmpty ? " " : relayErrorText)
               .font(.custom(LinkstrTheme.bodyFont, size: 12))
               .foregroundStyle(LinkstrTheme.textSecondary)
@@ -296,9 +296,7 @@ struct SettingsView: View {
   }
 
   private var connectedRelayCount: Int {
-    relays.count {
-      $0.isEnabled && ($0.status == .connected || $0.status == .readOnly)
-    }
+    session.connectedRelayCount(for: relays)
   }
 
   private func statusDotColor(for relay: RelayEntity) -> Color {
@@ -306,7 +304,7 @@ struct SettingsView: View {
       return LinkstrTheme.textSecondary.opacity(0.45)
     }
 
-    let status = relay.status
+    let status = session.relayStatus(for: relay)
     switch status {
     case .connected:
       return .green

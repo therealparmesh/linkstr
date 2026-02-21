@@ -13,15 +13,6 @@ enum URLClassifier {
       }
       return false
     }
-
-    var embedURL: URL? {
-      switch self {
-      case .extractionPreferred(let embedURL), .embedOnly(let embedURL):
-        return embedURL
-      case .link:
-        return nil
-      }
-    }
   }
 
   static func classify(_ urlString: String) -> LinkType {
@@ -244,5 +235,4 @@ enum URLClassifier {
     components.password = nil
     return components.url ?? sourceURL
   }
-
 }

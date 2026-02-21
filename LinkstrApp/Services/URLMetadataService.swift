@@ -8,7 +8,6 @@ struct LinkPreviewData {
   let thumbnailPath: String?
 }
 
-@MainActor
 final class URLMetadataService {
   static let shared = URLMetadataService()
   private static let providerTimeout: TimeInterval = 6.0

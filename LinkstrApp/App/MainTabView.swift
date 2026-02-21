@@ -39,13 +39,7 @@ struct MainTabView: View {
   private var contacts: [ContactEntity]
 
   private var scopedContacts: [ContactEntity] {
-    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
-    return
-      contacts
-      .filter { $0.ownerPubkey == ownerPubkey }
-      .sorted {
-        $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
-      }
+    session.scopedContacts(from: contacts)
   }
 
   private let tabBarHeight: CGFloat = 72

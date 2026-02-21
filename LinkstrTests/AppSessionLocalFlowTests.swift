@@ -243,6 +243,11 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertEqual(relays[0].url, "wss://relay.example.com")
     XCTAssertTrue(relays[0].isEnabled)
 
+    session.addRelay(url: "wss://relay.example.com/")
+    XCTAssertEqual(session.composeError, "That relay is already in your list.")
+    relays = try fetchRelays(in: container.mainContext)
+    XCTAssertEqual(relays.count, 1)
+
     session.toggleRelay(relays[0])
     XCTAssertFalse(relays[0].isEnabled)
 
@@ -351,7 +356,8 @@ final class AppSessionLocalFlowTests: XCTestCase {
   func testCreatePostAwaitingRelaySendsWhenLiveRelayConnectionExists() async throws {
     let (session, container) = try makeSession(
       testDisableNostrStartupOverride: false,
-      testHasConnectedRelaysOverride: { true }
+      testHasConnectedRelaysOverride: { true },
+      testRelaySendOverride: { _, _ in "await-root-event" }
     )
     let recipientNPub = try TestKeyMaterialFactory.makeNPub()
     try session.identityService.createNewIdentity()
@@ -626,7 +632,8 @@ final class AppSessionLocalFlowTests: XCTestCase {
   func testSendReplyAwaitingRelaySendsWhenLiveRelayConnectionExists() async throws {
     let (session, container) = try makeSession(
       testDisableNostrStartupOverride: false,
-      testHasConnectedRelaysOverride: { true }
+      testHasConnectedRelaysOverride: { true },
+      testRelaySendOverride: { _, _ in "await-reply-event" }
     )
     try session.identityService.createNewIdentity()
     let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
@@ -803,9 +810,79 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertEqual(storedMessage.conversationID, legacyConversationID)
   }
 
+  func testCreatePostAwaitingRelayDoesNotPersistWhenRelayRejectsPublish() async throws {
+    let (session, container) = try makeSession(
+      testDisableNostrStartupOverride: false,
+      testHasConnectedRelaysOverride: { true },
+      testRelaySendOverride: { _, _ in
+        throw NostrServiceError.publishRejected("blocked: policy")
+      }
+    )
+    let recipientNPub = try TestKeyMaterialFactory.makeNPub()
+    try session.identityService.createNewIdentity()
+
+    let relay = RelayEntity(url: "wss://relay.example.com", status: .connected)
+    container.mainContext.insert(relay)
+    try container.mainContext.save()
+
+    let didCreate = await session.createPostAwaitingRelay(
+      url: "https://example.com/path",
+      note: nil,
+      recipientNPub: recipientNPub,
+      timeoutSeconds: 0.05,
+      pollIntervalSeconds: 0.01
+    )
+
+    XCTAssertFalse(didCreate)
+    XCTAssertEqual(session.composeError, "blocked: policy")
+    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
+  }
+
+  func testSendReplyAwaitingRelayDoesNotPersistWhenRelayRejectsPublish() async throws {
+    let (session, container) = try makeSession(
+      testDisableNostrStartupOverride: false,
+      testHasConnectedRelaysOverride: { true },
+      testRelaySendOverride: { _, _ in
+        throw NostrServiceError.publishRejected("blocked: policy")
+      }
+    )
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+
+    let relay = RelayEntity(url: "wss://relay.example.com", status: .connected)
+    container.mainContext.insert(relay)
+
+    let root = makeMessage(
+      eventID: "root-await-rejected",
+      conversationID: ConversationID.deterministic(myPubkey, peerPubkey),
+      rootID: "root-await-rejected",
+      kind: .root,
+      senderPubkey: myPubkey,
+      receiverPubkey: peerPubkey,
+      ownerPubkey: myPubkey
+    )
+    container.mainContext.insert(root)
+    try container.mainContext.save()
+
+    let didSend = await session.sendReplyAwaitingRelay(
+      text: "reply text",
+      post: root,
+      timeoutSeconds: 0.05,
+      pollIntervalSeconds: 0.01
+    )
+
+    XCTAssertFalse(didSend)
+    XCTAssertEqual(session.composeError, "blocked: policy")
+    XCTAssertTrue(
+      try fetchMessages(in: container.mainContext).filter { $0.kind == .reply }.isEmpty
+    )
+  }
+
   private func makeSession(
     testDisableNostrStartupOverride: Bool? = nil,
-    testHasConnectedRelaysOverride: (() -> Bool)? = nil
+    testHasConnectedRelaysOverride: (() -> Bool)? = nil,
+    testRelaySendOverride: ((LinkstrPayload, String) async throws -> String)? = nil
   ) throws -> (
     AppSession, ModelContainer
   ) {
@@ -820,7 +897,8 @@ final class AppSessionLocalFlowTests: XCTestCase {
       AppSession(
         modelContext: container.mainContext,
         testDisableNostrStartupOverride: testDisableNostrStartupOverride,
-        testHasConnectedRelaysOverride: testHasConnectedRelaysOverride
+        testHasConnectedRelaysOverride: testHasConnectedRelaysOverride,
+        testRelaySendOverride: testRelaySendOverride
       ),
       container
     )
@@ -848,20 +926,25 @@ final class AppSessionLocalFlowTests: XCTestCase {
     receiverPubkey: String,
     ownerPubkey: String
   ) -> SessionMessageEntity {
-    try! SessionMessageEntity(
-      eventID: eventID,
-      ownerPubkey: ownerPubkey,
-      conversationID: conversationID,
-      rootID: rootID,
-      kind: kind,
-      senderPubkey: senderPubkey,
-      receiverPubkey: receiverPubkey,
-      url: kind == .root ? "https://example.com/\(eventID)" : nil,
-      note: "note-\(eventID)",
-      timestamp: .now,
-      readAt: nil,
-      linkType: .generic
-    )
+    guard
+      let message = try? SessionMessageEntity(
+        eventID: eventID,
+        ownerPubkey: ownerPubkey,
+        conversationID: conversationID,
+        rootID: rootID,
+        kind: kind,
+        senderPubkey: senderPubkey,
+        receiverPubkey: receiverPubkey,
+        url: kind == .root ? "https://example.com/\(eventID)" : nil,
+        note: "note-\(eventID)",
+        timestamp: .now,
+        readAt: nil,
+        linkType: .generic
+      )
+    else {
+      fatalError("Failed building test message for \(eventID)")
+    }
+    return message
   }
 }
 
