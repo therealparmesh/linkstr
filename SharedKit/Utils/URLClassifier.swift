@@ -7,17 +7,6 @@ enum URLClassifier {
     case embedOnly(embedURL: URL)
     case link
 
-    var showsVideoPill: Bool {
-      if case .extractionPreferred = self {
-        return true
-      }
-      return false
-    }
-
-    var contentKindLabel: String {
-      showsVideoPill ? "Video" : "Link"
-    }
-
     var allowsLocalPlaybackToggle: Bool {
       if case .extractionPreferred = self {
         return true
@@ -43,29 +32,12 @@ enum URLClassifier {
   }
 
   static func classify(_ url: URL) -> LinkType {
-    guard let host = url.host?.lowercased() else {
-      return .generic
-    }
-
-    if host.contains("tiktok.com") { return .tiktok }
-    if host.contains("instagram.com") || host.contains("instagr.am") { return .instagram }
-    if host.contains("facebook.com")
-      || host.contains("fb.watch")
-      || host == "fb.com"
-      || host.hasSuffix(".fb.com")
-    {
-      return .facebook
-    }
-    if host.contains("youtube.com") || host.contains("youtu.be") { return .youtube }
-    if host.contains("rumble.com") || host.contains("rumble.video") { return .rumble }
-    if hostMatches(host, domain: "x.com")
-      || hostMatches(host, domain: "twitter.com")
-      || hostMatches(host, domain: "fixupx.com")
-      || hostMatches(host, domain: "fxtwitter.com")
-      || hostMatches(host, domain: "vxtwitter.com")
-    {
-      return .twitter
-    }
+    if SocialURLHeuristics.isTikTokHost(url) { return .tiktok }
+    if SocialURLHeuristics.isInstagramHost(url) { return .instagram }
+    if SocialURLHeuristics.isFacebookHost(url) { return .facebook }
+    if SocialURLHeuristics.isYouTubeHost(url) { return .youtube }
+    if SocialURLHeuristics.isRumbleHost(url) { return .rumble }
+    if SocialURLHeuristics.isTwitterHost(url) { return .twitter }
     return .generic
   }
 
@@ -166,12 +138,13 @@ enum URLClassifier {
   }
 
   private static func facebookEmbedURL(for sourceURL: URL) -> URL? {
+    let canonicalSourceURL = canonicalFacebookWebURL(sourceURL)
     var components = URLComponents(string: "https://www.facebook.com/plugins/video.php")
     components?.queryItems = [
-      URLQueryItem(name: "href", value: sourceURL.absoluteString),
+      URLQueryItem(name: "href", value: canonicalSourceURL.absoluteString),
       URLQueryItem(name: "show_text", value: "false"),
     ]
-    return components?.url ?? sourceURL
+    return components?.url ?? canonicalSourceURL
   }
 
   private static func youtubeEmbedURL(for sourceURL: URL) -> URL? {
@@ -249,8 +222,27 @@ enum URLClassifier {
     }
   }
 
-  private static func hostMatches(_ host: String, domain: String) -> Bool {
-    host == domain || host.hasSuffix(".\(domain)")
+  private static func canonicalFacebookWebURL(_ sourceURL: URL) -> URL {
+    guard var components = URLComponents(url: sourceURL, resolvingAgainstBaseURL: false),
+      let host = components.host?.lowercased()
+    else {
+      return sourceURL
+    }
+
+    if host == "fb.watch" || host.hasSuffix(".fb.watch") {
+      return sourceURL
+    }
+
+    guard SocialURLHeuristics.isFacebookHost(sourceURL) else {
+      return sourceURL
+    }
+
+    components.scheme = "https"
+    components.host = "www.facebook.com"
+    components.port = nil
+    components.user = nil
+    components.password = nil
+    return components.url ?? sourceURL
   }
 
 }

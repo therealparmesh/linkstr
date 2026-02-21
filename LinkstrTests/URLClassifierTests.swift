@@ -25,7 +25,26 @@ final class URLClassifierTests: XCTestCase {
       URLClassifier.classify("https://fixupx.com/nyjets/status/924685391524798464/video/1"),
       .twitter
     )
+    XCTAssertEqual(
+      URLClassifier.classify("https://m.facebook.com/reel/123456789012345"),
+      .facebook
+    )
+    XCTAssertEqual(
+      URLClassifier.classify("https://m.instagram.com/reel/C7x5mYfP0R1/"),
+      .instagram
+    )
+    XCTAssertEqual(URLClassifier.classify("https://m.youtube.com/watch?v=dQw4w9WgXcQ"), .youtube)
+    XCTAssertEqual(URLClassifier.classify("https://mobile.twitter.com/jack/status/20"), .twitter)
     XCTAssertEqual(URLClassifier.classify("https://example.com/post/abc"), .generic)
+  }
+
+  func testClassifyRejectsLookalikeDomains() {
+    XCTAssertEqual(URLClassifier.classify("https://notfacebook.com/reel/123456"), .generic)
+    XCTAssertEqual(
+      URLClassifier.classify("https://instagram.com.evil.com/reel/C7x5mYfP0R1/"), .generic)
+    XCTAssertEqual(
+      URLClassifier.classify("https://reallytiktok.com/video/7596114833477537054"), .generic)
+    XCTAssertEqual(URLClassifier.classify("https://twitter.com.evil.org/jack/status/20"), .generic)
   }
 
   func testMediaStrategyExtractionCandidates() {
@@ -84,23 +103,15 @@ final class URLClassifierTests: XCTestCase {
     XCTAssertTrue(
       facebookEmbedURL.absoluteString.hasPrefix("https://www.facebook.com/plugins/video.php"))
 
-    XCTAssertFalse(youtube.showsVideoPill)
     XCTAssertFalse(youtube.allowsLocalPlaybackToggle)
-    XCTAssertFalse(rumble.showsVideoPill)
     XCTAssertFalse(rumble.allowsLocalPlaybackToggle)
-    XCTAssertFalse(instagramVideoPost.showsVideoPill)
     XCTAssertFalse(instagramVideoPost.allowsLocalPlaybackToggle)
-    XCTAssertEqual(instagramVideoPost.contentKindLabel, "Link")
-    XCTAssertEqual(instagramTVPost.contentKindLabel, "Link")
-    XCTAssertFalse(facebookVideoPost.showsVideoPill)
     XCTAssertFalse(facebookVideoPost.allowsLocalPlaybackToggle)
-    XCTAssertEqual(youtube.contentKindLabel, "Link")
   }
 
   func testMediaStrategyGenericLink() {
     let strategy = URLClassifier.mediaStrategy(for: "https://example.com/article")
     XCTAssertEqual(strategy, .link)
-    XCTAssertFalse(strategy.showsVideoPill)
     XCTAssertFalse(strategy.allowsLocalPlaybackToggle)
     XCTAssertNil(strategy.embedURL)
 
@@ -207,15 +218,68 @@ final class URLClassifierTests: XCTestCase {
     )
   }
 
+  func testFacebookShareURLHeuristic() {
+    XCTAssertTrue(
+      SocialURLHeuristics.isFacebookShareURL(
+        URL(
+          string:
+            "https://m.facebook.com/share/v/1AnBCzUqak/?mibextid=wwXIfr&from_xma_click=xma_e2ee"
+        )!
+      )
+    )
+    XCTAssertTrue(
+      SocialURLHeuristics.isFacebookShareURL(
+        URL(string: "https://www.facebook.com/share/r/213286701716863/")!
+      )
+    )
+    XCTAssertFalse(
+      SocialURLHeuristics.isFacebookShareURL(
+        URL(string: "https://www.facebook.com/reel/213286701716863/")!
+      )
+    )
+  }
+
+  func testMediaStrategyTreatsFacebookMobileShareLikeDesktopShare() {
+    let desktop = URLClassifier.mediaStrategy(for: "https://www.facebook.com/share/v/1AnBCzUqak/")
+    let mobile = URLClassifier.mediaStrategy(for: "https://m.facebook.com/share/v/1AnBCzUqak/")
+    XCTAssertEqual(desktop, mobile)
+    guard case .embedOnly = mobile else {
+      return XCTFail("Expected embedOnly for facebook share/v links before canonicalization")
+    }
+  }
+
+  func testFacebookCanonicalCandidateURLParsesOGURL() {
+    let html = """
+      <html><head>
+      <meta property="og:url" content="https://www.facebook.com/reel/759763136853657/" />
+      </head></html>
+      """
+
+    let candidate = URLCanonicalizationService.facebookCanonicalCandidateURL(fromHTML: html)
+    XCTAssertEqual(candidate?.absoluteString, "https://www.facebook.com/reel/759763136853657/")
+  }
+
+  func testFacebookCanonicalCandidateURLParsesCanonicalLinkAndDecodesEntities() {
+    let html = """
+      <html><head>
+      <link rel="canonical" href="https://m.facebook.com/watch/?v=10153231379946729&amp;foo=bar" />
+      </head></html>
+      """
+
+    let candidate = URLCanonicalizationService.facebookCanonicalCandidateURL(fromHTML: html)
+    XCTAssertEqual(
+      candidate?.absoluteString,
+      "https://m.facebook.com/watch/?v=10153231379946729&foo=bar"
+    )
+  }
+
   private func assertExtractionPreferred(_ url: String, expectedEmbedPrefix: String) {
     let strategy = URLClassifier.mediaStrategy(for: url)
     guard case .extractionPreferred(let embedURL) = strategy else {
       return XCTFail("Expected extractionPreferred for \(url)")
     }
     XCTAssertTrue(embedURL.absoluteString.hasPrefix(expectedEmbedPrefix))
-    XCTAssertTrue(strategy.showsVideoPill)
     XCTAssertTrue(strategy.allowsLocalPlaybackToggle)
-    XCTAssertEqual(strategy.contentKindLabel, "Video")
   }
 
   private func assertEmbedOnly(_ url: String, expectedEmbedPrefix: String) {
@@ -224,8 +288,6 @@ final class URLClassifierTests: XCTestCase {
       return XCTFail("Expected embedOnly for \(url)")
     }
     XCTAssertTrue(embedURL.absoluteString.hasPrefix(expectedEmbedPrefix))
-    XCTAssertFalse(strategy.showsVideoPill)
     XCTAssertFalse(strategy.allowsLocalPlaybackToggle)
-    XCTAssertEqual(strategy.contentKindLabel, "Link")
   }
 }

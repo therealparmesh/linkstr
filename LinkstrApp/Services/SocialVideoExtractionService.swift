@@ -107,8 +107,7 @@ final class SocialVideoExtractionService: NSObject {
   }
 
   private func isTikTokURL(_ url: URL) -> Bool {
-    guard let host = url.host?.lowercased() else { return false }
-    return host.contains("tiktok")
+    SocialURLHeuristics.isTikTokHost(url)
   }
 
   private func matchesSourceIdentity(_ candidateURL: URL, sourceURL: URL) -> Bool {
@@ -136,7 +135,11 @@ final class SocialVideoExtractionService: NSObject {
 
     if SocialURLHeuristics.isTwitterStatusURL(sourceURL) {
       let host = candidateURL.host?.lowercased() ?? ""
-      if !(host.contains("twimg.com") || host.contains("twitter.com") || host.contains("x.com")) {
+      let isTwitterMediaHost =
+        host == "twimg.com"
+        || host.hasSuffix(".twimg.com")
+        || SocialURLHeuristics.isTwitterHost(candidateURL)
+      if !isTwitterMediaHost {
         return false
       }
     }
@@ -711,5 +714,272 @@ private final class MediaCandidateCollector: NSObject, WKNavigationDelegate, WKS
     }
 
     registerCandidate(url)
+  }
+}
+
+actor URLCanonicalizationService {
+  static let shared = URLCanonicalizationService()
+
+  private let requestTimeout: TimeInterval = 6
+  private var cache: [String: URL] = [:]
+
+  func canonicalPlaybackURL(for sourceURL: URL) async -> URL {
+    let cacheKey = sourceURL.absoluteString
+    if let cached = cache[cacheKey] {
+      return cached
+    }
+
+    let resolved = await resolveUncached(sourceURL)
+    cache[cacheKey] = resolved
+    return resolved
+  }
+
+  private func resolveUncached(_ sourceURL: URL) async -> URL {
+    guard SocialURLHeuristics.isFacebookShareURL(sourceURL) else {
+      return sourceURL
+    }
+
+    if let redirectedURL = await firstRedirectTarget(from: sourceURL),
+      let canonical = canonicalFacebookURL(from: redirectedURL)
+    {
+      return canonical
+    }
+
+    if let canonicalFromPage = await canonicalFacebookURLFromPage(sourceURL) {
+      return canonicalFromPage
+    }
+
+    if let fallback = fallbackCanonicalFacebookURL(from: sourceURL) {
+      return fallback
+    }
+
+    return sourceURL
+  }
+
+  private func firstRedirectTarget(from sourceURL: URL) async -> URL? {
+    var request = URLRequest(url: sourceURL)
+    request.httpMethod = "GET"
+    request.setValue(
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15"
+        + " (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
+      forHTTPHeaderField: "User-Agent"
+    )
+    request.timeoutInterval = requestTimeout
+    return await FirstRedirectResolver.resolve(request: request, timeout: requestTimeout)
+  }
+
+  private func canonicalFacebookURLFromPage(_ sourceURL: URL) async -> URL? {
+    var request = URLRequest(url: sourceURL)
+    request.httpMethod = "GET"
+    request.setValue(
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15"
+        + " (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
+      forHTTPHeaderField: "User-Agent"
+    )
+    request.setValue(
+      "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      forHTTPHeaderField: "Accept"
+    )
+    request.timeoutInterval = requestTimeout
+
+    do {
+      let (data, response) = try await URLSession.shared.data(for: request)
+      if let httpResponse = response as? HTTPURLResponse,
+        !(200..<400).contains(httpResponse.statusCode)
+      {
+        return nil
+      }
+
+      guard !data.isEmpty else { return nil }
+      let html =
+        String(data: data, encoding: .utf8)
+        ?? String(data: data, encoding: .isoLatin1)
+      guard let html else { return nil }
+
+      guard let candidateURL = Self.facebookCanonicalCandidateURL(fromHTML: html) else {
+        return nil
+      }
+
+      return canonicalFacebookURL(from: candidateURL)
+    } catch {
+      return nil
+    }
+  }
+
+  private func canonicalFacebookURL(from candidateURL: URL) -> URL? {
+    if let loginNextURL = facebookLoginNextURL(from: candidateURL) {
+      return canonicalFacebookURL(from: loginNextURL)
+    }
+
+    let parts = candidateURL.pathComponents
+      .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased() }
+      .filter { !$0.isEmpty }
+
+    if let reelIndex = parts.firstIndex(of: "reel"), reelIndex + 1 < parts.count {
+      let id = parts[reelIndex + 1].trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !id.isEmpty else { return nil }
+      return URL(string: "https://www.facebook.com/reel/\(id)/")
+    }
+
+    if parts.first == "watch",
+      let v = URLComponents(url: candidateURL, resolvingAgainstBaseURL: false)?.queryItems?.first(
+        where: { $0.name.lowercased() == "v" })?.value?
+        .trimmingCharacters(in: .whitespacesAndNewlines),
+      !v.isEmpty
+    {
+      var components = URLComponents(string: "https://www.facebook.com/watch/")
+      components?.queryItems = [URLQueryItem(name: "v", value: v)]
+      return components?.url
+    }
+
+    if let videosIndex = parts.firstIndex(of: "videos"), videosIndex + 1 < parts.count {
+      let id = parts[videosIndex + 1].trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !id.isEmpty else { return nil }
+      return URL(string: "https://www.facebook.com/watch/?v=\(id)")
+    }
+
+    return nil
+  }
+
+  static func facebookCanonicalCandidateURL(fromHTML html: String) -> URL? {
+    let patterns = [
+      #"<meta[^>]+property=['"]og:url['"][^>]+content=['"]([^'"]+)['"][^>]*>"#,
+      #"<meta[^>]+content=['"]([^'"]+)['"][^>]+property=['"]og:url['"][^>]*>"#,
+      #"<link[^>]+rel=['"]canonical['"][^>]+href=['"]([^'"]+)['"][^>]*>"#,
+      #"<link[^>]+href=['"]([^'"]+)['"][^>]+rel=['"]canonical['"][^>]*>"#,
+    ]
+
+    for pattern in patterns {
+      guard let raw = firstCapturedGroup(in: html, pattern: pattern) else { continue }
+      let normalized = normalizedEmbeddedURL(raw)
+      if let url = URL(string: normalized) {
+        return url
+      }
+    }
+
+    return nil
+  }
+
+  private static func firstCapturedGroup(in text: String, pattern: String) -> String? {
+    guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+      return nil
+    }
+    let range = NSRange(text.startIndex..<text.endIndex, in: text)
+    guard let match = regex.firstMatch(in: text, range: range), match.numberOfRanges > 1,
+      let captureRange = Range(match.range(at: 1), in: text)
+    else {
+      return nil
+    }
+    return String(text[captureRange])
+  }
+
+  private static func normalizedEmbeddedURL(_ raw: String) -> String {
+    raw
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+      .replacingOccurrences(of: "&amp;", with: "&")
+      .replacingOccurrences(of: "\\/", with: "/")
+  }
+
+  private func facebookLoginNextURL(from url: URL) -> URL? {
+    guard SocialURLHeuristics.isFacebookHost(url) else { return nil }
+
+    let parts = url.pathComponents
+      .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased() }
+      .filter { !$0.isEmpty }
+    guard parts.first == "login" else { return nil }
+
+    guard
+      let rawNext = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(
+        where: { $0.name.lowercased() == "next" })?.value
+    else {
+      return nil
+    }
+
+    if let nextURL = URL(string: rawNext) {
+      return nextURL
+    }
+    if let decoded = rawNext.removingPercentEncoding {
+      return URL(string: decoded)
+    }
+    return nil
+  }
+
+  private func fallbackCanonicalFacebookURL(from sourceURL: URL) -> URL? {
+    let parts = sourceURL.pathComponents
+      .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "/")) }
+      .filter { !$0.isEmpty }
+
+    guard parts.count >= 3, parts[0].lowercased() == "share" else {
+      return nil
+    }
+
+    let marker = parts[1].lowercased()
+    let token = parts[2].trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !token.isEmpty else { return nil }
+
+    switch marker {
+    case "r", "reel":
+      return URL(string: "https://www.facebook.com/reel/\(token)/")
+    case "v":
+      if !token.allSatisfy(\.isNumber) {
+        return URL(string: "https://www.facebook.com/share/v/\(token)/")
+      }
+      var components = URLComponents(string: "https://www.facebook.com/watch/")
+      components?.queryItems = [URLQueryItem(name: "v", value: token)]
+      return components?.url
+    default:
+      return nil
+    }
+  }
+}
+
+private final class FirstRedirectResolver: NSObject, URLSessionTaskDelegate {
+  private var continuation: CheckedContinuation<URL?, Never>?
+  private var hasFinished = false
+  private var session: URLSession?
+
+  static func resolve(request: URLRequest, timeout: TimeInterval) async -> URL? {
+    let resolver = FirstRedirectResolver()
+    return await resolver.start(request: request, timeout: timeout)
+  }
+
+  private func start(request: URLRequest, timeout: TimeInterval) async -> URL? {
+    await withCheckedContinuation { continuation in
+      self.continuation = continuation
+
+      let configuration = URLSessionConfiguration.ephemeral
+      configuration.timeoutIntervalForRequest = timeout
+      configuration.timeoutIntervalForResource = timeout
+
+      let session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
+      self.session = session
+
+      let task = session.dataTask(with: request)
+      task.resume()
+    }
+  }
+
+  private func finish(with url: URL?) {
+    guard !hasFinished else { return }
+    hasFinished = true
+    continuation?.resume(returning: url)
+    continuation = nil
+    session?.invalidateAndCancel()
+    session = nil
+  }
+
+  func urlSession(
+    _ session: URLSession,
+    task: URLSessionTask,
+    willPerformHTTPRedirection response: HTTPURLResponse,
+    newRequest request: URLRequest,
+    completionHandler: @escaping (URLRequest?) -> Void
+  ) {
+    finish(with: request.url)
+    completionHandler(nil)
+  }
+
+  func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+    finish(with: nil)
   }
 }

@@ -56,17 +56,6 @@ struct ThreadView: View {
     return replies.contains { $0.senderPubkey != myPubkey && $0.readAt == nil }
   }
 
-  private var mediaStrategy: URLClassifier.MediaStrategy {
-    URLClassifier.mediaStrategy(for: post.url)
-  }
-
-  private var mediaAspectRatio: CGFloat {
-    guard let urlString = post.url, let sourceURL = URL(string: urlString) else {
-      return 16.0 / 9.0
-    }
-    return URLClassifier.preferredMediaAspectRatio(for: sourceURL, strategy: mediaStrategy)
-  }
-
   var body: some View {
     ScrollViewReader { proxy in
       ScrollView {
@@ -113,9 +102,6 @@ struct ThreadView: View {
     VStack(alignment: .leading, spacing: 10) {
       HStack {
         VStack(alignment: .leading, spacing: 2) {
-          Text(contentKindLabel)
-            .font(.caption)
-            .foregroundStyle(LinkstrTheme.textSecondary)
           Text("Sent by \(postSenderLabel)")
             .font(.caption2)
             .foregroundStyle(LinkstrTheme.textSecondary)
@@ -177,17 +163,11 @@ struct ThreadView: View {
     .padding(12)
   }
 
-  private var contentKindLabel: String {
-    mediaStrategy.contentKindLabel
-  }
-
   @ViewBuilder
   private var mediaBlock: some View {
     if let urlString = post.url, let url = URL(string: urlString) {
       AdaptiveVideoPlaybackView(
         sourceURL: url,
-        mediaStrategy: mediaStrategy,
-        mediaAspectRatio: mediaAspectRatio,
         showOpenSourceButtonInEmbedMode: true,
         openSourceAction: { openURL(url) },
         resolveCachedLocalMedia: { sourceURL in

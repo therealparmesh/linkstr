@@ -456,9 +456,6 @@ private struct PostCardView: View {
 
       VStack(alignment: .leading, spacing: 8) {
         HStack(spacing: 8) {
-          Text(contentKindLabel)
-            .font(.caption)
-            .foregroundStyle(LinkstrTheme.textSecondary)
           Text(isOutgoing ? "Sent by You" : "Sent by \(senderLabel)")
             .font(.caption2)
             .foregroundStyle(LinkstrTheme.textSecondary)
@@ -537,10 +534,6 @@ private struct PostCardView: View {
     guard let note = post.note else { return nil }
     let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
     return trimmed.isEmpty ? nil : trimmed
-  }
-
-  private var contentKindLabel: String {
-    URLClassifier.mediaStrategy(for: post.url).contentKindLabel
   }
 
   private var replyCountLabel: String {

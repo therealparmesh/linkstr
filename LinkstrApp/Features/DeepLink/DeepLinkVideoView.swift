@@ -18,13 +18,6 @@ struct DeepLinkVideoView: View {
     return Date(timeIntervalSince1970: TimeInterval(payload.timestamp))
   }
 
-  private var mediaAspectRatio: CGFloat {
-    guard let sourceURL else {
-      return 16.0 / 9.0
-    }
-    return URLClassifier.preferredMediaAspectRatio(for: sourceURL, strategy: mediaStrategy)
-  }
-
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: 12) {
@@ -54,8 +47,6 @@ struct DeepLinkVideoView: View {
       case .extractionPreferred, .embedOnly:
         AdaptiveVideoPlaybackView(
           sourceURL: sourceURL,
-          mediaStrategy: mediaStrategy,
-          mediaAspectRatio: mediaAspectRatio,
           showOpenSourceButtonInEmbedMode: false,
           openSourceAction: nil
         )
@@ -75,7 +66,7 @@ struct DeepLinkVideoView: View {
 
   private var sourceInfoBlock: some View {
     VStack(alignment: .leading, spacing: 8) {
-      if let host = sourceURL?.host?.replacingOccurrences(of: "www.", with: "") {
+      if let host = normalizedDisplayHost {
         Text(host)
           .font(.subheadline)
           .foregroundStyle(LinkstrTheme.textPrimary)
@@ -98,5 +89,16 @@ struct DeepLinkVideoView: View {
       RoundedRectangle(cornerRadius: 12, style: .continuous)
         .fill(LinkstrTheme.panel.opacity(0.92))
     )
+  }
+
+  private var normalizedDisplayHost: String? {
+    guard let host = sourceURL?.host?.lowercased() else { return nil }
+    if host.hasPrefix("www.") {
+      return String(host.dropFirst(4))
+    }
+    if host.hasPrefix("m.") {
+      return String(host.dropFirst(2))
+    }
+    return host
   }
 }

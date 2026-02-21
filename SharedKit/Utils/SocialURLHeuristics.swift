@@ -1,9 +1,47 @@
 import Foundation
 
 enum SocialURLHeuristics {
+  static func isTikTokHost(_ url: URL) -> Bool {
+    hostMatches(url, domain: "tiktok.com")
+  }
+
+  static func isInstagramHost(_ url: URL) -> Bool {
+    hostMatches(url, domain: "instagram.com") || hostMatches(url, domain: "instagr.am")
+  }
+
+  static func isFacebookHost(_ url: URL) -> Bool {
+    hostMatches(url, domain: "facebook.com")
+      || hostMatches(url, domain: "fb.com")
+      || hostMatches(url, domain: "fb.watch")
+  }
+
+  static func isYouTubeHost(_ url: URL) -> Bool {
+    hostMatches(url, domain: "youtube.com") || hostMatches(url, domain: "youtu.be")
+  }
+
+  static func isRumbleHost(_ url: URL) -> Bool {
+    hostMatches(url, domain: "rumble.com") || hostMatches(url, domain: "rumble.video")
+  }
+
+  static func isTwitterHost(_ url: URL) -> Bool {
+    hostMatches(url, domain: "x.com")
+      || hostMatches(url, domain: "twitter.com")
+      || hostMatches(url, domain: "fixupx.com")
+      || hostMatches(url, domain: "fxtwitter.com")
+      || hostMatches(url, domain: "vxtwitter.com")
+  }
+
+  static func isFacebookShareURL(_ url: URL) -> Bool {
+    guard isFacebookHost(url) else { return false }
+
+    let parts = normalizedPathComponents(for: url)
+    guard let first = parts.first else { return false }
+    return first == "share"
+  }
+
   static func isTikTokVideoLikeURL(_ url: URL) -> Bool {
-    let host = url.host?.lowercased() ?? ""
-    if host.hasPrefix("vm.tiktok.com") || host.hasPrefix("vt.tiktok.com") {
+    let host = normalizedHost(for: url) ?? ""
+    if hostMatches(host, domain: "vm.tiktok.com") || hostMatches(host, domain: "vt.tiktok.com") {
       return true
     }
 
@@ -55,8 +93,7 @@ enum SocialURLHeuristics {
   }
 
   static func isFacebookVideoURL(_ url: URL) -> Bool {
-    let host = url.host?.lowercased() ?? ""
-    if host.contains("fb.watch") {
+    if hostMatches(url, domain: "fb.watch") {
       return true
     }
 
@@ -260,6 +297,24 @@ enum SocialURLHeuristics {
     url.pathComponents
       .map { $0.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "/")) }
       .filter { !$0.isEmpty }
+  }
+
+  private static func normalizedHost(for url: URL) -> String? {
+    guard let host = url.host?.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: ".")),
+      !host.isEmpty
+    else {
+      return nil
+    }
+    return host
+  }
+
+  private static func hostMatches(_ url: URL, domain: String) -> Bool {
+    guard let host = normalizedHost(for: url) else { return false }
+    return hostMatches(host, domain: domain)
+  }
+
+  private static func hostMatches(_ host: String, domain: String) -> Bool {
+    host == domain || host.hasSuffix(".\(domain)")
   }
 
   private static func hasPathSequence(_ parts: [String], first: String, second: String) -> Bool {

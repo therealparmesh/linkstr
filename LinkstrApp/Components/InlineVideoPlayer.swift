@@ -86,13 +86,12 @@ struct AdaptiveVideoPlaybackView: View {
   }
 
   let sourceURL: URL
-  let mediaStrategy: URLClassifier.MediaStrategy
-  let mediaAspectRatio: CGFloat
   let showOpenSourceButtonInEmbedMode: Bool
   let openSourceAction: (() -> Void)?
   let resolveCachedLocalMedia: ((URL) -> PlayableMedia?)?
   let persistLocalMedia: ((URL, PlayableMedia) -> Void)?
 
+  @State private var canonicalSourceURL: URL?
   @State private var extractionState: ExtractionState?
   @State private var localPlaybackMode: LocalPlaybackMode = .localPreferred
   @State private var extractionFallbackReason: String?
@@ -100,16 +99,12 @@ struct AdaptiveVideoPlaybackView: View {
 
   init(
     sourceURL: URL,
-    mediaStrategy: URLClassifier.MediaStrategy,
-    mediaAspectRatio: CGFloat,
     showOpenSourceButtonInEmbedMode: Bool = true,
     openSourceAction: (() -> Void)? = nil,
     resolveCachedLocalMedia: ((URL) -> PlayableMedia?)? = nil,
     persistLocalMedia: ((URL, PlayableMedia) -> Void)? = nil
   ) {
     self.sourceURL = sourceURL
-    self.mediaStrategy = mediaStrategy
-    self.mediaAspectRatio = mediaAspectRatio
     self.showOpenSourceButtonInEmbedMode = showOpenSourceButtonInEmbedMode
     self.openSourceAction = openSourceAction
     self.resolveCachedLocalMedia = resolveCachedLocalMedia
@@ -123,6 +118,8 @@ struct AdaptiveVideoPlaybackView: View {
           .ignoresSafeArea()
       }
       .task(id: sourceURL.absoluteString) {
+        canonicalSourceURL = await URLCanonicalizationService.shared.canonicalPlaybackURL(
+          for: sourceURL)
         extractionState = nil
         extractionFallbackReason = nil
         localPlaybackMode = .localPreferred
@@ -132,7 +129,7 @@ struct AdaptiveVideoPlaybackView: View {
 
   @ViewBuilder
   private var content: some View {
-    switch mediaStrategy {
+    switch effectiveMediaStrategy {
     case .extractionPreferred(let embedURL):
       if localPlaybackMode == .embedPreferred {
         embedPlaybackBlock(embedURL: embedURL, allowsTryLocalPlayback: true)
@@ -249,33 +246,49 @@ struct AdaptiveVideoPlaybackView: View {
   private func mediaSurface<Content: View>(@ViewBuilder content: () -> Content) -> some View {
     content()
       .frame(maxWidth: .infinity)
-      .aspectRatio(mediaAspectRatio, contentMode: .fit)
+      .aspectRatio(effectiveMediaAspectRatio, contentMode: .fit)
       .background(LinkstrTheme.panelSoft)
       .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
   }
 
   private func prepareMediaIfNeeded() async {
-    guard mediaStrategy.allowsLocalPlaybackToggle else { return }
+    guard effectiveMediaStrategy.allowsLocalPlaybackToggle else { return }
     guard localPlaybackMode == .localPreferred else { return }
 
-    if let cached = resolveCachedLocalMedia?(sourceURL) {
+    let playbackSourceURL = effectiveSourceURL
+
+    if let cached = resolveCachedLocalMedia?(playbackSourceURL) {
       extractionState = .ready(cached)
       extractionFallbackReason = nil
       return
     }
 
-    let result = await SocialVideoExtractionService.shared.extractPlayableMedia(from: sourceURL)
+    let result = await SocialVideoExtractionService.shared.extractPlayableMedia(
+      from: playbackSourceURL)
     extractionState = result
 
     switch result {
     case .ready(let media):
       extractionFallbackReason = nil
       if media.isLocalFile {
-        persistLocalMedia?(sourceURL, media)
+        persistLocalMedia?(playbackSourceURL, media)
       }
     case .cannotExtract(let reason):
       extractionFallbackReason = reason
       localPlaybackMode = .embedPreferred
     }
+  }
+
+  private var effectiveSourceURL: URL {
+    canonicalSourceURL ?? sourceURL
+  }
+
+  private var effectiveMediaStrategy: URLClassifier.MediaStrategy {
+    URLClassifier.mediaStrategy(for: effectiveSourceURL)
+  }
+
+  private var effectiveMediaAspectRatio: CGFloat {
+    URLClassifier.preferredMediaAspectRatio(
+      for: effectiveSourceURL, strategy: effectiveMediaStrategy)
   }
 }
