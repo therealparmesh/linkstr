@@ -26,6 +26,7 @@ final class AppSession: ObservableObject {
   private let relayReconnectingMessage = "Relays are reconnecting. Try again in a moment."
   private let relayReadOnlyMessage =
     "Connected relays are read-only. Add a writable relay to send."
+  private let relaySendTimeoutMessage = "Couldn't reconnect to relays in time. Try again."
   private var hasShownOfflineToastForCurrentOutage = false
   private var isForeground = false
 
@@ -192,6 +193,73 @@ final class AppSession: ObservableObject {
     }
   }
 
+  private enum RelaySendWaitState {
+    case ready
+    case blocked(message: String)
+    case waitingForConnection
+  }
+
+  private func relaySendWaitState() -> RelaySendWaitState {
+    if shouldDisableNostrStartupForCurrentProcess() {
+      return .ready
+    }
+
+    if hasConnectedRelays() {
+      return .ready
+    }
+
+    let enabledRelays: [RelayEntity]
+    do {
+      enabledRelays = try relayStore.fetchRelays().filter(\.isEnabled)
+    } catch {
+      return .blocked(message: error.localizedDescription)
+    }
+
+    switch relayConnectivityState(for: enabledRelays) {
+    case .noEnabledRelays:
+      return .blocked(message: noEnabledRelaysMessage)
+    case .readOnly:
+      return .blocked(message: relayReadOnlyMessage)
+    case .online, .offline, .reconnecting:
+      return .waitingForConnection
+    }
+  }
+
+  private func awaitRelayReadyForSend(
+    timeoutSeconds: TimeInterval,
+    pollIntervalSeconds: TimeInterval
+  ) async -> Bool {
+    let timeout = max(0, timeoutSeconds)
+    let pollInterval = max(0.05, pollIntervalSeconds)
+    let deadline = Date.now.addingTimeInterval(timeout)
+
+    while true {
+      switch relaySendWaitState() {
+      case .ready:
+        clearRelaySendBlockingErrorIfPresent()
+        return true
+      case .blocked(let message):
+        composeError = message
+        hasShownOfflineToastForCurrentOutage = false
+        return false
+      case .waitingForConnection:
+        if Date.now >= deadline {
+          composeError = relaySendTimeoutMessage
+          hasShownOfflineToastForCurrentOutage = false
+          return false
+        }
+
+        if composeError == relayOfflineMessage || composeError == relayReconnectingMessage {
+          composeError = nil
+        }
+        startNostrIfPossible()
+
+        let sleepNanoseconds = UInt64(pollInterval * 1_000_000_000)
+        try? await Task.sleep(nanoseconds: sleepNanoseconds)
+      }
+    }
+  }
+
   private func makeLocalEventID() -> String {
     UUID().uuidString.replacingOccurrences(of: "-", with: "")
   }
@@ -335,15 +403,6 @@ final class AppSession: ObservableObject {
   }
 
   @discardableResult
-  func createPost(url: String, note: String?, contact: ContactEntity) -> Bool {
-    if let ownerPubkey = identityService.pubkeyHex, contact.ownerPubkey != ownerPubkey {
-      composeError = "Select a contact from the current account."
-      return false
-    }
-    return createPost(url: url, note: note, recipientNPub: contact.npub)
-  }
-
-  @discardableResult
   func createPost(url: String, note: String?, recipientNPub: String) -> Bool {
     guard let normalizedURL = LinkstrURLValidator.normalizedWebURL(from: url) else {
       composeError = "Enter a valid URL."
@@ -406,6 +465,26 @@ final class AppSession: ObservableObject {
       report(error: error)
       return false
     }
+  }
+
+  @discardableResult
+  func createPostAwaitingRelay(
+    url: String,
+    note: String?,
+    recipientNPub: String,
+    timeoutSeconds: TimeInterval = 12,
+    pollIntervalSeconds: TimeInterval = 0.35
+  ) async -> Bool {
+    guard
+      await awaitRelayReadyForSend(
+        timeoutSeconds: timeoutSeconds,
+        pollIntervalSeconds: pollIntervalSeconds
+      )
+    else {
+      return false
+    }
+    startNostrIfPossible()
+    return createPost(url: url, note: note, recipientNPub: recipientNPub)
   }
 
   @discardableResult

@@ -21,6 +21,7 @@ struct NewPostSheet: View {
   @State private var url = ""
   @State private var note = ""
   @State private var isPresentingRecipientPicker = false
+  @State private var isSending = false
 
   init(
     contacts: [ContactEntity],
@@ -95,22 +96,27 @@ struct NewPostSheet: View {
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
           Button("Cancel") { dismiss() }
+            .disabled(isSending)
         }
         ToolbarItem(placement: .confirmationAction) {
-          Button("Send") {
+          Button(isSending ? "Sending..." : "Send") {
             guard let recipientNPub = activeRecipientNPub else { return }
             guard let normalizedURL = normalizedURL else { return }
             let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
-            let didCreate = session.createPost(
-              url: normalizedURL,
-              note: trimmedNote.isEmpty ? nil : trimmedNote,
-              recipientNPub: recipientNPub
-            )
-            if didCreate {
-              dismiss()
+            isSending = true
+            Task { @MainActor in
+              let didCreate = await session.createPostAwaitingRelay(
+                url: normalizedURL,
+                note: trimmedNote.isEmpty ? nil : trimmedNote,
+                recipientNPub: recipientNPub
+              )
+              isSending = false
+              if didCreate {
+                dismiss()
+              }
             }
           }
-          .disabled(activeRecipientNPub == nil || normalizedURL == nil)
+          .disabled(isSending || activeRecipientNPub == nil || normalizedURL == nil)
           .tint(LinkstrTheme.neonCyan)
         }
       }

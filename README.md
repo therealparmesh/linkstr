@@ -45,6 +45,7 @@
   - Relay disconnect/reconnect chatter is suppressed in toasts.
   - Offline toast appears only when zero enabled relays are connected, zero are read-only, and none are reconnecting.
   - Sending is blocked unless at least one writable relay has a live connected socket.
+  - New post send action waits for relay reconnect in-place (with timeout) instead of dismissing immediately on transient offline/reconnect states.
   - No offline outbox retry is implemented yet; failed sends are not auto-retried after reconnect.
   - On connect/sign-in, the app subscribes live and also backfills relay history (paged) to recover prior messages.
   - Relays sorted alphabetically in Settings.

@@ -326,6 +326,53 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
   }
 
+  func testCreatePostAwaitingRelayTimesOutWhenRelayNeverConnects() async throws {
+    let (session, container) = try makeSession(testDisableNostrStartupOverride: false)
+    let recipientNPub = try TestKeyMaterialFactory.makeNPub()
+    try session.identityService.createNewIdentity()
+
+    let relay = RelayEntity(url: "wss://relay.example.com", status: .reconnecting)
+    container.mainContext.insert(relay)
+    try container.mainContext.save()
+
+    let didCreate = await session.createPostAwaitingRelay(
+      url: "https://example.com/path",
+      note: nil,
+      recipientNPub: recipientNPub,
+      timeoutSeconds: 0.05,
+      pollIntervalSeconds: 0.01
+    )
+
+    XCTAssertFalse(didCreate)
+    XCTAssertEqual(session.composeError, "Couldn't reconnect to relays in time. Try again.")
+    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
+  }
+
+  func testCreatePostAwaitingRelaySendsWhenLiveRelayConnectionExists() async throws {
+    let (session, container) = try makeSession(
+      testDisableNostrStartupOverride: false,
+      testHasConnectedRelaysOverride: { true }
+    )
+    let recipientNPub = try TestKeyMaterialFactory.makeNPub()
+    try session.identityService.createNewIdentity()
+
+    let relay = RelayEntity(url: "wss://relay.example.com", status: .failed)
+    container.mainContext.insert(relay)
+    try container.mainContext.save()
+
+    let didCreate = await session.createPostAwaitingRelay(
+      url: "https://example.com/path",
+      note: nil,
+      recipientNPub: recipientNPub,
+      timeoutSeconds: 0.05,
+      pollIntervalSeconds: 0.01
+    )
+
+    XCTAssertTrue(didCreate)
+    XCTAssertNil(session.composeError)
+    XCTAssertEqual(try fetchMessages(in: container.mainContext).count, 1)
+  }
+
   func testCreatePostWithOnlyPersistedOnlineStatusStillRequiresLiveRelaySocket() throws {
     let (session, container) = try makeSession(testDisableNostrStartupOverride: false)
     let recipientNPub = try TestKeyMaterialFactory.makeNPub()
