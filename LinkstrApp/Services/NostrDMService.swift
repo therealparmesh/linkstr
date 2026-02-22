@@ -189,18 +189,6 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     }
   }
 
-  func send(payload: LinkstrPayload, toMany recipientPubkeyHexes: [String]) throws -> String {
-    let events = try buildRumorAndGiftWrapEvents(
-      payload: payload, recipientPubkeyHexes: recipientPubkeyHexes)
-    for giftWrap in events.giftWrapForRecipients {
-      relayPool?.publishEvent(giftWrap)
-    }
-    if let giftWrapForSender = events.giftWrapForSender {
-      relayPool?.publishEvent(giftWrapForSender)
-    }
-    return events.rumorEvent.id
-  }
-
   func sendAwaitingRelayAcceptance(
     payload: LinkstrPayload,
     toMany recipientPubkeyHexes: [String],
@@ -583,11 +571,11 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
       startBackfillIfNeeded()
       onRelayStatus?(relayURL, .connected, nil)
     case .connecting:
-      onRelayStatus?(relayURL, .reconnecting, nil)
+      onRelayStatus?(relayURL, .disconnected, nil)
     case .notConnected:
       pruneRelayFromBackfillWaitlists(relayURL: relayURL)
       pruneRelayFromPublishWaitlists(relayURL: relayURL)
-      onRelayStatus?(relayURL, .reconnecting, nil)
+      onRelayStatus?(relayURL, .disconnected, nil)
       scheduleReconnect()
     case .error(let error):
       pruneRelayFromBackfillWaitlists(relayURL: relayURL)

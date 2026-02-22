@@ -15,11 +15,6 @@ final class SessionMessageStore {
     try modelContext.save()
   }
 
-  func message(eventID: String, ownerPubkey: String) throws -> SessionMessageEntity? {
-    let storageID = SessionMessageEntity.storageID(ownerPubkey: ownerPubkey, eventID: eventID)
-    return try message(storageID: storageID)
-  }
-
   func message(storageID: String) throws -> SessionMessageEntity? {
     let descriptor = FetchDescriptor<SessionMessageEntity>(
       predicate: #Predicate { $0.storageID == storageID }
@@ -267,17 +262,6 @@ final class SessionMessageStore {
     if didChange {
       try modelContext.save()
     }
-  }
-
-  func purgeLegacyNonRootMessages(ownerPubkey: String) throws {
-    let rootKindRaw = SessionMessageKind.root.rawValue
-    let descriptor = FetchDescriptor<SessionMessageEntity>(
-      predicate: #Predicate { $0.ownerPubkey == ownerPubkey && $0.kindRaw != rootKindRaw }
-    )
-    let messages = try modelContext.fetch(descriptor)
-    guard !messages.isEmpty else { return }
-    messages.forEach(modelContext.delete)
-    try modelContext.save()
   }
 
   func clearAllSessionData(ownerPubkey: String) throws {

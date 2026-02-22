@@ -40,6 +40,9 @@ struct ConversationsView: View {
   @Query(sort: [SortDescriptor(\ContactEntity.createdAt)])
   private var contacts: [ContactEntity]
 
+  @State private var selectedSessionID: String?
+  @State private var isShowingSelectedSession = false
+
   private var scopedSessions: [SessionEntity] {
     session.scopedSessions(from: allSessions)
   }
@@ -90,6 +93,28 @@ struct ConversationsView: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     .scrollContentBackground(.hidden)
+    .navigationDestination(isPresented: $isShowingSelectedSession) {
+      if let sessionID = selectedSessionID,
+        let targetSession = scopedSessions.first(where: { $0.sessionID == sessionID })
+      {
+        SessionPostsView(sessionEntity: targetSession)
+      } else {
+        ContentUnavailableView(
+          "Session Unavailable",
+          systemImage: "exclamationmark.triangle",
+          description: Text("This session is no longer available.")
+        )
+      }
+    }
+    .onAppear {
+      navigateToPendingSessionIfNeeded()
+    }
+    .onChange(of: session.pendingSessionNavigationID) { _, _ in
+      navigateToPendingSessionIfNeeded()
+    }
+    .onChange(of: scopedSessions.map(\.sessionID)) { _, _ in
+      navigateToPendingSessionIfNeeded()
+    }
   }
 
   @ViewBuilder
@@ -104,8 +129,9 @@ struct ConversationsView: View {
       ScrollView {
         LazyVStack(spacing: 0) {
           ForEach(activeSummaries) { summary in
-            NavigationLink {
-              SessionPostsView(sessionEntity: summary.session)
+            Button {
+              selectedSessionID = summary.session.sessionID
+              isShowingSelectedSession = true
             } label: {
               SessionRowView(summary: summary)
             }
@@ -122,8 +148,9 @@ struct ConversationsView: View {
           if !archivedSummaries.isEmpty {
             LinkstrSectionHeader(title: "Archived")
             ForEach(archivedSummaries) { summary in
-              NavigationLink {
-                SessionPostsView(sessionEntity: summary.session)
+              Button {
+                selectedSessionID = summary.session.sessionID
+                isShowingSelectedSession = true
               } label: {
                 SessionRowView(summary: summary)
               }
@@ -165,6 +192,14 @@ struct ConversationsView: View {
     guard let note else { return nil }
     let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
     return trimmed.isEmpty ? nil : trimmed
+  }
+
+  private func navigateToPendingSessionIfNeeded() {
+    guard let pendingID = session.pendingSessionNavigationID else { return }
+    guard scopedSessions.contains(where: { $0.sessionID == pendingID }) else { return }
+    selectedSessionID = pendingID
+    isShowingSelectedSession = true
+    session.clearPendingSessionNavigationID()
   }
 }
 
@@ -530,7 +565,7 @@ struct NewSessionSheet: View {
         ScrollView {
           VStack(alignment: .leading, spacing: 14) {
             LinkstrSectionHeader(title: "Session Name")
-            TextField("Weekend links", text: $sessionName)
+            TextField("Fun", text: $sessionName)
               .textInputAutocapitalization(.words)
               .padding(.horizontal, 12)
               .padding(.vertical, 10)

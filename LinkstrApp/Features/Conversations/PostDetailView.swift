@@ -14,60 +14,112 @@ struct LinkstrReactionRow: View {
   let onToggleEmoji: (String) -> Void
   let onAddReaction: () -> Void
 
+  private let quickEmojis = ["👍", "👎", "👀"]
+
+  private var quickSummariesByEmoji: [String: ReactionSummary] {
+    Dictionary(
+      uniqueKeysWithValues:
+        summaries
+        .filter { quickEmojis.contains($0.emoji) }
+        .map { ($0.emoji, $0) }
+    )
+  }
+
+  private var extraSummaries: [ReactionSummary] {
+    summaries.filter { !quickEmojis.contains($0.emoji) }
+  }
+
   var body: some View {
     HStack(spacing: 8) {
-      ForEach(summaries) { summary in
-        Button {
-          onToggleEmoji(summary.emoji)
-        } label: {
-          HStack(spacing: 6) {
-            Text(summary.emoji)
-              .font(.system(size: 15))
-            Text("\(summary.count)")
-              .font(.custom(LinkstrTheme.bodyFont, size: 12))
-              .foregroundStyle(LinkstrTheme.textPrimary.opacity(0.95))
-          }
+      ForEach(extraSummaries) { summary in
+        summaryChip(summary)
+      }
+
+      ForEach(quickEmojis, id: \.self) { emoji in
+        quickEmojiButton(emoji)
+      }
+
+      Button(action: onAddReaction) {
+        Text("...")
+          .font(.custom(LinkstrTheme.bodyFont, size: 13))
+          .foregroundStyle(LinkstrTheme.textPrimary.opacity(0.9))
           .padding(.horizontal, 10)
           .padding(.vertical, 6)
           .background(
             Capsule()
-              .fill(summary.includesCurrentUser ? LinkstrTheme.panelSoft : LinkstrTheme.panel)
+              .fill(LinkstrTheme.panel)
           )
           .overlay(
             Capsule()
-              .stroke(
-                summary.includesCurrentUser
-                  ? LinkstrTheme.neonCyan.opacity(0.45) : LinkstrTheme.textSecondary.opacity(0.2),
-                lineWidth: 1
-              )
+              .stroke(LinkstrTheme.textSecondary.opacity(0.2), lineWidth: 1)
           )
-        }
-        .buttonStyle(.plain)
-      }
-
-      Button(action: onAddReaction) {
-        HStack(spacing: 6) {
-          Image(systemName: "face.smiling")
-            .font(.system(size: 13, weight: .semibold))
-          Image(systemName: "plus")
-            .font(.system(size: 10, weight: .bold))
-        }
-        .foregroundStyle(LinkstrTheme.textPrimary.opacity(0.9))
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(
-          Capsule()
-            .fill(LinkstrTheme.panel)
-        )
-        .overlay(
-          Capsule()
-            .stroke(LinkstrTheme.textSecondary.opacity(0.2), lineWidth: 1)
-        )
       }
       .buttonStyle(.plain)
 
       Spacer(minLength: 0)
     }
+  }
+
+  private func summaryChip(_ summary: ReactionSummary) -> some View {
+    Button {
+      onToggleEmoji(summary.emoji)
+    } label: {
+      HStack(spacing: 6) {
+        Text(summary.emoji)
+          .font(.system(size: 15))
+        Text("\(summary.count)")
+          .font(.custom(LinkstrTheme.bodyFont, size: 12))
+          .foregroundStyle(LinkstrTheme.textPrimary.opacity(0.95))
+      }
+      .padding(.horizontal, 10)
+      .padding(.vertical, 6)
+      .background(
+        Capsule()
+          .fill(summary.includesCurrentUser ? LinkstrTheme.panelSoft : LinkstrTheme.panel)
+      )
+      .overlay(
+        Capsule()
+          .stroke(
+            summary.includesCurrentUser
+              ? LinkstrTheme.neonCyan.opacity(0.45) : LinkstrTheme.textSecondary.opacity(0.2),
+            lineWidth: 1
+          )
+      )
+    }
+    .buttonStyle(.plain)
+  }
+
+  private func quickEmojiButton(_ emoji: String) -> some View {
+    let summary = quickSummariesByEmoji[emoji]
+    return Button {
+      onToggleEmoji(emoji)
+    } label: {
+      HStack(spacing: 6) {
+        Text(emoji)
+          .font(.system(size: 15))
+
+        if let count = summary?.count, count > 0 {
+          Text("\(count)")
+            .font(.custom(LinkstrTheme.bodyFont, size: 12))
+            .foregroundStyle(LinkstrTheme.textPrimary.opacity(0.95))
+        }
+      }
+      .padding(.horizontal, 10)
+      .padding(.vertical, 6)
+      .background(
+        Capsule()
+          .fill(summary?.includesCurrentUser == true ? LinkstrTheme.panelSoft : LinkstrTheme.panel)
+      )
+      .overlay(
+        Capsule()
+          .stroke(
+            summary?.includesCurrentUser == true
+              ? LinkstrTheme.neonCyan.opacity(0.45) : LinkstrTheme.textSecondary.opacity(0.2),
+            lineWidth: 1
+          )
+      )
+    }
+    .buttonStyle(.plain)
   }
 }
 

@@ -8,7 +8,6 @@ final class AppSession: ObservableObject {
     case noEnabledRelays
     case online
     case readOnly
-    case reconnecting
     case offline
   }
 
@@ -62,6 +61,7 @@ final class AppSession: ObservableObject {
   private var relayRuntimeStatusByURL: [String: RelayRuntimeStatus] = [:]
 
   @Published var composeError: String?
+  @Published var pendingSessionNavigationID: String?
   @Published private(set) var hasIdentity = false
   @Published private(set) var didFinishBoot = false
   @Published private(set) var bootStatusMessage = "Loading account…"
@@ -105,7 +105,6 @@ final class AppSession: ObservableObject {
 
     do {
       bootStatusMessage = "Preparing local data…"
-      purgeLegacyNonRootMessagesIfNeeded()
       bootStatusMessage = "Connecting relays…"
       try relayStore.ensureDefaultRelays()
       pruneRuntimeRelayStatusCache()
@@ -138,9 +137,6 @@ final class AppSession: ObservableObject {
     }
     if enabledRelays.contains(where: { effectiveRelayStatus(for: $0) == .readOnly }) {
       return .readOnly
-    }
-    if enabledRelays.contains(where: { effectiveRelayStatus(for: $0) == .reconnecting }) {
-      return .reconnecting
     }
     return .offline
   }
@@ -251,6 +247,15 @@ final class AppSession: ObservableObject {
     message: String?
   ) {
     let trimmedMessage = message?.trimmingCharacters(in: .whitespacesAndNewlines)
+    if let existing = relayRuntimeStatusByURL[relayURL],
+      existing.status == .connected || existing.status == .readOnly,
+      status == .disconnected,
+      trimmedMessage?.isEmpty != false
+    {
+      // Keep healthy status while relay pool restarts so unrelated relays do not flash.
+      return
+    }
+
     relayRuntimeStatusByURL[relayURL] = RelayRuntimeStatus(
       status: status,
       message: (trimmedMessage?.isEmpty == false) ? trimmedMessage : nil
@@ -268,10 +273,6 @@ final class AppSession: ObservableObject {
     switch relayConnectivityState(for: enabledRelays) {
     case .online, .readOnly:
       clearOfflineToastIfPresent()
-    case .reconnecting:
-      // Keep outage state while sockets are still flapping between reconnecting/offline.
-      // Clearing here can create repeated toast show/hide loops during relay churn.
-      return
     case .offline:
       showOfflineToastForCurrentOutageIfNeeded()
     case .noEnabledRelays:
@@ -306,7 +307,7 @@ final class AppSession: ObservableObject {
       return .blocked(message: noEnabledRelaysMessage)
     case .readOnly:
       return .blocked(message: relayReadOnlyMessage)
-    case .online, .offline, .reconnecting:
+    case .online, .offline:
       return .waitingForConnection
     }
   }
@@ -412,6 +413,7 @@ final class AppSession: ObservableObject {
     enqueuedMetadataStorageIDs.removeAll()
     isProcessingMetadataQueue = false
     relayRuntimeStatusByURL.removeAll()
+    pendingSessionNavigationID = nil
 
     if let ownerPubkey, clearLocalData {
       clearCachedVideos(ownerPubkey: ownerPubkey)
@@ -425,15 +427,6 @@ final class AppSession: ObservableObject {
 
   private func refreshIdentityState() {
     hasIdentity = identityService.keypair != nil
-  }
-
-  private func purgeLegacyNonRootMessagesIfNeeded() {
-    guard let ownerPubkey = identityService.pubkeyHex else { return }
-    do {
-      try messageStore.purgeLegacyNonRootMessages(ownerPubkey: ownerPubkey)
-    } catch {
-      report(error: error)
-    }
   }
 
   func startNostrIfPossible(forceRestart: Bool = false) {
@@ -566,6 +559,7 @@ final class AppSession: ObservableObject {
         memberPubkeys: members,
         updatedAt: updatedAt
       )
+      pendingSessionNavigationID = sessionID
       composeError = nil
       return true
     } catch {
@@ -1092,6 +1086,10 @@ final class AppSession: ObservableObject {
     }
   }
 
+  func clearPendingSessionNavigationID() {
+    pendingSessionNavigationID = nil
+  }
+
   private func performRelayMutation(_ mutation: () throws -> Void) {
     do {
       try mutation()
@@ -1247,9 +1245,11 @@ final class AppSession: ObservableObject {
     guard let ownerPubkey = identityService.pubkeyHex else { return }
 
     do {
-      if let existing = try messageStore.message(
-        eventID: incoming.eventID, ownerPubkey: ownerPubkey)
-      {
+      let storageID = SessionMessageEntity.storageID(
+        ownerPubkey: ownerPubkey,
+        eventID: incoming.eventID
+      )
+      if let existing = try messageStore.message(storageID: storageID) {
         if existing.kind == .root {
           enqueueMetadataRefresh(for: existing)
         }

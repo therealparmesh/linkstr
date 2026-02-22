@@ -29,7 +29,6 @@
   - `Starting session…`
 - Boot loads identity from keychain and configures local notifications.
 - Boot ensures default relays exist if the local relay list is empty.
-- Boot prunes legacy non-root message rows from local storage.
 - Boot starts relay runtime when identity is available.
 - If no identity exists, onboarding is shown.
 - If identity exists, the main app shell is shown.
@@ -63,6 +62,7 @@
 - Session creation requires a non-empty name.
 - Member selection at creation is optional.
 - Session creation can be solo (creator only).
+- After successful session creation, the app navigates directly into that session.
 - Transport always includes creator in the effective member set.
 - Member updates are snapshot-based (`session_members`):
   - The active member set becomes exactly the snapshot.
@@ -86,6 +86,8 @@
   - Link (required).
   - Note (optional).
 - Link field supports `Paste` and `Clear` helpers.
+- Entering the link field pre-fills `https://` when the field is empty.
+- Paste replaces the entire link field value.
 - URL input is normalized and must be valid `http`/`https`.
 - Unsupported schemes are rejected.
 - Note text is trimmed and persisted only when non-empty.
@@ -101,7 +103,8 @@
 - Reactions are emoji-only toggles tied to a post.
 - UX includes:
   - Slack-style reaction summary chips.
-  - Add-reaction affordance with an emoji picker sheet.
+  - Inline quick toggles for `👍`, `👎`, `👀`.
+  - `...` button that opens the full emoji picker sheet.
 - Default quick options include `👍`, `👎`, `👀`.
 - Reaction state is keyed by:
   - Session ID.
@@ -127,7 +130,7 @@
   - Remove relay.
   - Reset default relays.
 - Relay header shows `connected_or_readonly / total`.
-- Relay rows show live status (`connected`, `reconnecting`, `read-only`, `failed`, `disabled`).
+- Relay rows show live status (`connected`, `read-only`, `failed`, `disabled`).
 - Relay error rows reserve layout height to avoid jitter when status text appears/disappears.
 
 ### Relay send gating
@@ -217,7 +220,7 @@
 - No automatic resend of previously failed posts.
 - No APNs remote push.
 - No public discovery feed/social graph product surface.
-- No text-based reply composer.
+- No text-based post replies.
 
 ## Development
 

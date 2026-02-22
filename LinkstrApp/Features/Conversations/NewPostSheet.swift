@@ -14,6 +14,7 @@ struct NewPostSheet: View {
   @State private var url = ""
   @State private var note = ""
   @State private var isSending = false
+  @FocusState private var isURLFieldFocused: Bool
 
   var body: some View {
     NavigationStack {
@@ -43,6 +44,7 @@ struct NewPostSheet: View {
                 .keyboardType(.URL)
                 .autocorrectionDisabled(true)
                 .disabled(isSending)
+                .focused($isURLFieldFocused)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
                 .background(
@@ -142,6 +144,13 @@ struct NewPostSheet: View {
             .ignoresSafeArea(edges: .bottom)
         )
       }
+      .onChange(of: isURLFieldFocused) { _, isFocused in
+        guard isFocused else { return }
+        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+          url = "https://"
+        }
+      }
     }
   }
 
@@ -188,7 +197,7 @@ struct NewPostSheet: View {
   private func pasteURLFromClipboard() {
     #if canImport(UIKit)
       if let clipboardText = UIPasteboard.general.string {
-        url = clipboardText
+        url = clipboardText.trimmingCharacters(in: .whitespacesAndNewlines)
       }
     #endif
   }

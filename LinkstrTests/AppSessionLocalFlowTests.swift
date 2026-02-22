@@ -207,42 +207,6 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertNil(inboundOtherRoot.readAt)
   }
 
-  func testBootPurgesLegacyNonRootMessages() throws {
-    let (session, container) = try makeSession()
-    try session.identityService.createNewIdentity()
-    let ownerPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
-
-    let root = makeMessage(
-      eventID: "root-valid",
-      conversationID: "session-purge",
-      rootID: "root-valid",
-      kind: .root,
-      senderPubkey: ownerPubkey,
-      receiverPubkey: ownerPubkey,
-      ownerPubkey: ownerPubkey
-    )
-    let legacy = makeMessage(
-      eventID: "legacy-non-root",
-      conversationID: "session-purge",
-      rootID: "root-valid",
-      kind: .root,
-      senderPubkey: ownerPubkey,
-      receiverPubkey: ownerPubkey,
-      ownerPubkey: ownerPubkey
-    )
-    legacy.kindRaw = "legacy_non_root"
-
-    container.mainContext.insert(root)
-    container.mainContext.insert(legacy)
-    try container.mainContext.save()
-
-    session.boot()
-
-    let messages = try fetchMessages(in: container.mainContext)
-    XCTAssertEqual(messages.count, 1)
-    XCTAssertEqual(messages.first?.eventID, root.eventID)
-  }
-
   func testRelayCRUDFlow() throws {
     let (session, container) = try makeSession()
 
@@ -305,9 +269,9 @@ final class AppSessionLocalFlowTests: XCTestCase {
     )
     XCTAssertEqual(
       session.relayConnectivityState(
-        for: [RelayEntity(url: "wss://one.example.com", status: .reconnecting)]
+        for: [RelayEntity(url: "wss://one.example.com", status: .disconnected)]
       ),
-      .reconnecting
+      .offline
     )
     XCTAssertEqual(
       session.relayConnectivityState(for: [
@@ -318,7 +282,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertEqual(
       session.relayConnectivityState(
         for: [
-          RelayEntity(url: "wss://one.example.com", status: .reconnecting),
+          RelayEntity(url: "wss://one.example.com", status: .disconnected),
           RelayEntity(url: "wss://two.example.com", status: .connected),
         ]
       ),
@@ -338,7 +302,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
       memberPubkeys: [myPubkey, peerPubkey]
     )
 
-    container.mainContext.insert(RelayEntity(url: "wss://relay.example.com", status: .reconnecting))
+    container.mainContext.insert(RelayEntity(url: "wss://relay.example.com", status: .disconnected))
     try container.mainContext.save()
 
     let didCreate = await session.createSessionPostAwaitingRelay(
@@ -352,6 +316,26 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertFalse(didCreate)
     XCTAssertEqual(session.composeError, "Couldn't reconnect to relays in time. Try again.")
     XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
+  }
+
+  func testCreateSessionSetsPendingNavigationID() async throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let peerNPub = try TestKeyMaterialFactory.makeNPub()
+
+    let didCreate = await session.createSessionAwaitingRelay(
+      name: "Navigation Session",
+      memberNPubs: [peerNPub]
+    )
+
+    XCTAssertTrue(didCreate)
+    let sessions = try container.mainContext.fetch(
+      FetchDescriptor<SessionEntity>(sortBy: [SortDescriptor(\.createdAt)]))
+    XCTAssertEqual(sessions.count, 1)
+    XCTAssertEqual(session.pendingSessionNavigationID, sessions.first?.sessionID)
+
+    session.clearPendingSessionNavigationID()
+    XCTAssertNil(session.pendingSessionNavigationID)
   }
 
   func testCreateSessionPostAwaitingRelaySendsWhenLiveRelayConnectionExists() async throws {
