@@ -137,8 +137,28 @@ enum URLClassifier {
   }
 
   private static func facebookEmbedURL(for sourceURL: URL) -> URL? {
-    // Facebook plugin embeds are inconsistent in-app. Use the canonical first-party page player.
-    canonicalFacebookWebURL(sourceURL)
+    let canonicalURL = canonicalFacebookWebURL(sourceURL)
+
+    if canonicalURL.path.lowercased().hasPrefix("/plugins/video.php") {
+      return canonicalURL
+    }
+
+    let isReel = SocialURLHeuristics.isFacebookReelURL(canonicalURL)
+    let width = isReel ? "540" : "560"
+    let height = isReel ? "960" : "315"
+
+    var components = URLComponents()
+    components.scheme = "https"
+    components.host = "www.facebook.com"
+    components.path = "/plugins/video.php"
+    components.queryItems = [
+      URLQueryItem(name: "href", value: canonicalURL.absoluteString),
+      URLQueryItem(name: "show_text", value: "false"),
+      URLQueryItem(name: "width", value: width),
+      URLQueryItem(name: "height", value: height),
+      URLQueryItem(name: "autoplay", value: "false"),
+    ]
+    return components.url ?? canonicalURL
   }
 
   private static func youtubeEmbedURL(for sourceURL: URL) -> URL? {

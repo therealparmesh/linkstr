@@ -33,6 +33,16 @@ final class DeepLinkCodecTests: XCTestCase {
     let wrongPath = URL(string: "linkstr://open/deep?\(query)")!
     XCTAssertNil(LinkstrDeepLinkCodec.parsePayload(fromAppDeepLink: wrongPath))
   }
+
+  func testAppDeepLinkRejectsNonWebPayloadURL() throws {
+    let payload = LinkstrDeepLinkPayload(
+      url: "javascript:alert('xss')",
+      timestamp: 1_739_877_800,
+      messageGUID: UUID().uuidString
+    )
+    let deepLink = try XCTUnwrap(LinkstrDeepLinkCodec.makeAppDeepLink(payload: payload))
+    XCTAssertNil(LinkstrDeepLinkCodec.parsePayload(fromAppDeepLink: deepLink))
+  }
 }
 
 @MainActor

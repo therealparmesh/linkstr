@@ -62,7 +62,7 @@ final class URLClassifierTests: XCTestCase {
     )
     assertExtractionPreferred(
       "https://www.facebook.com/reel/123456789012345",
-      expectedEmbedPrefix: "https://www.facebook.com/reel/123456789012345"
+      expectedEmbedPrefix: "https://www.facebook.com/plugins/video.php?href="
     )
   }
 
@@ -103,9 +103,9 @@ final class URLClassifierTests: XCTestCase {
     guard case .embedOnly(let facebookEmbedURL) = facebookVideoPost else {
       return XCTFail("Expected embedOnly strategy for Facebook non-reel video post")
     }
-    XCTAssertEqual(
-      facebookEmbedURL.absoluteString,
-      "https://www.facebook.com/some.page/videos/123456789012345/"
+    assertFacebookPluginEmbed(
+      facebookEmbedURL,
+      expectedHref: "https://www.facebook.com/some.page/videos/123456789012345/"
     )
 
     XCTAssertFalse(youtube.allowsLocalPlaybackToggle)
@@ -183,7 +183,7 @@ final class URLClassifierTests: XCTestCase {
     )
     assertExtractionPreferred(
       "https://www.facebook.com/reel/213286701716863",
-      expectedEmbedPrefix: "https://www.facebook.com/reel/213286701716863"
+      expectedEmbedPrefix: "https://www.facebook.com/plugins/video.php?href="
     )
 
     assertEmbedOnly(
@@ -192,19 +192,19 @@ final class URLClassifierTests: XCTestCase {
     )
     assertEmbedOnly(
       "https://www.facebook.com/facebook/videos/10153231379946729/",
-      expectedEmbedPrefix: "https://www.facebook.com/facebook/videos/10153231379946729/"
+      expectedEmbedPrefix: "https://www.facebook.com/plugins/video.php?href="
     )
     assertEmbedOnly(
       "https://www.facebook.com/watch/?v=10153231379946729",
-      expectedEmbedPrefix: "https://www.facebook.com/watch/?v=10153231379946729"
+      expectedEmbedPrefix: "https://www.facebook.com/plugins/video.php?href="
     )
     assertEmbedOnly(
       "https://www.facebook.com/share/v/10153231379946729/",
-      expectedEmbedPrefix: "https://www.facebook.com/share/v/10153231379946729/"
+      expectedEmbedPrefix: "https://www.facebook.com/plugins/video.php?href="
     )
     assertExtractionPreferred(
       "https://www.facebook.com/share/r/213286701716863/",
-      expectedEmbedPrefix: "https://www.facebook.com/share/r/213286701716863/"
+      expectedEmbedPrefix: "https://www.facebook.com/plugins/video.php?href="
     )
     assertExtractionPreferred(
       "https://www.instagram.com/share/reel/DUSWiOIDivu/",
@@ -299,5 +299,25 @@ final class URLClassifierTests: XCTestCase {
     }
     XCTAssertTrue(embedURL.absoluteString.hasPrefix(expectedEmbedPrefix))
     XCTAssertFalse(strategy.allowsLocalPlaybackToggle)
+  }
+
+  private func assertFacebookPluginEmbed(_ embedURL: URL, expectedHref: String) {
+    guard let components = URLComponents(url: embedURL, resolvingAgainstBaseURL: false) else {
+      return XCTFail("Expected URL components for Facebook embed URL")
+    }
+
+    XCTAssertEqual(components.scheme, "https")
+    XCTAssertEqual(components.host, "www.facebook.com")
+    XCTAssertEqual(components.path, "/plugins/video.php")
+
+    func value(_ key: String) -> String? {
+      components.queryItems?.first(where: { $0.name == key })?.value
+    }
+
+    XCTAssertEqual(value("href"), expectedHref)
+    XCTAssertEqual(value("show_text"), "false")
+    XCTAssertEqual(value("autoplay"), "false")
+    XCTAssertNotNil(value("width"))
+    XCTAssertNotNil(value("height"))
   }
 }

@@ -6,11 +6,16 @@ struct DeepLinkVideoView: View {
   @Environment(\.openURL) private var openURL
 
   private var mediaStrategy: URLClassifier.MediaStrategy {
-    URLClassifier.mediaStrategy(for: payload.url)
+    URLClassifier.mediaStrategy(for: normalizedURLString)
   }
 
   private var sourceURL: URL? {
-    URL(string: payload.url)
+    guard let normalizedURLString else { return nil }
+    return URL(string: normalizedURLString)
+  }
+
+  private var normalizedURLString: String? {
+    LinkstrURLValidator.normalizedWebURL(from: payload.url)
   }
 
   private var sharedAtDate: Date? {
@@ -73,7 +78,7 @@ struct DeepLinkVideoView: View {
           .foregroundStyle(LinkstrTheme.textPrimary)
       }
 
-      Text(payload.url)
+      Text(normalizedURLString ?? payload.url)
         .font(.footnote)
         .foregroundStyle(LinkstrTheme.textSecondary)
         .textSelection(.enabled)

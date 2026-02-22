@@ -52,13 +52,11 @@ struct ConversationsView: View {
     session.scopedMessages(from: allMessages)
   }
 
-  private var messageIndex: SessionMessageIndex {
-    SessionMessageIndex(messages: scopedMessages)
-  }
-
   private var summaries: [SessionSummary] {
-    scopedSessions.compactMap { sessionEntity in
-      let posts = messageIndex.rootsBySessionID[sessionEntity.sessionID] ?? []
+    let index = SessionMessageIndex(messages: scopedMessages)
+
+    return scopedSessions.compactMap { sessionEntity in
+      let posts = index.rootsBySessionID[sessionEntity.sessionID] ?? []
       let latestPost = posts.max(by: { $0.timestamp < $1.timestamp })
       let latestTimestamp = latestPost?.timestamp ?? sessionEntity.updatedAt
       let latestPreview = previewText(for: latestPost)
@@ -188,33 +186,58 @@ struct ConversationsView: View {
 
   @ViewBuilder
   private var archiveToggleRow: some View {
-    if isShowingArchivedSessions {
-      Button {
-        isShowingArchivedSessions = false
-      } label: {
-        Label("Back to Active", systemImage: "arrow.left")
-          .font(.custom(LinkstrTheme.bodyFont, size: 12))
-          .foregroundStyle(LinkstrTheme.textSecondary)
-      }
-      .buttonStyle(.plain)
-      .padding(.bottom, 4)
-    } else if archivedSessionCount > 0 {
-      HStack {
-        Spacer(minLength: 0)
-        Button {
-          isShowingArchivedSessions = true
-        } label: {
-          Label(
-            "Archived (\(archivedSessionCount))",
-            systemImage: "archivebox"
-          )
-          .font(.custom(LinkstrTheme.bodyFont, size: 12))
-          .foregroundStyle(LinkstrTheme.textSecondary)
+    if archivedSessionCount > 0 {
+      HStack(spacing: 6) {
+        archiveFilterButton(
+          title: "Active",
+          selected: !isShowingArchivedSessions
+        ) {
+          isShowingArchivedSessions = false
         }
-        .buttonStyle(.plain)
+
+        archiveFilterButton(
+          title: "Archived \(archivedSessionCount)",
+          selected: isShowingArchivedSessions
+        ) {
+          isShowingArchivedSessions = true
+        }
+
+        Spacer(minLength: 0)
       }
+      .padding(4)
+      .background(
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+          .fill(LinkstrTheme.panelSoft.opacity(0.72))
+      )
+      .overlay(
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+          .stroke(LinkstrTheme.textSecondary.opacity(0.22), lineWidth: 1)
+      )
       .padding(.bottom, 2)
     }
+  }
+
+  private func archiveFilterButton(
+    title: String,
+    selected: Bool,
+    action: @escaping () -> Void
+  ) -> some View {
+    Button(action: action) {
+      Text(title)
+        .font(.custom(LinkstrTheme.bodyFont, size: 12))
+        .foregroundStyle(selected ? LinkstrTheme.textPrimary : LinkstrTheme.textSecondary)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 4)
+        .background(
+          Capsule(style: .continuous)
+            .fill(selected ? LinkstrTheme.panel : .clear)
+        )
+        .overlay(
+          Capsule(style: .continuous)
+            .stroke(LinkstrTheme.textSecondary.opacity(selected ? 0.25 : 0), lineWidth: 1)
+        )
+    }
+    .buttonStyle(.plain)
   }
 
   private func hasUnreadIncomingRootPost(_ post: SessionMessageEntity) -> Bool {
@@ -368,30 +391,20 @@ private struct SessionPostsView: View {
           LinkstrSectionHeader(title: "Posts")
 
           ForEach(posts) { post in
-            VStack(alignment: .leading, spacing: 10) {
-              NavigationLink {
-                PostDetailView(post: post, sessionName: sessionEntity.name)
-              } label: {
-                PostCardView(
-                  post: post,
-                  senderLabel: senderLabel(for: post),
-                  isOutgoing: isOutgoing(post),
-                  hasUnreadPost: hasUnreadIncomingRootPost(post)
-                )
-              }
-              .buttonStyle(.plain)
+            let summaries = reactionSummaries(for: post.rootID)
 
-              let summaries = reactionSummaries(for: post.rootID)
-              if !summaries.isEmpty {
-                LinkstrReactionRow(
-                  summaries: summaries,
-                  mode: .readOnly,
-                  onToggleEmoji: nil,
-                  onAddReaction: nil
-                )
-                .padding(.horizontal, 6)
-              }
+            NavigationLink {
+              PostDetailView(post: post, sessionName: sessionEntity.name)
+            } label: {
+              PostCardView(
+                post: post,
+                senderLabel: senderLabel(for: post),
+                isOutgoing: isOutgoing(post),
+                hasUnreadPost: hasUnreadIncomingRootPost(post),
+                reactionSummaries: summaries
+              )
             }
+            .buttonStyle(.plain)
           }
         }
       }
@@ -486,6 +499,7 @@ private struct PostCardView: View {
   let senderLabel: String
   let isOutgoing: Bool
   let hasUnreadPost: Bool
+  let reactionSummaries: [ReactionSummary]
 
   var body: some View {
     HStack(alignment: .top, spacing: 10) {
@@ -509,28 +523,26 @@ private struct PostCardView: View {
             .lineLimit(2)
         }
 
-        HStack(alignment: .firstTextBaseline, spacing: 0) {
-          Text("Post")
-            .font(.caption)
-            .foregroundStyle(LinkstrTheme.textSecondary)
-            .lineLimit(1)
-
+        HStack(alignment: .center, spacing: 6) {
           if hasUnreadPost {
             Circle()
               .fill(LinkstrTheme.neonAmber)
               .frame(width: 7, height: 7)
-              .padding(.horizontal, 8)
-          } else {
-            Text("•")
-              .font(.caption2)
-              .foregroundStyle(LinkstrTheme.textSecondary)
-              .padding(.horizontal, 8)
           }
 
           Text(post.timestamp.linkstrListTimestampLabel)
             .font(.caption)
             .foregroundStyle(LinkstrTheme.textSecondary)
             .lineLimit(1)
+        }
+
+        if !reactionSummaries.isEmpty {
+          LinkstrReactionRow(
+            summaries: reactionSummaries,
+            mode: .readOnly,
+            onToggleEmoji: nil,
+            onAddReaction: nil
+          )
         }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
@@ -558,24 +570,38 @@ private struct PostCardView: View {
 
   @ViewBuilder
   private var thumbnailView: some View {
-    if let thumbnailURL = post.thumbnailURL,
-      let image = UIImage(contentsOfFile: thumbnailURL)
-    {
-      Image(uiImage: image)
-        .resizable()
-        .scaledToFill()
-        .frame(width: 52, height: 52)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-    } else {
-      RoundedRectangle(cornerRadius: 10, style: .continuous)
-        .fill(LinkstrTheme.panelSoft)
-        .frame(width: 52, height: 52)
-        .overlay {
-          Image(systemName: "link")
-            .font(.body)
-            .foregroundStyle(LinkstrTheme.textSecondary)
+    if let thumbnailPath = post.thumbnailURL {
+      AsyncImage(
+        url: URL(fileURLWithPath: thumbnailPath),
+        transaction: Transaction(animation: .easeInOut(duration: 0.12))
+      ) { phase in
+        switch phase {
+        case .empty, .failure:
+          thumbnailPlaceholder
+        case .success(let image):
+          image
+            .resizable()
+            .scaledToFill()
+        @unknown default:
+          thumbnailPlaceholder
         }
+      }
+      .frame(width: 52, height: 52)
+      .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    } else {
+      thumbnailPlaceholder
     }
+  }
+
+  private var thumbnailPlaceholder: some View {
+    RoundedRectangle(cornerRadius: 10, style: .continuous)
+      .fill(LinkstrTheme.panelSoft)
+      .frame(width: 52, height: 52)
+      .overlay {
+        Image(systemName: "link")
+          .font(.body)
+          .foregroundStyle(LinkstrTheme.textSecondary)
+      }
   }
 }
 

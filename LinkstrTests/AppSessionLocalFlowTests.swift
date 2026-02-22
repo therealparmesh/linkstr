@@ -559,6 +559,35 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertEqual(try fetchMessages(in: container.mainContext).count, 1)
   }
 
+  func testLogoutClearLocalDataRemovesStoredThumbnailFiles() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let ownerPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+
+    let thumbnailURL = URL(fileURLWithPath: NSTemporaryDirectory())
+      .appendingPathComponent("linkstr-thumbnail-\(UUID().uuidString).png")
+    try Data("thumbnail".utf8).write(to: thumbnailURL, options: .atomic)
+
+    let message = makeMessage(
+      eventID: "message-thumbnail",
+      conversationID: "conversation-thumbnail",
+      rootID: "message-thumbnail",
+      kind: .root,
+      senderPubkey: "peer",
+      receiverPubkey: ownerPubkey,
+      ownerPubkey: ownerPubkey
+    )
+    try message.setMetadata(title: "Title", thumbnailURL: thumbnailURL.path)
+    container.mainContext.insert(message)
+    try container.mainContext.save()
+
+    XCTAssertTrue(FileManager.default.fileExists(atPath: thumbnailURL.path))
+
+    session.logout(clearLocalData: true)
+
+    XCTAssertFalse(FileManager.default.fileExists(atPath: thumbnailURL.path))
+  }
+
   func testContactDuplicationIsScopedPerAccount() throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()

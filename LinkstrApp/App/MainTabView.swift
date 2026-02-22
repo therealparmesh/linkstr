@@ -55,14 +55,8 @@ struct MainTabView: View {
       LinkstrBackgroundView()
       VStack(spacing: 0) {
         header
-        ZStack {
-          ForEach(AppTab.allCases) { tab in
-            tabContent(tab)
-              .opacity(selectedTab == tab ? 1 : 0)
-              .allowsHitTesting(selectedTab == tab)
-              .accessibilityHidden(selectedTab != tab)
-          }
-        }
+        tabContent(selectedTab)
+          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)

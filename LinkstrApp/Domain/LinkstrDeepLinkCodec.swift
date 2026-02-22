@@ -39,7 +39,19 @@ enum LinkstrDeepLinkCodec {
       return nil
     }
 
-    return decode(token)
+    guard let payload = decode(token) else {
+      return nil
+    }
+
+    guard let normalizedURL = LinkstrURLValidator.normalizedWebURL(from: payload.url) else {
+      return nil
+    }
+
+    return LinkstrDeepLinkPayload(
+      url: normalizedURL,
+      timestamp: payload.timestamp,
+      messageGUID: payload.messageGUID
+    )
   }
 
   private static func encode(_ payload: LinkstrDeepLinkPayload) -> String? {

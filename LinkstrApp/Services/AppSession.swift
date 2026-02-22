@@ -14,6 +14,7 @@ final class AppSession: ObservableObject {
   private struct RelayRuntimeStatus {
     var status: RelayHealthStatus
     var message: String?
+    var updatedAt: Date
   }
 
   private struct RootPostDraft {
@@ -59,6 +60,7 @@ final class AppSession: ObservableObject {
   private var enqueuedMetadataStorageIDs = Set<String>()
   private var isProcessingMetadataQueue = false
   private var relayRuntimeStatusByURL: [String: RelayRuntimeStatus] = [:]
+  private let relayDisconnectGraceInterval: TimeInterval = 1.25
 
   @Published var composeError: String?
   @Published var pendingSessionNavigationID: String?
@@ -246,19 +248,22 @@ final class AppSession: ObservableObject {
     status: RelayHealthStatus,
     message: String?
   ) {
+    let now = Date()
     let trimmedMessage = message?.trimmingCharacters(in: .whitespacesAndNewlines)
     if let existing = relayRuntimeStatusByURL[relayURL],
       existing.status == .connected || existing.status == .readOnly,
       status == .disconnected,
-      trimmedMessage?.isEmpty != false
+      trimmedMessage?.isEmpty != false,
+      now.timeIntervalSince(existing.updatedAt) < relayDisconnectGraceInterval
     {
-      // Keep healthy status while relay pool restarts so unrelated relays do not flash.
+      // Keep healthy status briefly while relay pool restarts to avoid flicker.
       return
     }
 
     relayRuntimeStatusByURL[relayURL] = RelayRuntimeStatus(
       status: status,
-      message: (trimmedMessage?.isEmpty == false) ? trimmedMessage : nil
+      message: (trimmedMessage?.isEmpty == false) ? trimmedMessage : nil,
+      updatedAt: now
     )
   }
 
@@ -1057,13 +1062,14 @@ final class AppSession: ObservableObject {
     }
   }
 
-  func addRelay(url: String) {
+  @discardableResult
+  func addRelay(url: String) -> Bool {
     guard let parsedURL = normalizedRelayURL(from: url)
     else {
       composeError = "Enter a valid relay URL (ws:// or wss://)."
-      return
+      return false
     }
-    performRelayMutation {
+    return performRelayMutation {
       try relayStore.addRelay(url: parsedURL)
     }
   }
@@ -1090,16 +1096,18 @@ final class AppSession: ObservableObject {
     pendingSessionNavigationID = nil
   }
 
-  private func performRelayMutation(_ mutation: () throws -> Void) {
+  @discardableResult
+  private func performRelayMutation(_ mutation: () throws -> Void) -> Bool {
     do {
       try mutation()
       composeError = nil
     } catch {
       report(error: error)
-      return
+      return false
     }
     pruneRuntimeRelayStatusCache()
     startNostrIfPossible()
+    return true
   }
 
   private func clearMessageCache(ownerPubkey: String) {

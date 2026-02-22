@@ -69,11 +69,16 @@ struct SettingsView: View {
                 .padding(.top, 4)
             }
 
+            let relayErrorText = normalizedInlineMessage(session.relayErrorMessage(for: relay))
+            Text(relayErrorText.isEmpty ? " " : relayErrorText)
+              .font(.custom(LinkstrTheme.bodyFont, size: 12))
+              .foregroundStyle(LinkstrTheme.textSecondary)
+              .fixedSize(horizontal: false, vertical: true)
+              .frame(maxWidth: .infinity, minHeight: 30, alignment: .topLeading)
+              .opacity(relayErrorText.isEmpty ? 0 : 1)
+              .accessibilityHidden(relayErrorText.isEmpty)
+
             HStack(spacing: 10) {
-              Text("Enabled")
-                .font(.custom(LinkstrTheme.bodyFont, size: 13))
-                .foregroundStyle(LinkstrTheme.textSecondary)
-              Spacer(minLength: 8)
               Toggle(
                 "",
                 isOn: Binding(
@@ -86,20 +91,10 @@ struct SettingsView: View {
               )
               .labelsHidden()
               .tint(LinkstrTheme.neonCyan)
-            }
-            .padding(.trailing, 4)
+              .accessibilityLabel(relay.isEnabled ? "Disable relay" : "Enable relay")
 
-            let relayErrorText = normalizedInlineMessage(session.relayErrorMessage(for: relay))
-            Text(relayErrorText.isEmpty ? " " : relayErrorText)
-              .font(.custom(LinkstrTheme.bodyFont, size: 12))
-              .foregroundStyle(LinkstrTheme.textSecondary)
-              .fixedSize(horizontal: false, vertical: true)
-              .frame(maxWidth: .infinity, minHeight: 30, alignment: .topLeading)
-              .opacity(relayErrorText.isEmpty ? 0 : 1)
-              .accessibilityHidden(relayErrorText.isEmpty)
-
-            HStack {
               Spacer()
+
               Button(role: .destructive) {
                 session.removeRelay(relay)
               } label: {
@@ -145,8 +140,9 @@ struct SettingsView: View {
             )
 
           Button {
-            session.addRelay(url: relayURL)
-            relayURL = ""
+            if session.addRelay(url: relayURL) {
+              relayURL = ""
+            }
           } label: {
             Text("Add Relay")
               .frame(maxWidth: .infinity)

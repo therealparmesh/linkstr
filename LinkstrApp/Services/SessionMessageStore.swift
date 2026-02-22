@@ -279,11 +279,17 @@ final class SessionMessageStore {
         predicate: #Predicate { $0.ownerPubkey == ownerPubkey })
     )
 
+    let thumbnailPaths = Set(messages.compactMap { normalizedPath($0.thumbnailURL) })
+
     messages.forEach(modelContext.delete)
     sessions.forEach(modelContext.delete)
     members.forEach(modelContext.delete)
     reactions.forEach(modelContext.delete)
     try modelContext.save()
+
+    for path in thumbnailPaths {
+      try? FileManager.default.removeItem(atPath: path)
+    }
   }
 
   func clearCachedVideos(ownerPubkey: String) throws {
@@ -329,5 +335,11 @@ final class SessionMessageStore {
       throw NostrServiceError.invalidPubkey
     }
     return key.hex
+  }
+
+  private func normalizedPath(_ path: String?) -> String? {
+    guard let path else { return nil }
+    let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
   }
 }

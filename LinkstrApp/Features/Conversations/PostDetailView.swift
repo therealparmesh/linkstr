@@ -10,12 +10,11 @@ struct ReactionSummary: Identifiable, Hashable {
   var id: String { emoji }
 }
 
-struct ReactionBreakdown: Identifiable, Hashable {
-  let emoji: String
-  let participants: [String]
+struct ReactionParticipantBreakdown: Identifiable, Hashable {
+  let displayName: String
+  let emojis: [String]
 
-  var id: String { emoji }
-  var count: Int { participants.count }
+  var id: String { displayName }
 }
 
 struct LinkstrReactionRow: View {
@@ -30,6 +29,7 @@ struct LinkstrReactionRow: View {
   let onAddReaction: (() -> Void)?
 
   private let quickEmojis = ["👍", "👎", "👀"]
+  private let readOnlyMaxEmojiCount = 10
 
   private var quickSummariesByEmoji: [String: ReactionSummary] {
     Dictionary(
@@ -44,12 +44,26 @@ struct LinkstrReactionRow: View {
     summaries.filter { !quickEmojis.contains($0.emoji) }
   }
 
+  private var readOnlyVisibleSummaries: [ReactionSummary] {
+    Array(summaries.prefix(readOnlyMaxEmojiCount))
+  }
+
+  private var hasReadOnlyOverflow: Bool {
+    summaries.count > readOnlyMaxEmojiCount
+  }
+
   var body: some View {
     ScrollView(.horizontal, showsIndicators: false) {
-      HStack(spacing: 8) {
+      HStack(alignment: .center, spacing: mode == .readOnly ? 6 : 8) {
         if mode == .readOnly {
-          ForEach(summaries) { summary in
-            summaryChip(summary)
+          ForEach(readOnlyVisibleSummaries) { summary in
+            readOnlySummaryText(summary)
+          }
+
+          if hasReadOnlyOverflow {
+            Text("...")
+              .font(.custom(LinkstrTheme.bodyFont, size: 12))
+              .foregroundStyle(LinkstrTheme.textSecondary)
           }
         } else {
           ForEach(extraSummaries) { summary in
@@ -80,8 +94,25 @@ struct LinkstrReactionRow: View {
           }
         }
       }
+      .frame(minHeight: mode == .readOnly ? 18 : nil, alignment: .leading)
     }
     .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  private func readOnlySummaryText(_ summary: ReactionSummary) -> some View {
+    HStack(alignment: .firstTextBaseline, spacing: 2) {
+      Text(summary.emoji)
+        .font(.system(size: 15))
+        .foregroundStyle(LinkstrTheme.textPrimary.opacity(0.95))
+
+      if summary.count > 1 {
+        Text("\(summary.count)")
+          .font(.custom(LinkstrTheme.bodyFont, size: 10))
+          .foregroundStyle(LinkstrTheme.textSecondary)
+      }
+    }
+    .fixedSize(horizontal: true, vertical: false)
+    .padding(.vertical, 1)
   }
 
   private func summaryChip(_ summary: ReactionSummary) -> some View {
@@ -275,35 +306,30 @@ struct PostDetailView: View {
       }
   }
 
-  private var reactionBreakdown: [ReactionBreakdown] {
+  private var reactionBreakdown: [ReactionParticipantBreakdown] {
     guard !scopedReactions.isEmpty else { return [] }
 
-    let grouped = Dictionary(grouping: scopedReactions, by: \.emoji)
-    let myPubkey = session.identityService.pubkeyHex
+    let grouped = Dictionary(grouping: scopedReactions) { reaction -> String in
+      let myPubkey = session.identityService.pubkeyHex
+      if let myPubkey, reaction.senderMatches(myPubkey) {
+        return "You"
+      }
+      return session.contactName(for: reaction.senderPubkey, contacts: scopedContacts)
+    }
 
     return
-      grouped
-      .map { emoji, reactions in
-        let participants =
-          reactions
-          .map { reaction -> String in
-            if let myPubkey, reaction.senderMatches(myPubkey) {
-              return "You"
-            }
-            return session.contactName(for: reaction.senderPubkey, contacts: scopedContacts)
-          }
-          .sorted { lhs, rhs in
-            if lhs == "You" { return true }
-            if rhs == "You" { return false }
-            return lhs.localizedCaseInsensitiveCompare(rhs) == .orderedAscending
-          }
-        return ReactionBreakdown(emoji: emoji, participants: participants)
+      grouped.map { displayName, reactions in
+        let emojis = Array(Set(reactions.map(\.emoji))).sorted {
+          $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
+        }
+        return ReactionParticipantBreakdown(displayName: displayName, emojis: emojis)
       }
       .sorted {
-        if $0.count == $1.count {
-          return $0.emoji < $1.emoji
-        }
-        return $0.count > $1.count
+        if $0.displayName == "You" { return true }
+        if $1.displayName == "You" { return false }
+        return
+          $0.displayName.localizedCaseInsensitiveCompare($1.displayName)
+          == .orderedAscending
       }
   }
 
@@ -395,17 +421,18 @@ struct PostDetailView: View {
           LinkstrSectionHeader(title: "Who Reacted")
 
           ForEach(reactionBreakdown) { entry in
-            HStack(alignment: .top, spacing: 8) {
-              Text(entry.emoji)
-                .font(.system(size: 17))
-
-              Text(entry.participants.joined(separator: ", "))
+            HStack(alignment: .center, spacing: 6) {
+              Text("\(entry.displayName):")
                 .font(.custom(LinkstrTheme.bodyFont, size: 12))
                 .foregroundStyle(LinkstrTheme.textSecondary)
-                .multilineTextAlignment(.leading)
+
+              Text(entry.emojis.joined(separator: " "))
+                .font(.system(size: 15))
+                .foregroundStyle(LinkstrTheme.textPrimary)
 
               Spacer(minLength: 0)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 2)
           }
         }

@@ -37,6 +37,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
   private var relayPool: RelayPool?
   private var eventCancellable: AnyCancellable?
   private var processedEventIDs = Set<String>()
+  private var processedEventIDOrder: [String] = []
   private var recipientFilter: Filter?
   private var authorFilter: Filter?
   private var reconnectTask: Task<Void, Never>?
@@ -52,6 +53,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
   private let recipientSubscriptionID = "linkstr-giftwrap-recipient"
   private let authorSubscriptionID = "linkstr-giftwrap-author"
   private let backfillPageSize = 500
+  private let processedEventIDLimit = 10_000
   private let reconnectDelayNanoseconds: UInt64 = 2_000_000_000
   private var activeBackfillStates: [String: BackfillState] = [:]
   private var completedBackfillKinds = Set<BackfillSubscriptionKind>()
@@ -158,6 +160,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     relayPool?.disconnect()
     relayPool = nil
     processedEventIDs.removeAll()
+    processedEventIDOrder.removeAll()
     recipientFilter = nil
     authorFilter = nil
     activeBackfillStates.removeAll()
@@ -547,7 +550,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
       return
     }
 
-    processedEventIDs.insert(rumor.id)
+    rememberProcessedEventID(rumor.id)
 
     let receiver = keypair.publicKey.hex
 
@@ -559,6 +562,20 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
         payload: payload,
         createdAt: rumor.createdDate
       ))
+  }
+
+  private func rememberProcessedEventID(_ eventID: String) {
+    guard processedEventIDs.insert(eventID).inserted else { return }
+    processedEventIDOrder.append(eventID)
+
+    let overflowCount = processedEventIDOrder.count - processedEventIDLimit
+    guard overflowCount > 0 else { return }
+
+    let overflowIDs = processedEventIDOrder.prefix(overflowCount)
+    for overflowID in overflowIDs {
+      processedEventIDs.remove(overflowID)
+    }
+    processedEventIDOrder.removeFirst(overflowCount)
   }
 
   private func handleRelayStateDidChange(relayURL: String, state: Relay.State) {

@@ -23,7 +23,11 @@ struct LinkstrAppMain: App {
       let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
       container = try ModelContainer(for: schema, configurations: [configuration])
     } catch {
-      NSLog("Persistent store unavailable, falling back to in-memory store: \(error)")
+      guard Self.shouldAllowInMemoryStoreFallback() else {
+        fatalError("Persistent store unavailable: \(error)")
+      }
+
+      NSLog("Persistent store unavailable, using in-memory fallback for this process: \(error)")
       do {
         let fallbackConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         container = try ModelContainer(for: schema, configurations: [fallbackConfiguration])
@@ -33,6 +37,14 @@ struct LinkstrAppMain: App {
     }
     self.container = container
     _session = StateObject(wrappedValue: AppSession(modelContext: container.mainContext))
+  }
+
+  private static func shouldAllowInMemoryStoreFallback() -> Bool {
+    let environment = ProcessInfo.processInfo.environment
+    if environment["XCTestConfigurationFilePath"] != nil {
+      return true
+    }
+    return environment["LINKSTR_ALLOW_IN_MEMORY_STORE_FALLBACK"] == "1"
   }
 
   var body: some Scene {

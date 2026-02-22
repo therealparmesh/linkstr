@@ -70,7 +70,7 @@
   - Missing previous members become inactive.
 - Sessions can be archived/unarchived from a session-row long-press menu.
 - Session list shows active sessions by default.
-- Archived sessions are opened from a subtle `Archived (N)` affordance and exited via `Back to Active`.
+- Archived sessions are filtered via compact `Active` / `Archived (N)` pills shown only when archived sessions exist.
 - Archive is non-destructive.
 
 ### Session members UX
@@ -100,17 +100,17 @@
   - Send waits for a usable relay path (default timeout 12 seconds).
   - On success, post persists locally and composer dismisses.
   - On failure/timeout, composer stays open and error is shown.
-- Posting is blocked when no active members are available for the session.
+- Posting recipient resolution always includes the current user in addition to any active session members.
 
 ### Reactions
 
 - Reactions are emoji-only toggles tied to a post.
 - UX includes:
-  - Session post list shows read-only reaction summary chips.
+  - Session post list shows compact read-only reaction summaries (no interactive controls).
   - Post detail uses interactive Slack-style reaction summary chips.
   - Inline quick toggles for `👍`, `👎`, `👀`.
   - `...` button that opens the full emoji picker sheet.
-  - Post detail shows a per-emoji participant breakdown (who reacted with each emoji).
+  - Post detail shows per-participant breakdown rows (`display_name: emojis_reacted_with`).
 - Default quick options include `👍`, `👎`, `👀`.
 - Reaction state is keyed by:
   - Session ID.
@@ -181,7 +181,7 @@
 - Canonicalization handles mobile host variants (for example `m.facebook.com`).
 - For extraction-capable providers, local playback is attempted first with explicit controls to switch to embed mode.
 - If extraction fails, embed mode remains available and offers retry-local plus Safari open actions.
-- Facebook videos/reels are embedded through the canonical first-party Facebook page player (not plugin iframes).
+- Facebook videos/reels use Facebook plugin embed URLs (`/plugins/video.php`) with canonicalized `href` targets.
 - Rumble embeds are resolved from provider oEmbed iframe URLs when available.
 - Media actions are normalized:
   - One action button uses full width.
@@ -250,19 +250,3 @@ xcodebuild test -project Linkstr.xcodeproj -scheme Linkstr -destination 'platfor
 ```
 
 - If your simulator name differs, replace `name=iPhone 17 Pro` with one available locally.
-
-## README maintenance prompt
-
-- Use this prompt when behavior changes and README must stay aligned with shipped code:
-
-```text
-Rewrite README.md as a cohesive, human-readable product behavior spec for the current app state.
-
-Constraints:
-- Keep the top project title and one-line product description intact unless explicitly asked to change them.
-- Use bullet points, not numbered checklist formatting.
-- Cover: product model, boot, identity lifecycle, sessions, members, posts, reactions, unread semantics, relay management/runtime/send gating, transport+ingest, notifications, media/link behavior, contacts, share tab, deep links, local security/storage, migration expectations, and non-goals.
-- Reflect current implementation only; do not document aspirational behavior.
-- Keep precise engineering language without commit-log or Jira-task tone.
-- Keep development commands at the end.
-```
