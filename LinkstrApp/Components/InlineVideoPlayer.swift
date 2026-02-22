@@ -158,6 +158,7 @@ struct AdaptiveVideoPlaybackView: View {
               Text("Use Embedded")
                 .frame(maxWidth: .infinity)
             }
+            .frame(maxWidth: .infinity)
             .buttonStyle(LinkstrSecondaryButtonStyle())
 
             Button {
@@ -166,6 +167,7 @@ struct AdaptiveVideoPlaybackView: View {
               Text("Open in Safari")
                 .frame(maxWidth: .infinity)
             }
+            .frame(maxWidth: .infinity)
             .buttonStyle(LinkstrSecondaryButtonStyle())
           }
         } else {
@@ -175,6 +177,7 @@ struct AdaptiveVideoPlaybackView: View {
             Text("Use Embedded")
               .frame(maxWidth: .infinity)
           }
+          .frame(maxWidth: .infinity)
           .buttonStyle(LinkstrSecondaryButtonStyle())
         }
       }
@@ -221,6 +224,7 @@ struct AdaptiveVideoPlaybackView: View {
             Text("Try Local Playback")
               .frame(maxWidth: .infinity)
           }
+          .frame(maxWidth: .infinity)
           .buttonStyle(LinkstrSecondaryButtonStyle())
 
           Button {
@@ -229,6 +233,7 @@ struct AdaptiveVideoPlaybackView: View {
             Text("Open in Safari")
               .frame(maxWidth: .infinity)
           }
+          .frame(maxWidth: .infinity)
           .buttonStyle(LinkstrSecondaryButtonStyle())
         }
       } else if allowsTryLocalPlayback {
@@ -243,6 +248,7 @@ struct AdaptiveVideoPlaybackView: View {
           Text("Try Local Playback")
             .frame(maxWidth: .infinity)
         }
+        .frame(maxWidth: .infinity)
         .buttonStyle(LinkstrSecondaryButtonStyle())
       } else if canOpenSource, let openSourceAction {
         Button {
@@ -251,6 +257,7 @@ struct AdaptiveVideoPlaybackView: View {
           Text("Open in Safari")
             .frame(maxWidth: .infinity)
         }
+        .frame(maxWidth: .infinity)
         .buttonStyle(LinkstrSecondaryButtonStyle())
       }
     }

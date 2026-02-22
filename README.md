@@ -60,6 +60,7 @@
   - Archive flag.
 - Users create sessions from the Sessions tab `+` flow.
 - Session creation requires a non-empty name.
+- `Create Session` stays disabled (with disabled styling) until name is non-empty.
 - Member selection at creation is optional.
 - Session creation can be solo (creator only).
 - After successful session creation, the app navigates directly into that session.

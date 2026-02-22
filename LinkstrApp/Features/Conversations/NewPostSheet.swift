@@ -29,7 +29,7 @@ struct NewPostSheet: View {
                 .foregroundStyle(LinkstrTheme.textPrimary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(12)
-                .frame(minHeight: 42)
+                .frame(minHeight: LinkstrTheme.inputControlMinHeight)
                 .background(
                   RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(LinkstrTheme.panelSoft)
@@ -49,7 +49,7 @@ struct NewPostSheet: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
                 .lineLimit(1)
-                .frame(minHeight: 42)
+                .frame(minHeight: LinkstrTheme.inputControlMinHeight)
                 .background(
                   RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(LinkstrTheme.panelSoft)

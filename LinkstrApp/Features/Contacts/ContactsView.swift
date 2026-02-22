@@ -105,7 +105,7 @@ private struct ContactDetailView: View {
             .textInputAutocapitalization(.words)
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .frame(minHeight: 42)
+            .frame(minHeight: LinkstrTheme.inputControlMinHeight)
             .background(
               RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(LinkstrTheme.panelSoft)
@@ -118,7 +118,7 @@ private struct ContactDetailView: View {
             .lineLimit(1)
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .frame(minHeight: 42)
+            .frame(minHeight: LinkstrTheme.inputControlMinHeight)
             .background(
               RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(LinkstrTheme.panelSoft)
@@ -212,7 +212,7 @@ struct AddContactSheet: View {
             .disabled(isNPubPrefilled)
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .frame(minHeight: 42)
+            .frame(minHeight: LinkstrTheme.inputControlMinHeight)
             .background(
               RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(LinkstrTheme.panelSoft)
@@ -221,7 +221,7 @@ struct AddContactSheet: View {
             .textInputAutocapitalization(.words)
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .frame(minHeight: 42)
+            .frame(minHeight: LinkstrTheme.inputControlMinHeight)
             .background(
               RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(LinkstrTheme.panelSoft)

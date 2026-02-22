@@ -738,22 +738,26 @@ actor URLCanonicalizationService {
   }
 
   private func resolveUncached(_ sourceURL: URL) async -> URL {
-    guard SocialURLHeuristics.isFacebookShareURL(sourceURL) else {
-      return sourceURL
+    if SocialURLHeuristics.isFacebookShareURL(sourceURL) {
+      if let redirectedURL = await firstRedirectTarget(from: sourceURL),
+        let canonical = canonicalFacebookURL(from: redirectedURL)
+      {
+        return canonical
+      }
+
+      if let canonicalFromPage = await canonicalFacebookURLFromPage(sourceURL) {
+        return canonicalFromPage
+      }
+
+      if let fallback = fallbackCanonicalFacebookURL(from: sourceURL) {
+        return fallback
+      }
     }
 
-    if let redirectedURL = await firstRedirectTarget(from: sourceURL),
-      let canonical = canonicalFacebookURL(from: redirectedURL)
+    if SocialURLHeuristics.isRumbleHost(sourceURL),
+      let rumbleEmbed = await rumbleEmbedURL(from: sourceURL)
     {
-      return canonical
-    }
-
-    if let canonicalFromPage = await canonicalFacebookURLFromPage(sourceURL) {
-      return canonicalFromPage
-    }
-
-    if let fallback = fallbackCanonicalFacebookURL(from: sourceURL) {
-      return fallback
+      return rumbleEmbed
     }
 
     return sourceURL
@@ -882,6 +886,60 @@ actor URLCanonicalizationService {
     return String(text[captureRange])
   }
 
+  private func rumbleEmbedURL(from sourceURL: URL) async -> URL? {
+    let parts = sourceURL.pathComponents
+      .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased() }
+      .filter { !$0.isEmpty }
+    if parts.first == "embed" {
+      return sourceURL
+    }
+
+    var components = URLComponents(string: "https://rumble.com/api/Media/oembed.json")
+    components?.queryItems = [URLQueryItem(name: "url", value: sourceURL.absoluteString)]
+    guard let requestURL = components?.url else {
+      return nil
+    }
+
+    var request = URLRequest(url: requestURL)
+    request.httpMethod = "GET"
+    request.setValue(
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15"
+        + " (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
+      forHTTPHeaderField: "User-Agent"
+    )
+    request.setValue("application/json", forHTTPHeaderField: "Accept")
+    request.timeoutInterval = requestTimeout
+
+    do {
+      let (data, response) = try await URLSession.shared.data(for: request)
+      guard let httpResponse = response as? HTTPURLResponse,
+        (200..<300).contains(httpResponse.statusCode)
+      else {
+        return nil
+      }
+
+      let payload = try JSONDecoder().decode(RumbleOEmbedPayload.self, from: data)
+      guard
+        let rawEmbedURL = Self.firstCapturedGroup(
+          in: payload.html,
+          pattern: #"<iframe[^>]+src=['"]([^'"]+)['"][^>]*>"#
+        )
+      else {
+        return nil
+      }
+
+      let normalized = Self.normalizedEmbeddedURL(rawEmbedURL)
+      guard let embedURL = URL(string: normalized), SocialURLHeuristics.isRumbleHost(embedURL)
+      else {
+        return nil
+      }
+
+      return embedURL
+    } catch {
+      return nil
+    }
+  }
+
   private static func normalizedEmbeddedURL(_ raw: String) -> String {
     raw
       .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -940,6 +998,10 @@ actor URLCanonicalizationService {
       return nil
     }
   }
+}
+
+private struct RumbleOEmbedPayload: Decodable {
+  let html: String
 }
 
 private final class FirstRedirectResolver: NSObject, URLSessionTaskDelegate {

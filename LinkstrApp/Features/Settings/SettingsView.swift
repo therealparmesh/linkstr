@@ -133,7 +133,7 @@ struct SettingsView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
             .lineLimit(1)
-            .frame(minHeight: 42)
+            .frame(minHeight: LinkstrTheme.inputControlMinHeight)
             .background(
               RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(LinkstrTheme.panelSoft)

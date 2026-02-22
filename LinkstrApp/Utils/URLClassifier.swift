@@ -100,7 +100,7 @@ enum URLClassifier {
     case .youtube:
       return youtubeEmbedURL(for: sourceURL)
     case .rumble:
-      return rumbleEmbedURL(for: sourceURL)
+      return sourceURL
     case .twitter:
       return twitterEmbedURL(for: sourceURL)
     case .generic:
@@ -130,6 +130,14 @@ enum URLClassifier {
 
   private static func facebookEmbedURL(for sourceURL: URL) -> URL? {
     let canonicalSourceURL = canonicalFacebookWebURL(sourceURL)
+
+    // Facebook reel/share URLs are more reliable as first-party pages than plugin embeds.
+    if SocialURLHeuristics.isFacebookReelURL(canonicalSourceURL)
+      || SocialURLHeuristics.isFacebookShareURL(canonicalSourceURL)
+    {
+      return canonicalSourceURL
+    }
+
     var components = URLComponents(string: "https://www.facebook.com/plugins/video.php")
     components?.queryItems = [
       URLQueryItem(name: "href", value: canonicalSourceURL.absoluteString),
@@ -158,38 +166,28 @@ enum URLClassifier {
     guard let id = videoID?.trimmingCharacters(in: .whitespacesAndNewlines), !id.isEmpty else {
       return sourceURL
     }
-    return URL(string: "https://www.youtube.com/embed/\(id)")
-  }
 
-  private static func rumbleEmbedURL(for sourceURL: URL) -> URL? {
-    let parts = sourceURL.pathComponents.filter { $0 != "/" }
-    guard let first = parts.first, !first.isEmpty else { return sourceURL }
-
-    if first.lowercased() == "embed", parts.count >= 2 {
-      return sourceURL
-    }
-
-    let id =
-      first
-      .replacingOccurrences(of: ".html", with: "")
-      .split(separator: "-")
-      .first
-      .map(String.init)
-      ?? first
-    return URL(string: "https://rumble.com/embed/\(id)")
+    var components = URLComponents(string: "https://www.youtube-nocookie.com/embed/\(id)")
+    components?.queryItems = [
+      URLQueryItem(name: "playsinline", value: "1"),
+      URLQueryItem(name: "rel", value: "0"),
+      URLQueryItem(name: "modestbranding", value: "1"),
+    ]
+    return components?.url ?? sourceURL
   }
 
   private static func twitterEmbedURL(for sourceURL: URL) -> URL? {
     guard SocialURLHeuristics.isTwitterStatusURL(sourceURL) else { return sourceURL }
-    guard var components = URLComponents(url: sourceURL, resolvingAgainstBaseURL: false) else {
+    guard let statusID = SocialURLHeuristics.twitterStatusID(from: sourceURL) else {
       return sourceURL
     }
-    components.scheme = "https"
-    components.host = "fixupx.com"
-    components.port = nil
-    components.user = nil
-    components.password = nil
-    return components.url ?? sourceURL
+
+    var components = URLComponents(string: "https://platform.twitter.com/embed/Tweet.html")
+    components?.queryItems = [
+      URLQueryItem(name: "id", value: statusID),
+      URLQueryItem(name: "dnt", value: "true"),
+    ]
+    return components?.url ?? sourceURL
   }
 
   private static func isShortFormVideoURL(_ sourceURL: URL) -> Bool {

@@ -14,6 +14,7 @@ enum LinkstrTheme {
   static let titleFont = "HelveticaNeue-Medium"
   static let bodyFont = "HelveticaNeue"
   static let sectionStackSpacing: CGFloat = 26
+  static let inputControlMinHeight: CGFloat = 44
 }
 
 struct LinkstrBackgroundView: View {
@@ -130,10 +131,17 @@ struct LinkstrListRowDivider: View {
 }
 
 struct LinkstrPrimaryButtonStyle: ButtonStyle {
+  @Environment(\.isEnabled) private var isEnabled
+
   func makeBody(configuration: Configuration) -> some View {
+    let backgroundFill =
+      isEnabled
+      ? LinkstrTheme.neonCyan.opacity(configuration.isPressed ? 0.75 : 0.92)
+      : LinkstrTheme.panelSoft.opacity(0.72)
+
     configuration.label
       .font(.custom(LinkstrTheme.bodyFont, size: 14))
-      .foregroundStyle(Color.white)
+      .foregroundStyle(isEnabled ? Color.white : LinkstrTheme.textSecondary.opacity(0.9))
       .lineLimit(2)
       .multilineTextAlignment(.center)
       .padding(.horizontal, 14)
@@ -141,16 +149,20 @@ struct LinkstrPrimaryButtonStyle: ButtonStyle {
       .frame(minHeight: 44)
       .background(
         RoundedRectangle(cornerRadius: 12, style: .continuous)
-          .fill(LinkstrTheme.neonCyan.opacity(configuration.isPressed ? 0.75 : 0.92))
+          .fill(backgroundFill)
       )
   }
 }
 
 struct LinkstrSecondaryButtonStyle: ButtonStyle {
+  @Environment(\.isEnabled) private var isEnabled
+
   func makeBody(configuration: Configuration) -> some View {
+    let backgroundOpacity = isEnabled ? (configuration.isPressed ? 0.72 : 0.92) : 0.6
+
     configuration.label
       .font(.custom(LinkstrTheme.bodyFont, size: 14))
-      .foregroundStyle(LinkstrTheme.textPrimary)
+      .foregroundStyle(isEnabled ? LinkstrTheme.textPrimary : LinkstrTheme.textSecondary)
       .lineLimit(2)
       .multilineTextAlignment(.center)
       .padding(.horizontal, 14)
@@ -158,11 +170,14 @@ struct LinkstrSecondaryButtonStyle: ButtonStyle {
       .frame(minHeight: 44)
       .background(
         RoundedRectangle(cornerRadius: 12, style: .continuous)
-          .fill(LinkstrTheme.panelSoft.opacity(configuration.isPressed ? 0.72 : 0.92))
+          .fill(LinkstrTheme.panelSoft.opacity(backgroundOpacity))
       )
       .overlay(
         RoundedRectangle(cornerRadius: 12, style: .continuous)
-          .stroke(LinkstrTheme.textSecondary.opacity(0.24), lineWidth: 0.8)
+          .stroke(
+            LinkstrTheme.textSecondary.opacity(isEnabled ? 0.24 : 0.14),
+            lineWidth: 0.8
+          )
       )
   }
 }

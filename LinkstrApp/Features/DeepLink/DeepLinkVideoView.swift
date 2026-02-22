@@ -32,6 +32,7 @@ struct DeepLinkVideoView: View {
             Text("Open in Safari")
               .frame(maxWidth: .infinity)
           }
+          .frame(maxWidth: .infinity)
           .buttonStyle(LinkstrSecondaryButtonStyle())
         }
       }

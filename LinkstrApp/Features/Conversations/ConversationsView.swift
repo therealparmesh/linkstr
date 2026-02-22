@@ -598,13 +598,13 @@ struct NewSessionSheet: View {
       ZStack {
         LinkstrBackgroundView()
         ScrollView {
-          VStack(alignment: .leading, spacing: 14) {
+          VStack(alignment: .leading, spacing: 12) {
             LinkstrSectionHeader(title: "Session Name")
             TextField("Fun", text: $sessionName)
               .textInputAutocapitalization(.words)
               .padding(.horizontal, 12)
               .padding(.vertical, 10)
-              .frame(minHeight: 42)
+              .frame(minHeight: LinkstrTheme.inputControlMinHeight)
               .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                   .fill(LinkstrTheme.panelSoft)
@@ -620,7 +620,7 @@ struct NewSessionSheet: View {
               .autocorrectionDisabled(true)
               .padding(.horizontal, 12)
               .padding(.vertical, 10)
-              .frame(minHeight: 42)
+              .frame(minHeight: LinkstrTheme.inputControlMinHeight)
               .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                   .fill(LinkstrTheme.panelSoft)
@@ -835,7 +835,7 @@ private struct SessionMembersSheet: View {
               .autocorrectionDisabled(true)
               .padding(.horizontal, 12)
               .padding(.vertical, 10)
-              .frame(minHeight: 42)
+              .frame(minHeight: LinkstrTheme.inputControlMinHeight)
               .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                   .fill(LinkstrTheme.panelSoft)
