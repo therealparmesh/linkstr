@@ -73,14 +73,14 @@ final class URLClassifierTests: XCTestCase {
     }
     XCTAssertEqual(
       youtubeEmbedURL.absoluteString,
-      "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?playsinline=1&rel=0&modestbranding=1"
+      "https://www.youtube.com/embed/dQw4w9WgXcQ?playsinline=1&rel=0"
     )
 
     let rumble = URLClassifier.mediaStrategy(for: "https://rumble.com/v5h7abc-sample-title.html")
     guard case .embedOnly(let rumbleEmbedURL) = rumble else {
       return XCTFail("Expected embedOnly strategy for Rumble")
     }
-    XCTAssertEqual(rumbleEmbedURL.absoluteString, "https://rumble.com/v5h7abc-sample-title.html")
+    XCTAssertEqual(rumbleEmbedURL.absoluteString, "https://rumble.com/embed/v5h7abc/")
 
     let instagramVideoPost = URLClassifier.mediaStrategy(
       for: "https://www.instagram.com/p/C7x5mYfP0R1/")
@@ -103,8 +103,10 @@ final class URLClassifierTests: XCTestCase {
     guard case .embedOnly(let facebookEmbedURL) = facebookVideoPost else {
       return XCTFail("Expected embedOnly strategy for Facebook non-reel video post")
     }
-    XCTAssertTrue(
-      facebookEmbedURL.absoluteString.hasPrefix("https://www.facebook.com/plugins/video.php"))
+    XCTAssertEqual(
+      facebookEmbedURL.absoluteString,
+      "https://www.facebook.com/some.page/videos/123456789012345/"
+    )
 
     XCTAssertFalse(youtube.allowsLocalPlaybackToggle)
     XCTAssertFalse(rumble.allowsLocalPlaybackToggle)
@@ -133,20 +135,20 @@ final class URLClassifierTests: XCTestCase {
   func testMediaStrategyTwitterVideoAndNonVideoStatuses() {
     assertExtractionPreferred(
       "https://twitter.com/nyjets/status/924685391524798464/video/1",
-      expectedEmbedPrefix: "https://platform.twitter.com/embed/Tweet.html?id=924685391524798464"
+      expectedEmbedPrefix: "https://x.com/i/status/924685391524798464"
     )
     assertExtractionPreferred(
       "http://twitter.com/nyjets/status/924685391524798464/video/1",
-      expectedEmbedPrefix: "https://platform.twitter.com/embed/Tweet.html?id=924685391524798464"
+      expectedEmbedPrefix: "https://x.com/i/status/924685391524798464"
     )
 
-    assertEmbedOnly(
+    assertExtractionPreferred(
       "https://twitter.com/FloodSocial/status/861627479294746624/photo/1",
-      expectedEmbedPrefix: "https://platform.twitter.com/embed/Tweet.html?id=861627479294746624"
+      expectedEmbedPrefix: "https://x.com/i/status/861627479294746624"
     )
-    assertEmbedOnly(
+    assertExtractionPreferred(
       "https://x.com/jack/status/20",
-      expectedEmbedPrefix: "https://platform.twitter.com/embed/Tweet.html?id=20"
+      expectedEmbedPrefix: "https://x.com/i/status/20"
     )
   }
 
@@ -157,7 +159,7 @@ final class URLClassifierTests: XCTestCase {
     }
     XCTAssertEqual(
       shortsEmbedURL.absoluteString,
-      "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?playsinline=1&rel=0&modestbranding=1"
+      "https://www.youtube.com/embed/dQw4w9WgXcQ?playsinline=1&rel=0"
     )
 
     let youtuBe = URLClassifier.mediaStrategy(for: "https://youtu.be/dQw4w9WgXcQ")
@@ -166,7 +168,7 @@ final class URLClassifierTests: XCTestCase {
     }
     XCTAssertEqual(
       youtuBeEmbedURL.absoluteString,
-      "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?playsinline=1&rel=0&modestbranding=1"
+      "https://www.youtube.com/embed/dQw4w9WgXcQ?playsinline=1&rel=0"
     )
   }
 
@@ -190,11 +192,11 @@ final class URLClassifierTests: XCTestCase {
     )
     assertEmbedOnly(
       "https://www.facebook.com/facebook/videos/10153231379946729/",
-      expectedEmbedPrefix: "https://www.facebook.com/plugins/video.php"
+      expectedEmbedPrefix: "https://www.facebook.com/facebook/videos/10153231379946729/"
     )
     assertEmbedOnly(
       "https://www.facebook.com/watch/?v=10153231379946729",
-      expectedEmbedPrefix: "https://www.facebook.com/plugins/video.php"
+      expectedEmbedPrefix: "https://www.facebook.com/watch/?v=10153231379946729"
     )
     assertEmbedOnly(
       "https://www.facebook.com/share/v/10153231379946729/",
@@ -214,16 +216,15 @@ final class URLClassifierTests: XCTestCase {
     )
     assertEmbedOnly(
       "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-      expectedEmbedPrefix: "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ"
+      expectedEmbedPrefix: "https://www.youtube.com/embed/dQw4w9WgXcQ"
     )
     assertEmbedOnly(
       "https://www.youtube.com/shorts/aqz-KE-bpKQ",
-      expectedEmbedPrefix: "https://www.youtube-nocookie.com/embed/aqz-KE-bpKQ"
+      expectedEmbedPrefix: "https://www.youtube.com/embed/aqz-KE-bpKQ"
     )
     assertEmbedOnly(
       "https://rumble.com/v8tc4h9-zelensky-has-rolled-the-world-in-less-than-2-minutes.html",
-      expectedEmbedPrefix:
-        "https://rumble.com/v8tc4h9-zelensky-has-rolled-the-world-in-less-than-2-minutes.html"
+      expectedEmbedPrefix: "https://rumble.com/embed/v8tc4h9/"
     )
   }
 

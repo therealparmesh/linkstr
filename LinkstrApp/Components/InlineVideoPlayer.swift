@@ -87,6 +87,7 @@ struct AdaptiveVideoPlaybackView: View {
   let persistLocalMedia: ((URL, PlayableMedia) -> Void)?
 
   @State private var canonicalSourceURL: URL?
+  @State private var preferredEmbedURL: URL?
   @State private var extractionState: ExtractionState?
   @State private var localPlaybackMode: LocalPlaybackMode = .localPreferred
   @State private var extractionFallbackReason: String?
@@ -107,9 +108,13 @@ struct AdaptiveVideoPlaybackView: View {
 
   var body: some View {
     content
+      .frame(maxWidth: .infinity, alignment: .leading)
       .task(id: sourceURL.absoluteString) {
-        canonicalSourceURL = await URLCanonicalizationService.shared.canonicalPlaybackURL(
-          for: sourceURL)
+        preferredEmbedURL = nil
+        let canonical = await URLCanonicalizationService.shared.canonicalPlaybackURL(for: sourceURL)
+        canonicalSourceURL = canonical
+        preferredEmbedURL = await URLCanonicalizationService.shared.preferredEmbedURL(
+          for: canonical)
         extractionState = nil
         extractionFallbackReason = nil
         localPlaybackMode = .localPreferred
@@ -121,17 +126,22 @@ struct AdaptiveVideoPlaybackView: View {
   private var content: some View {
     switch effectiveMediaStrategy {
     case .extractionPreferred(let embedURL):
+      let resolvedEmbedURL = resolvedOrFallbackEmbedURL(embedURL)
       if localPlaybackMode == .embedPreferred {
-        embedPlaybackBlock(embedURL: embedURL, allowsTryLocalPlayback: true)
+        embedPlaybackBlock(embedURL: resolvedEmbedURL, allowsTryLocalPlayback: true)
       } else {
-        extractionPlaybackBlock(embedURL: embedURL)
+        extractionPlaybackBlock(embedURL: resolvedEmbedURL)
       }
     case .embedOnly(let embedURL):
-      embedPlaybackBlock(embedURL: embedURL, allowsTryLocalPlayback: false)
+      embedPlaybackBlock(
+        embedURL: resolvedOrFallbackEmbedURL(embedURL), allowsTryLocalPlayback: false)
     case .link:
       if let openSourceAction {
-        Button("Open in Safari") {
+        Button {
           openSourceAction()
+        } label: {
+          Text("Open in Safari")
+            .frame(maxWidth: .infinity)
         }
         .frame(maxWidth: .infinity)
         .buttonStyle(LinkstrPrimaryButtonStyle())
@@ -149,7 +159,6 @@ struct AdaptiveVideoPlaybackView: View {
         mediaSurface {
           InlineVideoPlayer(media: media)
         }
-
         if let openSourceAction {
           HStack(spacing: 8) {
             Button {
@@ -302,6 +311,18 @@ struct AdaptiveVideoPlaybackView: View {
 
   private var effectiveSourceURL: URL {
     canonicalSourceURL ?? sourceURL
+  }
+
+  private func resolvedOrFallbackEmbedURL(_ fallback: URL) -> URL {
+    if let preferredEmbedURL {
+      return preferredEmbedURL
+    }
+
+    if URLClassifier.classify(effectiveSourceURL) == .rumble {
+      return effectiveSourceURL
+    }
+
+    return fallback
   }
 
   private var effectiveMediaStrategy: URLClassifier.MediaStrategy {

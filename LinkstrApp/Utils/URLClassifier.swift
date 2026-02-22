@@ -63,10 +63,7 @@ enum URLClassifier {
       return .link
     case .twitter:
       guard SocialURLHeuristics.isTwitterStatusURL(url) else { return .link }
-      if SocialURLHeuristics.isTwitterVideoURL(url) {
-        return .extractionPreferred(embedURL: embedURL(for: url, linkType: linkType) ?? url)
-      }
-      return .embedOnly(embedURL: embedURL(for: url, linkType: linkType) ?? url)
+      return .extractionPreferred(embedURL: embedURL(for: url, linkType: linkType) ?? url)
     case .youtube, .rumble:
       return .embedOnly(embedURL: embedURL(for: url, linkType: linkType) ?? url)
     case .generic:
@@ -77,9 +74,20 @@ enum URLClassifier {
   static func preferredMediaAspectRatio(for sourceURL: URL, strategy: MediaStrategy) -> CGFloat {
     switch strategy {
     case .extractionPreferred:
-      // Reels/TikTok extraction targets are effectively portrait-first.
-      return 9.0 / 16.0
+      let linkType = classify(sourceURL)
+      switch linkType {
+      case .tiktok, .instagram:
+        return 9.0 / 16.0
+      case .facebook:
+        return 9.0 / 16.0
+      case .twitter, .youtube, .rumble, .generic:
+        return 16.0 / 9.0
+      }
     case .embedOnly:
+      let linkType = classify(sourceURL)
+      if linkType == .facebook {
+        return SocialURLHeuristics.isFacebookReelURL(sourceURL) ? 9.0 / 16.0 : 16.0 / 9.0
+      }
       if isShortFormVideoURL(sourceURL) {
         return 9.0 / 16.0
       }
@@ -100,7 +108,7 @@ enum URLClassifier {
     case .youtube:
       return youtubeEmbedURL(for: sourceURL)
     case .rumble:
-      return sourceURL
+      return rumbleEmbedURL(for: sourceURL)
     case .twitter:
       return twitterEmbedURL(for: sourceURL)
     case .generic:
@@ -129,21 +137,8 @@ enum URLClassifier {
   }
 
   private static func facebookEmbedURL(for sourceURL: URL) -> URL? {
-    let canonicalSourceURL = canonicalFacebookWebURL(sourceURL)
-
-    // Facebook reel/share URLs are more reliable as first-party pages than plugin embeds.
-    if SocialURLHeuristics.isFacebookReelURL(canonicalSourceURL)
-      || SocialURLHeuristics.isFacebookShareURL(canonicalSourceURL)
-    {
-      return canonicalSourceURL
-    }
-
-    var components = URLComponents(string: "https://www.facebook.com/plugins/video.php")
-    components?.queryItems = [
-      URLQueryItem(name: "href", value: canonicalSourceURL.absoluteString),
-      URLQueryItem(name: "show_text", value: "false"),
-    ]
-    return components?.url ?? canonicalSourceURL
+    // Facebook plugin embeds are inconsistent in-app. Use the canonical first-party page player.
+    canonicalFacebookWebURL(sourceURL)
   }
 
   private static func youtubeEmbedURL(for sourceURL: URL) -> URL? {
@@ -167,13 +162,30 @@ enum URLClassifier {
       return sourceURL
     }
 
-    var components = URLComponents(string: "https://www.youtube-nocookie.com/embed/\(id)")
+    var components = URLComponents(string: "https://www.youtube.com/embed/\(id)")
     components?.queryItems = [
       URLQueryItem(name: "playsinline", value: "1"),
       URLQueryItem(name: "rel", value: "0"),
-      URLQueryItem(name: "modestbranding", value: "1"),
     ]
     return components?.url ?? sourceURL
+  }
+
+  private static func rumbleEmbedURL(for sourceURL: URL) -> URL? {
+    let parts = sourceURL.pathComponents.filter { $0 != "/" }
+    guard let first = parts.first, !first.isEmpty else { return sourceURL }
+
+    if first.lowercased() == "embed", parts.count >= 2 {
+      return sourceURL
+    }
+
+    let id =
+      first
+      .replacingOccurrences(of: ".html", with: "")
+      .split(separator: "-")
+      .first
+      .map(String.init)
+      ?? first
+    return URL(string: "https://rumble.com/embed/\(id)/")
   }
 
   private static func twitterEmbedURL(for sourceURL: URL) -> URL? {
@@ -182,12 +194,7 @@ enum URLClassifier {
       return sourceURL
     }
 
-    var components = URLComponents(string: "https://platform.twitter.com/embed/Tweet.html")
-    components?.queryItems = [
-      URLQueryItem(name: "id", value: statusID),
-      URLQueryItem(name: "dnt", value: "true"),
-    ]
-    return components?.url ?? sourceURL
+    return URL(string: "https://x.com/i/status/\(statusID)") ?? sourceURL
   }
 
   private static func isShortFormVideoURL(_ sourceURL: URL) -> Bool {

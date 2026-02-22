@@ -69,18 +69,13 @@ struct SettingsView: View {
                 .padding(.top, 4)
             }
 
-            let relayErrorText = normalizedInlineMessage(session.relayErrorMessage(for: relay))
-            Text(relayErrorText.isEmpty ? " " : relayErrorText)
-              .font(.custom(LinkstrTheme.bodyFont, size: 12))
-              .foregroundStyle(LinkstrTheme.textSecondary)
-              .fixedSize(horizontal: false, vertical: true)
-              .frame(maxWidth: .infinity, minHeight: 30, alignment: .topLeading)
-              .opacity(relayErrorText.isEmpty ? 0 : 1)
-              .accessibilityHidden(relayErrorText.isEmpty)
-
             HStack(spacing: 10) {
+              Text("Enabled")
+                .font(.custom(LinkstrTheme.bodyFont, size: 13))
+                .foregroundStyle(LinkstrTheme.textSecondary)
+              Spacer(minLength: 8)
               Toggle(
-                "Enable relay",
+                "",
                 isOn: Binding(
                   get: {
                     relay.isEnabled
@@ -90,11 +85,21 @@ struct SettingsView: View {
                   })
               )
               .labelsHidden()
-              .accessibilityLabel("Enable relay")
               .tint(LinkstrTheme.neonCyan)
+            }
+            .padding(.trailing, 4)
 
-              Spacer(minLength: 8)
+            let relayErrorText = normalizedInlineMessage(session.relayErrorMessage(for: relay))
+            Text(relayErrorText.isEmpty ? " " : relayErrorText)
+              .font(.custom(LinkstrTheme.bodyFont, size: 12))
+              .foregroundStyle(LinkstrTheme.textSecondary)
+              .fixedSize(horizontal: false, vertical: true)
+              .frame(maxWidth: .infinity, minHeight: 30, alignment: .topLeading)
+              .opacity(relayErrorText.isEmpty ? 0 : 1)
+              .accessibilityHidden(relayErrorText.isEmpty)
 
+            HStack {
+              Spacer()
               Button(role: .destructive) {
                 session.removeRelay(relay)
               } label: {

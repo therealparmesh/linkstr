@@ -33,6 +33,19 @@ final class SocialVideoExtractionService: NSObject {
       }
     }
 
+    if SocialURLHeuristics.isTwitterStatusURL(sourceURL) {
+      let directTwitterCandidates = await loadTwitterStatusMediaURLs(from: sourceURL)
+      if let resolved = await resolvePlayableMedia(
+        from: directTwitterCandidates,
+        sourceURL: sourceURL,
+        userAgent: Self.mobileUserAgent,
+        cookies: [],
+        assumePlayableCandidates: true
+      ) {
+        return resolved
+      }
+    }
+
     for userAgent in [Self.desktopUserAgent, Self.mobileUserAgent] {
       let sniffResult = await sniffMediaURLs(from: sourceURL, userAgent: userAgent)
       let sniffedCandidates = sniffResult.urls
@@ -58,7 +71,8 @@ final class SocialVideoExtractionService: NSObject {
     from candidates: [URL],
     sourceURL: URL,
     userAgent: String,
-    cookies: [HTTPCookie]
+    cookies: [HTTPCookie],
+    assumePlayableCandidates: Bool = false
   ) async -> ExtractionState? {
     for candidateURL in candidates {
       // All providers in scope expose HTTPS media URLs and ATS expects secure transport.
@@ -75,14 +89,17 @@ final class SocialVideoExtractionService: NSObject {
         userAgent: userAgent
       )
 
-      guard await isLikelyPlayable(candidateURL, headers: headers) else {
-        continue
-      }
+      if !assumePlayableCandidates {
+        guard await isLikelyPlayable(candidateURL, headers: headers) else {
+          continue
+        }
 
-      let asset = AVURLAsset(url: candidateURL, options: ["AVURLAssetHTTPHeaderFieldsKey": headers])
-      let isProtected = (try? await asset.load(.hasProtectedContent)) ?? false
-      if isProtected {
-        continue
+        let asset = AVURLAsset(
+          url: candidateURL, options: ["AVURLAssetHTTPHeaderFieldsKey": headers])
+        let isProtected = (try? await asset.load(.hasProtectedContent)) ?? false
+        if isProtected {
+          continue
+        }
       }
 
       do {
@@ -103,6 +120,98 @@ final class SocialVideoExtractionService: NSObject {
     }
 
     return nil
+  }
+
+  private func loadTwitterStatusMediaURLs(from sourceURL: URL) async -> [URL] {
+    guard let statusID = SocialURLHeuristics.twitterStatusID(from: sourceURL) else {
+      return []
+    }
+
+    let endpoints = [
+      "https://api.vxtwitter.com/Twitter/status/\(statusID)",
+      "https://api.fxtwitter.com/status/\(statusID)",
+    ]
+
+    var candidates: [URL] = []
+    for raw in endpoints {
+      guard let endpoint = URL(string: raw) else { continue }
+      let endpointCandidates = await loadMediaURLsFromJSONEndpoint(endpoint)
+      candidates.append(contentsOf: endpointCandidates)
+    }
+
+    var seen = Set<String>()
+    return candidates.filter { url in
+      seen.insert(url.absoluteString.lowercased()).inserted
+    }
+  }
+
+  private func loadMediaURLsFromJSONEndpoint(_ endpoint: URL) async -> [URL] {
+    var request = URLRequest(url: endpoint)
+    request.httpMethod = "GET"
+    request.timeoutInterval = 10
+    request.setValue(Self.mobileUserAgent, forHTTPHeaderField: "User-Agent")
+    request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+    do {
+      let (data, response) = try await URLSession.shared.data(for: request)
+      guard let httpResponse = response as? HTTPURLResponse,
+        (200..<300).contains(httpResponse.statusCode),
+        !data.isEmpty
+      else {
+        return []
+      }
+
+      let json = try JSONSerialization.jsonObject(with: data)
+      let stringCandidates = extractStringValues(from: json)
+
+      var seen = Set<String>()
+      return stringCandidates.compactMap { raw in
+        let normalized = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard likelyTwitterMediaCandidate(normalized),
+          let url = URL(string: normalized),
+          url.scheme?.lowercased() == "https"
+        else {
+          return nil
+        }
+
+        let key = url.absoluteString.lowercased()
+        guard seen.insert(key).inserted else { return nil }
+        return url
+      }
+    } catch {
+      return []
+    }
+  }
+
+  private func extractStringValues(from any: Any) -> [String] {
+    if let value = any as? String {
+      return [value]
+    }
+
+    if let values = any as? [Any] {
+      return values.flatMap(extractStringValues(from:))
+    }
+
+    if let dict = any as? [String: Any] {
+      return dict.values.flatMap(extractStringValues(from:))
+    }
+
+    return []
+  }
+
+  private func likelyTwitterMediaCandidate(_ raw: String) -> Bool {
+    let lower = raw.lowercased()
+    guard lower.hasPrefix("http") else { return false }
+
+    if lower.contains("video.twimg.com")
+      || lower.contains("/ext_tw_video/")
+      || lower.contains("/amplify_video/")
+      || lower.contains("/tweet_video/")
+    {
+      return true
+    }
+
+    return Self.isLikelyMediaURLString(lower)
   }
 
   private func isTikTokURL(_ url: URL) -> Bool {
@@ -595,6 +704,10 @@ private struct TikTokFeedAddress: Decodable {
   }
 }
 
+private struct RumbleOEmbedPayload: Decodable {
+  let html: String
+}
+
 @MainActor
 private final class MediaCandidateCollector: NSObject, WKNavigationDelegate, WKScriptMessageHandler
 {
@@ -722,6 +835,7 @@ actor URLCanonicalizationService {
 
   private let requestTimeout: TimeInterval = 6
   private var cache: [String: URL] = [:]
+  private var embedURLCache: [String: URL] = [:]
 
   func canonicalPlaybackURL(for sourceURL: URL) async -> URL {
     let cacheKey = sourceURL.absoluteString
@@ -737,27 +851,43 @@ actor URLCanonicalizationService {
     return resolved
   }
 
-  private func resolveUncached(_ sourceURL: URL) async -> URL {
-    if SocialURLHeuristics.isFacebookShareURL(sourceURL) {
-      if let redirectedURL = await firstRedirectTarget(from: sourceURL),
-        let canonical = canonicalFacebookURL(from: redirectedURL)
-      {
-        return canonical
-      }
-
-      if let canonicalFromPage = await canonicalFacebookURLFromPage(sourceURL) {
-        return canonicalFromPage
-      }
-
-      if let fallback = fallbackCanonicalFacebookURL(from: sourceURL) {
-        return fallback
-      }
+  func preferredEmbedURL(for sourceURL: URL) async -> URL? {
+    let cacheKey = sourceURL.absoluteString
+    if let cached = embedURLCache[cacheKey] {
+      return cached
     }
 
-    if SocialURLHeuristics.isRumbleHost(sourceURL),
-      let rumbleEmbed = await rumbleEmbedURL(from: sourceURL)
+    let resolved: URL?
+    switch URLClassifier.classify(sourceURL) {
+    case .rumble:
+      resolved = await rumbleEmbedURL(from: sourceURL)
+    case .tiktok, .instagram, .facebook, .youtube, .twitter, .generic:
+      resolved = nil
+    }
+
+    if let resolved {
+      embedURLCache[cacheKey] = resolved
+    }
+    return resolved
+  }
+
+  private func resolveUncached(_ sourceURL: URL) async -> URL {
+    guard SocialURLHeuristics.isFacebookShareURL(sourceURL) else {
+      return sourceURL
+    }
+
+    if let redirectedURL = await firstRedirectTarget(from: sourceURL),
+      let canonical = canonicalFacebookURL(from: redirectedURL)
     {
-      return rumbleEmbed
+      return canonical
+    }
+
+    if let canonicalFromPage = await canonicalFacebookURLFromPage(sourceURL) {
+      return canonicalFromPage
+    }
+
+    if let fallback = fallbackCanonicalFacebookURL(from: sourceURL) {
+      return fallback
     }
 
     return sourceURL
@@ -795,12 +925,6 @@ actor URLCanonicalizationService {
         !(200..<400).contains(httpResponse.statusCode)
       {
         return nil
-      }
-
-      if let responseURL = response.url,
-        let canonicalFromResponseURL = canonicalFacebookURL(from: responseURL)
-      {
-        return canonicalFromResponseURL
       }
 
       guard !data.isEmpty else { return nil }
@@ -998,10 +1122,6 @@ actor URLCanonicalizationService {
       return nil
     }
   }
-}
-
-private struct RumbleOEmbedPayload: Decodable {
-  let html: String
 }
 
 private final class FirstRedirectResolver: NSObject, URLSessionTaskDelegate {

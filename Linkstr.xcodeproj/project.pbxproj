@@ -31,7 +31,6 @@
 		6EB7676D56763E9FED69A718 /* HLSDownloadManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B818363C936E8DBB7C2F538E /* HLSDownloadManager.swift */; };
 		703AB880A3B1547E90E1A1D1 /* NostrDMService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB411CF847C9613148DBF8EC /* NostrDMService.swift */; };
 		831A7E879E5FAF0EBD56753D /* URLClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68350273DCA0FBB994BE216F /* URLClassifier.swift */; };
-		87270EB46F7E765484EEE056 /* SessionPayloadValidationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 118E840F89FC06452507FEFF /* SessionPayloadValidationTests.swift */; };
 		88DCCA79F01DAC7A398ADF43 /* LinkstrPayloadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 076BFE5567285D2651D29E76 /* LinkstrPayloadTests.swift */; };
 		8E50F4A5A78EA671EE4A33E5 /* LinkstrURLValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0163E69486343F16E6BDF160 /* LinkstrURLValidator.swift */; };
 		938970AFBB34DA8F985E727B /* LinkstrDeepLinkCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = 473FCEDF05A41F46037CA0A3 /* LinkstrDeepLinkCodec.swift */; };
@@ -47,6 +46,7 @@
 		AEFA77E7FD38763F0EE68754 /* PostDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27CE1C3A55AB4C43AF9C789B /* PostDetailView.swift */; };
 		BE9025C7D76C0741DFDEAFE1 /* RelayStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73DB81B29D4FCF3EB0F03DA1 /* RelayStore.swift */; };
 		BF9CDA3FA5F441195AF2FC62 /* RecipientSearchLogic.swift in Sources */ = {isa = PBXBuildFile; fileRef = B704DE821A9D698172A93F4C /* RecipientSearchLogic.swift */; };
+		C71CFF572A21E4B3C98C3D4D /* SessionPayloadValidationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79E872C26CAFF97C3A9E7DCB /* SessionPayloadValidationTests.swift */; };
 		CABAAF73A10AD588AD2A5486 /* IdentityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7062F43FAE1972AB3EC5D121 /* IdentityService.swift */; };
 		CF8B164A8900998AC0AAE357 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4727E1501694C70C7FAE8184 /* RootView.swift */; };
 		D00F92650B5A37DEBF1B243B /* LinkstrTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36DC9E797AA11FBE47A6FBCE /* LinkstrTheme.swift */; };
@@ -55,6 +55,7 @@
 		D4A473A3317F94F6604A6E20 /* LinkType.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A117E36B63F21A3C556B224 /* LinkType.swift */; };
 		DBC4E7152BFBBEB6B7424844 /* SocialURLHeuristics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 883F83A19614596E085D64F5 /* SocialURLHeuristics.swift */; };
 		E22AEE4691F666C0ED852DFE /* ContactsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B09547E4A4B6A981A7FF4FD0 /* ContactsView.swift */; };
+		E3B55E966544C7FA45A41C4A /* EmojiKit in Frameworks */ = {isa = PBXBuildFile; productRef = 2AF3BE99B91F111B4006784B /* EmojiKit */; };
 		E98F8AD0477C0287BF9663F8 /* ConversationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 848DAED86706C32D1050B92C /* ConversationsView.swift */; };
 		EE247329EA1C2DFB3640EF85 /* LinkstrPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24DA8D8D914B2A19EC637310 /* LinkstrPayload.swift */; };
 		EF19FA401BDF74AE61B08BA9 /* AppSessionLocalFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47DB242D6FCB3732EC147A9D /* AppSessionLocalFlowTests.swift */; };
@@ -77,7 +78,6 @@
 		03426C3B013C8B741D6BAB1B /* InlineVideoPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InlineVideoPlayer.swift; sourceTree = "<group>"; };
 		076BFE5567285D2651D29E76 /* LinkstrPayloadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkstrPayloadTests.swift; sourceTree = "<group>"; };
 		0A117E36B63F21A3C556B224 /* LinkType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkType.swift; sourceTree = "<group>"; };
-		118E840F89FC06452507FEFF /* SessionPayloadValidationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionPayloadValidationTests.swift; sourceTree = "<group>"; };
 		22CECBEA34B217B7CA645A04 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		24DA8D8D914B2A19EC637310 /* LinkstrPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkstrPayload.swift; sourceTree = "<group>"; };
 		27CE1C3A55AB4C43AF9C789B /* PostDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostDetailView.swift; sourceTree = "<group>"; };
@@ -108,6 +108,7 @@
 		71EA6AFE00388F8A47E323AB /* LinkstrErrorToast.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkstrErrorToast.swift; sourceTree = "<group>"; };
 		73DB81B29D4FCF3EB0F03DA1 /* RelayStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayStore.swift; sourceTree = "<group>"; };
 		77319D5B63F27BDBC54D4DC3 /* Linkstr.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Linkstr.entitlements; sourceTree = "<group>"; };
+		79E872C26CAFF97C3A9E7DCB /* SessionPayloadValidationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionPayloadValidationTests.swift; sourceTree = "<group>"; };
 		848DAED86706C32D1050B92C /* ConversationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationsView.swift; sourceTree = "<group>"; };
 		883F83A19614596E085D64F5 /* SocialURLHeuristics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialURLHeuristics.swift; sourceTree = "<group>"; };
 		8C14B65A3FC6EC731BBAA10B /* DateLabelFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateLabelFormatter.swift; sourceTree = "<group>"; };
@@ -137,6 +138,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F50EF62E08CD91E1D4312E6E /* NostrSDK in Frameworks */,
+				E3B55E966544C7FA45A41C4A /* EmojiKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -151,7 +153,7 @@
 				D8CC474675B4FD0B86052DBD /* DeepLinkCodecTests.swift */,
 				9FED3B5DF5A048969C4C2153 /* IdentityServiceTests.swift */,
 				076BFE5567285D2651D29E76 /* LinkstrPayloadTests.swift */,
-				118E840F89FC06452507FEFF /* SessionPayloadValidationTests.swift */,
+				79E872C26CAFF97C3A9E7DCB /* SessionPayloadValidationTests.swift */,
 				3DF2BD42808FC977F554891B /* URLClassifierTests.swift */,
 			);
 			path = LinkstrTests;
@@ -351,6 +353,7 @@
 			name = Linkstr;
 			packageProductDependencies = (
 				853C8A5E617908C1401BE59A /* NostrSDK */,
+				2AF3BE99B91F111B4006784B /* EmojiKit */,
 			);
 			productName = Linkstr;
 			productReference = F62FC938E7F3697FA5067EA0 /* Linkstr.app */;
@@ -400,6 +403,7 @@
 			mainGroup = 18AC082DBA2112A9ED76C56C;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				A214F2D4A6F4D20C1561B3B8 /* XCRemoteSwiftPackageReference "EmojiKit" */,
 				C3D397ECD58263BFAA7C117F /* XCRemoteSwiftPackageReference "nostr-sdk-ios" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -484,7 +488,7 @@
 				D2B4AD7171CBD08290BFF297 /* DeepLinkCodecTests.swift in Sources */,
 				401F645DC5E055DAB60CA01D /* IdentityServiceTests.swift in Sources */,
 				88DCCA79F01DAC7A398ADF43 /* LinkstrPayloadTests.swift in Sources */,
-				87270EB46F7E765484EEE056 /* SessionPayloadValidationTests.swift in Sources */,
+				C71CFF572A21E4B3C98C3D4D /* SessionPayloadValidationTests.swift in Sources */,
 				5C081B12920542652F7743FA /* URLClassifierTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -726,6 +730,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		A214F2D4A6F4D20C1561B3B8 /* XCRemoteSwiftPackageReference "EmojiKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/danielsaidi/EmojiKit.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
+			};
+		};
 		C3D397ECD58263BFAA7C117F /* XCRemoteSwiftPackageReference "nostr-sdk-ios" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/nostr-sdk/nostr-sdk-ios.git";
@@ -737,6 +749,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		2AF3BE99B91F111B4006784B /* EmojiKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A214F2D4A6F4D20C1561B3B8 /* XCRemoteSwiftPackageReference "EmojiKit" */;
+			productName = EmojiKit;
+		};
 		853C8A5E617908C1401BE59A /* NostrSDK */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = C3D397ECD58263BFAA7C117F /* XCRemoteSwiftPackageReference "nostr-sdk-ios" */;

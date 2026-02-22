@@ -1,3 +1,4 @@
+import EmojiKit
 import SwiftData
 import SwiftUI
 
@@ -176,75 +177,33 @@ struct LinkstrEmojiPickerSheet: View {
   let onPick: (String) -> Void
 
   @State private var query = ""
-
-  private let quickEmojis = ["👍", "👎", "👀"]
-
-  private let categories: [(title: String, emojis: [String])] = [
-    (
-      "People",
-      [
-        "😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "😊", "🙂", "😉", "😍", "😘", "😋",
-        "😎", "🤓", "🤔", "😐", "😶", "🙄", "😏", "😬", "😮", "😢", "😭", "😤", "😡", "🤯",
-        "🥳", "😴", "🤗", "🤝", "🙏", "👏", "🙌", "👋", "🤌", "👌", "✌️", "🤞", "🤟", "🫡",
-      ]
-    ),
-    (
-      "Reactions",
-      [
-        "👍", "👎", "👊", "✊", "👏", "🙌", "👌", "🤝", "🙏", "💪", "🔥", "💯", "✅", "❌", "⚡️",
-        "❤️", "💙", "💚", "🧡", "💜", "🤍", "💔", "💥", "⭐️", "✨", "🎯", "🚀", "👀", "👎", "👍",
-      ]
-    ),
-    (
-      "Objects",
-      [
-        "📌", "📎", "📷", "🎥", "📺", "🎧", "📱", "💻", "⌚️", "🧠", "📝", "📚", "🔗", "🔒", "🔓",
-        "🛠️", "⚙️", "🧪", "💡", "🧯", "🎬", "🎮", "🧩", "🗂️", "🧾", "📦", "🧭", "🛰️", "🧱", "🧲",
-      ]
-    ),
-    (
-      "Nature & Food",
-      [
-        "🌞", "🌙", "⭐️", "☀️", "🌧️", "⚡️", "❄️", "🌊", "🌱", "🌴", "🌸", "🍀", "🍎", "🍕", "🍔",
-        "🍟", "🌮", "🍣", "🍜", "☕️", "🍺", "🍷", "🍿", "🍪", "🍫", "🍓", "🍉", "🥑", "🥐", "🍩",
-      ]
-    ),
-  ]
+  @State private var category: EmojiCategory?
+  @State private var selection: Emoji.GridSelection?
 
   var body: some View {
     NavigationStack {
       ZStack {
         LinkstrBackgroundView()
-        ScrollView {
-          VStack(alignment: .leading, spacing: 14) {
-            TextField("Search emoji", text: $query)
-              .textInputAutocapitalization(.never)
-              .autocorrectionDisabled(true)
-              .padding(.horizontal, 12)
-              .padding(.vertical, 10)
-              .lineLimit(1)
-              .frame(minHeight: LinkstrTheme.inputControlMinHeight)
-              .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                  .fill(LinkstrTheme.panelSoft)
-              )
-
-            LinkstrSectionHeader(title: "Quick")
-            emojiGrid(quickEmojis)
-
-            ForEach(filteredCategories, id: \.title) { category in
-              LinkstrSectionHeader(title: category.title)
-              emojiGrid(category.emojis)
-            }
-          }
-          .padding(.horizontal, 12)
-          .padding(.vertical, 12)
-        }
-        .scrollBounceBehavior(.basedOnSize)
+        EmojiGridScrollView(
+          axis: .vertical,
+          category: $category,
+          selection: $selection,
+          query: query,
+          action: { emoji in
+            onPick(emoji.char)
+            dismiss()
+          },
+          sectionTitle: { $0.view },
+          gridItem: { $0.view }
+        )
+        .emojiGridStyle(.medium)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 8)
       }
       .navigationTitle("Add Reaction")
       .navigationBarTitleDisplayMode(.inline)
       .toolbarColorScheme(.dark, for: .navigationBar)
+      .searchable(text: $query, prompt: "Search emoji")
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
           Button("Cancel") {
@@ -253,43 +212,6 @@ struct LinkstrEmojiPickerSheet: View {
         }
       }
     }
-  }
-
-  @ViewBuilder
-  private func emojiGrid(_ emojis: [String]) -> some View {
-    LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: 40)), count: 7), spacing: 8) {
-      ForEach(emojis, id: \.self) { emoji in
-        Button {
-          onPick(emoji)
-          dismiss()
-        } label: {
-          Text(emoji)
-            .font(.system(size: 28))
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 6)
-            .background(
-              RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(LinkstrTheme.panelSoft)
-            )
-        }
-        .buttonStyle(.plain)
-      }
-    }
-  }
-
-  private var filteredCategories: [(title: String, emojis: [String])] {
-    let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else {
-      return categories
-    }
-
-    return categories.map { category in
-      let filteredEmojis = category.emojis.filter { emoji in
-        emoji.contains(trimmed)
-      }
-      return (category.title, filteredEmojis)
-    }
-    .filter { !$0.emojis.isEmpty }
   }
 }
 
@@ -489,6 +411,7 @@ struct PostDetailView: View {
         }
       }
     }
+    .frame(maxWidth: .infinity, alignment: .leading)
     .padding(.horizontal, 2)
   }
 

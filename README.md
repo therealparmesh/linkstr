@@ -68,8 +68,9 @@
 - Member updates are snapshot-based (`session_members`):
   - The active member set becomes exactly the snapshot.
   - Missing previous members become inactive.
-- Sessions can be archived/unarchived from session-row archive controls.
-- Session list supports `Active`, `Archived`, and `All` filters.
+- Sessions can be archived/unarchived from a session-row long-press menu.
+- Session list shows active sessions by default.
+- Archived sessions are opened from a subtle `Archived (N)` affordance and exited via `Back to Active`.
 - Archive is non-destructive.
 
 ### Session members UX
@@ -180,6 +181,8 @@
 - Canonicalization handles mobile host variants (for example `m.facebook.com`).
 - For extraction-capable providers, local playback is attempted first with explicit controls to switch to embed mode.
 - If extraction fails, embed mode remains available and offers retry-local plus Safari open actions.
+- Facebook videos/reels are embedded through the canonical first-party Facebook page player (not plugin iframes).
+- Rumble embeds are resolved from provider oEmbed iframe URLs when available.
 - Media actions are normalized:
   - One action button uses full width.
   - Two action buttons split width evenly with spacing.

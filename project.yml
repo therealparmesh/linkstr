@@ -10,6 +10,9 @@ packages:
   NostrSDK:
     url: https://github.com/nostr-sdk/nostr-sdk-ios.git
     branch: main
+  EmojiKit:
+    url: https://github.com/danielsaidi/EmojiKit.git
+    from: 2.0.0
 schemes:
   Linkstr:
     build:
@@ -36,6 +39,7 @@ targets:
       - path: LinkstrApp
     dependencies:
       - package: NostrSDK
+      - package: EmojiKit
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.parmscript.linkstr

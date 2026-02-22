@@ -28,25 +28,6 @@ private struct SessionMessageIndex {
   }
 }
 
-private enum SessionListFilter: String, CaseIterable, Identifiable {
-  case active
-  case archived
-  case all
-
-  var id: String { rawValue }
-
-  var title: String {
-    switch self {
-    case .active:
-      return "Active"
-    case .archived:
-      return "Archived"
-    case .all:
-      return "All"
-    }
-  }
-}
-
 struct ConversationsView: View {
   @EnvironmentObject private var session: AppSession
 
@@ -61,7 +42,7 @@ struct ConversationsView: View {
 
   @State private var selectedSessionID: String?
   @State private var isShowingSelectedSession = false
-  @State private var listFilter: SessionListFilter = .active
+  @State private var isShowingArchivedSessions = false
 
   private var scopedSessions: [SessionEntity] {
     session.scopedSessions(from: allSessions)
@@ -98,15 +79,15 @@ struct ConversationsView: View {
     .sorted { $0.latestTimestamp > $1.latestTimestamp }
   }
 
+  private var archivedSessionCount: Int {
+    summaries.filter { $0.session.isArchived }.count
+  }
+
   private var visibleSummaries: [SessionSummary] {
-    switch listFilter {
-    case .active:
-      return summaries.filter { !$0.session.isArchived }
-    case .archived:
+    if isShowingArchivedSessions {
       return summaries.filter { $0.session.isArchived }
-    case .all:
-      return summaries
     }
+    return summaries.filter { !$0.session.isArchived }
   }
 
   var body: some View {
@@ -138,6 +119,11 @@ struct ConversationsView: View {
     .onChange(of: scopedSessions.map(\.sessionID)) { _, _ in
       navigateToPendingSessionIfNeeded()
     }
+    .onChange(of: archivedSessionCount) { _, count in
+      if count == 0, isShowingArchivedSessions {
+        isShowingArchivedSessions = false
+      }
+    }
   }
 
   @ViewBuilder
@@ -151,59 +137,43 @@ struct ConversationsView: View {
     } else {
       ScrollView {
         VStack(alignment: .leading, spacing: 10) {
-          Picker("Session Filter", selection: $listFilter) {
-            ForEach(SessionListFilter.allCases) { filter in
-              Text(filter.title)
-                .tag(filter)
-            }
-          }
-          .pickerStyle(.segmented)
+          archiveToggleRow
 
           if visibleSummaries.isEmpty {
             ContentUnavailableView(
-              listFilter == .archived ? "No Archived Sessions" : "No Active Sessions",
-              systemImage: listFilter == .archived ? "archivebox" : "rectangle.stack",
+              isShowingArchivedSessions ? "No Archived Sessions" : "No Active Sessions",
+              systemImage: isShowingArchivedSessions ? "archivebox" : "rectangle.stack",
               description: Text(
-                listFilter == .archived
+                isShowingArchivedSessions
                   ? "Archive a session to move it here."
-                  : "Create a session or switch filters."
+                  : "Create a session or view archived sessions."
               )
             )
             .padding(.top, 12)
           } else {
             LazyVStack(spacing: 0) {
               ForEach(visibleSummaries) { summary in
-                HStack(spacing: 8) {
-                  Button {
-                    selectedSessionID = summary.session.sessionID
-                    isShowingSelectedSession = true
-                  } label: {
-                    SessionRowView(summary: summary)
-                  }
-                  .buttonStyle(.plain)
-                  .contentShape(Rectangle())
-                  .frame(maxWidth: .infinity, alignment: .leading)
-
+                Button {
+                  selectedSessionID = summary.session.sessionID
+                  isShowingSelectedSession = true
+                } label: {
+                  SessionRowView(summary: summary)
+                }
+                .buttonStyle(.plain)
+                .contentShape(Rectangle())
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contextMenu {
                   Button {
                     session.setSessionArchived(
                       sessionID: summary.session.sessionID,
                       archived: !summary.session.isArchived
                     )
                   } label: {
-                    Image(
-                      systemName: summary.session.isArchived ? "tray.and.arrow.up" : "archivebox"
-                    )
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(LinkstrTheme.textPrimary)
-                    .frame(width: 32, height: 32)
-                    .background(
-                      RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(LinkstrTheme.panel)
+                    Label(
+                      summary.session.isArchived ? "Unarchive Session" : "Archive Session",
+                      systemImage: summary.session.isArchived ? "tray.and.arrow.up" : "archivebox"
                     )
                   }
-                  .buttonStyle(.plain)
-                  .accessibilityLabel(
-                    summary.session.isArchived ? "Unarchive session" : "Archive session")
                 }
               }
             }
@@ -213,6 +183,37 @@ struct ConversationsView: View {
         .padding(.top, 6)
       }
       .scrollBounceBehavior(.basedOnSize)
+    }
+  }
+
+  @ViewBuilder
+  private var archiveToggleRow: some View {
+    if isShowingArchivedSessions {
+      Button {
+        isShowingArchivedSessions = false
+      } label: {
+        Label("Back to Active", systemImage: "arrow.left")
+          .font(.custom(LinkstrTheme.bodyFont, size: 12))
+          .foregroundStyle(LinkstrTheme.textSecondary)
+      }
+      .buttonStyle(.plain)
+      .padding(.bottom, 4)
+    } else if archivedSessionCount > 0 {
+      HStack {
+        Spacer(minLength: 0)
+        Button {
+          isShowingArchivedSessions = true
+        } label: {
+          Label(
+            "Archived (\(archivedSessionCount))",
+            systemImage: "archivebox"
+          )
+          .font(.custom(LinkstrTheme.bodyFont, size: 12))
+          .foregroundStyle(LinkstrTheme.textSecondary)
+        }
+        .buttonStyle(.plain)
+      }
+      .padding(.bottom, 2)
     }
   }
 

@@ -1,5 +1,5 @@
 {
-  "originHash" : "0ab95d1183d844f21320b1577c4436792ca7cc44806c2722463bd637855c4b61",
+  "originHash" : "ca9662fd6e95b9db7232a4a91d796671d6d71d5c688c5522d14b1b49b53711ec",
   "pins" : [
     {
       "identity" : "cryptoswift",
@@ -8,6 +8,15 @@
       "state" : {
         "revision" : "e45a26384239e028ec87fbcc788f513b67e10d8f",
         "version" : "1.9.0"
+      }
+    },
+    {
+      "identity" : "emojikit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/danielsaidi/EmojiKit.git",
+      "state" : {
+        "revision" : "623102eea94cabb59c26cb10295dda044790b76c",
+        "version" : "2.3.4"
       }
     },
     {
