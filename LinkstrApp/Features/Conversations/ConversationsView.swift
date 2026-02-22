@@ -122,6 +122,9 @@ struct ConversationsView: View {
         isShowingArchivedSessions = false
       }
     }
+    .safeAreaInset(edge: .bottom, spacing: 0) {
+      archiveToggleInset
+    }
   }
 
   @ViewBuilder
@@ -135,8 +138,6 @@ struct ConversationsView: View {
     } else {
       ScrollView {
         VStack(alignment: .leading, spacing: 10) {
-          archiveToggleRow
-
           if visibleSummaries.isEmpty {
             ContentUnavailableView(
               isShowingArchivedSessions ? "No Archived Sessions" : "No Active Sessions",
@@ -185,7 +186,7 @@ struct ConversationsView: View {
   }
 
   @ViewBuilder
-  private var archiveToggleRow: some View {
+  private var archiveToggleInset: some View {
     if archivedSessionCount > 0 {
       HStack(spacing: 6) {
         archiveFilterButton(
@@ -196,13 +197,12 @@ struct ConversationsView: View {
         }
 
         archiveFilterButton(
-          title: "Archived \(archivedSessionCount)",
+          title: "Archived",
           selected: isShowingArchivedSessions
         ) {
           isShowingArchivedSessions = true
         }
 
-        Spacer(minLength: 0)
       }
       .padding(4)
       .background(
@@ -213,7 +213,11 @@ struct ConversationsView: View {
         RoundedRectangle(cornerRadius: 10, style: .continuous)
           .stroke(LinkstrTheme.textSecondary.opacity(0.22), lineWidth: 1)
       )
-      .padding(.bottom, 2)
+      .frame(maxWidth: .infinity)
+      .padding(.horizontal, 12)
+      .padding(.top, 6)
+      .padding(.bottom, 6)
+      .background(Color.clear)
     }
   }
 
