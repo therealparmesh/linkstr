@@ -1,248 +1,223 @@
 # linkstr
 
-`linkstr` is a private link feed for people you trust: share videos and other media, then discuss it in a focused thread - like a tiny private subreddit for you and the people you talk to.
+`linkstr` is a private link feed for people you trust: share videos and other media in focused sessions - like a tiny private subreddit for you and the people you talk to.
 
 ## Product Behavior Spec (Current)
 
-### Product shape
+### Product model
 
 - The app is session-first, not DM-first.
-- A session is a private container of members and posts.
-- A post is a root link item inside a session.
-- A post can have threaded text replies.
-- A post can have emoji reactions.
-- Everything is private relay-delivered Nostr DM payloads carried inside gift wrap events.
+- A session is a private container with:
+  - A name.
+  - A member set.
+  - A feed of root posts.
+- A post is a link item inside a session with:
+  - Required URL.
+  - Optional note.
+  - Optional metadata hydration (title/thumbnail).
+  - Emoji reactions.
+- Text replies are not part of the current product.
+- App data is transported as private Nostr gift-wrap DMs using app payload kind `44001`.
 
-### App startup and boot
+### Startup and boot
 
-- On app launch, the app enters a boot phase and shows a loading screen with a status line.
-- Boot stages are user-visible (`Loading account…`, `Preparing local data…`, `Connecting relays…`, `Starting session…`).
-- If no account exists after boot, onboarding is shown.
-- If an account exists, the main app is shown.
-- Relay startup is attempted automatically when identity is available.
+- On launch, the app enters a blocking boot flow with visible status text.
+- Boot status labels are user-visible and progress through:
+  - `Loading account…`
+  - `Preparing local data…`
+  - `Connecting relays…`
+  - `Starting session…`
+- Boot loads identity from keychain and configures local notifications.
+- Boot ensures default relays exist if the local relay list is empty.
+- Boot prunes legacy non-root message rows from local storage.
+- Boot starts relay runtime when identity is available.
+- If no identity exists, onboarding is shown.
+- If identity exists, the main app shell is shown.
 
 ### Identity and account lifecycle
 
-- Users can either:
-  - Create a new account (new keypair).
-  - Import an existing `Secret Key (nsec)`.
-- Active identity is loaded from keychain.
-- `Contact Key (npub)` is exposed in Share and Settings.
-- `Secret Key (nsec)` is hidden by default and only revealed on explicit action in Settings.
-- `Log Out (Keep Local Data)` removes active identity but keeps account-scoped local data.
-- `Log Out and Clear Local Data` removes identity and deletes local data for that account scope:
+- Users can create a new account (new keypair) or import an existing `nsec`.
+- The active identity is keychain-backed.
+- Settings and Share expose current `npub`.
+- `nsec` is hidden by default and only revealed on explicit action.
+- `Log Out (Keep Local Data)` clears active identity only.
+- `Log Out and Clear Local Data` clears identity and deletes account-scoped local data:
   - Contacts.
-  - Sessions/posts/replies/reactions.
+  - Sessions.
+  - Session members.
+  - Session posts.
+  - Reactions.
   - Cached media references.
-  - Local encryption key for that account.
+  - Local encryption key material for that owner scope.
 
 ### Sessions
 
-- Session list is the top-level inbox.
-- Sessions are account-scoped local entities with:
+- Session list is the top-level surface.
+- Sessions are local account-scoped entities with:
   - `sessionID`.
   - Name.
-  - Created-by pubkey.
+  - Creator pubkey.
   - Updated timestamp.
-  - Archive state.
-- Sessions can be created from `Sessions` tab `+`.
-- New session flow:
-  - Requires a non-empty session name.
-  - Member selection is optional.
-  - Members can only be chosen from contacts in the creation UI.
-  - Session creation works even with no selected contacts (solo session).
-- At send/transport level, the creator is always included as a member.
-- Session member updates are snapshot-based (`session_members` event):
-  - Active set becomes exactly the new snapshot.
+  - Archive flag.
+- Users create sessions from the Sessions tab `+` flow.
+- Session creation requires a non-empty name.
+- Member selection at creation is optional.
+- Session creation can be solo (creator only).
+- Transport always includes creator in the effective member set.
+- Member updates are snapshot-based (`session_members`):
+  - The active member set becomes exactly the snapshot.
   - Missing previous members become inactive.
-- Session list is split into active and archived sections.
-- Archive/unarchive is non-destructive and is done via swipe action.
+- Sessions can be archived/unarchived via swipe actions.
+- Archive is non-destructive.
 
 ### Session members UX
 
 - Session member management is available inside a session.
-- Members can be removed from the current active member set.
-- Contacts can be added to the active member set.
-- If a member is not present in local contacts, member identity falls back to `npub` (or truncated hex fallback).
-- Current user is not removable from UI and is retained in effective member set.
+- Members can be added only from existing contacts.
+- Members can be removed from active membership.
+- If a member no longer matches a local contact, UI falls back to `npub` (or truncated hex).
+- Current user is preserved in effective membership.
 
 ### Posts (root links)
 
-- New post flow is session-scoped (no recipient picker in composer).
-- Composer fields:
-  - Session (read-only context).
+- Posting is session-scoped.
+- Compose fields are:
+  - Session context (read-only).
   - Link (required).
   - Note (optional).
-- Link field supports `Paste` and `Clear` assist actions.
-- Link must normalize to valid `http(s)` URL.
-- Invalid or unsupported URL schemes are rejected.
-- Note is trimmed and persisted only when non-empty.
-- Send behavior is wait-and-timeout:
-  - Composer stays on screen while sending.
-  - Send waits for relay connectivity/reconnect (default timeout 12s).
-  - On success, root post persists locally and composer dismisses.
-  - On failure/timeout, composer stays open and toast is shown.
-- If no members are active for the session, send is blocked.
-
-### Replies
-
-- Replies are text-only payloads tied to a root post.
-- Empty/whitespace-only replies are blocked.
-- Reply send uses the same wait-and-timeout relay gating as root post send.
-- During reply send:
-  - Input/send is disabled.
-  - On success, input clears and thread scrolls to bottom.
-  - On failure, text remains for retry.
+- Link field supports `Paste` and `Clear` helpers.
+- URL input is normalized and must be valid `http`/`https`.
+- Unsupported schemes are rejected.
+- Note text is trimmed and persisted only when non-empty.
+- Send behavior is reconnect-and-timeout:
+  - Composer remains on-screen while waiting to send.
+  - Send waits for a usable relay path (default timeout 12 seconds).
+  - On success, post persists locally and composer dismisses.
+  - On failure/timeout, composer stays open and error is shown.
+- Posting is blocked when no active members are available for the session.
 
 ### Reactions
 
-- Reactions are emoji-only toggles on a root post.
-- Reaction UX uses:
-  - A quick per-post summary row (Slack-like chips).
-  - A dedicated emoji picker sheet for additional choices.
-- Tapping an existing emoji chip toggles current user reaction for that emoji.
-- Reactions are modeled as active/inactive state by key:
-  - Session.
+- Reactions are emoji-only toggles tied to a post.
+- UX includes:
+  - Slack-style reaction summary chips.
+  - Add-reaction affordance with an emoji picker sheet.
+- Default quick options include `👍`, `👎`, `👀`.
+- Reaction state is keyed by:
+  - Session ID.
   - Post/root ID.
   - Emoji.
   - Sender pubkey.
-- Default quick/common emojis include `👍`, `👎`, and `👀`.
+- Transport carries reaction active/inactive state.
 
 ### Read/unread semantics
 
-- Session row shows unread dot when any of these is true:
-  - Unread inbound root post exists in that session.
-  - Unread inbound reply exists under any root in that session.
-- Session post cards show unread dot when:
-  - The root post itself is unread inbound.
-  - Or that root has unread inbound replies.
-- Opening a session does not auto-mark all roots as read.
-- Opening a thread marks:
-  - The inbound root post for that thread as read.
-  - Inbound replies for that root as read.
+- Session rows show unread indicators when any inbound root post in that session is unread.
+- Post cards inside a session show unread indicators when that root post is unread inbound.
+- Opening a session does not auto-mark all posts as read.
+- Opening post detail marks that inbound root post as read.
+- Reactions do not affect unread counters.
 
-### Relay settings and status
+### Relay settings and runtime
 
 - Relay management is in Settings.
 - Users can:
-  - Add relay (`ws://` or `wss://` only, valid host required).
+  - Add relay URL (`ws://` or `wss://`, valid host required).
   - Enable/disable relay.
   - Remove relay.
-  - Reset defaults.
-- Relay header badge shows `connected_or_readonly_count / total_relays`.
-- Relay row shows live status dot (`connected`, `reconnecting`, `read-only`, `failed`, `disabled`).
-- Relay error text area reserves height even when empty to prevent row jitter.
+  - Reset default relays.
+- Relay header shows `connected_or_readonly / total`.
+- Relay rows show live status (`connected`, `reconnecting`, `read-only`, `failed`, `disabled`).
+- Relay error rows reserve layout height to avoid jitter when status text appears/disappears.
 
-### Relay runtime and send gating
+### Relay send gating
 
-- Relay runtime starts when identity is available and app is active.
-- On foreground re-entry, relay runtime is force-restarted to avoid stale sockets.
-- Runtime relay status is treated as foreground/live truth for send gating.
+- Relay runtime starts when identity exists and app is active.
+- Foreground re-entry force-restarts runtime to avoid stale sockets.
 - Send gating behavior:
-  - Hard block immediately for:
-    - No enabled relays.
-    - Only read-only relays.
-  - Otherwise wait for live connection until timeout.
-- No offline outbox queue is implemented.
-- Failed sends are not auto-retried later.
+  - Immediate block when no enabled relays.
+  - Immediate block when only read-only relays are available.
+  - Otherwise wait for connection until timeout.
+- No offline outbox exists.
+- Failed sends are not queued for automatic retry.
 
-### Nostr transport behavior
+### Nostr transport and ingest
 
-- App payloads are encoded as JSON and carried in rumor kind `44001`.
-- Rumors are gift-wrapped per recipient member using `NostrSDK`.
-- Outgoing publish confirmation waits for relay `OK` response with timeout.
-- Incoming processing accepts only:
-  - Gift wraps that can be unsealed.
-  - Rumors with app kind `44001`.
-  - Payloads that pass validation.
-- Event IDs are deduped to avoid duplicate persistence.
-
-### Incoming event handling
-
-- Accepted incoming payload kinds:
-  - `session_create`.
-  - `session_members`.
-  - `root`.
-  - `reply`.
-  - `reaction`.
-- `session_create` upserts session and applies full member snapshot.
-- `session_members` applies full member snapshot for existing/new session.
-- `root`/`reply` are persisted as session messages under account scope.
-- `reaction` upserts per `(session, post, emoji, sender)` state.
+- Payloads are JSON-encoded and published through `NostrSDK` gift wraps.
+- Outgoing publish awaits relay `OK` acceptance with timeout.
+- Accepted incoming payload kinds are:
+  - `session_create`
+  - `session_members`
+  - `root`
+  - `reaction`
+- Ingest processing rules:
+  - Ignore undecodable/unvalidated payloads.
+  - Deduplicate by event ID.
+  - Upsert sessions/member snapshots from session events.
+  - Persist root posts under account scope.
+  - Upsert reaction state by composite reaction key.
 
 ### Notifications (best effort)
 
-- Notifications are local notifications triggered by incoming relay events.
+- Notifications are local notifications based on incoming relay events.
 - APNs remote push is not implemented.
-- Notification types:
-  - Incoming root post.
-  - Incoming reply.
-  - Incoming reaction.
-- Self-sent echoes do not trigger notifications.
-- Notifications are grouped per session via `threadIdentifier`.
-- Foreground presentation is enabled (`banner`, `list`, `sound`).
+- Current notification type is inbound root post only.
+- Reaction events do not trigger notifications.
+- Self-echoed events do not trigger notifications.
+- Foreground presentation remains enabled (`banner`, `list`, `sound`).
 
-### Media strategy and previews
+### Media and link behavior
 
-- URL classification determines playback mode:
-  - Extraction-preferred (local media extraction first, embed fallback).
-  - Embed-only.
-  - Plain link.
-- Classification and host handling include mobile host variants (for example `m.facebook.com`).
-- Facebook canonicalization normalizes to stable web host for embed URL generation.
-- Metadata hydration:
-  - Root posts fetch title/thumbnail asynchronously.
-  - Existing roots are re-hydrated on boot if metadata is missing/stale.
-  - Missing thumbnail file paths are treated as stale and re-fetched.
+- URL classification drives playback mode (extract/embed/link fallback).
+- Canonicalization handles mobile host variants (for example `m.facebook.com`).
+- Metadata hydration fetches title/thumbnail asynchronously for root posts.
+- On boot, existing root posts are re-queued for metadata hydration when stale/missing.
+- Missing local thumbnail files are treated as stale and re-fetched.
 
 ### Contacts
 
 - Contacts are local account-scoped records.
 - Contacts are not published as social graph events.
-- Add/edit/delete contact is supported.
-- Add contact supports:
-  - Manual input.
-  - Paste.
-  - QR scan.
-- Duplicate contacts are prevented within the same account scope.
+- Contact management supports add/edit/delete.
+- Add-contact input supports manual entry, paste, and QR scan.
+- Duplicate contacts are blocked per account scope.
 
 ### Share tab
 
-- Share tab exposes current account `npub`:
+- Share tab exposes current account `npub`.
+- Share tab provides:
   - QR code.
   - Raw key text.
   - Copy action.
 
 ### Deep links
 
-- App deep link format: `linkstr://open?p=...`.
-- Valid deep links open a dedicated full-screen playback container.
-- Dismissing the deep link screen clears pending deep link state.
+- Deep link format is `linkstr://open?p=...`.
+- Valid deep links open a full-screen playback surface.
+- Dismissing deep link playback clears pending deep-link state.
 
 ### Local data and security
 
-- Local models are account-scoped by owner pubkey.
-- Sensitive local fields are encrypted at rest with per-account local key material.
-- Identity key material is stored in keychain.
-- Keychain behavior is migration-friendly:
-  - Uses `WhenUnlocked` accessibility.
-  - Prefers synchronizable items when available.
-- Simulator-only fallback key storage is used when simulator keychain is unavailable.
+- Local entities are owner-scoped by pubkey.
+- Sensitive stored fields are encrypted at rest with per-owner local keys.
+- Identity keys remain in keychain.
+- Keychain accessibility uses `WhenUnlocked` and prefers synchronizable items when available.
+- Simulator fallback key storage is used when simulator keychain is unavailable.
 
-### Device restore and migration expectations
+### Backup and migration expectations
 
-- Login continuity across device migration depends on keychain/iCloud keychain backup conditions.
-- Local SwiftData content is local app data and can participate in device backup/restore depending on iOS backup mode.
-- If local encrypted app data restores but keys do not, encrypted fields are not decryptable.
-- Reliable long-term portability still requires preserving/exporting `nsec`.
+- Identity continuity across devices depends on keychain/iCloud keychain backup conditions.
+- SwiftData participates in iOS backup/restore according to device backup mode.
+- If encrypted local data restores without matching key material, encrypted fields are unreadable.
+- Reliable long-term portability still depends on preserving `nsec`.
 
-### Known non-goals (current)
+### Known non-goals
 
-- No background guaranteed delivery queue.
-- No automatic resend later for previously failed sends.
+- No offline guaranteed delivery queue.
+- No automatic resend of previously failed posts.
 - No APNs remote push.
-- No public feed/discovery social product surface.
-- No bulk delete/multi-select message deletion flow yet.
+- No public discovery feed/social graph product surface.
+- No text-based reply composer.
 
 ## Development
 
@@ -262,17 +237,16 @@ xcodebuild test -project Linkstr.xcodeproj -scheme Linkstr -destination 'platfor
 
 ## README maintenance prompt
 
-- Use this prompt when updating this file after behavior changes:
+- Use this prompt when behavior changes and README must stay aligned with shipped code:
 
 ```text
 Rewrite README.md as a cohesive, human-readable product behavior spec for the current app state.
 
 Constraints:
 - Keep the top project title and one-line product description intact unless explicitly asked to change them.
-- Use bullet points, not numbered acceptance-checklist formatting.
-- Be comprehensive: identity, boot, sessions, members, posting, replies, reactions, unread semantics, archive behavior, relays, send gating/timeouts, ingest/backfill, notifications, media/link behavior, deep links, local data/security, migration expectations, and known non-goals.
-- Reflect what the code does today, not aspirational future behavior.
-- Avoid commit-log tone and avoid Jira/task wording.
-- Keep wording precise and implementation-aware, but still readable by product/engineering.
-- Keep dev commands at the end.
+- Use bullet points, not numbered checklist formatting.
+- Cover: product model, boot, identity lifecycle, sessions, members, posts, reactions, unread semantics, relay management/runtime/send gating, transport+ingest, notifications, media/link behavior, contacts, share tab, deep links, local security/storage, migration expectations, and non-goals.
+- Reflect current implementation only; do not document aspirational behavior.
+- Keep precise engineering language without commit-log or Jira-task tone.
+- Keep development commands at the end.
 ```

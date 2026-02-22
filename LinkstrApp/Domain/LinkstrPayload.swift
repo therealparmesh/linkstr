@@ -3,7 +3,6 @@ import NostrSDK
 
 enum LinkstrPayloadKind: String, Codable {
   case root
-  case reply
   case sessionCreate = "session_create"
   case sessionMembers = "session_members"
   case reaction
@@ -85,14 +84,6 @@ struct LinkstrPayload: Codable, Hashable {
       guard let url, LinkstrURLValidator.normalizedWebURL(from: url) != nil else {
         throw LinkstrPayloadError.invalidRootURL
       }
-    case .reply:
-      guard url == nil else {
-        throw LinkstrPayloadError.replyContainsURL
-      }
-      let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-      guard !trimmedNote.isEmpty else {
-        throw LinkstrPayloadError.emptyReply
-      }
     case .sessionCreate:
       let trimmedName = sessionName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
       guard !trimmedName.isEmpty else {
@@ -141,8 +132,6 @@ struct LinkstrPayload: Codable, Hashable {
 enum LinkstrPayloadError: Error, LocalizedError {
   case invalidSessionID
   case invalidRootURL
-  case replyContainsURL
-  case emptyReply
   case invalidSessionName
   case invalidMembers
   case invalidRootID
@@ -155,10 +144,6 @@ enum LinkstrPayloadError: Error, LocalizedError {
       return "Invalid session identifier."
     case .invalidRootURL:
       return "Post requires a valid URL."
-    case .replyContainsURL:
-      return "Reply messages cannot contain a URL."
-    case .emptyReply:
-      return "Reply cannot be empty."
     case .invalidSessionName:
       return "Session requires a name."
     case .invalidMembers:

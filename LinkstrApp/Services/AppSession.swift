@@ -28,16 +28,6 @@ final class AppSession: ObservableObject {
     let normalizedNote: String?
   }
 
-  private struct ReplyDraft {
-    let payload: LinkstrPayload
-    let ownerPubkey: String
-    let senderPubkey: String
-    let sessionID: String
-    let rootID: String
-    let recipientPubkeys: [String]
-    let text: String
-  }
-
   private struct ReactionDraft {
     let payload: LinkstrPayload
     let ownerPubkey: String
@@ -115,6 +105,7 @@ final class AppSession: ObservableObject {
 
     do {
       bootStatusMessage = "Preparing local data…"
+      purgeLegacyNonRootMessagesIfNeeded()
       bootStatusMessage = "Connecting relays…"
       try relayStore.ensureDefaultRelays()
       pruneRuntimeRelayStatusCache()
@@ -436,6 +427,15 @@ final class AppSession: ObservableObject {
     hasIdentity = identityService.keypair != nil
   }
 
+  private func purgeLegacyNonRootMessagesIfNeeded() {
+    guard let ownerPubkey = identityService.pubkeyHex else { return }
+    do {
+      try messageStore.purgeLegacyNonRootMessages(ownerPubkey: ownerPubkey)
+    } catch {
+      report(error: error)
+    }
+  }
+
   func startNostrIfPossible(forceRestart: Bool = false) {
     guard let keypair = identityService.keypair else { return }
 
@@ -673,12 +673,8 @@ final class AppSession: ObservableObject {
     }
 
     do {
-      let eventID: String
-      if shouldDisableNostrStartupForCurrentProcess() {
-        eventID = makeLocalEventID()
-      } else {
-        eventID = try nostrService.send(payload: draft.payload, toMany: draft.recipientPubkeys)
-      }
+      // Test-only local send path when relay startup is disabled in-process.
+      let eventID = makeLocalEventID()
       try persistSentRootPost(draft, eventID: eventID)
       composeError = nil
       return true
@@ -686,73 +682,6 @@ final class AppSession: ObservableObject {
       report(error: error)
       return false
     }
-  }
-
-  @discardableResult
-  private func createPostAwaitingRelay(
-    url: String,
-    note: String?,
-    sessionID: String,
-    timeoutSeconds: TimeInterval = 12,
-    pollIntervalSeconds: TimeInterval = 0.35
-  ) async -> Bool {
-    guard
-      await awaitRelayReadyForSend(
-        timeoutSeconds: timeoutSeconds,
-        pollIntervalSeconds: pollIntervalSeconds
-      )
-    else {
-      return false
-    }
-    startNostrIfPossible()
-    if shouldDisableNostrStartupForCurrentProcess() {
-      return createPostInSession(url: url, note: note, sessionID: sessionID)
-    }
-    return await createPostAwaitingRelayDelivery(url: url, note: note, sessionID: sessionID)
-  }
-
-  @discardableResult
-  private func sendReply(text: String, post: SessionMessageEntity) -> Bool {
-    guard let draft = makeReplyDraft(text: text, post: post) else {
-      return false
-    }
-
-    do {
-      let eventID: String
-      if shouldDisableNostrStartupForCurrentProcess() {
-        eventID = makeLocalEventID()
-      } else {
-        eventID = try nostrService.send(payload: draft.payload, toMany: draft.recipientPubkeys)
-      }
-      try persistSentReply(draft, eventID: eventID)
-      composeError = nil
-      return true
-    } catch {
-      report(error: error)
-      return false
-    }
-  }
-
-  @discardableResult
-  func sendReplyAwaitingRelay(
-    text: String,
-    post: SessionMessageEntity,
-    timeoutSeconds: TimeInterval = 12,
-    pollIntervalSeconds: TimeInterval = 0.35
-  ) async -> Bool {
-    guard
-      await awaitRelayReadyForSend(
-        timeoutSeconds: timeoutSeconds,
-        pollIntervalSeconds: pollIntervalSeconds
-      )
-    else {
-      return false
-    }
-    startNostrIfPossible()
-    if shouldDisableNostrStartupForCurrentProcess() {
-      return sendReply(text: text, post: post)
-    }
-    return await sendReplyAwaitingRelayDelivery(text: text, post: post)
   }
 
   @discardableResult
@@ -807,29 +736,6 @@ final class AppSession: ObservableObject {
         recipientPubkeyHexes: draft.recipientPubkeys
       )
       try persistSentRootPost(draft, eventID: eventID)
-      composeError = nil
-      return true
-    } catch {
-      report(error: error)
-      return false
-    }
-  }
-
-  private func sendReplyAwaitingRelayDelivery(
-    text: String,
-    post: SessionMessageEntity
-  ) async -> Bool {
-    let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard let draft = makeReplyDraft(text: trimmedText, post: post) else {
-      return false
-    }
-
-    do {
-      let eventID = try await sendPayloadAwaitingRelayAcceptance(
-        payload: draft.payload,
-        recipientPubkeyHexes: draft.recipientPubkeys
-      )
-      try persistSentReply(draft, eventID: eventID)
       composeError = nil
       return true
     } catch {
@@ -977,74 +883,6 @@ final class AppSession: ObservableObject {
     )
     try messageStore.insert(message)
     enqueueMetadataRefresh(for: message)
-  }
-
-  private func makeReplyDraft(text: String, post: SessionMessageEntity) -> ReplyDraft? {
-    guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
-    guard let keypair = identityService.keypair, let ownerPubkey = identityService.pubkeyHex else {
-      composeError = "You're signed out. Sign in to send replies."
-      return nil
-    }
-
-    let recipientPubkeys: [String]
-    do {
-      let fallbackPeer =
-        post.senderPubkey == keypair.publicKey.hex ? post.receiverPubkey : post.senderPubkey
-      recipientPubkeys = try activeMemberPubkeys(
-        sessionID: post.conversationID,
-        ownerPubkey: ownerPubkey,
-        fallbackPeerPubkey: fallbackPeer
-      )
-    } catch {
-      composeError = error.localizedDescription
-      return nil
-    }
-    guard !recipientPubkeys.isEmpty else {
-      composeError = "Session has no members. Add members before sending."
-      return nil
-    }
-
-    return ReplyDraft(
-      payload: LinkstrPayload(
-        conversationID: post.conversationID,
-        rootID: post.rootID,
-        kind: .reply,
-        url: nil,
-        note: text,
-        timestamp: Int64(Date.now.timeIntervalSince1970)
-      ),
-      ownerPubkey: ownerPubkey,
-      senderPubkey: keypair.publicKey.hex,
-      sessionID: post.conversationID,
-      rootID: post.rootID,
-      recipientPubkeys: recipientPubkeys,
-      text: text
-    )
-  }
-
-  private func persistSentReply(_ draft: ReplyDraft, eventID: String) throws {
-    _ = try messageStore.upsertSession(
-      ownerPubkey: draft.ownerPubkey,
-      sessionID: draft.sessionID,
-      name: existingSessionName(for: draft.sessionID, ownerPubkey: draft.ownerPubkey),
-      createdByPubkey: draft.senderPubkey,
-      updatedAt: .now
-    )
-    let reply = try SessionMessageEntity(
-      eventID: eventID,
-      ownerPubkey: draft.ownerPubkey,
-      conversationID: draft.sessionID,
-      rootID: draft.rootID,
-      kind: .reply,
-      senderPubkey: draft.senderPubkey,
-      receiverPubkey: draft.ownerPubkey,
-      url: nil,
-      note: draft.text,
-      timestamp: .now,
-      readAt: .now,
-      linkType: .generic
-    )
-    try messageStore.insert(reply)
   }
 
   private func persistReactionState(_ draft: ReactionDraft) throws {
@@ -1216,29 +1054,6 @@ final class AppSession: ObservableObject {
     }
   }
 
-  func markConversationPostsRead(conversationID: String) {
-    guard let myPubkey = identityService.pubkeyHex else { return }
-    do {
-      try messageStore.markConversationPostsRead(
-        conversationID: conversationID,
-        ownerPubkey: myPubkey,
-        myPubkey: myPubkey
-      )
-    } catch {
-      report(error: error)
-    }
-  }
-
-  func markPostRepliesRead(postID: String) {
-    guard let myPubkey = identityService.pubkeyHex else { return }
-    do {
-      try messageStore.markPostRepliesRead(
-        postID: postID, ownerPubkey: myPubkey, myPubkey: myPubkey)
-    } catch {
-      report(error: error)
-    }
-  }
-
   func markRootPostRead(postID: String) {
     guard let myPubkey = identityService.pubkeyHex else { return }
     do {
@@ -1327,8 +1142,8 @@ final class AppSession: ObservableObject {
       persistIncomingSessionMembers(incoming)
     case .reaction:
       persistIncomingReaction(incoming)
-    case .root, .reply:
-      persistIncomingPostOrReply(incoming)
+    case .root:
+      persistIncomingRootPost(incoming)
     }
   }
 
@@ -1426,17 +1241,9 @@ final class AppSession: ObservableObject {
       report(error: error)
       return
     }
-
-    notifyForIncomingReaction(
-      senderPubkey: incoming.senderPubkey,
-      emoji: emoji,
-      eventID: incoming.eventID,
-      conversationID: sessionID,
-      isActive: isActive
-    )
   }
 
-  private func persistIncomingPostOrReply(_ incoming: ReceivedDirectMessage) {
+  private func persistIncomingRootPost(_ incoming: ReceivedDirectMessage) {
     guard let ownerPubkey = identityService.pubkeyHex else { return }
 
     do {
@@ -1455,32 +1262,11 @@ final class AppSession: ObservableObject {
 
     let sessionID = incoming.payload.conversationID.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !sessionID.isEmpty else { return }
-
-    let canonicalPostID: String
-    switch incoming.payload.kind {
-    case .root:
-      let payloadRootID = incoming.payload.rootID.trimmingCharacters(in: .whitespacesAndNewlines)
-      canonicalPostID = payloadRootID.isEmpty ? incoming.eventID : payloadRootID
-    case .reply:
-      let payloadRootID = incoming.payload.rootID.trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !payloadRootID.isEmpty else { return }
-      canonicalPostID = payloadRootID
-    default:
-      return
-    }
-
-    let url: String?
-    switch incoming.payload.kind {
-    case .root:
-      guard let payloadURL = incoming.payload.url,
-        let normalizedURL = LinkstrURLValidator.normalizedWebURL(from: payloadURL)
-      else {
-        return
-      }
-      url = normalizedURL
-    case .reply:
-      url = nil
-    default:
+    let payloadRootID = incoming.payload.rootID.trimmingCharacters(in: .whitespacesAndNewlines)
+    let canonicalPostID = payloadRootID.isEmpty ? incoming.eventID : payloadRootID
+    guard let payloadURL = incoming.payload.url,
+      let normalizedURL = LinkstrURLValidator.normalizedWebURL(from: payloadURL)
+    else {
       return
     }
 
@@ -1511,14 +1297,14 @@ final class AppSession: ObservableObject {
         ownerPubkey: ownerPubkey,
         conversationID: sessionID,
         rootID: canonicalPostID,
-        kind: incoming.payload.kind == .root ? .root : .reply,
+        kind: .root,
         senderPubkey: incoming.senderPubkey,
         receiverPubkey: incoming.receiverPubkey,
-        url: url,
+        url: normalizedURL,
         note: incoming.payload.note,
         timestamp: incoming.createdAt,
         readAt: isEchoedOutgoing ? incoming.createdAt : nil,
-        linkType: url.map(URLClassifier.classify) ?? .generic
+        linkType: URLClassifier.classify(normalizedURL)
       )
     } catch {
       report(error: error)
@@ -1533,30 +1319,7 @@ final class AppSession: ObservableObject {
     }
 
     notifyForIncomingMessage(message)
-
-    if message.kind == .root {
-      enqueueMetadataRefresh(for: message)
-    }
-  }
-
-  private func notifyForIncomingReaction(
-    senderPubkey: String,
-    emoji: String,
-    eventID: String,
-    conversationID: String,
-    isActive: Bool
-  ) {
-    guard isActive else { return }
-    guard let myPubkey = identityService.pubkeyHex, senderPubkey != myPubkey else { return }
-
-    let contacts = (try? contactStore.fetchContacts(ownerPubkey: myPubkey)) ?? []
-    let senderName = contactName(for: senderPubkey, contacts: contacts)
-    LocalNotificationService.shared.postIncomingReactionNotification(
-      senderName: senderName,
-      emoji: emoji,
-      eventID: eventID,
-      conversationID: conversationID
-    )
+    enqueueMetadataRefresh(for: message)
   }
 
   private func notifyForIncomingMessage(_ message: SessionMessageEntity) {
@@ -1566,24 +1329,13 @@ final class AppSession: ObservableObject {
 
     let contacts = (try? contactStore.fetchContacts(ownerPubkey: myPubkey)) ?? []
     let senderName = contactName(for: message.senderPubkey, contacts: contacts)
-
-    switch message.kind {
-    case .root:
-      LocalNotificationService.shared.postIncomingPostNotification(
-        senderName: senderName,
-        url: message.url,
-        note: message.note,
-        eventID: message.eventID,
-        conversationID: message.conversationID
-      )
-    case .reply:
-      LocalNotificationService.shared.postIncomingReplyNotification(
-        senderName: senderName,
-        note: message.note,
-        eventID: message.eventID,
-        conversationID: message.conversationID
-      )
-    }
+    LocalNotificationService.shared.postIncomingPostNotification(
+      senderName: senderName,
+      url: message.url,
+      note: message.note,
+      eventID: message.eventID,
+      conversationID: message.conversationID
+    )
   }
 
   private func hydrateMissingMetadata() {
@@ -1749,20 +1501,35 @@ final class AppSession: ObservableObject {
       if posts.isEmpty, let myPubkey = identityService.pubkeyHex,
         let peerPubkey = PublicKey(npub: secondaryContact.npub)?.hex
       {
-        let conversationID = ConversationID.deterministic(myPubkey, peerPubkey)
+        let sessionID = "sim-\(ownerPubkey.prefix(12))"
+        let sessionName = "Simulator Session"
+        let seededAt = Date.now
+        _ = try? messageStore.upsertSession(
+          ownerPubkey: ownerPubkey,
+          sessionID: sessionID,
+          name: sessionName,
+          createdByPubkey: myPubkey,
+          updatedAt: seededAt
+        )
+        try? messageStore.applyMemberSnapshot(
+          ownerPubkey: ownerPubkey,
+          sessionID: sessionID,
+          memberPubkeys: [myPubkey, peerPubkey],
+          updatedAt: seededAt
+        )
         let sampleURL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
         let sampleEventID = UUID().uuidString.replacingOccurrences(of: "-", with: "")
 
         let post = try? SessionMessageEntity(
           eventID: sampleEventID,
           ownerPubkey: ownerPubkey,
-          conversationID: conversationID,
+          conversationID: sessionID,
           rootID: sampleEventID,
           kind: .root,
           senderPubkey: myPubkey,
           receiverPubkey: peerPubkey,
           url: sampleURL,
-          note: "Seeded simulator thread",
+          note: "Seeded simulator post",
           timestamp: .now,
           readAt: .now,
           linkType: URLClassifier.classify(sampleURL),

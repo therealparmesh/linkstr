@@ -35,35 +35,13 @@ final class LinkstrPayloadTests: XCTestCase {
     XCTAssertThrowsError(try invalidScheme.validated())
   }
 
-  func testReplyPayloadValidationRejectsURL() {
-    let valid = LinkstrPayload(
-      conversationID: "c1",
-      rootID: "r1",
-      kind: .reply,
-      url: nil,
-      note: "ok",
-      timestamp: 123
-    )
-    XCTAssertNoThrow(try valid.validated())
-
-    let invalid = LinkstrPayload(
-      conversationID: "c1",
-      rootID: "r1",
-      kind: .reply,
-      url: "https://example.com",
-      note: "bad",
-      timestamp: 123
-    )
-    XCTAssertThrowsError(try invalid.validated())
-  }
-
   func testDecodeWithoutTimestampBackfillsNow() throws {
     let json = """
       {
         "conversation_id": "conversation",
         "root_id": "root",
-        "kind": "reply",
-        "note": "hello"
+        "kind": "root",
+        "url": "https://example.com"
       }
       """
     let before = Int64(Date.now.timeIntervalSince1970) - 1
@@ -72,9 +50,8 @@ final class LinkstrPayloadTests: XCTestCase {
 
     XCTAssertGreaterThanOrEqual(payload.timestamp, before)
     XCTAssertLessThanOrEqual(payload.timestamp, after)
-    XCTAssertEqual(payload.kind, .reply)
-    XCTAssertEqual(payload.note, "hello")
-    XCTAssertNil(payload.url)
+    XCTAssertEqual(payload.kind, .root)
+    XCTAssertEqual(payload.url, "https://example.com")
   }
 
   func testNormalizedWebURLAcceptsHTTPAndHTTPS() {

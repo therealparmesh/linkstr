@@ -192,15 +192,12 @@ struct LinkstrEmojiPickerSheet: View {
   }
 }
 
-struct ThreadView: View {
+struct PostDetailView: View {
   @EnvironmentObject private var session: AppSession
   @Environment(\.openURL) private var openURL
 
   let post: SessionMessageEntity
   let sessionName: String
-
-  @Query(sort: [SortDescriptor(\SessionMessageEntity.timestamp)])
-  private var allMessages: [SessionMessageEntity]
 
   @Query(sort: [SortDescriptor(\ContactEntity.createdAt)])
   private var contacts: [ContactEntity]
@@ -208,14 +205,7 @@ struct ThreadView: View {
   @Query(sort: [SortDescriptor(\SessionReactionEntity.updatedAt, order: .reverse)])
   private var allReactions: [SessionReactionEntity]
 
-  @State private var replyText = ""
-  @State private var isSendingReply = false
   @State private var isPresentingEmojiPicker = false
-  @FocusState private var isComposerFocused: Bool
-
-  private var scopedMessages: [SessionMessageEntity] {
-    session.scopedMessages(from: allMessages)
-  }
 
   private var scopedContacts: [ContactEntity] {
     session.scopedContacts(from: contacts)
@@ -230,20 +220,11 @@ struct ThreadView: View {
       }
   }
 
-  private var replies: [SessionMessageEntity] {
-    scopedMessages.filter { $0.kind == .reply && $0.rootID == post.rootID }
-  }
-
   private var postSenderLabel: String {
     if isOutgoing(post) {
       return "You"
     }
     return session.contactName(for: post.senderPubkey, contacts: scopedContacts)
-  }
-
-  private var hasUnreadIncomingReplies: Bool {
-    guard let myPubkey = session.identityService.pubkeyHex else { return false }
-    return replies.contains { $0.senderPubkey != myPubkey && $0.readAt == nil }
   }
 
   private var reactionSummaries: [ReactionSummary] {
@@ -272,51 +253,27 @@ struct ThreadView: View {
   }
 
   var body: some View {
-    ScrollViewReader { proxy in
-      ScrollView {
-        LazyVStack(spacing: 10) {
-          postCard
-            .id("post-card")
-
-          ForEach(replies) { reply in
-            ReplyBubbleRow(
-              text: reply.note ?? "",
-              timestamp: reply.timestamp,
-              isOutgoing: isOutgoing(reply)
-            )
-            .id(reply.eventID)
-          }
-
-          Color.clear
-            .frame(height: 1)
-            .id("bottom-anchor")
-        }
-        .padding(.horizontal, 10)
-        .padding(.top, 10)
-        .padding(.bottom, 6)
+    ScrollView {
+      LazyVStack(spacing: 10) {
+        postCard
       }
-      .background(chatBackground)
-      .safeAreaInset(edge: .bottom) {
-        composerBar(proxy: proxy)
+      .padding(.horizontal, 10)
+      .padding(.top, 10)
+      .padding(.bottom, 12)
+    }
+    .background(LinkstrBackgroundView())
+    .navigationTitle(sessionName)
+    .navigationBarTitleDisplayMode(.inline)
+    .toolbar(.visible, for: .navigationBar)
+    .toolbarColorScheme(.dark, for: .navigationBar)
+    .task {
+      session.markRootPostRead(postID: post.rootID)
+    }
+    .sheet(isPresented: $isPresentingEmojiPicker) {
+      LinkstrEmojiPickerSheet { emoji in
+        toggleReaction(emoji)
       }
-      .navigationTitle(sessionName)
-      .navigationBarTitleDisplayMode(.inline)
-      .toolbar(.visible, for: .navigationBar)
-      .toolbarColorScheme(.dark, for: .navigationBar)
-      .task {
-        session.markRootPostRead(postID: post.rootID)
-        session.markPostRepliesRead(postID: post.rootID)
-      }
-      .onChange(of: replies.count) { _, _ in
-        session.markPostRepliesRead(postID: post.rootID)
-        scrollToBottom(using: proxy)
-      }
-      .sheet(isPresented: $isPresentingEmojiPicker) {
-        LinkstrEmojiPickerSheet { emoji in
-          toggleReaction(emoji)
-        }
-        .presentationDetents([.fraction(0.92)])
-      }
+      .presentationDetents([.fraction(0.92)])
     }
   }
 
@@ -364,20 +321,6 @@ struct ThreadView: View {
           isPresentingEmojiPicker = true
         }
       )
-
-      HStack(spacing: 8) {
-        Image(systemName: "bubble.left.and.bubble.right")
-          .foregroundStyle(LinkstrTheme.textSecondary)
-        Text(replyCountLabel)
-          .font(.caption)
-          .foregroundStyle(LinkstrTheme.textSecondary)
-        if hasUnreadIncomingReplies {
-          Circle()
-            .fill(LinkstrTheme.neonAmber)
-            .frame(width: 7, height: 7)
-            .accessibilityLabel("Unread replies")
-        }
-      }
     }
     .padding(.horizontal, 2)
   }
@@ -412,107 +355,14 @@ struct ThreadView: View {
     }
   }
 
-  private var chatBackground: some View {
-    LinkstrBackgroundView()
-  }
-
-  private func composerBar(proxy: ScrollViewProxy) -> some View {
-    HStack(alignment: .bottom, spacing: 10) {
-      TextField("Write a reply", text: $replyText, axis: .vertical)
-        .textFieldStyle(.plain)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .focused($isComposerFocused)
-        .disabled(isSendingReply)
-        .background(
-          RoundedRectangle(cornerRadius: 20, style: .continuous)
-            .fill(LinkstrTheme.panelSoft)
-        )
-        .foregroundStyle(LinkstrTheme.textPrimary)
-
-      Button {
-        sendReply(using: proxy)
-      } label: {
-        Image(systemName: "arrow.up.circle.fill")
-          .font(.system(size: 30))
-          .foregroundStyle(LinkstrTheme.neonCyan)
-      }
-      .disabled(isSendingReply || replyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-    }
-    .padding(.horizontal, 10)
-    .padding(.vertical, 8)
-    .background(LinkstrTheme.panel.opacity(0.92))
-  }
-
-  private func sendReply(using proxy: ScrollViewProxy) {
-    let text = replyText.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !text.isEmpty else { return }
-    guard !isSendingReply else { return }
-
-    isSendingReply = true
-    Task { @MainActor in
-      let didSend = await session.sendReplyAwaitingRelay(text: text, post: post)
-      isSendingReply = false
-      guard didSend else { return }
-      replyText = ""
-      isComposerFocused = false
-      scrollToBottom(using: proxy)
-    }
-  }
-
   private func toggleReaction(_ emoji: String) {
     Task { @MainActor in
       _ = await session.toggleReactionAwaitingRelay(emoji: emoji, post: post)
     }
   }
 
-  private func scrollToBottom(using proxy: ScrollViewProxy) {
-    withAnimation(.easeOut(duration: 0.25)) {
-      proxy.scrollTo("bottom-anchor", anchor: .bottom)
-    }
-  }
-
   private func isOutgoing(_ message: SessionMessageEntity) -> Bool {
     guard let myPubkey = session.identityService.pubkeyHex else { return false }
     return message.senderPubkey == myPubkey
-  }
-
-  private var replyCountLabel: String {
-    replies.count == 1 ? "1 reply" : "\(replies.count) replies"
-  }
-}
-
-private struct ReplyBubbleRow: View {
-  let text: String
-  let timestamp: Date
-  let isOutgoing: Bool
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 5) {
-      Text(text)
-        .font(.custom(LinkstrTheme.bodyFont, size: 14))
-        .foregroundStyle(isOutgoing ? LinkstrTheme.bgBottom : LinkstrTheme.textPrimary)
-
-      Text(timestamp.linkstrMessageTimestampLabel)
-        .font(.caption2)
-        .foregroundStyle(
-          isOutgoing ? LinkstrTheme.bgBottom.opacity(0.76) : LinkstrTheme.textSecondary)
-    }
-    .padding(.horizontal, 10)
-    .padding(.vertical, 8)
-    .background(
-      RoundedRectangle(cornerRadius: 14, style: .continuous)
-        .fill(isOutgoing ? LinkstrTheme.neonCyan : LinkstrTheme.panel)
-        .overlay(
-          RoundedRectangle(cornerRadius: 14, style: .continuous)
-            .stroke(
-              isOutgoing
-                ? LinkstrTheme.neonCyan.opacity(0.38) : LinkstrTheme.neonPink.opacity(0.26),
-              lineWidth: 1
-            )
-        )
-        .shadow(color: LinkstrTheme.neonPink.opacity(isOutgoing ? 0.0 : 0.12), radius: 8, y: 2)
-    )
-    .frame(maxWidth: .infinity, alignment: isOutgoing ? .trailing : .leading)
   }
 }

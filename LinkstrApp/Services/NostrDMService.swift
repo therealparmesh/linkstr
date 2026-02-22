@@ -287,7 +287,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     let builder = NostrEvent.Builder<NostrEvent>(kind: linkstrRumorKind)
       .content(content)
 
-    if payload.kind == .reply || payload.kind == .reaction {
+    if payload.kind == .reaction {
       let rootTag = try EventTag(eventId: payload.rootID, marker: .root)
       builder.appendTags(rootTag.tag)
     }

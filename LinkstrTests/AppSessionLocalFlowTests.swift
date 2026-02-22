@@ -95,13 +95,13 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertEqual(alice.displayName, "Alice Updated")
   }
 
-  func testSetSessionArchivedAffectsOnlyRootMessages() throws {
+  func testSetSessionArchivedAffectsSessionMessages() throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
     let ownerPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
     let conversationID = "session-archive"
 
-    let root = makeMessage(
+    let rootInTargetSession = makeMessage(
       eventID: "root-1",
       conversationID: conversationID,
       rootID: "root-1",
@@ -110,27 +110,27 @@ final class AppSessionLocalFlowTests: XCTestCase {
       receiverPubkey: "sender-b",
       ownerPubkey: ownerPubkey
     )
-    let reply = makeMessage(
-      eventID: "reply-1",
-      conversationID: conversationID,
-      rootID: "root-1",
-      kind: .reply,
+    let rootInDifferentSession = makeMessage(
+      eventID: "root-2",
+      conversationID: "session-other",
+      rootID: "root-2",
+      kind: .root,
       senderPubkey: "sender-b",
       receiverPubkey: "sender-a",
       ownerPubkey: ownerPubkey
     )
 
-    container.mainContext.insert(root)
-    container.mainContext.insert(reply)
+    container.mainContext.insert(rootInTargetSession)
+    container.mainContext.insert(rootInDifferentSession)
     try container.mainContext.save()
 
     session.setSessionArchived(sessionID: conversationID, archived: true)
-    XCTAssertTrue(root.isArchived)
-    XCTAssertFalse(reply.isArchived)
+    XCTAssertTrue(rootInTargetSession.isArchived)
+    XCTAssertFalse(rootInDifferentSession.isArchived)
 
     session.setSessionArchived(sessionID: conversationID, archived: false)
-    XCTAssertFalse(root.isArchived)
-    XCTAssertFalse(reply.isArchived)
+    XCTAssertFalse(rootInTargetSession.isArchived)
+    XCTAssertFalse(rootInDifferentSession.isArchived)
   }
 
   func testUpsertSessionCanPromoteNameFromOlderEventWithoutRewindingTimestamp() throws {
@@ -159,53 +159,6 @@ final class AppSessionLocalFlowTests: XCTestCase {
 
     XCTAssertEqual(updated.name, "Canonical Session Name")
     XCTAssertEqual(updated.updatedAt, newerDate)
-  }
-
-  func testMarkConversationPostsReadMarksOnlyInboundRootPosts() throws {
-    let (session, container) = try makeSession()
-    try session.identityService.createNewIdentity()
-    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
-    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
-    let conversationID = "session-mark-all-posts"
-
-    let inboundRoot = makeMessage(
-      eventID: "root-inbound",
-      conversationID: conversationID,
-      rootID: "root-inbound",
-      kind: .root,
-      senderPubkey: peerPubkey,
-      receiverPubkey: myPubkey,
-      ownerPubkey: myPubkey
-    )
-    let outboundRoot = makeMessage(
-      eventID: "root-outbound",
-      conversationID: conversationID,
-      rootID: "root-outbound",
-      kind: .root,
-      senderPubkey: myPubkey,
-      receiverPubkey: peerPubkey,
-      ownerPubkey: myPubkey
-    )
-    let inboundReply = makeMessage(
-      eventID: "reply-inbound",
-      conversationID: conversationID,
-      rootID: "root-inbound",
-      kind: .reply,
-      senderPubkey: peerPubkey,
-      receiverPubkey: myPubkey,
-      ownerPubkey: myPubkey
-    )
-
-    container.mainContext.insert(inboundRoot)
-    container.mainContext.insert(outboundRoot)
-    container.mainContext.insert(inboundReply)
-    try container.mainContext.save()
-
-    session.markConversationPostsRead(conversationID: conversationID)
-
-    XCTAssertNotNil(inboundRoot.readAt)
-    XCTAssertNil(outboundRoot.readAt)
-    XCTAssertNil(inboundReply.readAt)
   }
 
   func testMarkRootPostReadMarksOnlyInboundRootForThatPost() throws {
@@ -242,20 +195,9 @@ final class AppSessionLocalFlowTests: XCTestCase {
       receiverPubkey: myPubkey,
       ownerPubkey: myPubkey
     )
-    let inboundReplyTarget = makeMessage(
-      eventID: "reply-inbound-target",
-      conversationID: conversationID,
-      rootID: "root-target",
-      kind: .reply,
-      senderPubkey: peerPubkey,
-      receiverPubkey: myPubkey,
-      ownerPubkey: myPubkey
-    )
-
     container.mainContext.insert(inboundTargetRoot)
     container.mainContext.insert(outboundTargetRoot)
     container.mainContext.insert(inboundOtherRoot)
-    container.mainContext.insert(inboundReplyTarget)
     try container.mainContext.save()
 
     session.markRootPostRead(postID: "root-target")
@@ -263,54 +205,42 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertNotNil(inboundTargetRoot.readAt)
     XCTAssertNil(outboundTargetRoot.readAt)
     XCTAssertNil(inboundOtherRoot.readAt)
-    XCTAssertNil(inboundReplyTarget.readAt)
   }
 
-  func testMarkPostRepliesReadMarksOnlyInboundRepliesForThatPost() throws {
+  func testBootPurgesLegacyNonRootMessages() throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
-    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
-    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
-    let conversationID = "session-mark-replies"
+    let ownerPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
 
-    let inboundReply = makeMessage(
-      eventID: "reply-inbound-target",
-      conversationID: conversationID,
-      rootID: "root-target",
-      kind: .reply,
-      senderPubkey: peerPubkey,
-      receiverPubkey: myPubkey,
-      ownerPubkey: myPubkey
+    let root = makeMessage(
+      eventID: "root-valid",
+      conversationID: "session-purge",
+      rootID: "root-valid",
+      kind: .root,
+      senderPubkey: ownerPubkey,
+      receiverPubkey: ownerPubkey,
+      ownerPubkey: ownerPubkey
     )
-    let outboundReply = makeMessage(
-      eventID: "reply-outbound-target",
-      conversationID: conversationID,
-      rootID: "root-target",
-      kind: .reply,
-      senderPubkey: myPubkey,
-      receiverPubkey: peerPubkey,
-      ownerPubkey: myPubkey
+    let legacy = makeMessage(
+      eventID: "legacy-non-root",
+      conversationID: "session-purge",
+      rootID: "root-valid",
+      kind: .root,
+      senderPubkey: ownerPubkey,
+      receiverPubkey: ownerPubkey,
+      ownerPubkey: ownerPubkey
     )
-    let inboundReplyDifferentRoot = makeMessage(
-      eventID: "reply-inbound-other",
-      conversationID: conversationID,
-      rootID: "root-other",
-      kind: .reply,
-      senderPubkey: peerPubkey,
-      receiverPubkey: myPubkey,
-      ownerPubkey: myPubkey
-    )
+    legacy.kindRaw = "legacy_non_root"
 
-    container.mainContext.insert(inboundReply)
-    container.mainContext.insert(outboundReply)
-    container.mainContext.insert(inboundReplyDifferentRoot)
+    container.mainContext.insert(root)
+    container.mainContext.insert(legacy)
     try container.mainContext.save()
 
-    session.markPostRepliesRead(postID: "root-target")
+    session.boot()
 
-    XCTAssertNotNil(inboundReply.readAt)
-    XCTAssertNil(outboundReply.readAt)
-    XCTAssertNil(inboundReplyDifferentRoot.readAt)
+    let messages = try fetchMessages(in: container.mainContext)
+    XCTAssertEqual(messages.count, 1)
+    XCTAssertEqual(messages.first?.eventID, root.eventID)
   }
 
   func testRelayCRUDFlow() throws {
@@ -593,131 +523,6 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
   }
 
-  func testSendReplyAwaitingRelayPersistsOutgoingReplyMessage() async throws {
-    let (session, container) = try makeSession()
-    try session.identityService.createNewIdentity()
-    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
-    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
-    let sessionEntity = try insertSessionFixture(
-      in: container.mainContext,
-      ownerPubkey: myPubkey,
-      createdByPubkey: myPubkey,
-      memberPubkeys: [myPubkey, peerPubkey]
-    )
-
-    let root = makeMessage(
-      eventID: "root-abc",
-      conversationID: sessionEntity.sessionID,
-      rootID: "root-abc",
-      kind: .root,
-      senderPubkey: myPubkey,
-      receiverPubkey: peerPubkey,
-      ownerPubkey: myPubkey
-    )
-    container.mainContext.insert(root)
-    try container.mainContext.save()
-
-    let didSend = await session.sendReplyAwaitingRelay(text: "reply text", post: root)
-    XCTAssertTrue(didSend)
-
-    let replies = try fetchMessages(in: container.mainContext).filter { $0.kind == .reply }
-    XCTAssertEqual(replies.count, 1)
-    let reply = try XCTUnwrap(replies.first)
-    XCTAssertEqual(reply.note, "reply text")
-    XCTAssertEqual(reply.rootID, "root-abc")
-    XCTAssertEqual(reply.senderPubkey, myPubkey)
-    XCTAssertEqual(reply.receiverPubkey, myPubkey)
-    XCTAssertNotNil(reply.readAt)
-    XCTAssertNil(session.composeError)
-  }
-
-  func testSendReplyAwaitingRelayTimesOutWhenRelayNeverConnects() async throws {
-    let (session, container) = try makeSession(testDisableNostrStartupOverride: false)
-    try session.identityService.createNewIdentity()
-    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
-    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
-    let sessionEntity = try insertSessionFixture(
-      in: container.mainContext,
-      ownerPubkey: myPubkey,
-      createdByPubkey: myPubkey,
-      memberPubkeys: [myPubkey, peerPubkey]
-    )
-
-    let relay = RelayEntity(url: "wss://relay.example.com", status: .reconnecting)
-    container.mainContext.insert(relay)
-
-    let root = makeMessage(
-      eventID: "root-await-timeout",
-      conversationID: sessionEntity.sessionID,
-      rootID: "root-await-timeout",
-      kind: .root,
-      senderPubkey: myPubkey,
-      receiverPubkey: peerPubkey,
-      ownerPubkey: myPubkey
-    )
-    container.mainContext.insert(root)
-    try container.mainContext.save()
-
-    let didSend = await session.sendReplyAwaitingRelay(
-      text: "reply text",
-      post: root,
-      timeoutSeconds: 0.05,
-      pollIntervalSeconds: 0.01
-    )
-
-    XCTAssertFalse(didSend)
-    XCTAssertEqual(session.composeError, "Couldn't reconnect to relays in time. Try again.")
-    XCTAssertTrue(
-      try fetchMessages(in: container.mainContext).filter { $0.kind == .reply }.isEmpty
-    )
-  }
-
-  func testSendReplyAwaitingRelaySendsWhenLiveRelayConnectionExists() async throws {
-    let (session, container) = try makeSession(
-      testDisableNostrStartupOverride: false,
-      testHasConnectedRelaysOverride: { true },
-      testRelaySendOverride: { _, _ in "await-reply-event" }
-    )
-    try session.identityService.createNewIdentity()
-    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
-    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
-    let sessionEntity = try insertSessionFixture(
-      in: container.mainContext,
-      ownerPubkey: myPubkey,
-      createdByPubkey: myPubkey,
-      memberPubkeys: [myPubkey, peerPubkey]
-    )
-
-    let relay = RelayEntity(url: "wss://relay.example.com", status: .failed)
-    container.mainContext.insert(relay)
-
-    let root = makeMessage(
-      eventID: "root-await-success",
-      conversationID: sessionEntity.sessionID,
-      rootID: "root-await-success",
-      kind: .root,
-      senderPubkey: myPubkey,
-      receiverPubkey: peerPubkey,
-      ownerPubkey: myPubkey
-    )
-    container.mainContext.insert(root)
-    try container.mainContext.save()
-
-    let didSend = await session.sendReplyAwaitingRelay(
-      text: "reply text",
-      post: root,
-      timeoutSeconds: 0.05,
-      pollIntervalSeconds: 0.01
-    )
-
-    XCTAssertTrue(didSend)
-    XCTAssertNil(session.composeError)
-    XCTAssertEqual(
-      try fetchMessages(in: container.mainContext).filter { $0.kind == .reply }.count,
-      1
-    )
-  }
-
   func testLogoutClearLocalDataRemovesContactsAndMessages() throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
@@ -866,53 +671,6 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
   }
 
-  func testSendReplyAwaitingRelayDoesNotPersistWhenRelayRejectsPublish() async throws {
-    let (session, container) = try makeSession(
-      testDisableNostrStartupOverride: false,
-      testHasConnectedRelaysOverride: { true },
-      testRelaySendOverride: { _, _ in
-        throw NostrServiceError.publishRejected("blocked: policy")
-      }
-    )
-    try session.identityService.createNewIdentity()
-    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
-    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
-    let sessionEntity = try insertSessionFixture(
-      in: container.mainContext,
-      ownerPubkey: myPubkey,
-      createdByPubkey: myPubkey,
-      memberPubkeys: [myPubkey, peerPubkey]
-    )
-
-    let relay = RelayEntity(url: "wss://relay.example.com", status: .connected)
-    container.mainContext.insert(relay)
-
-    let root = makeMessage(
-      eventID: "root-await-rejected",
-      conversationID: sessionEntity.sessionID,
-      rootID: "root-await-rejected",
-      kind: .root,
-      senderPubkey: myPubkey,
-      receiverPubkey: peerPubkey,
-      ownerPubkey: myPubkey
-    )
-    container.mainContext.insert(root)
-    try container.mainContext.save()
-
-    let didSend = await session.sendReplyAwaitingRelay(
-      text: "reply text",
-      post: root,
-      timeoutSeconds: 0.05,
-      pollIntervalSeconds: 0.01
-    )
-
-    XCTAssertFalse(didSend)
-    XCTAssertEqual(session.composeError, "blocked: policy")
-    XCTAssertTrue(
-      try fetchMessages(in: container.mainContext).filter { $0.kind == .reply }.isEmpty
-    )
-  }
-
   private func insertSessionFixture(
     in context: ModelContext,
     ownerPubkey: String,
@@ -1007,7 +765,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
         kind: kind,
         senderPubkey: senderPubkey,
         receiverPubkey: receiverPubkey,
-        url: kind == .root ? "https://example.com/\(eventID)" : nil,
+        url: "https://example.com/\(eventID)",
         note: "note-\(eventID)",
         timestamp: .now,
         readAt: nil,

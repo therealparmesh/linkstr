@@ -3,7 +3,6 @@ import SwiftData
 
 enum SessionMessageKind: String, Codable {
   case root
-  case reply
 }
 
 @Model
@@ -54,7 +53,7 @@ final class SessionMessageEntity {
   }
 
   var kind: SessionMessageKind {
-    get { SessionMessageKind(rawValue: kindRaw) ?? .reply }
+    get { SessionMessageKind(rawValue: kindRaw) ?? .root }
     set { kindRaw = newValue.rawValue }
   }
 

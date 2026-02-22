@@ -107,7 +107,7 @@ final class SessionMessageStore {
       predicate: #Predicate { $0.conversationID == sessionID && $0.ownerPubkey == ownerPubkey }
     )
     let messages = try modelContext.fetch(descriptor)
-    for message in messages where message.kind == .root {
+    for message in messages {
       guard message.isArchived != archived else { continue }
       message.isArchived = archived
       didChange = true
@@ -251,26 +251,6 @@ final class SessionMessageStore {
     try modelContext.save()
   }
 
-  func markConversationPostsRead(conversationID: String, ownerPubkey: String, myPubkey: String)
-    throws
-  {
-    let descriptor = FetchDescriptor<SessionMessageEntity>(
-      predicate: #Predicate { $0.conversationID == conversationID && $0.ownerPubkey == ownerPubkey }
-    )
-    let messages = try modelContext.fetch(descriptor)
-
-    var didChange = false
-    for message in messages where message.kind == .root {
-      guard !message.senderMatches(myPubkey), message.readAt == nil else { continue }
-      message.readAt = .now
-      didChange = true
-    }
-
-    if didChange {
-      try modelContext.save()
-    }
-  }
-
   func markRootPostRead(postID: String, ownerPubkey: String, myPubkey: String) throws {
     let descriptor = FetchDescriptor<SessionMessageEntity>(
       predicate: #Predicate { $0.rootID == postID && $0.ownerPubkey == ownerPubkey }
@@ -289,22 +269,15 @@ final class SessionMessageStore {
     }
   }
 
-  func markPostRepliesRead(postID: String, ownerPubkey: String, myPubkey: String) throws {
+  func purgeLegacyNonRootMessages(ownerPubkey: String) throws {
+    let rootKindRaw = SessionMessageKind.root.rawValue
     let descriptor = FetchDescriptor<SessionMessageEntity>(
-      predicate: #Predicate { $0.rootID == postID && $0.ownerPubkey == ownerPubkey }
+      predicate: #Predicate { $0.ownerPubkey == ownerPubkey && $0.kindRaw != rootKindRaw }
     )
     let messages = try modelContext.fetch(descriptor)
-
-    var didChange = false
-    for message in messages where message.kind == .reply {
-      guard !message.senderMatches(myPubkey), message.readAt == nil else { continue }
-      message.readAt = .now
-      didChange = true
-    }
-
-    if didChange {
-      try modelContext.save()
-    }
+    guard !messages.isEmpty else { return }
+    messages.forEach(modelContext.delete)
+    try modelContext.save()
   }
 
   func clearAllSessionData(ownerPubkey: String) throws {

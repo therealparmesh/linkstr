@@ -14,29 +14,17 @@ private struct SessionSummary: Identifiable {
 
 private struct SessionMessageIndex {
   let rootsBySessionID: [String: [SessionMessageEntity]]
-  let repliesByRootID: [String: [SessionMessageEntity]]
-  let unreadIncomingReplyRootIDs: Set<String>
 
-  init(messages: [SessionMessageEntity], myPubkey: String?) {
+  init(messages: [SessionMessageEntity]) {
     var rootsBySessionID: [String: [SessionMessageEntity]] = [:]
-    var repliesByRootID: [String: [SessionMessageEntity]] = [:]
-    var unreadIncomingReplyRootIDs = Set<String>()
 
     for message in messages {
-      switch message.kind {
-      case .root:
+      if message.kind == .root {
         rootsBySessionID[message.conversationID, default: []].append(message)
-      case .reply:
-        repliesByRootID[message.rootID, default: []].append(message)
-        if let myPubkey, message.senderPubkey != myPubkey, message.readAt == nil {
-          unreadIncomingReplyRootIDs.insert(message.rootID)
-        }
       }
     }
 
     self.rootsBySessionID = rootsBySessionID
-    self.repliesByRootID = repliesByRootID
-    self.unreadIncomingReplyRootIDs = unreadIncomingReplyRootIDs
   }
 }
 
@@ -61,7 +49,7 @@ struct ConversationsView: View {
   }
 
   private var messageIndex: SessionMessageIndex {
-    SessionMessageIndex(messages: scopedMessages, myPubkey: session.identityService.pubkeyHex)
+    SessionMessageIndex(messages: scopedMessages)
   }
 
   private var summaries: [SessionSummary] {
@@ -72,11 +60,7 @@ struct ConversationsView: View {
       let latestPreview = previewText(for: latestPost)
       let latestNote = normalizedNote(latestPost?.note)
 
-      let hasUnread = posts.contains { post in
-        let hasUnreadPost = hasUnreadIncomingRootPost(post)
-        let hasUnreadReplies = messageIndex.unreadIncomingReplyRootIDs.contains(post.rootID)
-        return hasUnreadPost || hasUnreadReplies
-      }
+      let hasUnread = posts.contains { hasUnreadIncomingRootPost($0) }
 
       return SessionSummary(
         id: sessionEntity.sessionID,
@@ -291,28 +275,6 @@ private struct SessionPostsView: View {
       .sorted { $0.timestamp > $1.timestamp }
   }
 
-  private var repliesByPostID: [String: [SessionMessageEntity]] {
-    let postIDs = Set(posts.map(\.rootID))
-    let replies = scopedMessages.filter { message in
-      message.kind == .reply && postIDs.contains(message.rootID)
-    }
-    return Dictionary(grouping: replies, by: \.rootID)
-  }
-
-  private var unreadIncomingReplyPostIDs: Set<String> {
-    guard let myPubkey = session.identityService.pubkeyHex else { return [] }
-    return Set(
-      scopedMessages
-        .filter { message in
-          message.kind == .reply
-            && message.conversationID == sessionEntity.sessionID
-            && message.senderPubkey != myPubkey
-            && message.readAt == nil
-        }
-        .map(\.rootID)
-    )
-  }
-
   var body: some View {
     ScrollView {
       LazyVStack(alignment: .leading, spacing: 12) {
@@ -329,18 +291,13 @@ private struct SessionPostsView: View {
           ForEach(posts) { post in
             VStack(alignment: .leading, spacing: 10) {
               NavigationLink {
-                ThreadView(post: post, sessionName: sessionEntity.name)
+                PostDetailView(post: post, sessionName: sessionEntity.name)
               } label: {
                 PostCardView(
                   post: post,
                   senderLabel: senderLabel(for: post),
                   isOutgoing: isOutgoing(post),
-                  hasUnreadPost: hasUnreadIncomingRootPost(post),
-                  replyCount: repliesByPostID[post.rootID]?.count ?? 0,
-                  hasUnreadReplies: unreadIncomingReplyPostIDs.contains(post.rootID),
-                  latestReplyTimestamp: repliesByPostID[post.rootID]?.max(by: {
-                    $0.timestamp < $1.timestamp
-                  })?.timestamp
+                  hasUnreadPost: hasUnreadIncomingRootPost(post)
                 )
               }
               .buttonStyle(.plain)
@@ -462,9 +419,6 @@ private struct PostCardView: View {
   let senderLabel: String
   let isOutgoing: Bool
   let hasUnreadPost: Bool
-  let replyCount: Int
-  let hasUnreadReplies: Bool
-  let latestReplyTimestamp: Date?
 
   var body: some View {
     HStack(alignment: .top, spacing: 10) {
@@ -489,12 +443,12 @@ private struct PostCardView: View {
         }
 
         HStack(alignment: .firstTextBaseline, spacing: 0) {
-          Text(replyCount == 1 ? "1 reply" : "\(replyCount) replies")
+          Text("Post")
             .font(.caption)
             .foregroundStyle(LinkstrTheme.textSecondary)
             .lineLimit(1)
 
-          if hasUnreadPost || hasUnreadReplies {
+          if hasUnreadPost {
             Circle()
               .fill(LinkstrTheme.neonAmber)
               .frame(width: 7, height: 7)
@@ -510,18 +464,6 @@ private struct PostCardView: View {
             .font(.caption)
             .foregroundStyle(LinkstrTheme.textSecondary)
             .lineLimit(1)
-
-          if let latestReplyTimestamp {
-            Text("•")
-              .font(.caption2)
-              .foregroundStyle(LinkstrTheme.textSecondary)
-              .padding(.horizontal, 8)
-
-            Text("Updated \(latestReplyTimestamp.linkstrListTimestampLabel)")
-              .font(.caption)
-              .foregroundStyle(LinkstrTheme.textSecondary)
-              .lineLimit(1)
-          }
         }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
