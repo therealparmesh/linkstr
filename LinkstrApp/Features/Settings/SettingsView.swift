@@ -69,26 +69,6 @@ struct SettingsView: View {
                 .padding(.top, 4)
             }
 
-            HStack(spacing: 10) {
-              Text("Enabled")
-                .font(.custom(LinkstrTheme.bodyFont, size: 13))
-                .foregroundStyle(LinkstrTheme.textSecondary)
-              Spacer(minLength: 8)
-              Toggle(
-                "",
-                isOn: Binding(
-                  get: {
-                    relay.isEnabled
-                  },
-                  set: { _ in
-                    session.toggleRelay(relay)
-                  })
-              )
-              .labelsHidden()
-              .tint(LinkstrTheme.neonCyan)
-            }
-            .padding(.trailing, 4)
-
             let relayErrorText = normalizedInlineMessage(session.relayErrorMessage(for: relay))
             Text(relayErrorText.isEmpty ? " " : relayErrorText)
               .font(.custom(LinkstrTheme.bodyFont, size: 12))
@@ -98,8 +78,23 @@ struct SettingsView: View {
               .opacity(relayErrorText.isEmpty ? 0 : 1)
               .accessibilityHidden(relayErrorText.isEmpty)
 
-            HStack {
-              Spacer()
+            HStack(spacing: 10) {
+              Toggle(
+                "Enable relay",
+                isOn: Binding(
+                  get: {
+                    relay.isEnabled
+                  },
+                  set: { _ in
+                    session.toggleRelay(relay)
+                  })
+              )
+              .labelsHidden()
+              .accessibilityLabel("Enable relay")
+              .tint(LinkstrTheme.neonCyan)
+
+              Spacer(minLength: 8)
+
               Button(role: .destructive) {
                 session.removeRelay(relay)
               } label: {
