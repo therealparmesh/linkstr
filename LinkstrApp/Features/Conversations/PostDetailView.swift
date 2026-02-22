@@ -9,10 +9,24 @@ struct ReactionSummary: Identifiable, Hashable {
   var id: String { emoji }
 }
 
+struct ReactionBreakdown: Identifiable, Hashable {
+  let emoji: String
+  let participants: [String]
+
+  var id: String { emoji }
+  var count: Int { participants.count }
+}
+
 struct LinkstrReactionRow: View {
+  enum Mode {
+    case interactive
+    case readOnly
+  }
+
   let summaries: [ReactionSummary]
-  let onToggleEmoji: (String) -> Void
-  let onAddReaction: () -> Void
+  var mode: Mode = .interactive
+  let onToggleEmoji: ((String) -> Void)?
+  let onAddReaction: (() -> Void)?
 
   private let quickEmojis = ["👍", "👎", "👀"]
 
@@ -30,97 +44,130 @@ struct LinkstrReactionRow: View {
   }
 
   var body: some View {
-    HStack(spacing: 8) {
-      ForEach(extraSummaries) { summary in
-        summaryChip(summary)
-      }
+    ScrollView(.horizontal, showsIndicators: false) {
+      HStack(spacing: 8) {
+        if mode == .readOnly {
+          ForEach(summaries) { summary in
+            summaryChip(summary)
+          }
+        } else {
+          ForEach(extraSummaries) { summary in
+            summaryChip(summary)
+          }
 
-      ForEach(quickEmojis, id: \.self) { emoji in
-        quickEmojiButton(emoji)
-      }
+          ForEach(quickEmojis, id: \.self) { emoji in
+            quickEmojiButton(emoji)
+          }
 
-      Button(action: onAddReaction) {
-        Text("...")
-          .font(.custom(LinkstrTheme.bodyFont, size: 13))
-          .foregroundStyle(LinkstrTheme.textPrimary.opacity(0.9))
-          .padding(.horizontal, 10)
-          .padding(.vertical, 6)
-          .background(
-            Capsule()
-              .fill(LinkstrTheme.panel)
-          )
-          .overlay(
-            Capsule()
-              .stroke(LinkstrTheme.textSecondary.opacity(0.2), lineWidth: 1)
-          )
+          if let onAddReaction {
+            Button(action: onAddReaction) {
+              Text("...")
+                .font(.custom(LinkstrTheme.bodyFont, size: 13))
+                .foregroundStyle(LinkstrTheme.textPrimary.opacity(0.9))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(
+                  Capsule()
+                    .fill(LinkstrTheme.panel)
+                )
+                .overlay(
+                  Capsule()
+                    .stroke(LinkstrTheme.textSecondary.opacity(0.2), lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+          }
+        }
       }
-      .buttonStyle(.plain)
-
-      Spacer(minLength: 0)
     }
+    .frame(maxWidth: .infinity, alignment: .leading)
   }
 
   private func summaryChip(_ summary: ReactionSummary) -> some View {
-    Button {
-      onToggleEmoji(summary.emoji)
-    } label: {
-      HStack(spacing: 6) {
-        Text(summary.emoji)
-          .font(.system(size: 15))
-        Text("\(summary.count)")
-          .font(.custom(LinkstrTheme.bodyFont, size: 12))
-          .foregroundStyle(LinkstrTheme.textPrimary.opacity(0.95))
+    Group {
+      if let onToggleEmoji, mode == .interactive {
+        Button {
+          onToggleEmoji(summary.emoji)
+        } label: {
+          summaryChipLabel(summary)
+        }
+        .buttonStyle(.plain)
+      } else {
+        summaryChipLabel(summary)
       }
-      .padding(.horizontal, 10)
-      .padding(.vertical, 6)
-      .background(
-        Capsule()
-          .fill(summary.includesCurrentUser ? LinkstrTheme.panelSoft : LinkstrTheme.panel)
-      )
-      .overlay(
-        Capsule()
-          .stroke(
-            summary.includesCurrentUser
-              ? LinkstrTheme.neonCyan.opacity(0.45) : LinkstrTheme.textSecondary.opacity(0.2),
-            lineWidth: 1
-          )
-      )
     }
-    .buttonStyle(.plain)
+  }
+
+  private func summaryChipLabel(_ summary: ReactionSummary) -> some View {
+    HStack(spacing: 6) {
+      Text(summary.emoji)
+        .font(.system(size: 15))
+      Text("\(summary.count)")
+        .font(.custom(LinkstrTheme.bodyFont, size: 12))
+        .foregroundStyle(LinkstrTheme.textPrimary.opacity(0.95))
+    }
+    .padding(.horizontal, 10)
+    .padding(.vertical, 6)
+    .background(
+      Capsule()
+        .fill(summary.includesCurrentUser ? LinkstrTheme.panelSoft : LinkstrTheme.panel)
+    )
+    .overlay(
+      Capsule()
+        .stroke(
+          summary.includesCurrentUser
+            ? LinkstrTheme.neonCyan.opacity(0.45) : LinkstrTheme.textSecondary.opacity(0.2),
+          lineWidth: 1
+        )
+    )
   }
 
   private func quickEmojiButton(_ emoji: String) -> some View {
     let summary = quickSummariesByEmoji[emoji]
-    return Button {
-      onToggleEmoji(emoji)
-    } label: {
-      HStack(spacing: 6) {
-        Text(emoji)
-          .font(.system(size: 15))
-
-        if let count = summary?.count, count > 0 {
-          Text("\(count)")
-            .font(.custom(LinkstrTheme.bodyFont, size: 12))
-            .foregroundStyle(LinkstrTheme.textPrimary.opacity(0.95))
+    return Group {
+      if let onToggleEmoji, mode == .interactive {
+        Button {
+          onToggleEmoji(emoji)
+        } label: {
+          quickEmojiButtonLabel(emoji: emoji, summary: summary)
         }
+        .buttonStyle(.plain)
+      } else {
+        quickEmojiButtonLabel(emoji: emoji, summary: summary)
       }
-      .padding(.horizontal, 10)
-      .padding(.vertical, 6)
-      .background(
-        Capsule()
-          .fill(summary?.includesCurrentUser == true ? LinkstrTheme.panelSoft : LinkstrTheme.panel)
-      )
-      .overlay(
-        Capsule()
-          .stroke(
-            summary?.includesCurrentUser == true
-              ? LinkstrTheme.neonCyan.opacity(0.45) : LinkstrTheme.textSecondary.opacity(0.2),
-            lineWidth: 1
-          )
-      )
     }
-    .buttonStyle(.plain)
   }
+
+  private func quickEmojiButtonLabel(
+    emoji: String,
+    summary: ReactionSummary?
+  ) -> some View {
+    HStack(spacing: 6) {
+      Text(emoji)
+        .font(.system(size: 15))
+
+      if let count = summary?.count, count > 0 {
+        Text("\(count)")
+          .font(.custom(LinkstrTheme.bodyFont, size: 12))
+          .foregroundStyle(LinkstrTheme.textPrimary.opacity(0.95))
+      }
+    }
+    .padding(.horizontal, 10)
+    .padding(.vertical, 6)
+    .background(
+      Capsule()
+        .fill(summary?.includesCurrentUser == true ? LinkstrTheme.panelSoft : LinkstrTheme.panel)
+    )
+    .overlay(
+      Capsule()
+        .stroke(
+          summary?.includesCurrentUser == true
+            ? LinkstrTheme.neonCyan.opacity(0.45) : LinkstrTheme.textSecondary.opacity(0.2),
+          lineWidth: 1
+        )
+    )
+  }
+
 }
 
 struct LinkstrEmojiPickerSheet: View {
@@ -175,6 +222,8 @@ struct LinkstrEmojiPickerSheet: View {
               .autocorrectionDisabled(true)
               .padding(.horizontal, 12)
               .padding(.vertical, 10)
+              .lineLimit(1)
+              .frame(minHeight: 42)
               .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                   .fill(LinkstrTheme.panelSoft)
@@ -304,6 +353,38 @@ struct PostDetailView: View {
       }
   }
 
+  private var reactionBreakdown: [ReactionBreakdown] {
+    guard !scopedReactions.isEmpty else { return [] }
+
+    let grouped = Dictionary(grouping: scopedReactions, by: \.emoji)
+    let myPubkey = session.identityService.pubkeyHex
+
+    return
+      grouped
+      .map { emoji, reactions in
+        let participants =
+          reactions
+          .map { reaction -> String in
+            if let myPubkey, reaction.senderMatches(myPubkey) {
+              return "You"
+            }
+            return session.contactName(for: reaction.senderPubkey, contacts: scopedContacts)
+          }
+          .sorted { lhs, rhs in
+            if lhs == "You" { return true }
+            if rhs == "You" { return false }
+            return lhs.localizedCaseInsensitiveCompare(rhs) == .orderedAscending
+          }
+        return ReactionBreakdown(emoji: emoji, participants: participants)
+      }
+      .sorted {
+        if $0.count == $1.count {
+          return $0.emoji < $1.emoji
+        }
+        return $0.count > $1.count
+      }
+  }
+
   var body: some View {
     ScrollView {
       LazyVStack(spacing: 10) {
@@ -349,7 +430,19 @@ struct PostDetailView: View {
           .foregroundStyle(LinkstrTheme.textPrimary)
       }
 
-      if let url = post.url {
+      if let url = post.url, let parsedURL = URL(string: url) {
+        Button {
+          openURL(parsedURL)
+        } label: {
+          Text(url)
+            .font(.custom(LinkstrTheme.bodyFont, size: 13))
+            .foregroundStyle(LinkstrTheme.textSecondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .multilineTextAlignment(.leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+      } else if let url = post.url {
         Text(url)
           .font(.custom(LinkstrTheme.bodyFont, size: 13))
           .foregroundStyle(LinkstrTheme.textSecondary)
@@ -366,6 +459,7 @@ struct PostDetailView: View {
 
       LinkstrReactionRow(
         summaries: reactionSummaries,
+        mode: .interactive,
         onToggleEmoji: { emoji in
           toggleReaction(emoji)
         },
@@ -373,6 +467,27 @@ struct PostDetailView: View {
           isPresentingEmojiPicker = true
         }
       )
+
+      if !reactionBreakdown.isEmpty {
+        VStack(alignment: .leading, spacing: 8) {
+          LinkstrSectionHeader(title: "Who Reacted")
+
+          ForEach(reactionBreakdown) { entry in
+            HStack(alignment: .top, spacing: 8) {
+              Text(entry.emoji)
+                .font(.system(size: 17))
+
+              Text(entry.participants.joined(separator: ", "))
+                .font(.custom(LinkstrTheme.bodyFont, size: 12))
+                .foregroundStyle(LinkstrTheme.textSecondary)
+                .multilineTextAlignment(.leading)
+
+              Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 2)
+          }
+        }
+      }
     }
     .padding(.horizontal, 2)
   }

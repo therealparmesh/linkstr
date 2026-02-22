@@ -67,7 +67,8 @@
 - Member updates are snapshot-based (`session_members`):
   - The active member set becomes exactly the snapshot.
   - Missing previous members become inactive.
-- Sessions can be archived/unarchived via swipe actions.
+- Sessions can be archived/unarchived from session-row archive controls.
+- Session list supports `Active`, `Archived`, and `All` filters.
 - Archive is non-destructive.
 
 ### Session members UX
@@ -91,6 +92,7 @@
 - URL input is normalized and must be valid `http`/`https`.
 - Unsupported schemes are rejected.
 - Note text is trimmed and persisted only when non-empty.
+- In post detail, the raw link text is tappable and opens in the browser.
 - Send behavior is reconnect-and-timeout:
   - Composer remains on-screen while waiting to send.
   - Send waits for a usable relay path (default timeout 12 seconds).
@@ -102,9 +104,11 @@
 
 - Reactions are emoji-only toggles tied to a post.
 - UX includes:
-  - Slack-style reaction summary chips.
+  - Session post list shows read-only reaction summary chips.
+  - Post detail uses interactive Slack-style reaction summary chips.
   - Inline quick toggles for `👍`, `👎`, `👀`.
   - `...` button that opens the full emoji picker sheet.
+  - Post detail shows a per-emoji participant breakdown (who reacted with each emoji).
 - Default quick options include `👍`, `👎`, `👀`.
 - Reaction state is keyed by:
   - Session ID.
@@ -130,7 +134,7 @@
   - Remove relay.
   - Reset default relays.
 - Relay header shows `connected_or_readonly / total`.
-- Relay rows show live status (`connected`, `read-only`, `failed`, `disabled`).
+- Relay rows show a live status dot (`connected`, `read-only`, `failed`, `disabled`) and optional inline error text.
 - Relay error rows reserve layout height to avoid jitter when status text appears/disappears.
 
 ### Relay send gating
@@ -173,6 +177,11 @@
 
 - URL classification drives playback mode (extract/embed/link fallback).
 - Canonicalization handles mobile host variants (for example `m.facebook.com`).
+- For extraction-capable providers, local playback is attempted first with explicit controls to switch to embed mode.
+- If extraction fails, embed mode remains available and offers retry-local plus Safari open actions.
+- Media actions are normalized:
+  - One action button uses full width.
+  - Two action buttons split width evenly with spacing.
 - Metadata hydration fetches title/thumbnail asynchronously for root posts.
 - On boot, existing root posts are re-queued for metadata hydration when stale/missing.
 - Missing local thumbnail files are treated as stale and re-fetched.

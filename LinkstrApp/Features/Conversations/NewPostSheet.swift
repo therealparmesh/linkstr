@@ -21,21 +21,22 @@ struct NewPostSheet: View {
       ZStack {
         LinkstrBackgroundView()
         ScrollView {
-          VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 10) {
+          VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 8) {
               sectionLabel("Session")
               Text(sessionEntity.name)
                 .font(.custom(LinkstrTheme.bodyFont, size: 15))
                 .foregroundStyle(LinkstrTheme.textPrimary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(12)
+                .frame(minHeight: 42)
                 .background(
                   RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(LinkstrTheme.panelSoft)
                 )
             }
 
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 8) {
               sectionLabel("Link")
 
               TextField("https://...", text: $url)
@@ -47,6 +48,8 @@ struct NewPostSheet: View {
                 .focused($isURLFieldFocused)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
+                .lineLimit(1)
+                .frame(minHeight: 42)
                 .background(
                   RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(LinkstrTheme.panelSoft)
@@ -67,7 +70,7 @@ struct NewPostSheet: View {
                 .accessibilityHidden(urlValidationHint == nil)
             }
 
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 8) {
               sectionLabel("Note")
 
               ZStack(alignment: .topLeading) {

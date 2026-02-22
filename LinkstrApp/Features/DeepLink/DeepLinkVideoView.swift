@@ -29,7 +29,7 @@ struct DeepLinkVideoView: View {
           Button {
             openURL(sourceURL)
           } label: {
-            Text("Open Source in Safari")
+            Text("Open in Safari")
               .frame(maxWidth: .infinity)
           }
           .buttonStyle(LinkstrSecondaryButtonStyle())

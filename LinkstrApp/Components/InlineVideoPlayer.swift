@@ -80,11 +80,6 @@ struct AdaptiveVideoPlaybackView: View {
     case embedPreferred
   }
 
-  private struct FullScreenWebItem: Identifiable {
-    let id = UUID()
-    let url: URL
-  }
-
   let sourceURL: URL
   let showOpenSourceButtonInEmbedMode: Bool
   let openSourceAction: (() -> Void)?
@@ -95,7 +90,6 @@ struct AdaptiveVideoPlaybackView: View {
   @State private var extractionState: ExtractionState?
   @State private var localPlaybackMode: LocalPlaybackMode = .localPreferred
   @State private var extractionFallbackReason: String?
-  @State private var fullScreenWebItem: FullScreenWebItem?
 
   init(
     sourceURL: URL,
@@ -113,10 +107,6 @@ struct AdaptiveVideoPlaybackView: View {
 
   var body: some View {
     content
-      .fullScreenCover(item: $fullScreenWebItem) { item in
-        FullScreenSafariView(url: item.url)
-          .ignoresSafeArea()
-      }
       .task(id: sourceURL.absoluteString) {
         canonicalSourceURL = await URLCanonicalizationService.shared.canonicalPlaybackURL(
           for: sourceURL)
@@ -159,19 +149,30 @@ struct AdaptiveVideoPlaybackView: View {
         mediaSurface {
           InlineVideoPlayer(media: media)
         }
-        HStack(spacing: 8) {
+
+        if let openSourceAction {
+          HStack(spacing: 8) {
+            Button {
+              localPlaybackMode = .embedPreferred
+            } label: {
+              Text("Use Embedded")
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(LinkstrSecondaryButtonStyle())
+
+            Button {
+              openSourceAction()
+            } label: {
+              Text("Open in Safari")
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(LinkstrSecondaryButtonStyle())
+          }
+        } else {
           Button {
             localPlaybackMode = .embedPreferred
           } label: {
-            Text("Use Embedded Player")
-              .frame(maxWidth: .infinity)
-          }
-          .buttonStyle(LinkstrSecondaryButtonStyle())
-
-          Button {
-            fullScreenWebItem = FullScreenWebItem(url: embedURL)
-          } label: {
-            Text("Open Fullscreen")
+            Text("Use Embedded")
               .frame(maxWidth: .infinity)
           }
           .buttonStyle(LinkstrSecondaryButtonStyle())
@@ -205,8 +206,10 @@ struct AdaptiveVideoPlaybackView: View {
           .foregroundStyle(LinkstrTheme.textSecondary)
       }
 
-      HStack(spacing: 8) {
-        if allowsTryLocalPlayback {
+      let canOpenSource = showOpenSourceButtonInEmbedMode && openSourceAction != nil
+
+      if allowsTryLocalPlayback, let openSourceAction, canOpenSource {
+        HStack(spacing: 8) {
           Button {
             Task {
               localPlaybackMode = .localPreferred
@@ -219,22 +222,33 @@ struct AdaptiveVideoPlaybackView: View {
               .frame(maxWidth: .infinity)
           }
           .buttonStyle(LinkstrSecondaryButtonStyle())
-        }
 
+          Button {
+            openSourceAction()
+          } label: {
+            Text("Open in Safari")
+              .frame(maxWidth: .infinity)
+          }
+          .buttonStyle(LinkstrSecondaryButtonStyle())
+        }
+      } else if allowsTryLocalPlayback {
         Button {
-          fullScreenWebItem = FullScreenWebItem(url: embedURL)
+          Task {
+            localPlaybackMode = .localPreferred
+            extractionState = nil
+            extractionFallbackReason = nil
+            await prepareMediaIfNeeded()
+          }
         } label: {
-          Text("Open Fullscreen")
+          Text("Try Local Playback")
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(LinkstrSecondaryButtonStyle())
-      }
-
-      if showOpenSourceButtonInEmbedMode, let openSourceAction {
+      } else if canOpenSource, let openSourceAction {
         Button {
           openSourceAction()
         } label: {
-          Text("Open Source in Safari")
+          Text("Open in Safari")
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(LinkstrSecondaryButtonStyle())

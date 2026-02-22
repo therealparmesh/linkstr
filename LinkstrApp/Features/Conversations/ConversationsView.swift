@@ -28,6 +28,25 @@ private struct SessionMessageIndex {
   }
 }
 
+private enum SessionListFilter: String, CaseIterable, Identifiable {
+  case active
+  case archived
+  case all
+
+  var id: String { rawValue }
+
+  var title: String {
+    switch self {
+    case .active:
+      return "Active"
+    case .archived:
+      return "Archived"
+    case .all:
+      return "All"
+    }
+  }
+}
+
 struct ConversationsView: View {
   @EnvironmentObject private var session: AppSession
 
@@ -42,6 +61,7 @@ struct ConversationsView: View {
 
   @State private var selectedSessionID: String?
   @State private var isShowingSelectedSession = false
+  @State private var listFilter: SessionListFilter = .active
 
   private var scopedSessions: [SessionEntity] {
     session.scopedSessions(from: allSessions)
@@ -78,12 +98,15 @@ struct ConversationsView: View {
     .sorted { $0.latestTimestamp > $1.latestTimestamp }
   }
 
-  private var activeSummaries: [SessionSummary] {
-    summaries.filter { !$0.session.isArchived }
-  }
-
-  private var archivedSummaries: [SessionSummary] {
-    summaries.filter { $0.session.isArchived }
+  private var visibleSummaries: [SessionSummary] {
+    switch listFilter {
+    case .active:
+      return summaries.filter { !$0.session.isArchived }
+    case .archived:
+      return summaries.filter { $0.session.isArchived }
+    case .all:
+      return summaries
+    }
   }
 
   var body: some View {
@@ -127,40 +150,61 @@ struct ConversationsView: View {
       )
     } else {
       ScrollView {
-        LazyVStack(spacing: 0) {
-          ForEach(activeSummaries) { summary in
-            Button {
-              selectedSessionID = summary.session.sessionID
-              isShowingSelectedSession = true
-            } label: {
-              SessionRowView(summary: summary)
-            }
-            .buttonStyle(.plain)
-            .contentShape(Rectangle())
-            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-              Button("Archive") {
-                session.setSessionArchived(sessionID: summary.session.sessionID, archived: true)
-              }
-              .tint(.orange)
+        VStack(alignment: .leading, spacing: 10) {
+          Picker("Session Filter", selection: $listFilter) {
+            ForEach(SessionListFilter.allCases) { filter in
+              Text(filter.title)
+                .tag(filter)
             }
           }
+          .pickerStyle(.segmented)
 
-          if !archivedSummaries.isEmpty {
-            LinkstrSectionHeader(title: "Archived")
-            ForEach(archivedSummaries) { summary in
-              Button {
-                selectedSessionID = summary.session.sessionID
-                isShowingSelectedSession = true
-              } label: {
-                SessionRowView(summary: summary)
-              }
-              .buttonStyle(.plain)
-              .contentShape(Rectangle())
-              .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                Button("Unarchive") {
-                  session.setSessionArchived(sessionID: summary.session.sessionID, archived: false)
+          if visibleSummaries.isEmpty {
+            ContentUnavailableView(
+              listFilter == .archived ? "No Archived Sessions" : "No Active Sessions",
+              systemImage: listFilter == .archived ? "archivebox" : "rectangle.stack",
+              description: Text(
+                listFilter == .archived
+                  ? "Archive a session to move it here."
+                  : "Create a session or switch filters."
+              )
+            )
+            .padding(.top, 12)
+          } else {
+            LazyVStack(spacing: 0) {
+              ForEach(visibleSummaries) { summary in
+                HStack(spacing: 8) {
+                  Button {
+                    selectedSessionID = summary.session.sessionID
+                    isShowingSelectedSession = true
+                  } label: {
+                    SessionRowView(summary: summary)
+                  }
+                  .buttonStyle(.plain)
+                  .contentShape(Rectangle())
+                  .frame(maxWidth: .infinity, alignment: .leading)
+
+                  Button {
+                    session.setSessionArchived(
+                      sessionID: summary.session.sessionID,
+                      archived: !summary.session.isArchived
+                    )
+                  } label: {
+                    Image(
+                      systemName: summary.session.isArchived ? "tray.and.arrow.up" : "archivebox"
+                    )
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(LinkstrTheme.textPrimary)
+                    .frame(width: 32, height: 32)
+                    .background(
+                      RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(LinkstrTheme.panel)
+                    )
+                  }
+                  .buttonStyle(.plain)
+                  .accessibilityLabel(
+                    summary.session.isArchived ? "Unarchive session" : "Archive session")
                 }
-                .tint(.green)
               }
             }
           }
@@ -284,7 +328,6 @@ private struct SessionPostsView: View {
 
   @State private var isPresentingNewPost = false
   @State private var isPresentingMembers = false
-  @State private var reactionTargetPost: SessionMessageEntity?
 
   private var scopedMessages: [SessionMessageEntity] {
     session.scopedMessages(from: allMessages)
@@ -337,16 +380,16 @@ private struct SessionPostsView: View {
               }
               .buttonStyle(.plain)
 
-              LinkstrReactionRow(
-                summaries: reactionSummaries(for: post.rootID),
-                onToggleEmoji: { emoji in
-                  toggleReaction(emoji: emoji, post: post)
-                },
-                onAddReaction: {
-                  reactionTargetPost = post
-                }
-              )
-              .padding(.horizontal, 6)
+              let summaries = reactionSummaries(for: post.rootID)
+              if !summaries.isEmpty {
+                LinkstrReactionRow(
+                  summaries: summaries,
+                  mode: .readOnly,
+                  onToggleEmoji: nil,
+                  onAddReaction: nil
+                )
+                .padding(.horizontal, 6)
+              }
             }
           }
         }
@@ -389,18 +432,6 @@ private struct SessionPostsView: View {
         activeMembers: scopedMembers
       )
       .environmentObject(session)
-    }
-    .sheet(item: $reactionTargetPost) { post in
-      LinkstrEmojiPickerSheet { emoji in
-        toggleReaction(emoji: emoji, post: post)
-      }
-      .presentationDetents([.fraction(0.92)])
-    }
-  }
-
-  private func toggleReaction(emoji: String, post: SessionMessageEntity) {
-    Task { @MainActor in
-      _ = await session.toggleReactionAwaitingRelay(emoji: emoji, post: post)
     }
   }
 
@@ -558,6 +589,10 @@ struct NewSessionSheet: View {
   @State private var selectedNPubs = Set<String>()
   @State private var isCreating = false
 
+  private var canCreateSession: Bool {
+    !sessionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+
   var body: some View {
     NavigationStack {
       ZStack {
@@ -569,6 +604,7 @@ struct NewSessionSheet: View {
               .textInputAutocapitalization(.words)
               .padding(.horizontal, 12)
               .padding(.vertical, 10)
+              .frame(minHeight: 42)
               .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                   .fill(LinkstrTheme.panelSoft)
@@ -584,6 +620,7 @@ struct NewSessionSheet: View {
               .autocorrectionDisabled(true)
               .padding(.horizontal, 12)
               .padding(.vertical, 10)
+              .frame(minHeight: 42)
               .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                   .fill(LinkstrTheme.panelSoft)
@@ -667,8 +704,7 @@ struct NewSessionSheet: View {
               .frame(maxWidth: .infinity)
           }
           .buttonStyle(LinkstrPrimaryButtonStyle())
-          .disabled(
-            isCreating || sessionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+          .disabled(isCreating || !canCreateSession)
 
           Text(isCreating ? "Waiting for relay reconnect before creating…" : " ")
             .font(.custom(LinkstrTheme.bodyFont, size: 12))
@@ -712,6 +748,7 @@ struct NewSessionSheet: View {
 
   private func createSession() {
     guard !isCreating else { return }
+    guard canCreateSession else { return }
     let selected = Array(selectedNPubs)
     isCreating = true
 
@@ -798,6 +835,7 @@ private struct SessionMembersSheet: View {
               .autocorrectionDisabled(true)
               .padding(.horizontal, 12)
               .padding(.vertical, 10)
+              .frame(minHeight: 42)
               .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                   .fill(LinkstrTheme.panelSoft)

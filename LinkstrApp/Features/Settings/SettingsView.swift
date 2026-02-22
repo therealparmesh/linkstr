@@ -130,7 +130,10 @@ struct SettingsView: View {
           TextField("wss://relay.example.com", text: $relayURL)
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled(true)
-            .padding(10)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .lineLimit(1)
+            .frame(minHeight: 42)
             .background(
               RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(LinkstrTheme.panelSoft)

@@ -730,7 +730,10 @@ actor URLCanonicalizationService {
     }
 
     let resolved = await resolveUncached(sourceURL)
-    cache[cacheKey] = resolved
+    let isFacebookShare = SocialURLHeuristics.isFacebookShareURL(sourceURL)
+    if !isFacebookShare || resolved != sourceURL {
+      cache[cacheKey] = resolved
+    }
     return resolved
   }
 
@@ -788,6 +791,12 @@ actor URLCanonicalizationService {
         !(200..<400).contains(httpResponse.statusCode)
       {
         return nil
+      }
+
+      if let responseURL = response.url,
+        let canonicalFromResponseURL = canonicalFacebookURL(from: responseURL)
+      {
+        return canonicalFromResponseURL
       }
 
       guard !data.isEmpty else { return nil }
@@ -922,7 +931,7 @@ actor URLCanonicalizationService {
       return URL(string: "https://www.facebook.com/reel/\(token)/")
     case "v":
       if !token.allSatisfy(\.isNumber) {
-        return URL(string: "https://www.facebook.com/share/v/\(token)/")
+        return URL(string: "https://www.facebook.com/reel/\(token)/")
       }
       var components = URLComponents(string: "https://www.facebook.com/watch/")
       components?.queryItems = [URLQueryItem(name: "v", value: token)]

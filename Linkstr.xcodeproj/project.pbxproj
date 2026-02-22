@@ -30,7 +30,6 @@
 		6C78539BB6DE97B0777D76D8 /* ShareIdentityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F12865F1DBAEB780B3E3EF3 /* ShareIdentityView.swift */; };
 		6EB7676D56763E9FED69A718 /* HLSDownloadManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B818363C936E8DBB7C2F538E /* HLSDownloadManager.swift */; };
 		703AB880A3B1547E90E1A1D1 /* NostrDMService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB411CF847C9613148DBF8EC /* NostrDMService.swift */; };
-		7F0C177A5A77FD97E05A78A9 /* FullScreenSafariView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B6D988CCE5F1827503F606F /* FullScreenSafariView.swift */; };
 		831A7E879E5FAF0EBD56753D /* URLClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68350273DCA0FBB994BE216F /* URLClassifier.swift */; };
 		87270EB46F7E765484EEE056 /* SessionPayloadValidationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 118E840F89FC06452507FEFF /* SessionPayloadValidationTests.swift */; };
 		88DCCA79F01DAC7A398ADF43 /* LinkstrPayloadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 076BFE5567285D2651D29E76 /* LinkstrPayloadTests.swift */; };
@@ -78,7 +77,6 @@
 		03426C3B013C8B741D6BAB1B /* InlineVideoPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InlineVideoPlayer.swift; sourceTree = "<group>"; };
 		076BFE5567285D2651D29E76 /* LinkstrPayloadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkstrPayloadTests.swift; sourceTree = "<group>"; };
 		0A117E36B63F21A3C556B224 /* LinkType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkType.swift; sourceTree = "<group>"; };
-		0B6D988CCE5F1827503F606F /* FullScreenSafariView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullScreenSafariView.swift; sourceTree = "<group>"; };
 		118E840F89FC06452507FEFF /* SessionPayloadValidationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionPayloadValidationTests.swift; sourceTree = "<group>"; };
 		22CECBEA34B217B7CA645A04 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		24DA8D8D914B2A19EC637310 /* LinkstrPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkstrPayload.swift; sourceTree = "<group>"; };
@@ -185,7 +183,6 @@
 			isa = PBXGroup;
 			children = (
 				DB62A6966E8CF620904C81DF /* EmbeddedWebView.swift */,
-				0B6D988CCE5F1827503F606F /* FullScreenSafariView.swift */,
 				03426C3B013C8B741D6BAB1B /* InlineVideoPlayer.swift */,
 			);
 			path = Components;
@@ -442,7 +439,6 @@
 				AAA287E1271ED6F51214D802 /* DeepLinkHandler.swift in Sources */,
 				11F887A872ACDC7C396A291F /* DeepLinkVideoView.swift in Sources */,
 				9CC0DB1E8F036EE4ED1E6687 /* EmbeddedWebView.swift in Sources */,
-				7F0C177A5A77FD97E05A78A9 /* FullScreenSafariView.swift in Sources */,
 				6EB7676D56763E9FED69A718 /* HLSDownloadManager.swift in Sources */,
 				CABAAF73A10AD588AD2A5486 /* IdentityService.swift in Sources */,
 				249F87E4B931CC1061713BD7 /* InlineVideoPlayer.swift in Sources */,
