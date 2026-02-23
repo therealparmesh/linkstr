@@ -58,6 +58,7 @@ final class AppSession: ObservableObject {
   private var hasShownOfflineToastForCurrentOutage = false
   private var isForeground = false
   private var pendingMetadataStorageIDs: [String] = []
+  private var pendingMetadataStorageHead = 0
   private var enqueuedMetadataStorageIDs = Set<String>()
   private var isProcessingMetadataQueue = false
   @Published private var relayRuntimeStatusByURL: [String: RelayRuntimeStatus] = [:]
@@ -430,6 +431,7 @@ final class AppSession: ObservableObject {
     }
     refreshIdentityState()
     pendingMetadataStorageIDs.removeAll()
+    pendingMetadataStorageHead = 0
     enqueuedMetadataStorageIDs.removeAll()
     isProcessingMetadataQueue = false
     relayRuntimeStatusByURL.removeAll()
@@ -1540,8 +1542,9 @@ final class AppSession: ObservableObject {
     isProcessingMetadataQueue = true
 
     Task { @MainActor in
-      while !pendingMetadataStorageIDs.isEmpty {
-        let storageID = pendingMetadataStorageIDs.removeFirst()
+      while pendingMetadataStorageHead < pendingMetadataStorageIDs.count {
+        let storageID = pendingMetadataStorageIDs[pendingMetadataStorageHead]
+        pendingMetadataStorageHead += 1
         defer {
           enqueuedMetadataStorageIDs.remove(storageID)
         }
@@ -1554,10 +1557,9 @@ final class AppSession: ObservableObject {
         }
       }
 
+      pendingMetadataStorageIDs.removeAll(keepingCapacity: true)
+      pendingMetadataStorageHead = 0
       isProcessingMetadataQueue = false
-      if !pendingMetadataStorageIDs.isEmpty {
-        processMetadataQueueIfNeeded()
-      }
     }
   }
 

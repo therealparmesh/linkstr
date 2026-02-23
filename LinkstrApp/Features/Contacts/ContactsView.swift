@@ -24,9 +24,9 @@ struct ContactsView: View {
   private var content: some View {
     if scopedContacts.isEmpty {
       LinkstrCenteredEmptyStateView(
-        title: "no follows",
+        title: "no contacts",
         systemImage: "person.2.slash",
-        description: "follow at least one person to start sharing links."
+        description: "add at least one contact to start sharing links."
       )
     } else {
       ScrollView {
@@ -129,7 +129,7 @@ private struct ContactDetailView: View {
             isPresentingDeleteConfirmation = true
           } label: {
             Label(
-              isRemoving ? "unfollowing…" : "unfollow",
+              isRemoving ? "removing contact…" : "remove contact",
               systemImage: "person.crop.circle.badge.minus"
             )
             .frame(maxWidth: .infinity)
@@ -164,13 +164,13 @@ private struct ContactDetailView: View {
         .disabled(isSaving || isRemoving)
       }
     }
-    .alert("unfollow this contact?", isPresented: $isPresentingDeleteConfirmation) {
+    .alert("remove this contact?", isPresented: $isPresentingDeleteConfirmation) {
       Button("cancel", role: .cancel) {}
-      Button("unfollow", role: .destructive) {
+      Button("remove", role: .destructive) {
         unfollow()
       }
     } message: {
-      Text("this publishes an updated follow list to relays and removes this contact locally.")
+      Text("this publishes an updated contact list to relays and removes this contact locally.")
     }
   }
 
@@ -270,7 +270,7 @@ struct AddContactSheet: View {
         }
         .padding(14)
       }
-      .navigationTitle("add follow")
+      .navigationTitle("add contact")
       .toolbarColorScheme(.dark, for: .navigationBar)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
@@ -278,7 +278,7 @@ struct AddContactSheet: View {
             .disabled(isSubmitting)
         }
         ToolbarItem(placement: .confirmationAction) {
-          Button(isSubmitting ? "following…" : "follow") {
+          Button(isSubmitting ? "adding contact…" : "add contact") {
             submitFollow()
           }
           .disabled(isSubmitting || npub.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)

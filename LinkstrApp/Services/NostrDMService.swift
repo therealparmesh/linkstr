@@ -45,6 +45,10 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
   private var eventCancellable: AnyCancellable?
   private var processedEventIDs = Set<String>()
   private var processedEventIDOrder: [String] = []
+  private var processedEventIDHead = 0
+  private var processedGiftWrapEventIDs = Set<String>()
+  private var processedGiftWrapEventIDOrder: [String] = []
+  private var processedGiftWrapEventIDHead = 0
   private var recipientFilter: Filter?
   private var authorFilter: Filter?
   private var reconnectTask: Task<Void, Never>?
@@ -67,6 +71,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
   private var activeBackfillStates: [String: BackfillState] = [:]
   private var completedBackfillKinds = Set<BackfillSubscriptionKind>()
   private var followListFilter: Filter?
+  private let payloadDecoder = JSONDecoder()
   // App-specific rumor kind carried inside NIP-59 gift wrap events.
   private let linkstrRumorKind = EventKind.unknown(44_001)
 
@@ -180,6 +185,10 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     relayPool = nil
     processedEventIDs.removeAll()
     processedEventIDOrder.removeAll()
+    processedEventIDHead = 0
+    processedGiftWrapEventIDs.removeAll()
+    processedGiftWrapEventIDOrder.removeAll()
+    processedGiftWrapEventIDHead = 0
     recipientFilter = nil
     authorFilter = nil
     followListFilter = nil
@@ -588,8 +597,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     let event = relayEvent.event
     if event.kind == .followList {
       guard let followListEvent = event as? FollowListEvent else { return }
-      guard !processedEventIDs.contains(followListEvent.id) else { return }
-      rememberProcessedEventID(followListEvent.id)
+      guard rememberProcessedEventIDIfNeeded(followListEvent.id) else { return }
       let followedPubkeys = followListEvent.followedPubkeys.compactMap { followed -> String? in
         PublicKey(hex: followed.lowercased())?.hex
       }
@@ -616,9 +624,12 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
       activeBackfillStates[relayEvent.subscriptionId] = backfill
     }
 
-    guard let wrapped = event as? GiftWrapEvent,
-      let rumor = try? wrapped.unsealedRumor(using: keypair.privateKey)
-    else {
+    guard let wrapped = event as? GiftWrapEvent else {
+      return
+    }
+    guard rememberProcessedGiftWrapEventIDIfNeeded(wrapped.id) else { return }
+
+    guard let rumor = try? wrapped.unsealedRumor(using: keypair.privateKey) else {
       return
     }
 
@@ -626,10 +637,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
 
     guard !processedEventIDs.contains(rumor.id) else { return }
 
-    guard let data = rumor.content.data(using: .utf8),
-      let payload = try? JSONDecoder().decode(LinkstrPayload.self, from: data),
-      (try? payload.validated()) != nil
-    else {
+    guard let payload = decodeValidatedPayload(from: rumor.content) else {
       return
     }
 
@@ -647,18 +655,67 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
       ))
   }
 
-  private func rememberProcessedEventID(_ eventID: String) {
-    guard processedEventIDs.insert(eventID).inserted else { return }
-    processedEventIDOrder.append(eventID)
+  private func decodeValidatedPayload(from content: String) -> LinkstrPayload? {
+    guard let data = content.data(using: .utf8),
+      let payload = try? payloadDecoder.decode(LinkstrPayload.self, from: data),
+      (try? payload.validated()) != nil
+    else {
+      return nil
+    }
+    return payload
+  }
 
-    let overflowCount = processedEventIDOrder.count - processedEventIDLimit
+  @discardableResult
+  private func rememberProcessedEventIDIfNeeded(_ eventID: String) -> Bool {
+    guard processedEventIDs.insert(eventID).inserted else { return false }
+    processedEventIDOrder.append(eventID)
+    trimProcessedIDStorageIfNeeded(
+      ids: &processedEventIDs,
+      order: &processedEventIDOrder,
+      head: &processedEventIDHead,
+      limit: processedEventIDLimit
+    )
+    return true
+  }
+
+  private func rememberProcessedEventID(_ eventID: String) {
+    _ = rememberProcessedEventIDIfNeeded(eventID)
+  }
+
+  @discardableResult
+  private func rememberProcessedGiftWrapEventIDIfNeeded(_ eventID: String) -> Bool {
+    guard processedGiftWrapEventIDs.insert(eventID).inserted else { return false }
+    processedGiftWrapEventIDOrder.append(eventID)
+    trimProcessedIDStorageIfNeeded(
+      ids: &processedGiftWrapEventIDs,
+      order: &processedGiftWrapEventIDOrder,
+      head: &processedGiftWrapEventIDHead,
+      limit: processedEventIDLimit
+    )
+    return true
+  }
+
+  private func trimProcessedIDStorageIfNeeded(
+    ids: inout Set<String>,
+    order: inout [String],
+    head: inout Int,
+    limit: Int
+  ) {
+    let activeCount = order.count - head
+    let overflowCount = activeCount - limit
     guard overflowCount > 0 else { return }
 
-    let overflowIDs = processedEventIDOrder.prefix(overflowCount)
-    for overflowID in overflowIDs {
-      processedEventIDs.remove(overflowID)
+    let trimEnd = head + overflowCount
+    for index in head..<trimEnd {
+      ids.remove(order[index])
     }
-    processedEventIDOrder.removeFirst(overflowCount)
+    head = trimEnd
+
+    // Compact rarely to avoid frequent O(n) array shifts while still bounding memory growth.
+    if head >= 2_048, head * 2 >= order.count {
+      order.removeFirst(head)
+      head = 0
+    }
   }
 
   private func handleRelayStateDidChange(relayURL: String, state: Relay.State) {

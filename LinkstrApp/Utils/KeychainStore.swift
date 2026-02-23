@@ -231,6 +231,8 @@ final class LocalDataCrypto {
 
   private let keychain = KeychainStore.shared
   private let keyPrefix = "local_data_key."
+  private var symmetricKeyCache: [String: SymmetricKey] = [:]
+  private let symmetricKeyCacheLock = NSLock()
 
   private init() {}
 
@@ -264,6 +266,7 @@ final class LocalDataCrypto {
   }
 
   func clearKey(ownerPubkey: String) throws {
+    removeCachedSymmetricKey(for: ownerPubkey)
     try keychain.delete(keyName(for: ownerPubkey))
   }
 
@@ -272,18 +275,43 @@ final class LocalDataCrypto {
   }
 
   private func symmetricKey(for ownerPubkey: String) throws -> SymmetricKey {
+    if let cached = cachedSymmetricKey(for: ownerPubkey) {
+      return cached
+    }
+
     let keyName = keyName(for: ownerPubkey)
     if let encodedKey = try keychain.get(keyName) {
       guard let data = Data(base64Encoded: encodedKey), data.count == 32 else {
         throw LocalDataCryptoError.invalidKeyMaterial
       }
-      return SymmetricKey(data: data)
+      let key = SymmetricKey(data: data)
+      cacheSymmetricKey(key, for: ownerPubkey)
+      return key
     }
 
     let key = SymmetricKey(size: .bits256)
     let keyData = Data(key.withUnsafeBytes { Data($0) })
     try keychain.set(keyData.base64EncodedString(), for: keyName)
+    cacheSymmetricKey(key, for: ownerPubkey)
     return key
+  }
+
+  private func cachedSymmetricKey(for ownerPubkey: String) -> SymmetricKey? {
+    symmetricKeyCacheLock.lock()
+    defer { symmetricKeyCacheLock.unlock() }
+    return symmetricKeyCache[ownerPubkey]
+  }
+
+  private func cacheSymmetricKey(_ key: SymmetricKey, for ownerPubkey: String) {
+    symmetricKeyCacheLock.lock()
+    symmetricKeyCache[ownerPubkey] = key
+    symmetricKeyCacheLock.unlock()
+  }
+
+  private func removeCachedSymmetricKey(for ownerPubkey: String) {
+    symmetricKeyCacheLock.lock()
+    symmetricKeyCache.removeValue(forKey: ownerPubkey)
+    symmetricKeyCacheLock.unlock()
   }
 
   private func keyName(for ownerPubkey: String) -> String {
