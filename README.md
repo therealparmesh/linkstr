@@ -90,6 +90,7 @@
   - Link (required).
   - Note (optional).
 - Link field supports `Paste` and `Clear` helpers.
+- Link helper controls render directly below the field in a compact, consistent control row.
 - Entering the link field pre-fills `https://` when the field is empty.
 - Paste replaces the entire link field value.
 - URL input is normalized and must be valid `http`/`https`.
@@ -198,11 +199,14 @@
 
 ### Contacts
 
-- Contacts are local account-scoped records.
-- Contacts are not published as social graph events.
-- Contact management supports add/edit/delete.
+- Contacts mirror the account's Nostr follow list (`kind:3`, NIP-02).
+- Follow and unfollow actions publish a full replacement follow-list event and wait for relay acceptance.
+- Incoming follow-list events from the signed-in author reconcile local contacts (latest event wins).
+- Local aliases are private per-account device data and are never published to relays.
+- Contact management supports follow/unfollow and local-alias edit.
 - Add-contact input supports manual entry, paste, and QR scan.
-- Duplicate contacts are blocked per account scope.
+- Contact-key helper controls render directly below the field in the same compact control row pattern used by post compose.
+- Duplicate follows are blocked per account scope.
 
 ### Share tab
 
@@ -220,7 +224,16 @@
 
 ### Local data and security
 
+- SwiftData persistence is local-first and survives app relaunch.
+- Persisted local entities include:
+  - Relay configuration and enabled state.
+  - Contacts/follows and private local aliases.
+  - Sessions, member snapshots, root posts, reactions, read state, and archive state.
+  - Cached media references and metadata hydration state.
 - Local entities are owner-scoped by pubkey.
+- Account scoping is enforced in storage and query paths to prevent cross-account bleed.
+- `Log Out (Keep Local Data)` preserves persisted local entities for later re-login.
+- `Log Out and Clear Local Data` removes the signed-in account’s persisted entities and cached media references.
 - Sensitive stored fields are encrypted at rest with per-owner local keys.
 - Identity keys remain in keychain.
 - Keychain accessibility uses `WhenUnlocked` and prefers synchronizable items when available.

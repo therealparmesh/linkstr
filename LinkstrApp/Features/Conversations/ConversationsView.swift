@@ -883,9 +883,8 @@ private struct SessionMembersSheet: View {
             } else {
               VStack(spacing: 0) {
                 ForEach(filteredContacts) { contact in
-                  let contactHex = PublicKey(npub: contact.npub)?.hex
+                  let contactHex = contact.targetPubkey
                   Button {
-                    guard let contactHex else { return }
                     if includedMemberHexes.contains(contactHex) {
                       includedMemberHexes.remove(contactHex)
                     } else {
@@ -907,11 +906,11 @@ private struct SessionMembersSheet: View {
                       Spacer()
 
                       Image(
-                        systemName: (contactHex != nil && includedMemberHexes.contains(contactHex!))
+                        systemName: includedMemberHexes.contains(contactHex)
                           ? "checkmark.circle.fill" : "circle"
                       )
                       .foregroundStyle(
-                        (contactHex != nil && includedMemberHexes.contains(contactHex!))
+                        includedMemberHexes.contains(contactHex)
                           ? LinkstrTheme.neonCyan : LinkstrTheme.textSecondary
                       )
                     }
@@ -977,7 +976,7 @@ private struct SessionMembersSheet: View {
     if pubkeyHex == session.identityService.pubkeyHex {
       return "You"
     }
-    if let contact = contacts.first(where: { PublicKey(npub: $0.npub)?.hex == pubkeyHex }) {
+    if let contact = contacts.first(where: { $0.targetPubkey == pubkeyHex }) {
       let trimmed = contact.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
       if !trimmed.isEmpty {
         return trimmed

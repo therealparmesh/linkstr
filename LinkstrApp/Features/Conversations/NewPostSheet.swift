@@ -58,6 +58,7 @@ struct NewPostSheet: View {
               LinkstrInputAssistRow(
                 showClear: !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                 showScan: false,
+                isDisabled: isSending,
                 onPaste: pasteURLFromClipboard,
                 onClear: { url = "" }
               )
@@ -209,39 +210,57 @@ struct NewPostSheet: View {
 struct LinkstrInputAssistRow: View {
   let showClear: Bool
   var showScan = true
+  var isDisabled = false
   let onPaste: () -> Void
   var onScan: (() -> Void)? = nil
   let onClear: () -> Void
 
   var body: some View {
-    HStack(spacing: 14) {
-      actionButton("Paste", systemImage: "doc.on.clipboard", action: onPaste)
+    HStack(spacing: 8) {
+      assistButton("Paste", systemImage: "doc.on.clipboard", action: onPaste)
       if showScan, let onScan {
-        actionButton("Scan", systemImage: "qrcode.viewfinder", action: onScan)
+        assistButton("Scan", systemImage: "qrcode.viewfinder", action: onScan)
       }
-      Spacer()
-
       if showClear {
-        Button("Clear", action: onClear)
-          .buttonStyle(.plain)
-          .foregroundStyle(.red)
-          .font(.footnote)
+        assistButton(
+          "Clear",
+          systemImage: "xmark.circle",
+          tint: Color.red.opacity(0.9),
+          action: onClear
+        )
       }
     }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .disabled(isDisabled)
+    .opacity(isDisabled ? 0.65 : 1)
   }
 
-  private func actionButton(_ title: String, systemImage: String, action: @escaping () -> Void)
-    -> some View
-  {
+  private func assistButton(
+    _ title: String,
+    systemImage: String,
+    tint: Color = LinkstrTheme.textPrimary,
+    action: @escaping () -> Void
+  ) -> some View {
     Button(action: action) {
-      HStack(spacing: 6) {
+      HStack(spacing: 5) {
         Image(systemName: systemImage)
-          .font(.system(size: 14, weight: .semibold))
-          .frame(width: 16, height: 16)
+          .font(.system(size: 12, weight: .semibold))
+          .frame(width: 14, height: 14)
         Text(title)
-          .font(.footnote)
+          .font(.custom(LinkstrTheme.bodyFont, size: 12))
       }
-      .foregroundStyle(LinkstrTheme.textPrimary)
+      .foregroundStyle(tint)
+      .padding(.horizontal, 10)
+      .padding(.vertical, 6)
+      .frame(minHeight: 30)
+      .background(
+        Capsule(style: .continuous)
+          .fill(LinkstrTheme.panelSoft)
+      )
+      .overlay(
+        Capsule(style: .continuous)
+          .stroke(LinkstrTheme.textSecondary.opacity(0.24), lineWidth: 1)
+      )
     }
     .buttonStyle(.plain)
   }

@@ -10,6 +10,13 @@ struct ReceivedDirectMessage {
   let createdAt: Date
 }
 
+struct ReceivedFollowList {
+  let eventID: String
+  let authorPubkey: String
+  let followedPubkeys: [String]
+  let createdAt: Date
+}
+
 @MainActor
 final class NostrDMService: NSObject, ObservableObject, EventCreating {
   private enum BackfillSubscriptionKind: String {
@@ -47,16 +54,19 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
 
   private var keypair: Keypair?
   private var onIncoming: ((ReceivedDirectMessage) -> Void)?
+  private var onFollowList: ((ReceivedFollowList) -> Void)?
   private var onRelayStatus: ((String, RelayHealthStatus, String?) -> Void)?
   private var configuredRelayURLs = Set<String>()
 
   private let recipientSubscriptionID = "linkstr-giftwrap-recipient"
   private let authorSubscriptionID = "linkstr-giftwrap-author"
+  private let followListSubscriptionID = "linkstr-follow-list-self"
   private let backfillPageSize = 500
   private let processedEventIDLimit = 10_000
   private let reconnectDelayNanoseconds: UInt64 = 2_000_000_000
   private var activeBackfillStates: [String: BackfillState] = [:]
   private var completedBackfillKinds = Set<BackfillSubscriptionKind>()
+  private var followListFilter: Filter?
   // App-specific rumor kind carried inside NIP-59 gift wrap events.
   private let linkstrRumorKind = EventKind.unknown(44_001)
 
@@ -78,11 +88,13 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     keypair: Keypair,
     relayURLs: [String],
     onIncoming: @escaping (ReceivedDirectMessage) -> Void,
-    onRelayStatus: @escaping (String, RelayHealthStatus, String?) -> Void
+    onRelayStatus: @escaping (String, RelayHealthStatus, String?) -> Void,
+    onFollowList: ((ReceivedFollowList) -> Void)? = nil
   ) {
     if isConfigured(for: keypair, relayURLs: relayURLs) {
       self.onIncoming = onIncoming
       self.onRelayStatus = onRelayStatus
+      self.onFollowList = onFollowList
       relayPool?.connect()
       return
     }
@@ -93,6 +105,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     self.keypair = keypair
     self.onIncoming = onIncoming
     self.onRelayStatus = onRelayStatus
+    self.onFollowList = onFollowList
     configuredRelayURLs = Set(relayURLs)
     activeBackfillStates = [:]
     completedBackfillKinds = []
@@ -143,6 +156,12 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
         limit: backfillPageSize
       )
 
+      followListFilter = Filter(
+        authors: [keypair.publicKey.hex],
+        kinds: [EventKind.followList.rawValue],
+        limit: 1
+      )
+
     } catch {
       let message = "Failed to start relay pool: \(error.localizedDescription)"
       for relayURL in relayURLs {
@@ -163,6 +182,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     processedEventIDOrder.removeAll()
     recipientFilter = nil
     authorFilter = nil
+    followListFilter = nil
     activeBackfillStates.removeAll()
     completedBackfillKinds.removeAll()
     let pendingEventIDs = Array(pendingPublishAcks.keys)
@@ -173,6 +193,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
       )
     }
     onIncoming = nil
+    onFollowList = nil
     onRelayStatus = nil
     keypair = nil
     configuredRelayURLs.removeAll()
@@ -238,6 +259,48 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     }
 
     return events.rumorEvent.id
+  }
+
+  func publishFollowListAwaitingRelayAcceptance(
+    followedPubkeyHexes: [String],
+    timeoutSeconds: TimeInterval = 8
+  ) async throws -> String {
+    guard relayPool != nil else {
+      throw NostrServiceError.relayUnavailable
+    }
+    guard let keypair else {
+      throw NostrServiceError.missingIdentity
+    }
+
+    let parsedPubkeys = try parsePublicKeys(followedPubkeyHexes)
+    let followEvent = try followList(withPubkeys: parsedPubkeys.map(\.hex), signedBy: keypair)
+    let expectedRelayURLs = connectedRelayURLs()
+    guard !expectedRelayURLs.isEmpty else {
+      throw NostrServiceError.relayUnavailable
+    }
+
+    try await withCheckedThrowingContinuation {
+      (continuation: CheckedContinuation<Void, Error>) in
+      pendingPublishAcks[followEvent.id] = PendingPublishAck(
+        expectedRelayURLs: expectedRelayURLs,
+        failedRelayMessagesByURL: [:],
+        continuation: continuation
+      )
+
+      pendingPublishAckTimeoutTasks[followEvent.id] = Task { @MainActor [weak self] in
+        guard let self else { return }
+        try? await Task.sleep(for: .seconds(max(0.1, timeoutSeconds)))
+        guard !Task.isCancelled else { return }
+        self.finishPendingPublishAck(
+          eventID: followEvent.id,
+          result: .failure(NostrServiceError.publishTimedOut)
+        )
+      }
+
+      relayPool?.publishEvent(followEvent)
+    }
+
+    return followEvent.id
   }
 
   private func parsePublicKeys(_ pubkeyHexes: [String]) throws -> [PublicKey] {
@@ -515,11 +578,31 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     if let authorFilter {
       _ = relayPool.subscribe(with: authorFilter, subscriptionId: authorSubscriptionID)
     }
+    if let followListFilter {
+      _ = relayPool.subscribe(with: followListFilter, subscriptionId: followListSubscriptionID)
+    }
   }
 
   private func handleIncomingEvent(_ relayEvent: RelayEvent) {
     guard let keypair else { return }
     let event = relayEvent.event
+    if event.kind == .followList {
+      guard let followListEvent = event as? FollowListEvent else { return }
+      guard !processedEventIDs.contains(followListEvent.id) else { return }
+      rememberProcessedEventID(followListEvent.id)
+      let followedPubkeys = followListEvent.followedPubkeys.compactMap { followed -> String? in
+        PublicKey(hex: followed.lowercased())?.hex
+      }
+      onFollowList?(
+        ReceivedFollowList(
+          eventID: followListEvent.id,
+          authorPubkey: followListEvent.pubkey,
+          followedPubkeys: followedPubkeys,
+          createdAt: followListEvent.createdDate
+        ))
+      return
+    }
+
     guard event.kind == .giftWrap else { return }
 
     if var backfill = activeBackfillStates[relayEvent.subscriptionId] {

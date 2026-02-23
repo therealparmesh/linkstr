@@ -1,40 +1,49 @@
 import Foundation
+import NostrSDK
 import SwiftData
 
 @Model
 final class ContactEntity {
   var ownerPubkey: String
-  var npubHash: String
-  var encryptedNPub: String
-  var encryptedDisplayName: String
+  var targetPubkey: String
+  var encryptedAlias: String
   var createdAt: Date
 
+  var localAlias: String? {
+    let decrypted = LocalDataCrypto.shared.decryptString(encryptedAlias, ownerPubkey: ownerPubkey)
+    let trimmed = decrypted?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return trimmed.isEmpty ? nil : trimmed
+  }
+
   var npub: String {
-    LocalDataCrypto.shared.decryptString(encryptedNPub, ownerPubkey: ownerPubkey) ?? ""
+    PublicKey(hex: targetPubkey)?.npub ?? targetPubkey
   }
 
   var displayName: String {
-    LocalDataCrypto.shared.decryptString(encryptedDisplayName, ownerPubkey: ownerPubkey) ?? ""
+    localAlias ?? npub
   }
 
-  init(ownerPubkey: String, npub: String, displayName: String, createdAt: Date = .now) throws {
+  init(ownerPubkey: String, targetPubkey: String, alias: String? = nil, createdAt: Date = .now)
+    throws
+  {
     self.ownerPubkey = ownerPubkey
-    self.npubHash = LocalDataCrypto.shared.digestHex(npub)
-    self.encryptedNPub =
-      try LocalDataCrypto.shared.encryptString(npub, ownerPubkey: ownerPubkey) ?? ""
-    self.encryptedDisplayName =
-      try LocalDataCrypto.shared.encryptString(displayName, ownerPubkey: ownerPubkey) ?? ""
+    self.targetPubkey = targetPubkey
+    self.encryptedAlias = ""
     self.createdAt = createdAt
+    try updateAlias(alias)
   }
 
-  func updateSecureFields(npub: String, displayName: String) throws {
-    npubHash = LocalDataCrypto.shared.digestHex(npub)
-    encryptedNPub = try LocalDataCrypto.shared.encryptString(npub, ownerPubkey: ownerPubkey) ?? ""
-    encryptedDisplayName =
-      try LocalDataCrypto.shared.encryptString(displayName, ownerPubkey: ownerPubkey) ?? ""
+  func updateAlias(_ alias: String?) throws {
+    let trimmed = alias?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    if trimmed.isEmpty {
+      encryptedAlias = ""
+      return
+    }
+    encryptedAlias =
+      try LocalDataCrypto.shared.encryptString(trimmed, ownerPubkey: ownerPubkey) ?? ""
   }
 
-  func matchesNPub(_ npub: String) -> Bool {
-    npubHash == LocalDataCrypto.shared.digestHex(npub)
+  func matchesTargetPubkey(_ pubkeyHex: String) -> Bool {
+    targetPubkey == pubkeyHex
   }
 }

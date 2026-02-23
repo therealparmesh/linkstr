@@ -63,6 +63,8 @@ final class AppSession: ObservableObject {
   @Published private var relayRuntimeStatusByURL: [String: RelayRuntimeStatus] = [:]
   private var hasObservedHealthyRelayInCurrentForeground = false
   private let relayDisconnectGraceInterval: TimeInterval = 1.25
+  private var latestAppliedFollowListCreatedAt: Date?
+  private var latestAppliedFollowListEventID: String?
 
   @Published var composeError: String?
   @Published var pendingSessionNavigationID: String?
@@ -432,6 +434,8 @@ final class AppSession: ObservableObject {
     isProcessingMetadataQueue = false
     relayRuntimeStatusByURL.removeAll()
     pendingSessionNavigationID = nil
+    latestAppliedFollowListCreatedAt = nil
+    latestAppliedFollowListEventID = nil
 
     if let ownerPubkey, clearLocalData {
       clearCachedVideos(ownerPubkey: ownerPubkey)
@@ -505,6 +509,11 @@ final class AppSession: ObservableObject {
             message: message
           )
           try? self.refreshRelayConnectivityAlert()
+        }
+      },
+      onFollowList: { [weak self] followList in
+        Task { @MainActor in
+          self?.persistIncomingFollowList(followList)
         }
       }
     )
@@ -999,13 +1008,76 @@ final class AppSession: ObservableObject {
   }
 
   @discardableResult
-  func addContact(npub: String, displayName: String) -> Bool {
+  func addContact(
+    npub: String,
+    displayName: String,
+    timeoutSeconds: TimeInterval = 12,
+    pollIntervalSeconds: TimeInterval = 0.35
+  ) async -> Bool {
     guard let ownerPubkey = identityService.pubkeyHex else {
       composeError = "You're signed out. Sign in to manage contacts."
       return false
     }
+
+    let targetPubkey: String
     do {
-      try contactStore.addContact(ownerPubkey: ownerPubkey, npub: npub, displayName: displayName)
+      targetPubkey = try contactStore.normalizeFollowTarget(npub)
+      if contactStore.hasContact(ownerPubkey: ownerPubkey, withTargetPubkey: targetPubkey) {
+        composeError = "This contact is already in your list."
+        return false
+      }
+    } catch {
+      report(error: error)
+      return false
+    }
+
+    let alias = contactStore.normalizeAlias(displayName)
+
+    let nextFollowedPubkeys: [String]
+    do {
+      var set = Set(try contactStore.followedPubkeys(ownerPubkey: ownerPubkey))
+      set.insert(targetPubkey)
+      nextFollowedPubkeys = Array(set).sorted()
+    } catch {
+      report(error: error)
+      return false
+    }
+
+    if shouldDisableNostrStartupForCurrentProcess() == false {
+      guard
+        await awaitRelayReadyForSend(
+          timeoutSeconds: timeoutSeconds,
+          pollIntervalSeconds: pollIntervalSeconds
+        )
+      else {
+        return false
+      }
+      startNostrIfPossible()
+
+      do {
+        _ = try await nostrService.publishFollowListAwaitingRelayAcceptance(
+          followedPubkeyHexes: nextFollowedPubkeys
+        )
+      } catch {
+        report(error: error)
+        return false
+      }
+    }
+
+    do {
+      try contactStore.replaceFollowedPubkeys(
+        ownerPubkey: ownerPubkey,
+        pubkeyHexes: nextFollowedPubkeys
+      )
+      if let alias {
+        try contactStore.updateAlias(
+          ownerPubkey: ownerPubkey,
+          targetPubkey: targetPubkey,
+          alias: alias
+        )
+      }
+      latestAppliedFollowListCreatedAt = .now
+      latestAppliedFollowListEventID = nil
       composeError = nil
       return true
     } catch {
@@ -1015,14 +1087,15 @@ final class AppSession: ObservableObject {
   }
 
   @discardableResult
-  func updateContact(_ contact: ContactEntity, npub: String, displayName: String) -> Bool {
+  func updateContactAlias(_ contact: ContactEntity, displayName: String) -> Bool {
     guard let ownerPubkey = identityService.pubkeyHex else {
       composeError = "You're signed out. Sign in to manage contacts."
       return false
     }
+
     do {
-      try contactStore.updateContact(
-        contact, ownerPubkey: ownerPubkey, npub: npub, displayName: displayName)
+      let alias = contactStore.normalizeAlias(displayName)
+      try contactStore.updateAlias(contact, ownerPubkey: ownerPubkey, alias: alias)
       composeError = nil
       return true
     } catch {
@@ -1031,16 +1104,64 @@ final class AppSession: ObservableObject {
     }
   }
 
-  func removeContact(_ contact: ContactEntity) {
+  @discardableResult
+  func removeContact(
+    _ contact: ContactEntity,
+    timeoutSeconds: TimeInterval = 12,
+    pollIntervalSeconds: TimeInterval = 0.35
+  ) async -> Bool {
     guard let ownerPubkey = identityService.pubkeyHex else {
       composeError = "You're signed out. Sign in to manage contacts."
-      return
+      return false
     }
+    guard contact.ownerPubkey == ownerPubkey else {
+      composeError = "This contact belongs to a different account."
+      return false
+    }
+
+    let nextFollowedPubkeys: [String]
     do {
-      try contactStore.removeContact(contact, ownerPubkey: ownerPubkey)
-      composeError = nil
+      var set = Set(try contactStore.followedPubkeys(ownerPubkey: ownerPubkey))
+      set.remove(contact.targetPubkey)
+      nextFollowedPubkeys = Array(set).sorted()
     } catch {
       report(error: error)
+      return false
+    }
+
+    if shouldDisableNostrStartupForCurrentProcess() == false {
+      guard
+        await awaitRelayReadyForSend(
+          timeoutSeconds: timeoutSeconds,
+          pollIntervalSeconds: pollIntervalSeconds
+        )
+      else {
+        return false
+      }
+      startNostrIfPossible()
+
+      do {
+        _ = try await nostrService.publishFollowListAwaitingRelayAcceptance(
+          followedPubkeyHexes: nextFollowedPubkeys
+        )
+      } catch {
+        report(error: error)
+        return false
+      }
+    }
+
+    do {
+      try contactStore.replaceFollowedPubkeys(
+        ownerPubkey: ownerPubkey,
+        pubkeyHexes: nextFollowedPubkeys
+      )
+      latestAppliedFollowListCreatedAt = .now
+      latestAppliedFollowListEventID = nil
+      composeError = nil
+      return true
+    } catch {
+      report(error: error)
+      return false
     }
   }
 
@@ -1151,6 +1272,33 @@ final class AppSession: ObservableObject {
 
   func contactName(for pubkeyHex: String, contacts: [ContactEntity]) -> String {
     contactStore.contactName(for: pubkeyHex, contacts: contacts)
+  }
+
+  private func persistIncomingFollowList(_ incoming: ReceivedFollowList) {
+    guard let ownerPubkey = identityService.pubkeyHex else { return }
+    guard incoming.authorPubkey == ownerPubkey else { return }
+
+    if let latestCreatedAt = latestAppliedFollowListCreatedAt {
+      if incoming.createdAt < latestCreatedAt {
+        return
+      }
+      if incoming.createdAt == latestCreatedAt,
+        incoming.eventID == latestAppliedFollowListEventID
+      {
+        return
+      }
+    }
+
+    do {
+      try contactStore.replaceFollowedPubkeys(
+        ownerPubkey: ownerPubkey,
+        pubkeyHexes: incoming.followedPubkeys
+      )
+      latestAppliedFollowListCreatedAt = incoming.createdAt
+      latestAppliedFollowListEventID = incoming.eventID
+    } catch {
+      report(error: error)
+    }
   }
 
   private func persistIncoming(_ incoming: ReceivedDirectMessage) {
@@ -1506,13 +1654,13 @@ final class AppSession: ObservableObject {
         secondaryContact = firstContact
       } else {
         let secondaryKeypair = Keypair()
-        let npub =
-          secondaryKeypair?.publicKey.npub
-          ?? "npub1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqk3el7l"
+        let pubkeyHex =
+          secondaryKeypair?.publicKey.hex
+          ?? "0000000000000000000000000000000000000000000000000000000000000001"
         let contact = try? ContactEntity(
           ownerPubkey: ownerPubkey,
-          npub: npub,
-          displayName: "Secondary Test Contact"
+          targetPubkey: pubkeyHex,
+          alias: "Secondary Test Contact"
         )
         guard let contact else { return }
         modelContext.insert(contact)
@@ -1520,8 +1668,9 @@ final class AppSession: ObservableObject {
       }
 
       if posts.isEmpty, let myPubkey = identityService.pubkeyHex,
-        let peerPubkey = PublicKey(npub: secondaryContact.npub)?.hex
+        PublicKey(hex: secondaryContact.targetPubkey) != nil
       {
+        let peerPubkey = secondaryContact.targetPubkey
         let sessionID = "sim-\(ownerPubkey.prefix(12))"
         let sessionName = "Simulator Session"
         let seededAt = Date.now

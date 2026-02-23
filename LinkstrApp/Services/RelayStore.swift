@@ -97,11 +97,10 @@ final class ContactStore {
   func fetchContacts(ownerPubkey: String, sortedByDisplayName: Bool = false) throws
     -> [ContactEntity]
   {
-    let descriptor = FetchDescriptor<ContactEntity>(
-      predicate: #Predicate { $0.ownerPubkey == ownerPubkey },
-      sortBy: [SortDescriptor(\.createdAt)]
-    )
-    let contacts = try modelContext.fetch(descriptor)
+    // NOTE: SwiftData predicate evaluation for ContactEntity has been unstable in tests on
+    // iOS 26 simulators. Fetch + filter keeps behavior deterministic for this small dataset.
+    let descriptor = FetchDescriptor<ContactEntity>(sortBy: [SortDescriptor(\.createdAt)])
+    let contacts = try modelContext.fetch(descriptor).filter { $0.ownerPubkey == ownerPubkey }
     if sortedByDisplayName {
       return contacts.sorted {
         $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
@@ -110,92 +109,36 @@ final class ContactStore {
     return contacts
   }
 
-  func addContact(ownerPubkey: String, npub: String, displayName: String) throws {
-    let normalizedNPub = try normalize(npub: npub)
-    let normalizedDisplayName = normalize(displayName: displayName)
-
-    guard !normalizedDisplayName.isEmpty else {
-      throw ContactStoreError.emptyDisplayName
-    }
-    guard !hasContact(ownerPubkey: ownerPubkey, withNPub: normalizedNPub) else {
-      throw ContactStoreError.duplicateContact
-    }
-
-    modelContext.insert(
-      try ContactEntity(
-        ownerPubkey: ownerPubkey,
-        npub: normalizedNPub,
-        displayName: normalizedDisplayName
-      ))
-    try modelContext.save()
-  }
-
-  func updateContact(
-    _ contact: ContactEntity, ownerPubkey: String, npub: String, displayName: String
-  ) throws {
-    guard contact.ownerPubkey == ownerPubkey else {
-      throw ContactStoreError.contactOwnershipMismatch
-    }
-    let normalizedNPub = try normalize(npub: npub)
-    let normalizedDisplayName = normalize(displayName: displayName)
-
-    guard !normalizedDisplayName.isEmpty else {
-      throw ContactStoreError.emptyDisplayName
-    }
-    guard
-      !hasContact(
-        ownerPubkey: ownerPubkey, withNPub: normalizedNPub, excluding: contact.persistentModelID)
-    else {
-      throw ContactStoreError.duplicateContact
-    }
-
-    let previousHash = contact.npubHash
-    let previousEncryptedNPub = contact.encryptedNPub
-    let previousEncryptedDisplayName = contact.encryptedDisplayName
-    try contact.updateSecureFields(npub: normalizedNPub, displayName: normalizedDisplayName)
-    do {
-      try modelContext.save()
-    } catch {
-      contact.npubHash = previousHash
-      contact.encryptedNPub = previousEncryptedNPub
-      contact.encryptedDisplayName = previousEncryptedDisplayName
-      throw error
-    }
-  }
-
-  func removeContact(_ contact: ContactEntity, ownerPubkey: String) throws {
-    guard contact.ownerPubkey == ownerPubkey else {
-      throw ContactStoreError.contactOwnershipMismatch
-    }
-    modelContext.delete(contact)
-    try modelContext.save()
-  }
-
   func clearAllContacts(ownerPubkey: String) throws {
-    let descriptor = FetchDescriptor<ContactEntity>(
-      predicate: #Predicate { $0.ownerPubkey == ownerPubkey }
-    )
-    let contacts = try modelContext.fetch(descriptor)
+    let contacts = try fetchContacts(ownerPubkey: ownerPubkey)
     contacts.forEach(modelContext.delete)
     try modelContext.save()
   }
 
-  func contactName(for pubkeyHex: String, contacts: [ContactEntity]) -> String {
-    for contact in contacts where PublicKey(npub: contact.npub)?.hex == pubkeyHex {
-      return contact.displayName
+  func normalizeFollowTarget(_ input: String) throws -> String {
+    let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+    if let parsedNPub = PublicKey(npub: trimmed) {
+      return parsedNPub.hex
     }
-    if let npub = PublicKey(hex: pubkeyHex)?.npub {
-      return npub
+    if let parsedHex = PublicKey(hex: trimmed.lowercased()) {
+      return parsedHex.hex
     }
-    return String(pubkeyHex.prefix(12))
+    throw ContactStoreError.invalidContactKey
+  }
+
+  func normalizeAlias(_ displayName: String) -> String? {
+    let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
   }
 
   func hasContact(
-    ownerPubkey: String, withNPub npub: String, excluding contactID: PersistentIdentifier? = nil
+    ownerPubkey: String,
+    withTargetPubkey targetPubkey: String,
+    excluding contactID: PersistentIdentifier? = nil
   ) -> Bool {
     guard let contacts = try? fetchContacts(ownerPubkey: ownerPubkey) else { return false }
     return contacts.contains { existing in
-      guard existing.matchesNPub(npub) else { return false }
+      guard existing.matchesTargetPubkey(targetPubkey) else { return false }
       if let contactID {
         return existing.persistentModelID != contactID
       }
@@ -203,35 +146,103 @@ final class ContactStore {
     }
   }
 
-  private func normalize(npub: String) throws -> String {
-    let trimmed = npub.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard let parsedPublicKey = PublicKey(npub: trimmed) else {
-      throw ContactStoreError.invalidNPub
+  func followedPubkeys(ownerPubkey: String) throws -> [String] {
+    let contacts = try fetchContacts(ownerPubkey: ownerPubkey)
+    var seen = Set<String>()
+    var output: [String] = []
+    output.reserveCapacity(contacts.count)
+    for contact in contacts {
+      guard PublicKey(hex: contact.targetPubkey) != nil else { continue }
+      guard seen.insert(contact.targetPubkey).inserted else { continue }
+      output.append(contact.targetPubkey)
     }
-    return parsedPublicKey.npub
+    return output
   }
 
-  private func normalize(displayName: String) -> String {
-    displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+  func replaceFollowedPubkeys(ownerPubkey: String, pubkeyHexes: [String]) throws {
+    var normalizedSet = Set<String>()
+    for rawPubkey in pubkeyHexes {
+      let trimmed = rawPubkey.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+      guard let parsed = PublicKey(hex: trimmed) else { continue }
+      normalizedSet.insert(parsed.hex)
+    }
+
+    let existing = try fetchContacts(ownerPubkey: ownerPubkey)
+    var existingByPubkey: [String: ContactEntity] = [:]
+    existingByPubkey.reserveCapacity(existing.count)
+    for contact in existing {
+      // Retain the oldest row per pubkey and prune any duplicate rows for correctness.
+      if existingByPubkey[contact.targetPubkey] == nil {
+        existingByPubkey[contact.targetPubkey] = contact
+      } else {
+        modelContext.delete(contact)
+      }
+    }
+
+    for pubkey in normalizedSet where existingByPubkey[pubkey] == nil {
+      modelContext.insert(
+        try ContactEntity(ownerPubkey: ownerPubkey, targetPubkey: pubkey, alias: nil)
+      )
+    }
+
+    for (pubkey, contact) in existingByPubkey where normalizedSet.contains(pubkey) == false {
+      modelContext.delete(contact)
+    }
+
+    try modelContext.save()
+  }
+
+  func updateAlias(_ contact: ContactEntity, ownerPubkey: String, alias: String?) throws {
+    guard contact.ownerPubkey == ownerPubkey else {
+      throw ContactStoreError.contactOwnershipMismatch
+    }
+
+    let previousEncryptedAlias = contact.encryptedAlias
+    try contact.updateAlias(alias)
+    do {
+      try modelContext.save()
+    } catch {
+      contact.encryptedAlias = previousEncryptedAlias
+      throw error
+    }
+  }
+
+  func updateAlias(ownerPubkey: String, targetPubkey: String, alias: String?) throws {
+    guard
+      let contact = try fetchContacts(ownerPubkey: ownerPubkey).first(where: {
+        $0.targetPubkey == targetPubkey
+      })
+    else {
+      throw ContactStoreError.contactNotFound
+    }
+    try updateAlias(contact, ownerPubkey: ownerPubkey, alias: alias)
+  }
+
+  func contactName(for pubkeyHex: String, contacts: [ContactEntity]) -> String {
+    let canonicalPubkey = PublicKey(hex: pubkeyHex)?.hex ?? pubkeyHex
+    for contact in contacts where contact.targetPubkey == canonicalPubkey {
+      return contact.displayName
+    }
+    if let npub = PublicKey(hex: pubkeyHex)?.npub {
+      return npub
+    }
+    return String(pubkeyHex.prefix(12))
   }
 }
 
 private enum ContactStoreError: LocalizedError {
-  case invalidNPub
-  case emptyDisplayName
-  case duplicateContact
+  case invalidContactKey
   case contactOwnershipMismatch
+  case contactNotFound
 
   var errorDescription: String? {
     switch self {
-    case .invalidNPub:
+    case .invalidContactKey:
       return "Invalid Contact Key (npub)."
-    case .emptyDisplayName:
-      return "Enter a display name."
-    case .duplicateContact:
-      return "This contact is already in your list."
     case .contactOwnershipMismatch:
       return "This contact belongs to a different account."
+    case .contactNotFound:
+      return "Contact not found."
     }
   }
 }

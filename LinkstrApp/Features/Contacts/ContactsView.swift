@@ -24,9 +24,9 @@ struct ContactsView: View {
   private var content: some View {
     if scopedContacts.isEmpty {
       LinkstrCenteredEmptyStateView(
-        title: "No Contacts",
+        title: "No Follows",
         systemImage: "person.2.slash",
-        description: "Add at least one contact to start sharing links."
+        description: "Follow at least one person to start sharing links."
       )
     } else {
       ScrollView {
@@ -85,14 +85,14 @@ private struct ContactDetailView: View {
 
   let contact: ContactEntity
 
-  @State private var npub: String
   @State private var displayName: String
+  @State private var isSaving = false
+  @State private var isRemoving = false
   @State private var isPresentingDeleteConfirmation = false
 
   init(contact: ContactEntity) {
     self.contact = contact
-    _npub = State(initialValue: contact.npub)
-    _displayName = State(initialValue: contact.displayName)
+    _displayName = State(initialValue: contact.localAlias ?? "")
   }
 
   var body: some View {
@@ -100,8 +100,8 @@ private struct ContactDetailView: View {
       LinkstrBackgroundView()
       ScrollView {
         VStack(alignment: .leading, spacing: 12) {
-          LinkstrSectionHeader(title: "Display Name")
-          TextField("Display Name", text: $displayName)
+          LinkstrSectionHeader(title: "Local Alias (Optional)")
+          TextField("Alias", text: $displayName)
             .textInputAutocapitalization(.words)
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
@@ -112,10 +112,11 @@ private struct ContactDetailView: View {
             )
 
           LinkstrSectionHeader(title: "Contact Key (npub)")
-          TextField("Contact Key (npub...)", text: $npub)
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled(true)
+          Text(contact.npub)
+            .font(.custom(LinkstrTheme.bodyFont, size: 13))
+            .foregroundStyle(LinkstrTheme.textSecondary)
             .lineLimit(1)
+            .textSelection(.enabled)
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
             .frame(minHeight: LinkstrTheme.inputControlMinHeight)
@@ -127,10 +128,14 @@ private struct ContactDetailView: View {
           Button(role: .destructive) {
             isPresentingDeleteConfirmation = true
           } label: {
-            Label("Delete Contact", systemImage: "trash")
-              .frame(maxWidth: .infinity)
+            Label(
+              isRemoving ? "Unfollowing…" : "Unfollow",
+              systemImage: "person.crop.circle.badge.minus"
+            )
+            .frame(maxWidth: .infinity)
           }
           .buttonStyle(LinkstrDangerButtonStyle())
+          .disabled(isSaving || isRemoving)
           .padding(.top, 6)
         }
         .padding(.horizontal, 12)
@@ -149,24 +154,45 @@ private struct ContactDetailView: View {
           dismiss()
         }
         .tint(LinkstrTheme.textSecondary)
+        .disabled(isSaving || isRemoving)
       }
       ToolbarItem(placement: .topBarTrailing) {
-        Button("Save") {
-          if session.updateContact(contact, npub: npub, displayName: displayName) {
-            dismiss()
-          }
+        Button(isSaving ? "Saving…" : "Save") {
+          saveAlias()
         }
         .tint(LinkstrTheme.neonCyan)
+        .disabled(isSaving || isRemoving)
       }
     }
-    .alert("Delete this contact?", isPresented: $isPresentingDeleteConfirmation) {
+    .alert("Unfollow this contact?", isPresented: $isPresentingDeleteConfirmation) {
       Button("Cancel", role: .cancel) {}
-      Button("Delete", role: .destructive) {
-        session.removeContact(contact)
-        dismiss()
+      Button("Unfollow", role: .destructive) {
+        unfollow()
       }
     } message: {
-      Text("This removes the contact from linkstr.")
+      Text("This publishes an updated follow list to relays and removes this contact locally.")
+    }
+  }
+
+  private func saveAlias() {
+    guard !isSaving else { return }
+    isSaving = true
+    let didSave = session.updateContactAlias(contact, displayName: displayName)
+    isSaving = false
+    if didSave {
+      dismiss()
+    }
+  }
+
+  private func unfollow() {
+    guard !isRemoving else { return }
+    isRemoving = true
+    Task { @MainActor in
+      let didRemove = await session.removeContact(contact)
+      isRemoving = false
+      if didRemove {
+        dismiss()
+      }
     }
   }
 }
@@ -177,6 +203,7 @@ struct AddContactSheet: View {
 
   @State private var npub = ""
   @State private var displayName = ""
+  @State private var isSubmitting = false
   @State private var isPresentingScanner = false
   @State private var scannerErrorMessage: String?
   private let isNPubPrefilled: Bool
@@ -191,21 +218,6 @@ struct AddContactSheet: View {
       ZStack {
         LinkstrBackgroundView()
         VStack(spacing: 12) {
-          if !isNPubPrefilled {
-            LinkstrInputAssistRow(
-              showClear: !npub.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              onPaste: {
-                pasteFromClipboard()
-                scannerErrorMessage = nil
-              },
-              onScan: {
-                scannerErrorMessage = nil
-                isPresentingScanner = true
-              },
-              onClear: { npub = "" }
-            )
-          }
-
           TextField("Contact Key (npub...)", text: $npub)
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled(true)
@@ -217,7 +229,27 @@ struct AddContactSheet: View {
               RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(LinkstrTheme.panelSoft)
             )
-          TextField("Display Name", text: $displayName)
+
+          if !isNPubPrefilled {
+            LinkstrInputAssistRow(
+              showClear: !npub.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              isDisabled: isSubmitting,
+              onPaste: {
+                pasteFromClipboard()
+                scannerErrorMessage = nil
+              },
+              onScan: {
+                scannerErrorMessage = nil
+                isPresentingScanner = true
+              },
+              onClear: {
+                npub = ""
+                scannerErrorMessage = nil
+              }
+            )
+          }
+
+          TextField("Alias (optional)", text: $displayName)
             .textInputAutocapitalization(.words)
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
@@ -238,22 +270,18 @@ struct AddContactSheet: View {
         }
         .padding(14)
       }
-      .navigationTitle("Add Contact")
+      .navigationTitle("Add Follow")
       .toolbarColorScheme(.dark, for: .navigationBar)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
           Button("Cancel") { dismiss() }
+            .disabled(isSubmitting)
         }
         ToolbarItem(placement: .confirmationAction) {
-          Button("Add") {
-            if session.addContact(npub: npub, displayName: displayName) {
-              dismiss()
-            }
+          Button(isSubmitting ? "Following…" : "Follow") {
+            submitFollow()
           }
-          .disabled(
-            npub.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-              || displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-          )
+          .disabled(isSubmitting || npub.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
           .tint(LinkstrTheme.neonCyan)
         }
       }
@@ -272,7 +300,19 @@ struct AddContactSheet: View {
 
   private func pasteFromClipboard() {
     if let clipboardText = UIPasteboard.general.string {
-      npub = clipboardText
+      npub = clipboardText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+  }
+
+  private func submitFollow() {
+    guard !isSubmitting else { return }
+    isSubmitting = true
+    Task { @MainActor in
+      let didAdd = await session.addContact(npub: npub, displayName: displayName)
+      isSubmitting = false
+      if didAdd {
+        dismiss()
+      }
     }
   }
 
