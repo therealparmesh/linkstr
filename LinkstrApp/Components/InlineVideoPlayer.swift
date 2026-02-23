@@ -1,6 +1,11 @@
 import AVFoundation
 import AVKit
+import Photos
 import SwiftUI
+
+#if canImport(UIKit)
+  import UIKit
+#endif
 
 struct InlineVideoPlayer: View {
   let media: PlayableMedia
@@ -91,6 +96,10 @@ struct AdaptiveVideoPlaybackView: View {
   @State private var extractionState: ExtractionState?
   @State private var localPlaybackMode: LocalPlaybackMode = .localPreferred
   @State private var extractionFallbackReason: String?
+  @State private var exportTarget: LocalMediaExportTarget?
+  @State private var fileExportItem: LocalFileExportItem?
+  @State private var exportFeedbackTitle = ""
+  @State private var exportFeedbackMessage: String?
 
   init(
     sourceURL: URL,
@@ -120,6 +129,64 @@ struct AdaptiveVideoPlaybackView: View {
         localPlaybackMode = .localPreferred
         await prepareMediaIfNeeded()
       }
+      .confirmationDialog(
+        "Save Local Media",
+        isPresented: Binding(
+          get: { exportTarget != nil },
+          set: { isPresented in
+            if !isPresented {
+              exportTarget = nil
+            }
+          }
+        ),
+        titleVisibility: .visible
+      ) {
+        if let target = exportTarget {
+          if target.allowsPhotoSave {
+            Button("Save to Photos") {
+              saveToPhotos(target.fileURL)
+              exportTarget = nil
+            }
+          }
+          Button("Save to Files") {
+            fileExportItem = LocalFileExportItem(fileURL: target.fileURL)
+            exportTarget = nil
+          }
+        }
+        Button("Cancel", role: .cancel) {
+          exportTarget = nil
+        }
+      }
+      .sheet(item: $fileExportItem) { item in
+        LocalFileExportSheet(url: item.fileURL) { result in
+          fileExportItem = nil
+          switch result {
+          case .exported:
+            showExportFeedback(title: "Saved", message: "Saved to Files.")
+          case .cancelled:
+            break
+          case .failed(let message):
+            showExportFeedback(title: "Save Failed", message: message)
+          }
+        }
+      }
+      .alert(
+        exportFeedbackTitle,
+        isPresented: Binding(
+          get: { exportFeedbackMessage != nil },
+          set: { isPresented in
+            if !isPresented {
+              exportFeedbackMessage = nil
+            }
+          }
+        ),
+        actions: {
+          Button("OK", role: .cancel) {}
+        },
+        message: {
+          Text(exportFeedbackMessage ?? "")
+        }
+      )
   }
 
   @ViewBuilder
@@ -155,12 +222,72 @@ struct AdaptiveVideoPlaybackView: View {
   private func extractionPlaybackBlock(embedURL: URL) -> some View {
     switch extractionState {
     case .ready(let media):
+      let exportFileURL = exportableLocalMediaURL(for: media)
       VStack(alignment: .leading, spacing: 8) {
         mediaSurface {
           InlineVideoPlayer(media: media)
         }
         if let openSourceAction {
-          HStack(spacing: 8) {
+          VStack(spacing: 8) {
+            HStack(spacing: 8) {
+              Button {
+                localPlaybackMode = .embedPreferred
+              } label: {
+                Text("Use Embedded")
+                  .frame(maxWidth: .infinity)
+              }
+              .frame(maxWidth: .infinity)
+              .buttonStyle(LinkstrSecondaryButtonStyle())
+
+              Button {
+                openSourceAction()
+              } label: {
+                Text("Open in Safari")
+                  .frame(maxWidth: .infinity)
+              }
+              .frame(maxWidth: .infinity)
+              .buttonStyle(LinkstrSecondaryButtonStyle())
+            }
+
+            if let exportFileURL {
+              Button {
+                exportTarget = LocalMediaExportTarget(
+                  fileURL: exportFileURL,
+                  allowsPhotoSave: supportsPhotoSave(fileURL: exportFileURL)
+                )
+              } label: {
+                Text("Save...")
+                  .frame(maxWidth: .infinity)
+              }
+              .frame(maxWidth: .infinity)
+              .buttonStyle(LinkstrSecondaryButtonStyle())
+            }
+          }
+        } else {
+          if let exportFileURL {
+            HStack(spacing: 8) {
+              Button {
+                localPlaybackMode = .embedPreferred
+              } label: {
+                Text("Use Embedded")
+                  .frame(maxWidth: .infinity)
+              }
+              .frame(maxWidth: .infinity)
+              .buttonStyle(LinkstrSecondaryButtonStyle())
+
+              Button {
+                exportTarget = LocalMediaExportTarget(
+                  fileURL: exportFileURL,
+                  allowsPhotoSave: supportsPhotoSave(fileURL: exportFileURL)
+                )
+              } label: {
+                Text("Save...")
+                  .frame(maxWidth: .infinity)
+              }
+              .frame(maxWidth: .infinity)
+              .buttonStyle(LinkstrSecondaryButtonStyle())
+            }
+          } else {
             Button {
               localPlaybackMode = .embedPreferred
             } label: {
@@ -169,25 +296,7 @@ struct AdaptiveVideoPlaybackView: View {
             }
             .frame(maxWidth: .infinity)
             .buttonStyle(LinkstrSecondaryButtonStyle())
-
-            Button {
-              openSourceAction()
-            } label: {
-              Text("Open in Safari")
-                .frame(maxWidth: .infinity)
-            }
-            .frame(maxWidth: .infinity)
-            .buttonStyle(LinkstrSecondaryButtonStyle())
           }
-        } else {
-          Button {
-            localPlaybackMode = .embedPreferred
-          } label: {
-            Text("Use Embedded")
-              .frame(maxWidth: .infinity)
-          }
-          .frame(maxWidth: .infinity)
-          .buttonStyle(LinkstrSecondaryButtonStyle())
         }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
@@ -333,4 +442,130 @@ struct AdaptiveVideoPlaybackView: View {
     URLClassifier.preferredMediaAspectRatio(
       for: effectiveSourceURL, strategy: effectiveMediaStrategy)
   }
+
+  private func exportableLocalMediaURL(for media: PlayableMedia) -> URL? {
+    guard media.isLocalFile else { return nil }
+    let fileURL = media.playbackURL
+    guard fileURL.isFileURL else { return nil }
+    guard FileManager.default.fileExists(atPath: fileURL.path) else { return nil }
+    return fileURL
+  }
+
+  private func supportsPhotoSave(fileURL: URL) -> Bool {
+    guard fileURL.isFileURL else { return false }
+    let isDirectory = (try? fileURL.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+    if isDirectory { return false }
+    let ext = fileURL.pathExtension.lowercased()
+    return ext == "mp4" || ext == "mov" || ext == "m4v"
+  }
+
+  private func saveToPhotos(_ fileURL: URL) {
+    Task { @MainActor in
+      let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+      switch status {
+      case .authorized, .limited:
+        break
+      case .denied, .restricted:
+        showExportFeedback(
+          title: "Photos Access Needed",
+          message: "Allow add-only Photos access in Settings to save videos to your gallery."
+        )
+        return
+      case .notDetermined:
+        showExportFeedback(title: "Save Failed", message: "Couldn't determine Photos permission.")
+        return
+      @unknown default:
+        showExportFeedback(title: "Save Failed", message: "Unexpected Photos permission state.")
+        return
+      }
+
+      do {
+        try await withCheckedThrowingContinuation { continuation in
+          PHPhotoLibrary.shared().performChanges(
+            {
+              let creationRequest = PHAssetCreationRequest.forAsset()
+              creationRequest.addResource(with: .video, fileURL: fileURL, options: nil)
+            },
+            completionHandler: { success, error in
+              if success {
+                continuation.resume(returning: ())
+              } else {
+                continuation.resume(throwing: error ?? URLError(.cannotWriteToFile))
+              }
+            }
+          )
+        }
+        showExportFeedback(title: "Saved", message: "Saved to Photos.")
+      } catch {
+        showExportFeedback(title: "Save Failed", message: "Couldn't save this video to Photos.")
+      }
+    }
+  }
+
+  private func showExportFeedback(title: String, message: String) {
+    exportFeedbackTitle = title
+    exportFeedbackMessage = message
+  }
 }
+
+private struct LocalMediaExportTarget {
+  let fileURL: URL
+  let allowsPhotoSave: Bool
+}
+
+private struct LocalFileExportItem: Identifiable {
+  let id = UUID()
+  let fileURL: URL
+}
+
+private enum LocalFileExportResult {
+  case exported
+  case cancelled
+  case failed(String)
+}
+
+#if canImport(UIKit)
+  private struct LocalFileExportSheet: UIViewControllerRepresentable {
+    let url: URL
+    let onComplete: (LocalFileExportResult) -> Void
+
+    final class Coordinator: NSObject, UIDocumentPickerDelegate {
+      private let onComplete: (LocalFileExportResult) -> Void
+      private var didComplete = false
+
+      init(onComplete: @escaping (LocalFileExportResult) -> Void) {
+        self.onComplete = onComplete
+      }
+
+      func documentPicker(
+        _ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]
+      ) {
+        guard !didComplete else { return }
+        didComplete = true
+        onComplete(.exported)
+      }
+
+      func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+        guard !didComplete else { return }
+        didComplete = true
+        onComplete(.cancelled)
+      }
+    }
+
+    func makeCoordinator() -> Coordinator {
+      Coordinator(onComplete: onComplete)
+    }
+
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+      let picker = UIDocumentPickerViewController(forExporting: [url], asCopy: true)
+      picker.delegate = context.coordinator
+      picker.allowsMultipleSelection = false
+      return picker
+    }
+
+    func updateUIViewController(
+      _ uiViewController: UIDocumentPickerViewController,
+      context: Context
+    ) {}
+  }
+#endif

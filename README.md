@@ -183,6 +183,9 @@
 - URL classification drives playback mode (extract/embed/link fallback).
 - Canonicalization handles mobile host variants (for example `m.facebook.com`).
 - For extraction-capable providers, local playback is attempted first with explicit controls to switch to embed mode.
+- In local playback mode with a locally cached media file, users can export via `Save...`:
+  - `Save to Photos` (requests Photos add-only permission).
+  - `Save to Files` (document export flow, no broad media permission).
 - If extraction fails, embed mode remains available and offers retry-local plus Safari open actions.
 - Facebook videos/reels use Facebook plugin embed URLs (`/plugins/video.php`) with canonicalized `href` targets.
 - Rumble embeds are resolved from provider oEmbed iframe URLs when available.
