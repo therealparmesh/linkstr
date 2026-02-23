@@ -96,6 +96,8 @@ struct AdaptiveVideoPlaybackView: View {
   @State private var canonicalSourceURL: URL?
   @State private var preferredEmbedURL: URL?
   @State private var extractionState: ExtractionState?
+  @State private var cachedLocalMedia: PlayableMedia?
+  @State private var localCacheTask: Task<Void, Never>?
   @State private var localPlaybackMode: LocalPlaybackMode = .localPreferred
   @State private var extractionFallbackReason: String?
   @State private var exportTarget: LocalMediaExportTarget?
@@ -121,6 +123,9 @@ struct AdaptiveVideoPlaybackView: View {
     content
       .frame(maxWidth: .infinity, alignment: .leading)
       .task(id: sourceURL.absoluteString) {
+        localCacheTask?.cancel()
+        localCacheTask = nil
+        cachedLocalMedia = nil
         preferredEmbedURL = nil
         let canonical = await URLCanonicalizationService.shared.canonicalPlaybackURL(for: sourceURL)
         canonicalSourceURL = canonical
@@ -189,6 +194,10 @@ struct AdaptiveVideoPlaybackView: View {
           Text(exportFeedbackMessage ?? "")
         }
       )
+      .onDisappear {
+        localCacheTask?.cancel()
+        localCacheTask = nil
+      }
   }
 
   @ViewBuilder
@@ -225,7 +234,7 @@ struct AdaptiveVideoPlaybackView: View {
   private func extractionPlaybackBlock(embedURL: URL) -> some View {
     switch extractionState {
     case .ready(let media):
-      let exportFileURL = exportableLocalMediaURL(for: media)
+      let exportFileURL = exportableLocalMediaURL(for: cachedLocalMedia ?? media)
       VStack(alignment: .leading, spacing: 8) {
         mediaSurface {
           InlineVideoPlayer(media: media)
@@ -361,7 +370,14 @@ struct AdaptiveVideoPlaybackView: View {
     let playbackSourceURL = effectiveSourceURL
 
     if let cached = resolveCachedLocalMedia?(playbackSourceURL) {
+      cachedLocalMedia = cached
       extractionState = .ready(cached)
+      extractionFallbackReason = nil
+      return
+    }
+
+    if let cachedLocalMedia {
+      extractionState = .ready(cachedLocalMedia)
       extractionFallbackReason = nil
       return
     }
@@ -374,11 +390,32 @@ struct AdaptiveVideoPlaybackView: View {
     case .ready(let media):
       extractionFallbackReason = nil
       if media.isLocalFile {
+        cachedLocalMedia = media
         persistLocalMedia?(playbackSourceURL, media)
+      } else {
+        scheduleLocalCachingIfNeeded(sourceURL: playbackSourceURL, media: media)
       }
     case .cannotExtract(let reason):
       extractionFallbackReason = reason
       localPlaybackMode = .embedPreferred
+    }
+  }
+
+  private func scheduleLocalCachingIfNeeded(sourceURL: URL, media: PlayableMedia) {
+    guard !media.isLocalFile else { return }
+    guard cachedLocalMedia == nil else { return }
+
+    localCacheTask?.cancel()
+    localCacheTask = Task {
+      guard
+        let localMedia = await SocialVideoExtractionService.shared.cachePlayableMediaLocally(media)
+      else { return }
+      guard !Task.isCancelled else { return }
+
+      await MainActor.run {
+        cachedLocalMedia = localMedia
+        persistLocalMedia?(sourceURL, localMedia)
+      }
     }
   }
 

@@ -33,7 +33,7 @@
 - If no identity exists, onboarding is shown.
 - If identity exists, the main app shell is shown.
 - The app uses a Tokyo Night color scheme across all surfaces.
-- Main app shell uses native iOS tab/navigation bars with dark material chrome aligned to that palette.
+- Main app shell uses native iOS tab/navigation bars with transparent chrome over the Tokyo Night app background.
 
 ### Identity and account lifecycle
 

@@ -61,6 +61,7 @@ struct ShareIdentityView: View {
         .padding(12)
       }
       .scrollBounceBehavior(.basedOnSize)
+      .linkstrTabBarContentInset()
     } else {
       LinkstrCenteredEmptyStateView(
         title: "no identity",

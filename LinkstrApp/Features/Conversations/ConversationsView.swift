@@ -184,6 +184,7 @@ struct ConversationsView: View {
         .padding(.top, 6)
       }
       .scrollBounceBehavior(.basedOnSize)
+      .linkstrTabBarContentInset()
     }
   }
 
@@ -422,13 +423,13 @@ private struct SessionPostsView: View {
       .padding(.top, 10)
       .padding(.bottom, 24)
     }
+    .linkstrTabBarContentInset()
     .scrollContentBackground(.hidden)
     .background(LinkstrBackgroundView())
     .navigationTitle(sessionEntity.name)
     .navigationBarTitleDisplayMode(.inline)
     .toolbar(.visible, for: .navigationBar)
-    .toolbarBackground(.visible, for: .navigationBar)
-    .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+    .toolbarBackground(.hidden, for: .navigationBar)
     .toolbarColorScheme(.dark, for: .navigationBar)
     .toolbar {
       ToolbarItemGroup(placement: .topBarTrailing) {
@@ -702,8 +703,7 @@ struct NewSessionSheet: View {
       }
       .navigationTitle("new session")
       .navigationBarTitleDisplayMode(.inline)
-      .toolbarBackground(.visible, for: .navigationBar)
-      .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+      .toolbarBackground(.hidden, for: .navigationBar)
       .toolbarColorScheme(.dark, for: .navigationBar)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
@@ -912,8 +912,7 @@ private struct SessionMembersSheet: View {
       }
       .navigationTitle("session members")
       .navigationBarTitleDisplayMode(.inline)
-      .toolbarBackground(.visible, for: .navigationBar)
-      .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+      .toolbarBackground(.hidden, for: .navigationBar)
       .toolbarColorScheme(.dark, for: .navigationBar)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {

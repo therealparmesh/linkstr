@@ -67,6 +67,33 @@ final class SocialVideoExtractionService: NSObject {
     return .cannotExtract("Could not find a usable video stream for this post")
   }
 
+  func cachePlayableMediaLocally(_ media: PlayableMedia) async -> PlayableMedia? {
+    guard !media.isLocalFile else {
+      return media
+    }
+    guard media.playbackURL.scheme?.lowercased() == "https" else {
+      return nil
+    }
+
+    do {
+      if media.playbackURL.absoluteString.lowercased().contains(".m3u8") {
+        let localURL = try await HLSDownloadManager.shared.download(
+          assetURL: media.playbackURL,
+          headers: media.headers
+        )
+        return PlayableMedia(playbackURL: localURL, headers: [:], isLocalFile: true)
+      }
+
+      let localURL = try await VideoCacheService.shared.downloadMP4(
+        from: media.playbackURL,
+        headers: media.headers
+      )
+      return PlayableMedia(playbackURL: localURL, headers: [:], isLocalFile: true)
+    } catch {
+      return nil
+    }
+  }
+
   private func resolvePlayableMedia(
     from candidates: [URL],
     sourceURL: URL,
@@ -102,21 +129,10 @@ final class SocialVideoExtractionService: NSObject {
         }
       }
 
-      do {
-        if candidateURL.absoluteString.lowercased().contains(".m3u8") {
-          let localURL = try await HLSDownloadManager.shared.download(
-            assetURL: candidateURL, headers: headers)
-          return .ready(PlayableMedia(playbackURL: localURL, headers: [:], isLocalFile: true))
-        }
-
-        let localURL = try await VideoCacheService.shared.downloadMP4(
-          from: candidateURL, headers: headers)
-        return .ready(PlayableMedia(playbackURL: localURL, headers: [:], isLocalFile: true))
-      } catch {
-        // Fallback to direct playback with captured headers if local caching fails.
-        return .ready(
-          PlayableMedia(playbackURL: candidateURL, headers: headers, isLocalFile: false))
-      }
+      // Return a streamable candidate immediately; local caching is handled asynchronously by UI
+      // flows so long videos do not block playback controls.
+      return .ready(
+        PlayableMedia(playbackURL: candidateURL, headers: headers, isLocalFile: false))
     }
 
     return nil

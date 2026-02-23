@@ -10,8 +10,7 @@ struct DeepLinkContainerView: View {
       DeepLinkVideoView(payload: payload)
         .navigationTitle("watch video")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(.visible, for: .navigationBar)
-        .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+        .toolbarBackground(.hidden, for: .navigationBar)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbar {
           ToolbarItem(placement: .topBarTrailing) {

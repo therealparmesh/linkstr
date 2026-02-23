@@ -17,6 +17,7 @@ enum LinkstrTheme {
   static let bodyFont = "HelveticaNeue"
   static let sectionStackSpacing: CGFloat = 26
   static let inputControlMinHeight: CGFloat = 44
+  static let tabBarContentBottomInset: CGFloat = 96
 }
 
 struct LinkstrBackgroundView: View {
@@ -69,6 +70,13 @@ struct LinkstrNeonCard: ViewModifier {
 extension View {
   func linkstrNeonCard() -> some View {
     modifier(LinkstrNeonCard())
+  }
+
+  func linkstrTabBarContentInset() -> some View {
+    safeAreaInset(edge: .bottom) {
+      Color.clear
+        .frame(height: LinkstrTheme.tabBarContentBottomInset)
+    }
   }
 }
 

@@ -93,10 +93,8 @@ struct MainTabView: View {
         toolbarAccessories
       }
     }
-    .toolbarBackground(.visible, for: .navigationBar)
-    .toolbarBackground(.visible, for: .tabBar)
-    .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
-    .toolbarBackground(.ultraThinMaterial, for: .tabBar)
+    .toolbarBackground(.hidden, for: .navigationBar)
+    .toolbarBackground(.hidden, for: .tabBar)
     .toolbarColorScheme(.dark, for: .navigationBar)
     .toolbarColorScheme(.dark, for: .tabBar)
     .onChange(of: selectedTab) { oldValue, newValue in

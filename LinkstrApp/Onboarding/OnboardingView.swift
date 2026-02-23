@@ -85,8 +85,7 @@ struct OnboardingView: View {
         .scrollBounceBehavior(.basedOnSize)
       }
       .navigationBarTitleDisplayMode(.inline)
-      .toolbarBackground(.visible, for: .navigationBar)
-      .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+      .toolbarBackground(.hidden, for: .navigationBar)
       .toolbarColorScheme(.dark, for: .navigationBar)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)

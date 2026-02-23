@@ -44,6 +44,7 @@ struct ContactsView: View {
         .padding(.top, 6)
       }
       .scrollBounceBehavior(.basedOnSize)
+      .linkstrTabBarContentInset()
     }
   }
 }
@@ -143,13 +144,13 @@ private struct ContactDetailView: View {
         .padding(.top, 12)
       }
       .scrollBounceBehavior(.basedOnSize)
+      .linkstrTabBarContentInset()
     }
     .navigationTitle("contact")
     .navigationBarTitleDisplayMode(.inline)
     .navigationBarBackButtonHidden(true)
     .toolbar(.visible, for: .navigationBar)
-    .toolbarBackground(.visible, for: .navigationBar)
-    .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+    .toolbarBackground(.hidden, for: .navigationBar)
     .toolbarColorScheme(.dark, for: .navigationBar)
     .toolbar {
       ToolbarItem(placement: .topBarLeading) {
@@ -274,8 +275,7 @@ struct AddContactSheet: View {
         .padding(14)
       }
       .navigationTitle("add contact")
-      .toolbarBackground(.visible, for: .navigationBar)
-      .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+      .toolbarBackground(.hidden, for: .navigationBar)
       .toolbarColorScheme(.dark, for: .navigationBar)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {

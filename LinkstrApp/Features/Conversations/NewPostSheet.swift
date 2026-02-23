@@ -111,8 +111,7 @@ struct NewPostSheet: View {
       }
       .navigationTitle("new post")
       .navigationBarTitleDisplayMode(.inline)
-      .toolbarBackground(.visible, for: .navigationBar)
-      .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+      .toolbarBackground(.hidden, for: .navigationBar)
       .toolbarColorScheme(.dark, for: .navigationBar)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
