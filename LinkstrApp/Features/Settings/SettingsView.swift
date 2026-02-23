@@ -102,7 +102,7 @@ struct SettingsView: View {
                   .font(.custom(LinkstrTheme.bodyFont, size: 13))
               }
               .buttonStyle(.bordered)
-              .tint(.red)
+              .tint(LinkstrTheme.destructive)
             }
             .padding(.trailing, 4)
 
@@ -177,7 +177,7 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(.borderedProminent)
-        .tint(.red)
+        .tint(LinkstrTheme.destructive)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       .padding(.top, 8)
@@ -255,7 +255,7 @@ struct SettingsView: View {
               .frame(maxWidth: .infinity)
           }
           .buttonStyle(.borderedProminent)
-          .tint(.red)
+          .tint(LinkstrTheme.destructive)
         } else {
           Text("no account found. sign in with a secret key (nsec) or create one.")
             .font(.custom(LinkstrTheme.bodyFont, size: 12))
@@ -306,13 +306,13 @@ struct SettingsView: View {
     let status = session.relayStatus(for: relay)
     switch status {
     case .connected:
-      return .green
+      return LinkstrTheme.statusSuccess
     case .connecting:
       return LinkstrTheme.neonCyan
     case .failed:
-      return .red
+      return LinkstrTheme.destructive
     case .readOnly:
-      return .orange
+      return LinkstrTheme.neonAmber
     case .disconnected:
       return LinkstrTheme.textSecondary
     }

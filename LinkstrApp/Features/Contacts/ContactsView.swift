@@ -135,7 +135,7 @@ private struct ContactDetailView: View {
             .frame(maxWidth: .infinity)
           }
           .buttonStyle(.borderedProminent)
-          .tint(.red)
+          .tint(LinkstrTheme.destructive)
           .disabled(isSaving || isRemoving)
           .padding(.top, 6)
         }
@@ -264,7 +264,7 @@ struct AddContactSheet: View {
 
           Text(normalizedScannerErrorMessage.isEmpty ? " " : normalizedScannerErrorMessage)
             .font(.custom(LinkstrTheme.bodyFont, size: 12))
-            .foregroundStyle(Color.red.opacity(0.9))
+            .foregroundStyle(LinkstrTheme.destructive.opacity(0.9))
             .frame(maxWidth: .infinity, minHeight: 20, alignment: .leading)
             .opacity(normalizedScannerErrorMessage.isEmpty ? 0 : 1)
             .accessibilityHidden(normalizedScannerErrorMessage.isEmpty)

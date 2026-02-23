@@ -8,6 +8,8 @@ enum LinkstrTheme {
   static let neonCyan = Color(red: 0.48, green: 0.64, blue: 0.97)
   static let neonPink = Color(red: 0.73, green: 0.60, blue: 0.97)
   static let neonAmber = Color(red: 0.88, green: 0.69, blue: 0.41)
+  static let destructive = Color(red: 0.97, green: 0.46, blue: 0.56)
+  static let statusSuccess = Color(red: 0.62, green: 0.81, blue: 0.42)
   static let textPrimary = Color(red: 0.75, green: 0.79, blue: 0.96)
   static let textSecondary = Color(red: 0.60, green: 0.65, blue: 0.81)
 

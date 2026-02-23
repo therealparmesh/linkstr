@@ -65,7 +65,7 @@ struct NewPostSheet: View {
 
               Text(urlValidationHint ?? " ")
                 .font(.custom(LinkstrTheme.bodyFont, size: 12))
-                .foregroundStyle(Color.red.opacity(0.92))
+                .foregroundStyle(LinkstrTheme.destructive.opacity(0.92))
                 .frame(maxWidth: .infinity, minHeight: 14, alignment: .leading)
                 .opacity(urlValidationHint == nil ? 0 : 1)
                 .accessibilityHidden(urlValidationHint == nil)
@@ -223,7 +223,7 @@ struct LinkstrInputAssistRow: View {
         assistButton(
           "clear",
           systemImage: "xmark.circle",
-          tint: Color.red.opacity(0.9),
+          tint: LinkstrTheme.destructive.opacity(0.9),
           action: onClear
         )
       }

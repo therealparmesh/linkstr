@@ -243,7 +243,7 @@ struct AdaptiveVideoPlaybackView: View {
           ProgressView()
           Text("preparing video playback...")
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(LinkstrTheme.textSecondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
       }

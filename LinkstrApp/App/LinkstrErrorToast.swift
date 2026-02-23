@@ -23,7 +23,7 @@ struct LinkstrErrorToast: View {
     )
     .overlay(
       RoundedRectangle(cornerRadius: 14, style: .continuous)
-        .stroke(Color.red.opacity(0.35), lineWidth: 1)
+        .stroke(LinkstrTheme.destructive.opacity(0.35), lineWidth: 1)
     )
     .shadow(color: .black.opacity(0.28), radius: 8, y: 2)
   }
