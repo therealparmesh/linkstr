@@ -1,5 +1,9 @@
 import SwiftUI
 
+#if canImport(UIKit)
+  import UIKit
+#endif
+
 struct OnboardingView: View {
   @EnvironmentObject private var session: AppSession
   @State private var secretKey = ""
@@ -28,6 +32,18 @@ struct OnboardingView: View {
                   RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(LinkstrTheme.panelSoft)
                 )
+
+              LinkstrInputAssistRow(
+                showClear: !secretKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                showScan: false,
+                onPaste: {
+                  pasteSecretKeyFromClipboard()
+                },
+                onClear: {
+                  secretKey = ""
+                }
+              )
+
               Button {
                 session.importNsec(secretKey)
               } label: {
@@ -70,5 +86,13 @@ struct OnboardingView: View {
       .toolbarColorScheme(.dark, for: .navigationBar)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+  }
+
+  private func pasteSecretKeyFromClipboard() {
+    #if canImport(UIKit)
+      if let clipboardText = UIPasteboard.general.string {
+        secretKey = clipboardText.trimmingCharacters(in: .whitespacesAndNewlines)
+      }
+    #endif
   }
 }
