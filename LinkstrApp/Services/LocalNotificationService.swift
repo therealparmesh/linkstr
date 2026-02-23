@@ -27,7 +27,7 @@ final class LocalNotificationService: NSObject {
   ) {
     let content = UNMutableNotificationContent()
     content.title = "\(senderName) shared a post"
-    content.body = notificationBody(note: note, fallback: url ?? "Open linkstr to view")
+    content.body = notificationBody(note: note, fallback: url ?? "open linkstr to view")
     content.sound = .default
     content.threadIdentifier = conversationID
 

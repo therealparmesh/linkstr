@@ -102,9 +102,9 @@ struct ConversationsView: View {
         SessionPostsView(sessionEntity: targetSession)
       } else {
         ContentUnavailableView(
-          "Session Unavailable",
+          "session unavailable",
           systemImage: "exclamationmark.triangle",
-          description: Text("This session is no longer available.")
+          description: Text("this session is no longer available.")
         )
       }
     }
@@ -131,21 +131,21 @@ struct ConversationsView: View {
   private var content: some View {
     if scopedSessions.isEmpty {
       LinkstrCenteredEmptyStateView(
-        title: "No Sessions",
+        title: "no sessions",
         systemImage: "rectangle.stack.badge.plus",
-        description: "Create a session to start tracking and discussing links."
+        description: "create a session to start tracking and discussing links."
       )
     } else {
       ScrollView {
         VStack(alignment: .leading, spacing: 10) {
           if visibleSummaries.isEmpty {
             ContentUnavailableView(
-              isShowingArchivedSessions ? "No Archived Sessions" : "No Active Sessions",
+              isShowingArchivedSessions ? "no archived sessions" : "no active sessions",
               systemImage: isShowingArchivedSessions ? "archivebox" : "rectangle.stack",
               description: Text(
                 isShowingArchivedSessions
-                  ? "Archive a session to move it here."
-                  : "Create a session or view archived sessions."
+                  ? "archive a session to move it here."
+                  : "create a session or view archived sessions."
               )
             )
             .padding(.top, 12)
@@ -169,7 +169,7 @@ struct ConversationsView: View {
                     )
                   } label: {
                     Label(
-                      summary.session.isArchived ? "Unarchive Session" : "Archive Session",
+                      summary.session.isArchived ? "unarchive session" : "archive session",
                       systemImage: summary.session.isArchived ? "tray.and.arrow.up" : "archivebox"
                     )
                   }
@@ -190,14 +190,14 @@ struct ConversationsView: View {
     if archivedSessionCount > 0 {
       HStack(spacing: 6) {
         archiveFilterButton(
-          title: "Active",
+          title: "active",
           selected: !isShowingArchivedSessions
         ) {
           isShowingArchivedSessions = false
         }
 
         archiveFilterButton(
-          title: "Archived",
+          title: "archived",
           selected: isShowingArchivedSessions
         ) {
           isShowingArchivedSessions = true
@@ -250,14 +250,14 @@ struct ConversationsView: View {
   }
 
   private func previewText(for post: SessionMessageEntity?) -> String {
-    guard let post else { return "No posts yet" }
+    guard let post else { return "no posts yet" }
     if let title = post.metadataTitle, !title.isEmpty {
       return title
     }
     if let url = post.url, !url.isEmpty {
       return url
     }
-    return "Untitled post"
+    return "untitled post"
   }
 
   private func normalizedNote(_ note: String?) -> String? {
@@ -324,7 +324,7 @@ private struct SessionRowView: View {
         Circle()
           .fill(LinkstrTheme.neonAmber)
           .frame(width: 8, height: 8)
-          .accessibilityLabel("Unread")
+          .accessibilityLabel("unread")
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
@@ -386,13 +386,13 @@ private struct SessionPostsView: View {
       LazyVStack(alignment: .leading, spacing: 12) {
         if posts.isEmpty {
           ContentUnavailableView(
-            "No Posts Yet",
+            "no posts yet",
             systemImage: "link.badge.plus",
-            description: Text("Share a link in this session.")
+            description: Text("share a link in this session.")
           )
           .padding(.top, 24)
         } else {
-          LinkstrSectionHeader(title: "Posts")
+          LinkstrSectionHeader(title: "posts")
 
           ForEach(posts) { post in
             let summaries = reactionSummaries(for: post.rootID)
@@ -427,14 +427,14 @@ private struct SessionPostsView: View {
         Button {
           isPresentingMembers = true
         } label: {
-          Label("Members", systemImage: "person.2")
+          Label("members", systemImage: "person.2")
         }
         .tint(LinkstrTheme.neonCyan)
 
         Button {
           isPresentingNewPost = true
         } label: {
-          Label("New Post", systemImage: "plus")
+          Label("new post", systemImage: "plus")
         }
         .tint(LinkstrTheme.neonCyan)
       }
@@ -487,7 +487,7 @@ private struct SessionPostsView: View {
 
   private func senderLabel(for message: SessionMessageEntity) -> String {
     if isOutgoing(message) {
-      return "You"
+      return "you"
     }
     return session.contactName(for: message.senderPubkey, contacts: scopedContacts)
   }
@@ -510,7 +510,7 @@ private struct PostCardView: View {
       thumbnailView
 
       VStack(alignment: .leading, spacing: 8) {
-        Text(isOutgoing ? "Sent by You" : "Sent by \(senderLabel)")
+        Text(isOutgoing ? "sent by you" : "sent by \(senderLabel)")
           .font(.caption2)
           .foregroundStyle(LinkstrTheme.textSecondary)
           .lineLimit(1)
@@ -563,7 +563,7 @@ private struct PostCardView: View {
     if let url = post.url, !url.isEmpty {
       return url
     }
-    return "Untitled post"
+    return "untitled post"
   }
 
   private var noteText: String? {
@@ -630,8 +630,8 @@ struct NewSessionSheet: View {
         LinkstrBackgroundView()
         ScrollView {
           VStack(alignment: .leading, spacing: 12) {
-            LinkstrSectionHeader(title: "Session Name")
-            TextField("Fun", text: $sessionName)
+            LinkstrSectionHeader(title: "session name")
+            TextField("fun", text: $sessionName)
               .textInputAutocapitalization(.words)
               .padding(.horizontal, 12)
               .padding(.vertical, 10)
@@ -641,12 +641,12 @@ struct NewSessionSheet: View {
                   .fill(LinkstrTheme.panelSoft)
               )
 
-            LinkstrSectionHeader(title: "Members (Optional)")
-            Text("Create solo or add contacts now. You can manage members later.")
+            LinkstrSectionHeader(title: "members (optional)")
+            Text("create solo or add contacts now. you can manage members later.")
               .font(.custom(LinkstrTheme.bodyFont, size: 12))
               .foregroundStyle(LinkstrTheme.textSecondary)
 
-            TextField("Search contacts", text: $query)
+            TextField("search contacts", text: $query)
               .textInputAutocapitalization(.never)
               .autocorrectionDisabled(true)
               .padding(.horizontal, 12)
@@ -658,11 +658,11 @@ struct NewSessionSheet: View {
               )
 
             if contacts.isEmpty {
-              Text("No contacts yet. You can still create a solo session.")
+              Text("no contacts yet. you can still create a solo session.")
                 .font(.custom(LinkstrTheme.bodyFont, size: 12))
                 .foregroundStyle(LinkstrTheme.textSecondary)
             } else if filteredContacts.isEmpty {
-              Text("No contacts match.")
+              Text("no contacts match.")
                 .font(.custom(LinkstrTheme.bodyFont, size: 12))
                 .foregroundStyle(LinkstrTheme.textSecondary)
             } else {
@@ -707,7 +707,7 @@ struct NewSessionSheet: View {
 
             Text(
               selectedNPubs.isEmpty
-                ? "Creating a solo session" : "\(selectedNPubs.count) member(s) selected"
+                ? "creating a solo session" : "\(selectedNPubs.count) member(s) selected"
             )
             .font(.custom(LinkstrTheme.bodyFont, size: 12))
             .foregroundStyle(LinkstrTheme.textSecondary)
@@ -719,25 +719,25 @@ struct NewSessionSheet: View {
           .padding(.bottom, 120)
         }
       }
-      .navigationTitle("New Session")
+      .navigationTitle("new session")
       .navigationBarTitleDisplayMode(.inline)
       .toolbarColorScheme(.dark, for: .navigationBar)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
-          Button("Cancel") { dismiss() }
+          Button("cancel") { dismiss() }
             .disabled(isCreating)
         }
       }
       .safeAreaInset(edge: .bottom) {
         VStack(spacing: 8) {
           Button(action: createSession) {
-            Label(isCreating ? "Creating…" : "Create Session", systemImage: "plus.circle.fill")
+            Label(isCreating ? "creating…" : "create session", systemImage: "plus.circle.fill")
               .frame(maxWidth: .infinity)
           }
           .buttonStyle(LinkstrPrimaryButtonStyle())
           .disabled(isCreating || !canCreateSession)
 
-          Text(isCreating ? "Waiting for relay reconnect before creating…" : " ")
+          Text(isCreating ? "waiting for relay reconnect before creating…" : " ")
             .font(.custom(LinkstrTheme.bodyFont, size: 12))
             .foregroundStyle(LinkstrTheme.textSecondary)
             .frame(maxWidth: .infinity, minHeight: 14, alignment: .center)
@@ -824,10 +824,10 @@ private struct SessionMembersSheet: View {
         LinkstrBackgroundView()
         ScrollView {
           VStack(alignment: .leading, spacing: 14) {
-            LinkstrSectionHeader(title: "Current Members")
+            LinkstrSectionHeader(title: "current members")
 
             if visibleCurrentMembers.isEmpty {
-              Text("Only you are in this session.")
+              Text("only you are in this session.")
                 .font(.custom(LinkstrTheme.bodyFont, size: 12))
                 .foregroundStyle(LinkstrTheme.textSecondary)
             } else {
@@ -845,7 +845,7 @@ private struct SessionMembersSheet: View {
                         .lineLimit(1)
                     }
                     Spacer()
-                    Button("Remove", role: .destructive) {
+                    Button("remove", role: .destructive) {
                       includedMemberHexes.remove(memberHex)
                     }
                     .font(.custom(LinkstrTheme.bodyFont, size: 12))
@@ -859,9 +859,9 @@ private struct SessionMembersSheet: View {
               .padding(.horizontal, 2)
             }
 
-            LinkstrSectionHeader(title: "Add From Contacts")
+            LinkstrSectionHeader(title: "add from contacts")
 
-            TextField("Search contacts", text: $query)
+            TextField("search contacts", text: $query)
               .textInputAutocapitalization(.never)
               .autocorrectionDisabled(true)
               .padding(.horizontal, 12)
@@ -873,11 +873,11 @@ private struct SessionMembersSheet: View {
               )
 
             if contacts.isEmpty {
-              Text("No contacts yet.")
+              Text("no contacts yet.")
                 .font(.custom(LinkstrTheme.bodyFont, size: 12))
                 .foregroundStyle(LinkstrTheme.textSecondary)
             } else if filteredContacts.isEmpty {
-              Text("No contacts match.")
+              Text("no contacts match.")
                 .font(.custom(LinkstrTheme.bodyFont, size: 12))
                 .foregroundStyle(LinkstrTheme.textSecondary)
             } else {
@@ -931,18 +931,18 @@ private struct SessionMembersSheet: View {
           .padding(.bottom, 24)
         }
       }
-      .navigationTitle("Session Members")
+      .navigationTitle("session members")
       .navigationBarTitleDisplayMode(.inline)
       .toolbarColorScheme(.dark, for: .navigationBar)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
-          Button("Cancel") {
+          Button("cancel") {
             dismiss()
           }
           .disabled(isSaving)
         }
         ToolbarItem(placement: .confirmationAction) {
-          Button(isSaving ? "Saving…" : "Save") {
+          Button(isSaving ? "saving…" : "save") {
             saveMembers()
           }
           .disabled(isSaving)
@@ -974,7 +974,7 @@ private struct SessionMembersSheet: View {
 
   private func memberDisplayName(for pubkeyHex: String) -> String {
     if pubkeyHex == session.identityService.pubkeyHex {
-      return "You"
+      return "you"
     }
     if let contact = contacts.first(where: { $0.targetPubkey == pubkeyHex }) {
       let trimmed = contact.displayName.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -50,7 +50,7 @@ final class SessionMessageStore {
     isArchived: Bool? = nil
   ) throws -> SessionEntity {
     let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-    let effectiveName = normalizedName.isEmpty ? "Untitled Session" : normalizedName
+    let effectiveName = normalizedName.isEmpty ? "untitled session" : normalizedName
 
     if let existing = try session(sessionID: sessionID, ownerPubkey: ownerPubkey) {
       var didChange = false

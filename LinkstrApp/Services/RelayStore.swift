@@ -81,7 +81,7 @@ private enum RelayStoreError: LocalizedError {
   var errorDescription: String? {
     switch self {
     case .duplicateRelay:
-      return "That relay is already in your list."
+      return "that relay is already in your list."
     }
   }
 }
@@ -230,11 +230,11 @@ private enum ContactStoreError: LocalizedError {
   var errorDescription: String? {
     switch self {
     case .invalidContactKey:
-      return "Invalid Contact Key (npub)."
+      return "invalid contact key (npub)."
     case .contactOwnershipMismatch:
-      return "This contact belongs to a different account."
+      return "this contact belongs to a different account."
     case .contactNotFound:
-      return "Contact not found."
+      return "contact not found."
     }
   }
 }

@@ -141,19 +141,19 @@ enum LinkstrPayloadError: Error, LocalizedError {
   var errorDescription: String? {
     switch self {
     case .invalidSessionID:
-      return "Invalid session identifier."
+      return "invalid session identifier."
     case .invalidRootURL:
-      return "Post requires a valid URL."
+      return "post requires a valid url."
     case .invalidSessionName:
-      return "Session requires a name."
+      return "session requires a name."
     case .invalidMembers:
-      return "Session requires valid members."
+      return "session requires valid members."
     case .invalidRootID:
-      return "Reaction requires a post identifier."
+      return "reaction requires a post identifier."
     case .invalidReactionEmoji:
-      return "Reaction requires an emoji."
+      return "reaction requires an emoji."
     case .invalidReactionState:
-      return "Reaction requires an active/inactive state."
+      return "reaction requires an active/inactive state."
     }
   }
 }

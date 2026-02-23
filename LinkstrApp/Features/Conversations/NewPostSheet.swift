@@ -23,7 +23,7 @@ struct NewPostSheet: View {
         ScrollView {
           VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 8) {
-              sectionLabel("Session")
+              sectionLabel("session")
               Text(sessionEntity.name)
                 .font(.custom(LinkstrTheme.bodyFont, size: 15))
                 .foregroundStyle(LinkstrTheme.textPrimary)
@@ -37,7 +37,7 @@ struct NewPostSheet: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-              sectionLabel("Link")
+              sectionLabel("link")
 
               TextField("https://...", text: $url)
                 .font(.custom(LinkstrTheme.bodyFont, size: 14))
@@ -72,11 +72,11 @@ struct NewPostSheet: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-              sectionLabel("Note")
+              sectionLabel("note")
 
               ZStack(alignment: .topLeading) {
                 if note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                  Text("Optional context for this session")
+                  Text("optional context for this session")
                     .font(.custom(LinkstrTheme.bodyFont, size: 14))
                     .foregroundStyle(LinkstrTheme.textSecondary)
                     .padding(.top, 12)
@@ -98,7 +98,7 @@ struct NewPostSheet: View {
               )
             }
 
-            Text("Send requires a valid link. Note is optional.")
+            Text("send requires a valid link. note is optional.")
               .font(.custom(LinkstrTheme.bodyFont, size: 12))
               .foregroundStyle(LinkstrTheme.textSecondary)
               .padding(.horizontal, 2)
@@ -109,25 +109,25 @@ struct NewPostSheet: View {
         .padding(.bottom, 120)
         .scrollBounceBehavior(.basedOnSize)
       }
-      .navigationTitle("New Post")
+      .navigationTitle("new post")
       .navigationBarTitleDisplayMode(.inline)
       .toolbarColorScheme(.dark, for: .navigationBar)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
-          Button("Cancel") { dismiss() }
+          Button("cancel") { dismiss() }
             .disabled(isSending)
         }
       }
       .safeAreaInset(edge: .bottom, spacing: 0) {
         VStack(spacing: 8) {
           Button(action: sendPost) {
-            Label(isSending ? "Sending…" : "Send Post", systemImage: "paperplane.fill")
+            Label(isSending ? "sending…" : "send post", systemImage: "paperplane.fill")
               .frame(maxWidth: .infinity)
           }
           .buttonStyle(LinkstrPrimaryButtonStyle())
           .disabled(!canSend)
 
-          Text(isSending ? "Waiting for relay reconnect before sending…" : " ")
+          Text(isSending ? "waiting for relay reconnect before sending…" : " ")
             .font(.custom(LinkstrTheme.bodyFont, size: 12))
             .foregroundStyle(LinkstrTheme.textSecondary)
             .frame(maxWidth: .infinity, minHeight: 14, alignment: .center)
@@ -169,7 +169,7 @@ struct NewPostSheet: View {
   private var urlValidationHint: String? {
     let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return nil }
-    return normalizedURL == nil ? "Enter a valid http(s) URL." : nil
+    return normalizedURL == nil ? "enter a valid http(s) url." : nil
   }
 
   private func sectionLabel(_ text: String) -> some View {
@@ -217,13 +217,13 @@ struct LinkstrInputAssistRow: View {
 
   var body: some View {
     HStack(spacing: 8) {
-      assistButton("Paste", systemImage: "doc.on.clipboard", action: onPaste)
+      assistButton("paste", systemImage: "doc.on.clipboard", action: onPaste)
       if showScan, let onScan {
-        assistButton("Scan", systemImage: "qrcode.viewfinder", action: onScan)
+        assistButton("scan", systemImage: "qrcode.viewfinder", action: onScan)
       }
       if showClear {
         assistButton(
-          "Clear",
+          "clear",
           systemImage: "xmark.circle",
           tint: Color.red.opacity(0.9),
           action: onClear

@@ -8,11 +8,11 @@ struct DeepLinkContainerView: View {
   var body: some View {
     NavigationStack {
       DeepLinkVideoView(payload: payload)
-        .navigationTitle("Watch Video")
+        .navigationTitle("watch video")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
           ToolbarItem(placement: .topBarTrailing) {
-            Button("Done") {
+            Button("done") {
               deepLinkHandler.clear()
             }
           }

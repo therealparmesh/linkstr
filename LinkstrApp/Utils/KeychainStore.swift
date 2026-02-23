@@ -11,13 +11,13 @@ enum KeychainStoreError: Error, LocalizedError {
   var errorDescription: String? {
     switch self {
     case .saveFailed:
-      return "Couldn't save account keys on this device."
+      return "couldn't save account keys on this device."
     case .readFailed:
-      return "Couldn't load account keys from this device."
+      return "couldn't load account keys from this device."
     case .deleteFailed:
-      return "Couldn't remove account keys from this device."
+      return "couldn't remove account keys from this device."
     case .decodeFailed:
-      return "Stored account keys are unreadable."
+      return "stored account keys are unreadable."
     }
   }
 }
@@ -217,11 +217,11 @@ enum LocalDataCryptoError: Error, LocalizedError {
   var errorDescription: String? {
     switch self {
     case .invalidKeyMaterial:
-      return "Stored encryption key is invalid."
+      return "stored encryption key is invalid."
     case .invalidCiphertext:
-      return "Stored encrypted data is invalid."
+      return "stored encrypted data is invalid."
     case .decryptionFailed:
-      return "Couldn't decrypt local data for this account."
+      return "couldn't decrypt local data for this account."
     }
   }
 }

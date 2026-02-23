@@ -25,7 +25,7 @@ struct ShareIdentityView: View {
                 .scaledToFit()
                 .frame(maxWidth: 300)
 
-              Text("Scan to add this Contact Key (npub)")
+              Text("scan to add this contact key (npub)")
                 .font(.custom(LinkstrTheme.bodyFont, size: 13))
                 .foregroundStyle(LinkstrTheme.textSecondary)
             }
@@ -33,8 +33,8 @@ struct ShareIdentityView: View {
           }
 
           VStack(alignment: .leading, spacing: 10) {
-            LinkstrSectionHeader(title: "Your Contact Key (npub)")
-            Text("Others use this key to send links to you or add you as a contact.")
+            LinkstrSectionHeader(title: "your contact key (npub)")
+            Text("others use this key to send links to you or add you as a contact.")
               .font(.custom(LinkstrTheme.bodyFont, size: 13))
               .foregroundStyle(LinkstrTheme.textSecondary)
             Text(npub)
@@ -51,7 +51,7 @@ struct ShareIdentityView: View {
             Button {
               UIPasteboard.general.string = npub
             } label: {
-              Label("Copy Contact Key (npub)", systemImage: "doc.on.doc")
+              Label("copy contact key (npub)", systemImage: "doc.on.doc")
                 .frame(maxWidth: .infinity)
             }
             .buttonStyle(LinkstrPrimaryButtonStyle())
@@ -62,9 +62,9 @@ struct ShareIdentityView: View {
       .scrollBounceBehavior(.basedOnSize)
     } else {
       LinkstrCenteredEmptyStateView(
-        title: "No Identity",
+        title: "no identity",
         systemImage: "person.crop.circle.badge.exclamationmark",
-        description: "Create an account or sign in with a Secret Key (nsec) in Settings."
+        description: "create an account or sign in with a secret key (nsec) in settings."
       )
     }
   }

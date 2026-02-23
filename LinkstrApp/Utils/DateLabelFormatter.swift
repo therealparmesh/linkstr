@@ -59,7 +59,7 @@ enum DateLabelFormatter {
       return timeFormatter.string(from: date)
     }
     if calendar.isDateInYesterday(date) {
-      return "Yesterday"
+      return "yesterday"
     }
     if calendar.isDate(date, equalTo: now, toGranularity: .weekOfYear) {
       return weekdayFormatter.string(from: date)
@@ -77,7 +77,7 @@ enum DateLabelFormatter {
       return timeFormatter.string(from: date)
     }
     if calendar.isDateInYesterday(date) {
-      return "Yesterday, \(timeFormatter.string(from: date))"
+      return "yesterday, \(timeFormatter.string(from: date))"
     }
     if calendar.isDate(date, equalTo: now, toGranularity: .weekOfYear) {
       return weekdayTimeFormatter.string(from: date)

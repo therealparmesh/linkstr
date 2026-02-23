@@ -34,7 +34,7 @@ struct DeepLinkVideoView: View {
           Button {
             openURL(sourceURL)
           } label: {
-            Text("Open in Safari")
+            Text("open in safari")
               .frame(maxWidth: .infinity)
           }
           .frame(maxWidth: .infinity)
@@ -57,14 +57,14 @@ struct DeepLinkVideoView: View {
           openSourceAction: nil
         )
       case .link:
-        Button("Open in Safari") {
+        Button("open in safari") {
           openURL(sourceURL)
         }
         .frame(maxWidth: .infinity)
         .buttonStyle(LinkstrPrimaryButtonStyle())
       }
     } else {
-      Text("Invalid video URL")
+      Text("invalid video url")
         .font(.footnote)
         .foregroundStyle(LinkstrTheme.textSecondary)
     }
@@ -84,7 +84,7 @@ struct DeepLinkVideoView: View {
         .textSelection(.enabled)
 
       if let sharedAtDate {
-        Text("Shared \(sharedAtDate.formatted(date: .abbreviated, time: .shortened))")
+        Text("shared \(sharedAtDate.formatted(date: .abbreviated, time: .shortened))")
           .font(.footnote)
           .foregroundStyle(LinkstrTheme.textSecondary)
       }

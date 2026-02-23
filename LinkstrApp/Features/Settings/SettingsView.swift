@@ -37,17 +37,17 @@ struct SettingsView: View {
       .padding(.bottom, 28)
     }
     .scrollBounceBehavior(.basedOnSize)
-    .alert("Log Out", isPresented: $isPresentingLogoutOptions) {
-      Button("Log Out (Keep Local Data)") {
+    .alert("log out", isPresented: $isPresentingLogoutOptions) {
+      Button("log out (keep local data)") {
         session.logout(clearLocalData: false)
       }
-      Button("Log Out and Clear Local Data", role: .destructive) {
+      Button("log out and clear local data", role: .destructive) {
         session.logout(clearLocalData: true)
       }
-      Button("Cancel", role: .cancel) {}
+      Button("cancel", role: .cancel) {}
     } message: {
       Text(
-        "Choose whether to keep this account's local contacts/messages on this device or remove them before signing out."
+        "choose whether to keep this account's local contacts/messages on this device or remove them before signing out."
       )
     }
   }
@@ -91,14 +91,14 @@ struct SettingsView: View {
               )
               .labelsHidden()
               .tint(LinkstrTheme.neonCyan)
-              .accessibilityLabel(relay.isEnabled ? "Disable relay" : "Enable relay")
+              .accessibilityLabel(relay.isEnabled ? "disable relay" : "enable relay")
 
               Spacer()
 
               Button(role: .destructive) {
                 session.removeRelay(relay)
               } label: {
-                Label("Remove", systemImage: "trash")
+                Label("remove", systemImage: "trash")
                   .font(.custom(LinkstrTheme.bodyFont, size: 13))
                   .foregroundStyle(Color.red.opacity(0.95))
                   .padding(.horizontal, 10)
@@ -144,7 +144,7 @@ struct SettingsView: View {
               relayURL = ""
             }
           } label: {
-            Text("Add Relay")
+            Text("add relay")
               .frame(maxWidth: .infinity)
           }
           .buttonStyle(LinkstrPrimaryButtonStyle())
@@ -152,7 +152,7 @@ struct SettingsView: View {
           Button {
             session.resetDefaultRelays()
           } label: {
-            Text("Reset Default Relays")
+            Text("reset default relays")
               .frame(maxWidth: .infinity)
           }
           .buttonStyle(LinkstrSecondaryButtonStyle())
@@ -164,7 +164,7 @@ struct SettingsView: View {
       .padding(.top, 8)
     } label: {
       sectionLabel(
-        "Relays",
+        "relays",
         systemImage: "antenna.radiowaves.left.and.right",
         badge: "\(connectedRelayCount)/\(relays.count)"
       )
@@ -177,7 +177,7 @@ struct SettingsView: View {
         Button(role: .destructive) {
           session.clearCachedVideos()
         } label: {
-          Text("Clear Cached Videos")
+          Text("clear cached videos")
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(LinkstrDangerButtonStyle())
@@ -185,7 +185,7 @@ struct SettingsView: View {
       .frame(maxWidth: .infinity, alignment: .leading)
       .padding(.top, 8)
     } label: {
-      sectionLabel("Storage", systemImage: "externaldrive")
+      sectionLabel("storage", systemImage: "externaldrive")
     }
   }
 
@@ -193,7 +193,7 @@ struct SettingsView: View {
     DisclosureGroup(isExpanded: $isIdentityExpanded) {
       VStack(alignment: .leading, spacing: 10) {
         if let npub = session.identityService.npub {
-          LinkstrSectionHeader(title: "Contact Key (npub)")
+          LinkstrSectionHeader(title: "contact key (npub)")
           Text(npub)
             .font(.custom(LinkstrTheme.bodyFont, size: 12))
             .foregroundStyle(LinkstrTheme.textSecondary)
@@ -215,7 +215,7 @@ struct SettingsView: View {
               }
             } label: {
               Label(
-                isNsecVisible ? "Hide Secret Key (nsec)" : "Reveal Secret Key (nsec)",
+                isNsecVisible ? "hide secret key (nsec)" : "reveal secret key (nsec)",
                 systemImage: "key.fill"
               )
               .frame(maxWidth: .infinity)
@@ -227,7 +227,7 @@ struct SettingsView: View {
                 guard !revealedNsec.isEmpty else { return }
                 UIPasteboard.general.string = revealedNsec
               } label: {
-                Label("Copy Secret Key (nsec)", systemImage: "doc.on.doc")
+                Label("copy secret key (nsec)", systemImage: "doc.on.doc")
                   .frame(maxWidth: .infinity)
               }
               .buttonStyle(LinkstrWarningButtonStyle())
@@ -236,8 +236,8 @@ struct SettingsView: View {
           }
 
           if isNsecVisible {
-            LinkstrSectionHeader(title: "Secret Key (nsec)")
-            Text(revealedNsec.isEmpty ? "Unable to reveal Secret Key (nsec)." : revealedNsec)
+            LinkstrSectionHeader(title: "secret key (nsec)")
+            Text(revealedNsec.isEmpty ? "unable to reveal secret key (nsec)." : revealedNsec)
               .font(.custom(LinkstrTheme.bodyFont, size: 12))
               .foregroundStyle(LinkstrTheme.textSecondary)
               .textSelection(.enabled)
@@ -252,12 +252,12 @@ struct SettingsView: View {
           Button(role: .destructive) {
             isPresentingLogoutOptions = true
           } label: {
-            Label("Log Out", systemImage: "rectangle.portrait.and.arrow.right")
+            Label("log out", systemImage: "rectangle.portrait.and.arrow.right")
               .frame(maxWidth: .infinity)
           }
           .buttonStyle(LinkstrDangerButtonStyle())
         } else {
-          Text("No account found. Sign in with a Secret Key (nsec) or create one.")
+          Text("no account found. sign in with a secret key (nsec) or create one.")
             .font(.custom(LinkstrTheme.bodyFont, size: 12))
             .foregroundStyle(LinkstrTheme.textSecondary)
         }
@@ -265,7 +265,7 @@ struct SettingsView: View {
       .frame(maxWidth: .infinity, alignment: .leading)
       .padding(.top, 8)
     } label: {
-      sectionLabel("Identity", systemImage: "person.crop.circle")
+      sectionLabel("identity", systemImage: "person.crop.circle")
     }
   }
 

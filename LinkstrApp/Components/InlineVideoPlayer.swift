@@ -130,7 +130,7 @@ struct AdaptiveVideoPlaybackView: View {
         await prepareMediaIfNeeded()
       }
       .confirmationDialog(
-        "Save Local Media",
+        "save local media",
         isPresented: Binding(
           get: { exportTarget != nil },
           set: { isPresented in
@@ -143,17 +143,17 @@ struct AdaptiveVideoPlaybackView: View {
       ) {
         if let target = exportTarget {
           if target.allowsPhotoSave {
-            Button("Save to Photos") {
+            Button("save to photos") {
               saveToPhotos(target.fileURL)
               exportTarget = nil
             }
           }
-          Button("Save to Files") {
+          Button("save to files") {
             fileExportItem = LocalFileExportItem(fileURL: target.fileURL)
             exportTarget = nil
           }
         }
-        Button("Cancel", role: .cancel) {
+        Button("cancel", role: .cancel) {
           exportTarget = nil
         }
       }
@@ -162,11 +162,11 @@ struct AdaptiveVideoPlaybackView: View {
           fileExportItem = nil
           switch result {
           case .exported:
-            showExportFeedback(title: "Saved", message: "Saved to Files.")
+            showExportFeedback(title: "saved", message: "saved to files.")
           case .cancelled:
             break
           case .failed(let message):
-            showExportFeedback(title: "Save Failed", message: message)
+            showExportFeedback(title: "save failed", message: message)
           }
         }
       }
@@ -181,7 +181,7 @@ struct AdaptiveVideoPlaybackView: View {
           }
         ),
         actions: {
-          Button("OK", role: .cancel) {}
+          Button("ok", role: .cancel) {}
         },
         message: {
           Text(exportFeedbackMessage ?? "")
@@ -207,7 +207,7 @@ struct AdaptiveVideoPlaybackView: View {
         Button {
           openSourceAction()
         } label: {
-          Text("Open in Safari")
+          Text("open in safari")
             .frame(maxWidth: .infinity)
         }
         .frame(maxWidth: .infinity)
@@ -233,7 +233,7 @@ struct AdaptiveVideoPlaybackView: View {
               Button {
                 localPlaybackMode = .embedPreferred
               } label: {
-                Text("Use Embedded")
+                Text("use embedded")
                   .frame(maxWidth: .infinity)
               }
               .frame(maxWidth: .infinity)
@@ -242,7 +242,7 @@ struct AdaptiveVideoPlaybackView: View {
               Button {
                 openSourceAction()
               } label: {
-                Text("Open in Safari")
+                Text("open in safari")
                   .frame(maxWidth: .infinity)
               }
               .frame(maxWidth: .infinity)
@@ -256,7 +256,7 @@ struct AdaptiveVideoPlaybackView: View {
                   allowsPhotoSave: supportsPhotoSave(fileURL: exportFileURL)
                 )
               } label: {
-                Text("Save...")
+                Text("save...")
                   .frame(maxWidth: .infinity)
               }
               .frame(maxWidth: .infinity)
@@ -269,7 +269,7 @@ struct AdaptiveVideoPlaybackView: View {
               Button {
                 localPlaybackMode = .embedPreferred
               } label: {
-                Text("Use Embedded")
+                Text("use embedded")
                   .frame(maxWidth: .infinity)
               }
               .frame(maxWidth: .infinity)
@@ -281,7 +281,7 @@ struct AdaptiveVideoPlaybackView: View {
                   allowsPhotoSave: supportsPhotoSave(fileURL: exportFileURL)
                 )
               } label: {
-                Text("Save...")
+                Text("save...")
                   .frame(maxWidth: .infinity)
               }
               .frame(maxWidth: .infinity)
@@ -291,7 +291,7 @@ struct AdaptiveVideoPlaybackView: View {
             Button {
               localPlaybackMode = .embedPreferred
             } label: {
-              Text("Use Embedded")
+              Text("use embedded")
                 .frame(maxWidth: .infinity)
             }
             .frame(maxWidth: .infinity)
@@ -307,7 +307,7 @@ struct AdaptiveVideoPlaybackView: View {
     case nil:
       HStack(spacing: 8) {
         ProgressView()
-        Text("Preparing video playback...")
+        Text("preparing video playback...")
           .font(.footnote)
           .foregroundStyle(.secondary)
       }
@@ -322,7 +322,7 @@ struct AdaptiveVideoPlaybackView: View {
       }
 
       if let extractionFallbackReason {
-        Text("Video playback unavailable: \(extractionFallbackReason)")
+        Text("video playback unavailable: \(extractionFallbackReason)")
           .font(.footnote)
           .foregroundStyle(LinkstrTheme.textSecondary)
       }
@@ -339,7 +339,7 @@ struct AdaptiveVideoPlaybackView: View {
               await prepareMediaIfNeeded()
             }
           } label: {
-            Text("Try Local Playback")
+            Text("try local playback")
               .frame(maxWidth: .infinity)
           }
           .frame(maxWidth: .infinity)
@@ -348,7 +348,7 @@ struct AdaptiveVideoPlaybackView: View {
           Button {
             openSourceAction()
           } label: {
-            Text("Open in Safari")
+            Text("open in safari")
               .frame(maxWidth: .infinity)
           }
           .frame(maxWidth: .infinity)
@@ -363,7 +363,7 @@ struct AdaptiveVideoPlaybackView: View {
             await prepareMediaIfNeeded()
           }
         } label: {
-          Text("Try Local Playback")
+          Text("try local playback")
             .frame(maxWidth: .infinity)
         }
         .frame(maxWidth: .infinity)
@@ -372,7 +372,7 @@ struct AdaptiveVideoPlaybackView: View {
         Button {
           openSourceAction()
         } label: {
-          Text("Open in Safari")
+          Text("open in safari")
             .frame(maxWidth: .infinity)
         }
         .frame(maxWidth: .infinity)
@@ -467,15 +467,15 @@ struct AdaptiveVideoPlaybackView: View {
         break
       case .denied, .restricted:
         showExportFeedback(
-          title: "Photos Access Needed",
-          message: "Allow add-only Photos access in Settings to save videos to your gallery."
+          title: "photos access needed",
+          message: "allow add-only photos access in settings to save videos to your gallery."
         )
         return
       case .notDetermined:
-        showExportFeedback(title: "Save Failed", message: "Couldn't determine Photos permission.")
+        showExportFeedback(title: "save failed", message: "couldn't determine photos permission.")
         return
       @unknown default:
-        showExportFeedback(title: "Save Failed", message: "Unexpected Photos permission state.")
+        showExportFeedback(title: "save failed", message: "unexpected photos permission state.")
         return
       }
 
@@ -495,9 +495,9 @@ struct AdaptiveVideoPlaybackView: View {
             }
           )
         }
-        showExportFeedback(title: "Saved", message: "Saved to Photos.")
+        showExportFeedback(title: "saved", message: "saved to photos.")
       } catch {
-        showExportFeedback(title: "Save Failed", message: "Couldn't save this video to Photos.")
+        showExportFeedback(title: "save failed", message: "couldn't save this video to photos.")
       }
     }
   }

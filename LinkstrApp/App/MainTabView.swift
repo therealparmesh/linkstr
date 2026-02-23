@@ -14,10 +14,10 @@ struct MainTabView: View {
 
     var title: String {
       switch self {
-      case .sessions: return "Sessions"
-      case .contacts: return "Contacts"
-      case .share: return "Share"
-      case .settings: return "Settings"
+      case .sessions: return "sessions"
+      case .contacts: return "contacts"
+      case .share: return "share"
+      case .settings: return "settings"
       }
     }
 

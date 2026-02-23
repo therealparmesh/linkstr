@@ -11,16 +11,16 @@ struct OnboardingView: View {
         LinkstrBackgroundView()
         ScrollView {
           VStack(alignment: .leading, spacing: 18) {
-            Text("Welcome To linkstr.")
+            Text("welcome to linkstr.")
               .font(.custom(LinkstrTheme.titleFont, size: 36))
               .foregroundStyle(LinkstrTheme.textPrimary)
-            Text("Share videos and links privately with people who don’t use social media.")
+            Text("share videos and links privately with people who don’t use social media.")
               .font(.custom(LinkstrTheme.bodyFont, size: 14))
               .foregroundStyle(LinkstrTheme.textSecondary)
 
             VStack(alignment: .leading, spacing: formRowSpacing) {
-              LinkstrSectionHeader(title: "Sign In")
-              TextField("Secret Key (nsec...)", text: $secretKey)
+              LinkstrSectionHeader(title: "sign in")
+              TextField("secret key (nsec...)", text: $secretKey)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled(true)
                 .padding(12)
@@ -31,7 +31,7 @@ struct OnboardingView: View {
               Button {
                 session.importNsec(secretKey)
               } label: {
-                Label("Sign In with Secret Key (nsec)", systemImage: "arrow.right.circle.fill")
+                Label("sign in with secret key (nsec)", systemImage: "arrow.right.circle.fill")
                   .frame(maxWidth: .infinity)
               }
               .buttonStyle(LinkstrPrimaryButtonStyle())
@@ -41,7 +41,7 @@ struct OnboardingView: View {
                 Rectangle()
                   .fill(LinkstrTheme.textSecondary.opacity(0.26))
                   .frame(height: 1)
-                Text("OR")
+                Text("or")
                   .font(.custom(LinkstrTheme.titleFont, size: 13))
                   .foregroundStyle(LinkstrTheme.textSecondary)
                 Rectangle()
@@ -50,11 +50,11 @@ struct OnboardingView: View {
               }
               .padding(.vertical, LinkstrTheme.sectionStackSpacing - formRowSpacing)
 
-              LinkstrSectionHeader(title: "Create Account")
+              LinkstrSectionHeader(title: "create account")
               Button {
                 session.ensureIdentity()
               } label: {
-                Label("Create Account", systemImage: "sparkles")
+                Label("create account", systemImage: "sparkles")
                   .frame(maxWidth: .infinity)
               }
               .buttonStyle(LinkstrSecondaryButtonStyle())

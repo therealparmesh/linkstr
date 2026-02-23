@@ -50,11 +50,11 @@ final class AppSession: ObservableObject {
   private let testDisableNostrStartupOverride: Bool?
   private let testRelaySendOverride: ((LinkstrPayload, String) async throws -> String)?
   private let noEnabledRelaysMessage =
-    "No relays are enabled. Enable at least one relay in Settings."
-  private let relayOfflineMessage = "You're offline. Waiting for a relay connection."
+    "no relays are enabled. enable at least one relay in settings."
+  private let relayOfflineMessage = "you're offline. waiting for a relay connection."
   private let relayReadOnlyMessage =
-    "Connected relays are read-only. Add a writable relay to send."
-  private let relaySendTimeoutMessage = "Couldn't reconnect to relays in time. Try again."
+    "connected relays are read-only. add a writable relay to send."
+  private let relaySendTimeoutMessage = "couldn't reconnect to relays in time. try again."
   private var hasShownOfflineToastForCurrentOutage = false
   private var isForeground = false
   private var pendingMetadataStorageIDs: [String] = []
@@ -70,7 +70,7 @@ final class AppSession: ObservableObject {
   @Published var pendingSessionNavigationID: String?
   @Published private(set) var hasIdentity = false
   @Published private(set) var didFinishBoot = false
-  @Published private(set) var bootStatusMessage = "Loading account…"
+  @Published private(set) var bootStatusMessage = "loading account…"
 
   init(
     modelContext: ModelContext,
@@ -91,7 +91,7 @@ final class AppSession: ObservableObject {
 
   func boot() {
     didFinishBoot = false
-    bootStatusMessage = "Loading account…"
+    bootStatusMessage = "loading account…"
     defer { didFinishBoot = true }
 
     identityService.loadIdentity()
@@ -103,21 +103,21 @@ final class AppSession: ObservableObject {
 
     #if targetEnvironment(simulator)
       if isEnvironmentFlagEnabled("LINKSTR_SIM_BOOTSTRAP") {
-        bootStatusMessage = "Preparing simulator account…"
+        bootStatusMessage = "preparing simulator account…"
         bootstrapSimulatorIfNeeded()
         refreshIdentityState()
       }
     #endif
 
     do {
-      bootStatusMessage = "Preparing local data…"
-      bootStatusMessage = "Connecting relays…"
+      bootStatusMessage = "preparing local data…"
+      bootStatusMessage = "connecting relays…"
       try relayStore.ensureDefaultRelays()
       pruneRuntimeRelayStatusCache()
     } catch {
       composeError = error.localizedDescription
     }
-    bootStatusMessage = "Starting session…"
+    bootStatusMessage = "starting session…"
     handleAppDidBecomeActive()
     hydrateMissingMetadata()
   }
@@ -528,7 +528,7 @@ final class AppSession: ObservableObject {
   ) async -> Bool {
     let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !normalizedName.isEmpty else {
-      composeError = "Enter a session name."
+      composeError = "enter a session name."
       return false
     }
 
@@ -543,7 +543,7 @@ final class AppSession: ObservableObject {
     startNostrIfPossible()
 
     guard let keypair = identityService.keypair, let ownerPubkey = identityService.pubkeyHex else {
-      composeError = "You're signed out. Sign in to create sessions."
+      composeError = "you're signed out. sign in to create sessions."
       return false
     }
 
@@ -613,7 +613,7 @@ final class AppSession: ObservableObject {
     startNostrIfPossible()
 
     guard let keypair = identityService.keypair, let ownerPubkey = identityService.pubkeyHex else {
-      composeError = "You're signed out. Sign in to manage session members."
+      composeError = "you're signed out. sign in to manage session members."
       return false
     }
 
@@ -768,11 +768,11 @@ final class AppSession: ObservableObject {
   private func makeReactionDraft(emoji: String, post: SessionMessageEntity) -> ReactionDraft? {
     let normalizedEmoji = emoji.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !normalizedEmoji.isEmpty else {
-      composeError = "Pick an emoji reaction."
+      composeError = "pick an emoji reaction."
       return nil
     }
     guard let keypair = identityService.keypair, let ownerPubkey = identityService.pubkeyHex else {
-      composeError = "You're signed out. Sign in to react."
+      composeError = "you're signed out. sign in to react."
       return nil
     }
 
@@ -831,12 +831,12 @@ final class AppSession: ObservableObject {
     sessionID: String
   ) -> RootPostDraft? {
     guard let normalizedURL = LinkstrURLValidator.normalizedWebURL(from: url) else {
-      composeError = "Enter a valid URL."
+      composeError = "enter a valid url."
       return nil
     }
 
     guard let keypair = identityService.keypair, let ownerPubkey = identityService.pubkeyHex else {
-      composeError = "You're signed out. Sign in to send posts."
+      composeError = "you're signed out. sign in to send posts."
       return nil
     }
 
@@ -852,7 +852,7 @@ final class AppSession: ObservableObject {
       return nil
     }
     guard !recipientPubkeys.isEmpty else {
-      composeError = "Session has no members. Add members before sending."
+      composeError = "session has no members. add members before sending."
       return nil
     }
 
@@ -1004,7 +1004,7 @@ final class AppSession: ObservableObject {
     } catch {
       // Ignore fetch failures and fall back to a generic title.
     }
-    return "Session"
+    return "session"
   }
 
   @discardableResult
@@ -1015,7 +1015,7 @@ final class AppSession: ObservableObject {
     pollIntervalSeconds: TimeInterval = 0.35
   ) async -> Bool {
     guard let ownerPubkey = identityService.pubkeyHex else {
-      composeError = "You're signed out. Sign in to manage contacts."
+      composeError = "you're signed out. sign in to manage contacts."
       return false
     }
 
@@ -1023,7 +1023,7 @@ final class AppSession: ObservableObject {
     do {
       targetPubkey = try contactStore.normalizeFollowTarget(npub)
       if contactStore.hasContact(ownerPubkey: ownerPubkey, withTargetPubkey: targetPubkey) {
-        composeError = "This contact is already in your list."
+        composeError = "this contact is already in your list."
         return false
       }
     } catch {
@@ -1089,7 +1089,7 @@ final class AppSession: ObservableObject {
   @discardableResult
   func updateContactAlias(_ contact: ContactEntity, displayName: String) -> Bool {
     guard let ownerPubkey = identityService.pubkeyHex else {
-      composeError = "You're signed out. Sign in to manage contacts."
+      composeError = "you're signed out. sign in to manage contacts."
       return false
     }
 
@@ -1111,11 +1111,11 @@ final class AppSession: ObservableObject {
     pollIntervalSeconds: TimeInterval = 0.35
   ) async -> Bool {
     guard let ownerPubkey = identityService.pubkeyHex else {
-      composeError = "You're signed out. Sign in to manage contacts."
+      composeError = "you're signed out. sign in to manage contacts."
       return false
     }
     guard contact.ownerPubkey == ownerPubkey else {
-      composeError = "This contact belongs to a different account."
+      composeError = "this contact belongs to a different account."
       return false
     }
 
@@ -1200,7 +1200,7 @@ final class AppSession: ObservableObject {
   func addRelay(url: String) -> Bool {
     guard let parsedURL = normalizedRelayURL(from: url)
     else {
-      composeError = "Enter a valid relay URL (ws:// or wss://)."
+      composeError = "enter a valid relay url (ws:// or wss://)."
       return false
     }
     return performRelayMutation {
@@ -1255,7 +1255,7 @@ final class AppSession: ObservableObject {
 
   func clearCachedVideos() {
     guard let ownerPubkey = identityService.pubkeyHex else {
-      composeError = "You're signed out. Sign in to manage local storage."
+      composeError = "you're signed out. sign in to manage local storage."
       return
     }
     clearCachedVideos(ownerPubkey: ownerPubkey)
@@ -1444,7 +1444,7 @@ final class AppSession: ObservableObject {
     let contacts = (try? contactStore.fetchContacts(ownerPubkey: ownerPubkey)) ?? []
     let fallbackName = contactName(for: incoming.senderPubkey, contacts: contacts)
     let sessionName = existingSessionName(for: sessionID, ownerPubkey: ownerPubkey)
-    let resolvedSessionName = sessionName == "Session" ? fallbackName : sessionName
+    let resolvedSessionName = sessionName == "session" ? fallbackName : sessionName
 
     do {
       _ = try messageStore.upsertSession(
@@ -1660,7 +1660,7 @@ final class AppSession: ObservableObject {
         let contact = try? ContactEntity(
           ownerPubkey: ownerPubkey,
           targetPubkey: pubkeyHex,
-          alias: "Secondary Test Contact"
+          alias: "secondary test contact"
         )
         guard let contact else { return }
         modelContext.insert(contact)
@@ -1672,7 +1672,7 @@ final class AppSession: ObservableObject {
       {
         let peerPubkey = secondaryContact.targetPubkey
         let sessionID = "sim-\(ownerPubkey.prefix(12))"
-        let sessionName = "Simulator Session"
+        let sessionName = "simulator session"
         let seededAt = Date.now
         _ = try? messageStore.upsertSession(
           ownerPubkey: ownerPubkey,
@@ -1699,11 +1699,11 @@ final class AppSession: ObservableObject {
           senderPubkey: myPubkey,
           receiverPubkey: peerPubkey,
           url: sampleURL,
-          note: "Seeded simulator post",
+          note: "seeded simulator post",
           timestamp: .now,
           readAt: .now,
           linkType: URLClassifier.classify(sampleURL),
-          metadataTitle: "Sample Link"
+          metadataTitle: "sample link"
         )
         if let post {
           modelContext.insert(post)

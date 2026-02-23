@@ -120,7 +120,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
       onRelayStatus(
         invalidRelay,
         .failed,
-        "Invalid relay URL format: \(invalidRelay)"
+        "invalid relay url format: \(invalidRelay)"
       )
     }
 
@@ -128,7 +128,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
       onRelayStatus(
         relayURLs.first ?? "relays",
         .failed,
-        "No valid relay URLs are configured."
+        "no valid relay urls are configured."
       )
       return
     }
@@ -163,7 +163,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
       )
 
     } catch {
-      let message = "Failed to start relay pool: \(error.localizedDescription)"
+      let message = "failed to start relay pool: \(error.localizedDescription)"
       for relayURL in relayURLs {
         onRelayStatus(relayURL, .failed, message)
       }
@@ -452,7 +452,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
 
     if pending.expectedRelayURLs.isEmpty {
       let fallbackMessage =
-        pending.failedRelayMessagesByURL.values.first ?? "Relays rejected this message."
+        pending.failedRelayMessagesByURL.values.first ?? "relays rejected this message."
       finishPendingPublishAck(
         eventID: eventID,
         result: .failure(NostrServiceError.publishRejected(fallbackMessage))
@@ -467,7 +467,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
       pendingPublishAcks[eventID] = pending
 
       if pending.expectedRelayURLs.isEmpty {
-        let message = pending.failedRelayMessagesByURL.values.first ?? "Relay connection dropped."
+        let message = pending.failedRelayMessagesByURL.values.first ?? "relay connection dropped."
         finishPendingPublishAck(
           eventID: eventID,
           result: .failure(NostrServiceError.publishRejected(message))
@@ -791,19 +791,19 @@ enum NostrServiceError: Error, LocalizedError {
   var errorDescription: String? {
     switch self {
     case .missingIdentity:
-      return "You're signed out. Sign in to continue."
+      return "you're signed out. sign in to continue."
     case .relayUnavailable:
-      return "You're offline. Waiting for a relay connection."
+      return "you're offline. waiting for a relay connection."
     case .payloadEncodingFailed:
-      return "Couldn't prepare this message. Try again."
+      return "couldn't prepare this message. try again."
     case .invalidPubkey:
-      return "Invalid recipient Contact Key (npub)."
+      return "invalid recipient contact key (npub)."
     case .publishRejected(let message):
       return message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        ? "Relay rejected this message."
+        ? "relay rejected this message."
         : message
     case .publishTimedOut:
-      return "Couldn't confirm send with relays. Try again."
+      return "couldn't confirm send with relays. try again."
     }
   }
 }

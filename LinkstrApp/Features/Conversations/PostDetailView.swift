@@ -231,13 +231,13 @@ struct LinkstrEmojiPickerSheet: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 8)
       }
-      .navigationTitle("Add Reaction")
+      .navigationTitle("add reaction")
       .navigationBarTitleDisplayMode(.inline)
       .toolbarColorScheme(.dark, for: .navigationBar)
-      .searchable(text: $query, prompt: "Search emoji")
+      .searchable(text: $query, prompt: "search emoji")
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
-          Button("Cancel") {
+          Button("cancel") {
             dismiss()
           }
         }
@@ -276,7 +276,7 @@ struct PostDetailView: View {
 
   private var postSenderLabel: String {
     if isOutgoing(post) {
-      return "You"
+      return "you"
     }
     return session.contactName(for: post.senderPubkey, contacts: scopedContacts)
   }
@@ -312,7 +312,7 @@ struct PostDetailView: View {
     let grouped = Dictionary(grouping: scopedReactions) { reaction -> String in
       let myPubkey = session.identityService.pubkeyHex
       if let myPubkey, reaction.senderMatches(myPubkey) {
-        return "You"
+        return "you"
       }
       return session.contactName(for: reaction.senderPubkey, contacts: scopedContacts)
     }
@@ -325,8 +325,8 @@ struct PostDetailView: View {
         return ReactionParticipantBreakdown(displayName: displayName, emojis: emojis)
       }
       .sorted {
-        if $0.displayName == "You" { return true }
-        if $1.displayName == "You" { return false }
+        if $0.displayName == "you" { return true }
+        if $1.displayName == "you" { return false }
         return
           $0.displayName.localizedCaseInsensitiveCompare($1.displayName)
           == .orderedAscending
@@ -361,7 +361,7 @@ struct PostDetailView: View {
   private var postCard: some View {
     VStack(alignment: .leading, spacing: 10) {
       HStack {
-        Text("Sent by \(postSenderLabel)")
+        Text("sent by \(postSenderLabel)")
           .font(.caption2)
           .foregroundStyle(LinkstrTheme.textSecondary)
 
@@ -418,7 +418,7 @@ struct PostDetailView: View {
 
       if !reactionBreakdown.isEmpty {
         VStack(alignment: .leading, spacing: 8) {
-          LinkstrSectionHeader(title: "Who Reacted")
+          LinkstrSectionHeader(title: "who reacted")
 
           ForEach(reactionBreakdown) { entry in
             HStack(alignment: .center, spacing: 6) {

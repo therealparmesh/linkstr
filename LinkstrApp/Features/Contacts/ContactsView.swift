@@ -24,9 +24,9 @@ struct ContactsView: View {
   private var content: some View {
     if scopedContacts.isEmpty {
       LinkstrCenteredEmptyStateView(
-        title: "No Follows",
+        title: "no follows",
         systemImage: "person.2.slash",
-        description: "Follow at least one person to start sharing links."
+        description: "follow at least one person to start sharing links."
       )
     } else {
       ScrollView {
@@ -100,8 +100,8 @@ private struct ContactDetailView: View {
       LinkstrBackgroundView()
       ScrollView {
         VStack(alignment: .leading, spacing: 12) {
-          LinkstrSectionHeader(title: "Local Alias (Optional)")
-          TextField("Alias", text: $displayName)
+          LinkstrSectionHeader(title: "local alias (optional)")
+          TextField("alias", text: $displayName)
             .textInputAutocapitalization(.words)
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
@@ -111,7 +111,7 @@ private struct ContactDetailView: View {
                 .fill(LinkstrTheme.panelSoft)
             )
 
-          LinkstrSectionHeader(title: "Contact Key (npub)")
+          LinkstrSectionHeader(title: "contact key (npub)")
           Text(contact.npub)
             .font(.custom(LinkstrTheme.bodyFont, size: 13))
             .foregroundStyle(LinkstrTheme.textSecondary)
@@ -129,7 +129,7 @@ private struct ContactDetailView: View {
             isPresentingDeleteConfirmation = true
           } label: {
             Label(
-              isRemoving ? "Unfollowing…" : "Unfollow",
+              isRemoving ? "unfollowing…" : "unfollow",
               systemImage: "person.crop.circle.badge.minus"
             )
             .frame(maxWidth: .infinity)
@@ -143,34 +143,34 @@ private struct ContactDetailView: View {
       }
       .scrollBounceBehavior(.basedOnSize)
     }
-    .navigationTitle("Contact")
+    .navigationTitle("contact")
     .navigationBarTitleDisplayMode(.inline)
     .navigationBarBackButtonHidden(true)
     .toolbar(.visible, for: .navigationBar)
     .toolbarColorScheme(.dark, for: .navigationBar)
     .toolbar {
       ToolbarItem(placement: .topBarLeading) {
-        Button("Cancel") {
+        Button("cancel") {
           dismiss()
         }
         .tint(LinkstrTheme.textSecondary)
         .disabled(isSaving || isRemoving)
       }
       ToolbarItem(placement: .topBarTrailing) {
-        Button(isSaving ? "Saving…" : "Save") {
+        Button(isSaving ? "saving…" : "save") {
           saveAlias()
         }
         .tint(LinkstrTheme.neonCyan)
         .disabled(isSaving || isRemoving)
       }
     }
-    .alert("Unfollow this contact?", isPresented: $isPresentingDeleteConfirmation) {
-      Button("Cancel", role: .cancel) {}
-      Button("Unfollow", role: .destructive) {
+    .alert("unfollow this contact?", isPresented: $isPresentingDeleteConfirmation) {
+      Button("cancel", role: .cancel) {}
+      Button("unfollow", role: .destructive) {
         unfollow()
       }
     } message: {
-      Text("This publishes an updated follow list to relays and removes this contact locally.")
+      Text("this publishes an updated follow list to relays and removes this contact locally.")
     }
   }
 
@@ -218,7 +218,7 @@ struct AddContactSheet: View {
       ZStack {
         LinkstrBackgroundView()
         VStack(spacing: 12) {
-          TextField("Contact Key (npub...)", text: $npub)
+          TextField("contact key (npub...)", text: $npub)
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled(true)
             .disabled(isNPubPrefilled)
@@ -249,7 +249,7 @@ struct AddContactSheet: View {
             )
           }
 
-          TextField("Alias (optional)", text: $displayName)
+          TextField("alias (optional)", text: $displayName)
             .textInputAutocapitalization(.words)
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
@@ -270,15 +270,15 @@ struct AddContactSheet: View {
         }
         .padding(14)
       }
-      .navigationTitle("Add Follow")
+      .navigationTitle("add follow")
       .toolbarColorScheme(.dark, for: .navigationBar)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
-          Button("Cancel") { dismiss() }
+          Button("cancel") { dismiss() }
             .disabled(isSubmitting)
         }
         ToolbarItem(placement: .confirmationAction) {
-          Button(isSubmitting ? "Following…" : "Follow") {
+          Button(isSubmitting ? "following…" : "follow") {
             submitFollow()
           }
           .disabled(isSubmitting || npub.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -291,7 +291,7 @@ struct AddContactSheet: View {
             npub = scannedNPub
             scannerErrorMessage = nil
           } else {
-            scannerErrorMessage = "No valid Contact Key (npub) found in that QR code."
+            scannerErrorMessage = "no valid contact key (npub) found in that qr code."
           }
         }
       }
@@ -352,7 +352,7 @@ struct LinkstrQRScannerSheet: View {
         LinkstrQRScannerAccessDeniedView()
       case .failed(let message):
         VStack(spacing: 12) {
-          Text("Scanner Error")
+          Text("scanner error")
             .font(.custom(LinkstrTheme.titleFont, size: 18))
             .foregroundStyle(.white)
           Text(message)
@@ -366,7 +366,7 @@ struct LinkstrQRScannerSheet: View {
       VStack {
         HStack {
           Spacer()
-          Button("Close") {
+          Button("close") {
             dismiss()
           }
           .font(.custom(LinkstrTheme.bodyFont, size: 16))
@@ -409,9 +409,9 @@ struct LinkstrQRScannerSheet: View {
   private var unavailableCameraMessage: String {
     #if targetEnvironment(simulator)
       return
-        "Camera capture is unavailable in this simulator. Use a physical iPhone to scan QR codes."
+        "camera capture is unavailable in this simulator. use a physical iphone to scan qr codes."
     #else
-      return "Unable to read QR codes from the camera."
+      return "unable to read qr codes from the camera."
     #endif
   }
 }
@@ -422,15 +422,15 @@ private struct LinkstrQRScannerAccessDeniedView: View {
       Image(systemName: "camera.fill")
         .font(.system(size: 28))
         .foregroundStyle(.white)
-      Text("Camera Access Required")
+      Text("camera access required")
         .font(.custom(LinkstrTheme.titleFont, size: 18))
         .foregroundStyle(.white)
-      Text("Enable camera access in Settings to scan a Contact Key (npub) QR code.")
+      Text("enable camera access in settings to scan a contact key (npub) qr code.")
         .font(.custom(LinkstrTheme.bodyFont, size: 14))
         .foregroundStyle(LinkstrTheme.textSecondary)
         .multilineTextAlignment(.center)
         .padding(.horizontal, 24)
-      Button("Open Settings") {
+      Button("open settings") {
         guard let settingsURL = URL(string: UIApplication.openSettingsURLString) else { return }
         UIApplication.shared.open(settingsURL)
       }

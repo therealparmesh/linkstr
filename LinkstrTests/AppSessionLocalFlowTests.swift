@@ -40,11 +40,11 @@ final class AppSessionLocalFlowTests: XCTestCase {
 
     let didAddDuplicate = await session.addContact(npub: npub, displayName: "Alice 2")
     XCTAssertFalse(didAddDuplicate)
-    XCTAssertEqual(session.composeError, "This contact is already in your list.")
+    XCTAssertEqual(session.composeError, "this contact is already in your list.")
 
     let didAddInvalid = await session.addContact(npub: "not-an-npub", displayName: "Bob")
     XCTAssertFalse(didAddInvalid)
-    XCTAssertEqual(session.composeError, "Invalid Contact Key (npub).")
+    XCTAssertEqual(session.composeError, "invalid contact key (npub).")
 
     let contacts = try fetchContacts(in: container.mainContext)
     XCTAssertEqual(contacts.count, 1)
@@ -61,7 +61,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
 
     let didAddDuplicate = await session.addContact(npub: "  \(npub)  ", displayName: "Alice 2")
     XCTAssertFalse(didAddDuplicate)
-    XCTAssertEqual(session.composeError, "This contact is already in your list.")
+    XCTAssertEqual(session.composeError, "this contact is already in your list.")
 
     let contacts = try fetchContacts(in: container.mainContext)
     XCTAssertEqual(contacts.count, 1)
@@ -231,10 +231,10 @@ final class AppSessionLocalFlowTests: XCTestCase {
     let (session, container) = try makeSession()
 
     session.addRelay(url: "https://invalid-relay.example.com")
-    XCTAssertEqual(session.composeError, "Enter a valid relay URL (ws:// or wss://).")
+    XCTAssertEqual(session.composeError, "enter a valid relay url (ws:// or wss://).")
 
     session.addRelay(url: "wss://")
-    XCTAssertEqual(session.composeError, "Enter a valid relay URL (ws:// or wss://).")
+    XCTAssertEqual(session.composeError, "enter a valid relay url (ws:// or wss://).")
     XCTAssertTrue(try fetchRelays(in: container.mainContext).isEmpty)
 
     session.addRelay(url: "wss://relay.example.com")
@@ -244,7 +244,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertTrue(relays[0].isEnabled)
 
     session.addRelay(url: "wss://relay.example.com/")
-    XCTAssertEqual(session.composeError, "That relay is already in your list.")
+    XCTAssertEqual(session.composeError, "that relay is already in your list.")
     relays = try fetchRelays(in: container.mainContext)
     XCTAssertEqual(relays.count, 1)
 
@@ -340,7 +340,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
     )
 
     XCTAssertFalse(didCreate)
-    XCTAssertEqual(session.composeError, "Couldn't reconnect to relays in time. Try again.")
+    XCTAssertEqual(session.composeError, "couldn't reconnect to relays in time. try again.")
     XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
   }
 
@@ -422,7 +422,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertFalse(didCreate)
     XCTAssertEqual(
       session.composeError,
-      "Connected relays are read-only. Add a writable relay to send."
+      "connected relays are read-only. add a writable relay to send."
     )
     XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
   }
@@ -451,7 +451,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
 
     XCTAssertFalse(didCreate)
     XCTAssertEqual(
-      session.composeError, "No relays are enabled. Enable at least one relay in Settings.")
+      session.composeError, "no relays are enabled. enable at least one relay in settings.")
     XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
   }
 
@@ -506,7 +506,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
     )
 
     XCTAssertFalse(didCreate)
-    XCTAssertEqual(session.composeError, "Enter a valid URL.")
+    XCTAssertEqual(session.composeError, "enter a valid url.")
     XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
   }
 
@@ -529,7 +529,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
     )
 
     XCTAssertFalse(didCreate)
-    XCTAssertEqual(session.composeError, "Enter a valid URL.")
+    XCTAssertEqual(session.composeError, "enter a valid url.")
     XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
   }
 
