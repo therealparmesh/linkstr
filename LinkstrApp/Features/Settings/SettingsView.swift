@@ -307,6 +307,8 @@ struct SettingsView: View {
     switch status {
     case .connected:
       return .green
+    case .connecting:
+      return LinkstrTheme.neonCyan
     case .failed:
       return .red
     case .readOnly:

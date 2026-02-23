@@ -263,6 +263,12 @@ final class AppSessionLocalFlowTests: XCTestCase {
     )
     XCTAssertEqual(
       session.relayConnectivityState(for: [
+        RelayEntity(url: "wss://one.example.com", status: .connecting)
+      ]),
+      .connecting
+    )
+    XCTAssertEqual(
+      session.relayConnectivityState(for: [
         RelayEntity(url: "wss://one.example.com", status: .readOnly)
       ]),
       .readOnly

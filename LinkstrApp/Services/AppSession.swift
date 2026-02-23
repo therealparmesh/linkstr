@@ -7,6 +7,7 @@ final class AppSession: ObservableObject {
   enum RelayConnectivityState: Equatable {
     case noEnabledRelays
     case online
+    case connecting
     case readOnly
     case offline
   }
@@ -59,7 +60,8 @@ final class AppSession: ObservableObject {
   private var pendingMetadataStorageIDs: [String] = []
   private var enqueuedMetadataStorageIDs = Set<String>()
   private var isProcessingMetadataQueue = false
-  private var relayRuntimeStatusByURL: [String: RelayRuntimeStatus] = [:]
+  @Published private var relayRuntimeStatusByURL: [String: RelayRuntimeStatus] = [:]
+  private var hasObservedHealthyRelayInCurrentForeground = false
   private let relayDisconnectGraceInterval: TimeInterval = 1.25
 
   @Published var composeError: String?
@@ -120,11 +122,13 @@ final class AppSession: ObservableObject {
 
   func handleAppDidBecomeActive() {
     isForeground = true
+    hasObservedHealthyRelayInCurrentForeground = false
     startNostrIfPossible(forceRestart: true)
   }
 
   func handleAppDidLeaveForeground() {
     isForeground = false
+    hasObservedHealthyRelayInCurrentForeground = false
   }
 
   private func report(error: Error) {
@@ -136,6 +140,9 @@ final class AppSession: ObservableObject {
 
     if enabledRelays.contains(where: { effectiveRelayStatus(for: $0) == .connected }) {
       return .online
+    }
+    if enabledRelays.contains(where: { effectiveRelayStatus(for: $0) == .connecting }) {
+      return .connecting
     }
     if enabledRelays.contains(where: { effectiveRelayStatus(for: $0) == .readOnly }) {
       return .readOnly
@@ -151,6 +158,8 @@ final class AppSession: ObservableObject {
   }
 
   private func showOfflineToastForCurrentOutageIfNeeded() {
+    // Don't warn while startup/reconnect is still in the initial connection phase.
+    guard hasObservedHealthyRelayInCurrentForeground else { return }
     guard !hasShownOfflineToastForCurrentOutage else { return }
     composeError = relayOfflineMessage
     hasShownOfflineToastForCurrentOutage = true
@@ -248,6 +257,10 @@ final class AppSession: ObservableObject {
     status: RelayHealthStatus,
     message: String?
   ) {
+    if status == .connected || status == .readOnly {
+      hasObservedHealthyRelayInCurrentForeground = true
+    }
+
     let now = Date()
     let trimmedMessage = message?.trimmingCharacters(in: .whitespacesAndNewlines)
     if let existing = relayRuntimeStatusByURL[relayURL],
@@ -276,7 +289,7 @@ final class AppSession: ObservableObject {
   private func refreshRelayConnectivityAlert() throws {
     let enabledRelays = try relayStore.fetchRelays().filter(\.isEnabled)
     switch relayConnectivityState(for: enabledRelays) {
-    case .online, .readOnly:
+    case .online, .connecting, .readOnly:
       clearOfflineToastIfPresent()
     case .offline:
       showOfflineToastForCurrentOutageIfNeeded()
@@ -312,7 +325,7 @@ final class AppSession: ObservableObject {
       return .blocked(message: noEnabledRelaysMessage)
     case .readOnly:
       return .blocked(message: relayReadOnlyMessage)
-    case .online, .offline:
+    case .online, .connecting, .offline:
       return .waitingForConnection
     }
   }

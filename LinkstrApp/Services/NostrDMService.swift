@@ -588,7 +588,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
       startBackfillIfNeeded()
       onRelayStatus?(relayURL, .connected, nil)
     case .connecting:
-      onRelayStatus?(relayURL, .disconnected, nil)
+      onRelayStatus?(relayURL, .connecting, nil)
     case .notConnected:
       pruneRelayFromBackfillWaitlists(relayURL: relayURL)
       pruneRelayFromPublishWaitlists(relayURL: relayURL)

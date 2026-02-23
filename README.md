@@ -137,7 +137,7 @@
   - Remove relay.
   - Reset default relays.
 - Relay header shows `connected_or_readonly / total`.
-- Relay rows show a live status dot (`connected`, `read-only`, `failed`, `disabled`) and optional inline error text.
+- Relay rows show a live status dot (`connecting`, `connected`, `read-only`, `failed`, `disabled`) and optional inline error text.
 - Relay error rows reserve layout height to avoid jitter when status text appears/disappears.
 
 ### Relay send gating

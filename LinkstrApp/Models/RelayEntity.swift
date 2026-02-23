@@ -3,6 +3,7 @@ import SwiftData
 
 enum RelayHealthStatus: String, Codable, CaseIterable {
   case connected
+  case connecting
   case readOnly
   case failed
   case disconnected
