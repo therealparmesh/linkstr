@@ -4,6 +4,13 @@ import SwiftUI
 struct MainTabView: View {
   @EnvironmentObject private var session: AppSession
 
+  private struct HeaderAccessory: Identifiable {
+    let id: String
+    let icon: String
+    let action: () -> Void
+    let isActive: Bool
+  }
+
   private enum AppTab: String, CaseIterable, Identifiable {
     case sessions
     case contacts
@@ -34,12 +41,24 @@ struct MainTabView: View {
   @State private var selectedTab: AppTab = .sessions
   @State private var isPresentingNewSession = false
   @State private var isPresentingAddContact = false
+  @State private var isShowingArchivedSessions = false
 
   @Query(sort: [SortDescriptor(\ContactEntity.createdAt)])
   private var contacts: [ContactEntity]
 
+  @Query(sort: [SortDescriptor(\SessionEntity.updatedAt, order: .reverse)])
+  private var allSessions: [SessionEntity]
+
   private var scopedContacts: [ContactEntity] {
     session.scopedContacts(from: contacts)
+  }
+
+  private var scopedSessions: [SessionEntity] {
+    session.scopedSessions(from: allSessions)
+  }
+
+  private var archivedSessionCount: Int {
+    scopedSessions.filter(\.isArchived).count
   }
 
   private let tabBarHeight: CGFloat = 72
@@ -68,6 +87,16 @@ struct MainTabView: View {
         .padding(.top, 8)
         .padding(.bottom, tabBarBottomPadding)
     }
+    .onChange(of: selectedTab) { oldValue, newValue in
+      if oldValue == .sessions, newValue != .sessions {
+        isShowingArchivedSessions = false
+      }
+    }
+    .onChange(of: archivedSessionCount) { _, count in
+      if count == 0, isShowingArchivedSessions {
+        isShowingArchivedSessions = false
+      }
+    }
     .sheet(isPresented: $isPresentingNewSession) {
       NewSessionSheet(contacts: scopedContacts)
     }
@@ -82,19 +111,28 @@ struct MainTabView: View {
         .font(.custom(LinkstrTheme.titleFont, size: 34))
         .foregroundStyle(LinkstrTheme.textPrimary)
       Spacer()
-      if let headerAccessory {
+      ForEach(headerAccessories) { accessory in
         Button {
-          headerAccessory.action()
+          accessory.action()
         } label: {
-          Image(systemName: headerAccessory.icon)
+          Image(systemName: accessory.icon)
             .font(.system(size: 21, weight: .medium))
-            .foregroundStyle(LinkstrTheme.neonCyan)
+            .foregroundStyle(accessory.isActive ? LinkstrTheme.textPrimary : LinkstrTheme.neonCyan)
             .frame(width: 36, height: 36)
             .background(
               Circle()
-                .stroke(LinkstrTheme.textSecondary.opacity(0.3), lineWidth: 1)
+                .fill(accessory.isActive ? LinkstrTheme.neonCyan.opacity(0.85) : .clear)
+            )
+            .overlay(
+              Circle()
+                .stroke(
+                  accessory.isActive
+                    ? LinkstrTheme.neonCyan.opacity(0.95) : LinkstrTheme.textSecondary.opacity(0.3),
+                  lineWidth: 1
+                )
             )
         }
+        .buttonStyle(.plain)
       }
     }
     .padding(.horizontal, 16)
@@ -102,14 +140,38 @@ struct MainTabView: View {
     .padding(.bottom, 8)
   }
 
-  private var headerAccessory: (icon: String, action: () -> Void)? {
+  private var headerAccessories: [HeaderAccessory] {
     switch selectedTab {
     case .sessions:
-      return ("plus", { isPresentingNewSession = true })
+      var accessories: [HeaderAccessory] = []
+      if archivedSessionCount > 0 {
+        accessories.append(
+          HeaderAccessory(
+            id: "archive-toggle",
+            icon: isShowingArchivedSessions ? "archivebox.fill" : "archivebox",
+            action: { isShowingArchivedSessions.toggle() },
+            isActive: isShowingArchivedSessions
+          ))
+      }
+      accessories.append(
+        HeaderAccessory(
+          id: "new-session",
+          icon: "plus",
+          action: { isPresentingNewSession = true },
+          isActive: false
+        ))
+      return accessories
     case .contacts:
-      return ("person.badge.plus", { isPresentingAddContact = true })
+      return [
+        HeaderAccessory(
+          id: "new-contact",
+          icon: "person.badge.plus",
+          action: { isPresentingAddContact = true },
+          isActive: false
+        )
+      ]
     case .share, .settings:
-      return nil
+      return []
     }
   }
 
@@ -155,7 +217,7 @@ struct MainTabView: View {
   private func tabContent(_ tab: AppTab) -> some View {
     switch tab {
     case .sessions:
-      ConversationsView()
+      ConversationsView(isShowingArchivedSessions: $isShowingArchivedSessions)
     case .contacts:
       ContactsView()
     case .share:

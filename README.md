@@ -70,8 +70,10 @@
   - Missing previous members become inactive.
 - Sessions can be archived/unarchived from a session-row long-press menu.
 - Session list shows active sessions by default.
-- Archived sessions are filtered via compact `active` / `archived` pills shown only when archived sessions exist.
-- The archive filter pills are anchored above the main tab bar.
+- When archived sessions exist, a header archive toggle icon appears to the left of `+` in the sessions tab.
+- Tapping the archive icon switches between active and archived list mode.
+- Archive mode is visually indicated via the highlighted/filled archive icon state.
+- Switching away from sessions resets the list mode back to active.
 - Archive is non-destructive.
 
 ### Session members UX

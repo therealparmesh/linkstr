@@ -30,6 +30,7 @@ private struct SessionMessageIndex {
 
 struct ConversationsView: View {
   @EnvironmentObject private var session: AppSession
+  @Binding var isShowingArchivedSessions: Bool
 
   @Query(sort: [SortDescriptor(\SessionEntity.updatedAt, order: .reverse)])
   private var allSessions: [SessionEntity]
@@ -42,7 +43,6 @@ struct ConversationsView: View {
 
   @State private var selectedSessionID: String?
   @State private var isShowingSelectedSession = false
-  @State private var isShowingArchivedSessions = false
 
   private var scopedSessions: [SessionEntity] {
     session.scopedSessions(from: allSessions)
@@ -122,9 +122,6 @@ struct ConversationsView: View {
         isShowingArchivedSessions = false
       }
     }
-    .safeAreaInset(edge: .bottom, spacing: 0) {
-      archiveToggleInset
-    }
   }
 
   @ViewBuilder
@@ -150,6 +147,15 @@ struct ConversationsView: View {
             )
             .padding(.top, 12)
           } else {
+            if isShowingArchivedSessions {
+              Text("archived sessions. long-press to unarchive.")
+                .font(.custom(LinkstrTheme.bodyFont, size: 12))
+                .foregroundStyle(LinkstrTheme.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 2)
+            }
+
             LazyVStack(spacing: 0) {
               ForEach(visibleSummaries) { summary in
                 Button {
@@ -183,65 +189,6 @@ struct ConversationsView: View {
       }
       .scrollBounceBehavior(.basedOnSize)
     }
-  }
-
-  @ViewBuilder
-  private var archiveToggleInset: some View {
-    if archivedSessionCount > 0 {
-      HStack(spacing: 6) {
-        archiveFilterButton(
-          title: "active",
-          selected: !isShowingArchivedSessions
-        ) {
-          isShowingArchivedSessions = false
-        }
-
-        archiveFilterButton(
-          title: "archived",
-          selected: isShowingArchivedSessions
-        ) {
-          isShowingArchivedSessions = true
-        }
-
-      }
-      .padding(4)
-      .background(
-        RoundedRectangle(cornerRadius: 10, style: .continuous)
-          .fill(LinkstrTheme.panelSoft.opacity(0.72))
-      )
-      .overlay(
-        RoundedRectangle(cornerRadius: 10, style: .continuous)
-          .stroke(LinkstrTheme.textSecondary.opacity(0.22), lineWidth: 1)
-      )
-      .frame(maxWidth: .infinity)
-      .padding(.horizontal, 12)
-      .padding(.top, 6)
-      .padding(.bottom, 6)
-      .background(Color.clear)
-    }
-  }
-
-  private func archiveFilterButton(
-    title: String,
-    selected: Bool,
-    action: @escaping () -> Void
-  ) -> some View {
-    Button(action: action) {
-      Text(title)
-        .font(.custom(LinkstrTheme.bodyFont, size: 12))
-        .foregroundStyle(selected ? LinkstrTheme.textPrimary : LinkstrTheme.textSecondary)
-        .padding(.horizontal, 9)
-        .padding(.vertical, 4)
-        .background(
-          Capsule(style: .continuous)
-            .fill(selected ? LinkstrTheme.panel : .clear)
-        )
-        .overlay(
-          Capsule(style: .continuous)
-            .stroke(LinkstrTheme.textSecondary.opacity(selected ? 0.25 : 0), lineWidth: 1)
-        )
-    }
-    .buttonStyle(.plain)
   }
 
   private func hasUnreadIncomingRootPost(_ post: SessionMessageEntity) -> Bool {
