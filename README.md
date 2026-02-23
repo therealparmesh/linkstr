@@ -1,8 +1,8 @@
 # linkstr
 
-`linkstr` is a private link feed for people you trust: share videos and other media in focused sessions - like a tiny private subreddit for you and the people you talk to.
+`linkstr` is for sharing videos and links privately with people who don’t use social media.
 
-## Product Behavior Spec (Current)
+## Product behavior specification
 
 ### Product model
 
@@ -185,14 +185,45 @@
 
 ### Media and link behavior
 
-- URL classification drives playback mode (extract/embed/link fallback).
+- URL classification drives playback mode (extraction/embed/link fallback).
 - Canonicalization handles mobile host variants (for example `m.facebook.com`).
+
+#### Extraction vs. embed
+
+- Extraction downloads the video file locally for native playback.
+  - Local playback uses the system video player with full controls.
+  - Extracted media can be saved to Photos or Files.
+  - Works offline once cached.
+- Embed loads the provider's web player in an inline web view.
+  - Requires network connectivity.
+  - Subject to provider playback restrictions and UX.
+  - Fullscreen depends on provider iframe support.
+
+#### Provider support
+
+- Extraction-preferred providers (local playback attempted first, embed fallback available):
+  - TikTok videos.
+  - Instagram Reels.
+  - Facebook Reels.
+  - Twitter/X video posts.
+- Embed-only providers (web player only, no extraction):
+  - YouTube.
+  - Rumble.
+  - Instagram non-reel posts (`/p/`, `/tv/`).
+  - Facebook non-reel videos (`/videos/`).
+- Generic links fall back to open-in-browser.
+
+#### Playback behavior
+
 - For extraction-capable providers, local playback is attempted first with explicit controls to switch to embed mode.
 - Local/embed action rows are normalized across post detail and deep-link playback surfaces.
 - In local playback mode with a locally cached media file, users can export via `Save...`:
   - `Save to Photos` (requests Photos add-only permission).
   - `Save to Files` (document export flow, no broad media permission).
 - If extraction fails, embed mode remains available and offers retry-local plus Safari open actions.
+
+#### Embed URL patterns
+
 - Embed URLs prefer provider-native patterns where available:
   - TikTok `embed/v2`.
   - Instagram `/embed`.
@@ -202,6 +233,9 @@
 - Facebook videos/reels use Facebook plugin embed URLs (`/plugins/video.php`) with canonicalized `href` targets.
 - Rumble embeds are resolved from provider oEmbed iframe URLs when available.
 - Embedded web playback allows provider element fullscreen when supported by the provider and iframe context.
+
+#### Media actions and metadata
+
 - Media actions are normalized:
   - One action button uses full width.
   - Two action buttons split width evenly with spacing.
@@ -266,6 +300,12 @@
 - No APNs remote push.
 - No public discovery feed/social graph product surface.
 - No text-based post replies.
+
+## Future
+
+- Future proposals are tracked as separate docs and are not part of the current shipped behavior.
+- Delete session: [docs/future/delete-session.md](docs/future/delete-session.md)
+- Leave session: [docs/future/leave-session.md](docs/future/leave-session.md)
 
 ## Development
 
