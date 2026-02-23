@@ -50,7 +50,8 @@ struct OnboardingView: View {
                 Label("sign in with secret key (nsec)", systemImage: "arrow.right.circle.fill")
                   .frame(maxWidth: .infinity)
               }
-              .buttonStyle(LinkstrPrimaryButtonStyle())
+              .buttonStyle(.borderedProminent)
+              .tint(LinkstrTheme.neonCyan)
               .disabled(secretKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
               HStack(spacing: 10) {
@@ -73,7 +74,8 @@ struct OnboardingView: View {
                 Label("create account", systemImage: "sparkles")
                   .frame(maxWidth: .infinity)
               }
-              .buttonStyle(LinkstrSecondaryButtonStyle())
+              .buttonStyle(.bordered)
+              .tint(LinkstrTheme.textSecondary)
             }
             .padding(.top, 6)
           }
@@ -83,6 +85,8 @@ struct OnboardingView: View {
         .scrollBounceBehavior(.basedOnSize)
       }
       .navigationBarTitleDisplayMode(.inline)
+      .toolbarBackground(.visible, for: .navigationBar)
+      .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
       .toolbarColorScheme(.dark, for: .navigationBar)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)

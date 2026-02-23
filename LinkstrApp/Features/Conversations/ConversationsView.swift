@@ -427,6 +427,8 @@ private struct SessionPostsView: View {
     .navigationTitle(sessionEntity.name)
     .navigationBarTitleDisplayMode(.inline)
     .toolbar(.visible, for: .navigationBar)
+    .toolbarBackground(.visible, for: .navigationBar)
+    .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
     .toolbarColorScheme(.dark, for: .navigationBar)
     .toolbar {
       ToolbarItemGroup(placement: .topBarTrailing) {
@@ -700,6 +702,8 @@ struct NewSessionSheet: View {
       }
       .navigationTitle("new session")
       .navigationBarTitleDisplayMode(.inline)
+      .toolbarBackground(.visible, for: .navigationBar)
+      .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
       .toolbarColorScheme(.dark, for: .navigationBar)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
@@ -713,7 +717,8 @@ struct NewSessionSheet: View {
             Label(isCreating ? "creating…" : "create session", systemImage: "plus.circle.fill")
               .frame(maxWidth: .infinity)
           }
-          .buttonStyle(LinkstrPrimaryButtonStyle())
+          .buttonStyle(.borderedProminent)
+          .tint(LinkstrTheme.neonCyan)
           .disabled(isCreating || !canCreateSession)
 
           Text(isCreating ? "waiting for relay reconnect before creating…" : " ")
@@ -725,16 +730,11 @@ struct NewSessionSheet: View {
         .padding(.horizontal, 12)
         .padding(.top, 10)
         .padding(.bottom, 12)
-        .background(
-          Rectangle()
-            .fill(LinkstrTheme.bgBottom.opacity(0.95))
-            .overlay(alignment: .top) {
-              Rectangle()
-                .fill(LinkstrTheme.textSecondary.opacity(0.18))
-                .frame(height: 1)
-            }
-            .ignoresSafeArea(edges: .bottom)
-        )
+        .background(.ultraThinMaterial)
+        .overlay(alignment: .top) {
+          Divider()
+            .overlay(LinkstrTheme.textSecondary.opacity(0.18))
+        }
       }
     }
   }
@@ -912,6 +912,8 @@ private struct SessionMembersSheet: View {
       }
       .navigationTitle("session members")
       .navigationBarTitleDisplayMode(.inline)
+      .toolbarBackground(.visible, for: .navigationBar)
+      .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
       .toolbarColorScheme(.dark, for: .navigationBar)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {

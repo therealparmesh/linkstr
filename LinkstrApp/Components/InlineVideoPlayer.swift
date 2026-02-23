@@ -213,7 +213,8 @@ struct AdaptiveVideoPlaybackView: View {
             .frame(maxWidth: .infinity)
         }
         .frame(maxWidth: .infinity)
-        .buttonStyle(LinkstrPrimaryButtonStyle())
+        .buttonStyle(.borderedProminent)
+        .tint(LinkstrTheme.neonCyan)
       } else {
         EmptyView()
       }
@@ -332,7 +333,8 @@ struct AdaptiveVideoPlaybackView: View {
         .frame(maxWidth: .infinity)
     }
     .frame(maxWidth: .infinity)
-    .buttonStyle(LinkstrSecondaryButtonStyle())
+    .buttonStyle(.bordered)
+    .tint(LinkstrTheme.textSecondary)
   }
 
   private func retryLocalPlayback() {

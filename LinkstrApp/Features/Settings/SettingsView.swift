@@ -100,15 +100,9 @@ struct SettingsView: View {
               } label: {
                 Label("remove", systemImage: "trash")
                   .font(.custom(LinkstrTheme.bodyFont, size: 13))
-                  .foregroundStyle(Color.red.opacity(0.95))
-                  .padding(.horizontal, 10)
-                  .padding(.vertical, 6)
-                  .background(
-                    Capsule()
-                      .fill(Color.red.opacity(0.14))
-                  )
               }
-              .buttonStyle(.plain)
+              .buttonStyle(.bordered)
+              .tint(.red)
             }
             .padding(.trailing, 4)
 
@@ -147,7 +141,8 @@ struct SettingsView: View {
             Text("add relay")
               .frame(maxWidth: .infinity)
           }
-          .buttonStyle(LinkstrPrimaryButtonStyle())
+          .buttonStyle(.borderedProminent)
+          .tint(LinkstrTheme.neonCyan)
 
           Button {
             session.resetDefaultRelays()
@@ -155,7 +150,8 @@ struct SettingsView: View {
             Text("reset default relays")
               .frame(maxWidth: .infinity)
           }
-          .buttonStyle(LinkstrSecondaryButtonStyle())
+          .buttonStyle(.bordered)
+          .tint(LinkstrTheme.textSecondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, 8)
@@ -180,7 +176,8 @@ struct SettingsView: View {
           Text("clear cached videos")
             .frame(maxWidth: .infinity)
         }
-        .buttonStyle(LinkstrDangerButtonStyle())
+        .buttonStyle(.borderedProminent)
+        .tint(.red)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       .padding(.top, 8)
@@ -220,7 +217,8 @@ struct SettingsView: View {
               )
               .frame(maxWidth: .infinity)
             }
-            .buttonStyle(LinkstrSecondaryButtonStyle())
+            .buttonStyle(.bordered)
+            .tint(LinkstrTheme.textSecondary)
 
             if isNsecVisible {
               Button {
@@ -230,7 +228,8 @@ struct SettingsView: View {
                 Label("copy secret key (nsec)", systemImage: "doc.on.doc")
                   .frame(maxWidth: .infinity)
               }
-              .buttonStyle(LinkstrWarningButtonStyle())
+              .buttonStyle(.bordered)
+              .tint(LinkstrTheme.neonAmber)
               .disabled(revealedNsec.isEmpty)
             }
           }
@@ -255,7 +254,8 @@ struct SettingsView: View {
             Label("log out", systemImage: "rectangle.portrait.and.arrow.right")
               .frame(maxWidth: .infinity)
           }
-          .buttonStyle(LinkstrDangerButtonStyle())
+          .buttonStyle(.borderedProminent)
+          .tint(.red)
         } else {
           Text("no account found. sign in with a secret key (nsec) or create one.")
             .font(.custom(LinkstrTheme.bodyFont, size: 12))

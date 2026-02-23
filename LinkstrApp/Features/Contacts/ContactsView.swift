@@ -134,7 +134,8 @@ private struct ContactDetailView: View {
             )
             .frame(maxWidth: .infinity)
           }
-          .buttonStyle(LinkstrDangerButtonStyle())
+          .buttonStyle(.borderedProminent)
+          .tint(.red)
           .disabled(isSaving || isRemoving)
           .padding(.top, 6)
         }
@@ -147,6 +148,8 @@ private struct ContactDetailView: View {
     .navigationBarTitleDisplayMode(.inline)
     .navigationBarBackButtonHidden(true)
     .toolbar(.visible, for: .navigationBar)
+    .toolbarBackground(.visible, for: .navigationBar)
+    .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
     .toolbarColorScheme(.dark, for: .navigationBar)
     .toolbar {
       ToolbarItem(placement: .topBarLeading) {
@@ -271,6 +274,8 @@ struct AddContactSheet: View {
         .padding(14)
       }
       .navigationTitle("add contact")
+      .toolbarBackground(.visible, for: .navigationBar)
+      .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
       .toolbarColorScheme(.dark, for: .navigationBar)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
@@ -435,7 +440,8 @@ private struct LinkstrQRScannerAccessDeniedView: View {
         guard let settingsURL = URL(string: UIApplication.openSettingsURLString) else { return }
         UIApplication.shared.open(settingsURL)
       }
-      .buttonStyle(LinkstrPrimaryButtonStyle())
+      .buttonStyle(.borderedProminent)
+      .tint(LinkstrTheme.neonCyan)
       .padding(.top, 8)
     }
     .padding(.horizontal, 16)

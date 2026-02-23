@@ -54,7 +54,8 @@ struct ShareIdentityView: View {
               Label("copy contact key (npub)", systemImage: "doc.on.doc")
                 .frame(maxWidth: .infinity)
             }
-            .buttonStyle(LinkstrPrimaryButtonStyle())
+            .buttonStyle(.borderedProminent)
+            .tint(LinkstrTheme.neonCyan)
           }
         }
         .padding(12)

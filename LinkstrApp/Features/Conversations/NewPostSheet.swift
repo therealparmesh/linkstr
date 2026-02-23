@@ -111,6 +111,8 @@ struct NewPostSheet: View {
       }
       .navigationTitle("new post")
       .navigationBarTitleDisplayMode(.inline)
+      .toolbarBackground(.visible, for: .navigationBar)
+      .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
       .toolbarColorScheme(.dark, for: .navigationBar)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
@@ -124,7 +126,8 @@ struct NewPostSheet: View {
             Label(isSending ? "sending…" : "send post", systemImage: "paperplane.fill")
               .frame(maxWidth: .infinity)
           }
-          .buttonStyle(LinkstrPrimaryButtonStyle())
+          .buttonStyle(.borderedProminent)
+          .tint(LinkstrTheme.neonCyan)
           .disabled(!canSend)
 
           Text(isSending ? "waiting for relay reconnect before sending…" : " ")
@@ -137,16 +140,11 @@ struct NewPostSheet: View {
         .padding(.horizontal, 12)
         .padding(.top, 10)
         .padding(.bottom, 12)
-        .background(
-          Rectangle()
-            .fill(LinkstrTheme.bgBottom.opacity(0.95))
-            .overlay(alignment: .top) {
-              Rectangle()
-                .fill(LinkstrTheme.textSecondary.opacity(0.18))
-                .frame(height: 1)
-            }
-            .ignoresSafeArea(edges: .bottom)
-        )
+        .background(.ultraThinMaterial)
+        .overlay(alignment: .top) {
+          Divider()
+            .overlay(LinkstrTheme.textSecondary.opacity(0.18))
+        }
       }
       .onChange(of: isURLFieldFocused) { _, isFocused in
         guard isFocused else { return }
@@ -233,6 +231,7 @@ struct LinkstrInputAssistRow: View {
     .frame(maxWidth: .infinity, alignment: .leading)
     .disabled(isDisabled)
     .opacity(isDisabled ? 0.65 : 1)
+    .controlSize(.small)
   }
 
   private func assistButton(
@@ -242,26 +241,11 @@ struct LinkstrInputAssistRow: View {
     action: @escaping () -> Void
   ) -> some View {
     Button(action: action) {
-      HStack(spacing: 5) {
-        Image(systemName: systemImage)
-          .font(.system(size: 12, weight: .semibold))
-          .frame(width: 14, height: 14)
-        Text(title)
-          .font(.custom(LinkstrTheme.bodyFont, size: 12))
-      }
-      .foregroundStyle(tint)
-      .padding(.horizontal, 10)
-      .padding(.vertical, 6)
-      .frame(minHeight: 30)
-      .background(
-        Capsule(style: .continuous)
-          .fill(LinkstrTheme.panelSoft)
-      )
-      .overlay(
-        Capsule(style: .continuous)
-          .stroke(LinkstrTheme.textSecondary.opacity(0.24), lineWidth: 1)
-      )
+      Label(title, systemImage: systemImage)
+        .font(.custom(LinkstrTheme.bodyFont, size: 12))
+        .foregroundStyle(tint)
     }
-    .buttonStyle(.plain)
+    .buttonStyle(.bordered)
+    .tint(LinkstrTheme.textSecondary)
   }
 }

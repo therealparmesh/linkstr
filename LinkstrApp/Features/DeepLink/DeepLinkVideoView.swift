@@ -50,7 +50,8 @@ struct DeepLinkVideoView: View {
           openURL(sourceURL)
         }
         .frame(maxWidth: .infinity)
-        .buttonStyle(LinkstrPrimaryButtonStyle())
+        .buttonStyle(.borderedProminent)
+        .tint(LinkstrTheme.neonCyan)
       }
     } else {
       Text("invalid video url")

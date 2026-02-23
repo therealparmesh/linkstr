@@ -233,6 +233,8 @@ struct LinkstrEmojiPickerSheet: View {
       }
       .navigationTitle("add reaction")
       .navigationBarTitleDisplayMode(.inline)
+      .toolbarBackground(.visible, for: .navigationBar)
+      .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
       .toolbarColorScheme(.dark, for: .navigationBar)
       .searchable(text: $query, prompt: "search emoji")
       .toolbar {
@@ -346,6 +348,8 @@ struct PostDetailView: View {
     .navigationTitle(sessionName)
     .navigationBarTitleDisplayMode(.inline)
     .toolbar(.visible, for: .navigationBar)
+    .toolbarBackground(.visible, for: .navigationBar)
+    .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
     .toolbarColorScheme(.dark, for: .navigationBar)
     .task {
       session.markRootPostRead(postID: post.rootID)
