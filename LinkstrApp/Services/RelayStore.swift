@@ -97,10 +97,11 @@ final class ContactStore {
   func fetchContacts(ownerPubkey: String, sortedByDisplayName: Bool = false) throws
     -> [ContactEntity]
   {
-    // NOTE: SwiftData predicate evaluation for ContactEntity has been unstable in tests on
-    // iOS 26 simulators. Fetch + filter keeps behavior deterministic for this small dataset.
-    let descriptor = FetchDescriptor<ContactEntity>(sortBy: [SortDescriptor(\.createdAt)])
-    let contacts = try modelContext.fetch(descriptor).filter { $0.ownerPubkey == ownerPubkey }
+    let descriptor = FetchDescriptor<ContactEntity>(
+      predicate: #Predicate { $0.ownerPubkey == ownerPubkey },
+      sortBy: [SortDescriptor(\.createdAt)]
+    )
+    let contacts = try modelContext.fetch(descriptor)
     if sortedByDisplayName {
       return contacts.sorted {
         $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
@@ -131,19 +132,9 @@ final class ContactStore {
     return trimmed.isEmpty ? nil : trimmed
   }
 
-  func hasContact(
-    ownerPubkey: String,
-    withTargetPubkey targetPubkey: String,
-    excluding contactID: PersistentIdentifier? = nil
-  ) -> Bool {
+  func hasContact(ownerPubkey: String, withTargetPubkey targetPubkey: String) -> Bool {
     guard let contacts = try? fetchContacts(ownerPubkey: ownerPubkey) else { return false }
-    return contacts.contains { existing in
-      guard existing.matchesTargetPubkey(targetPubkey) else { return false }
-      if let contactID {
-        return existing.persistentModelID != contactID
-      }
-      return true
-    }
+    return contacts.contains(where: { $0.targetPubkey == targetPubkey })
   }
 
   func followedPubkeys(ownerPubkey: String) throws -> [String] {
@@ -208,11 +199,12 @@ final class ContactStore {
   }
 
   func updateAlias(ownerPubkey: String, targetPubkey: String, alias: String?) throws {
-    guard
-      let contact = try fetchContacts(ownerPubkey: ownerPubkey).first(where: {
-        $0.targetPubkey == targetPubkey
-      })
-    else {
+    let descriptor = FetchDescriptor<ContactEntity>(
+      predicate: #Predicate {
+        $0.ownerPubkey == ownerPubkey && $0.targetPubkey == targetPubkey
+      }
+    )
+    guard let contact = try modelContext.fetch(descriptor).first else {
       throw ContactStoreError.contactNotFound
     }
     try updateAlias(contact, ownerPubkey: ownerPubkey, alias: alias)

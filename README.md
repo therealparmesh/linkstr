@@ -204,7 +204,7 @@
 - Incoming follow-list events from the signed-in author reconcile local contacts (latest event wins).
 - Local aliases are private per-account device data and are never published to relays.
 - Contact management supports follow/unfollow and local-alias edit.
-- Add-contact input supports manual entry, paste, and QR scan.
+- Add-follow input supports manual entry, paste, and QR scan.
 - Contact-key helper controls render directly below the field in the same compact control row pattern used by post compose.
 - Duplicate follows are blocked per account scope.
 

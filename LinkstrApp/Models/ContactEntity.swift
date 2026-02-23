@@ -42,8 +42,4 @@ final class ContactEntity {
     encryptedAlias =
       try LocalDataCrypto.shared.encryptString(trimmed, ownerPubkey: ownerPubkey) ?? ""
   }
-
-  func matchesTargetPubkey(_ pubkeyHex: String) -> Bool {
-    targetPubkey == pubkeyHex
-  }
 }

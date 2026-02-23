@@ -32,7 +32,6 @@ final class AppSessionLocalFlowTests: XCTestCase {
 
   func testAddContactRejectsDuplicateAndInvalidNPub() async throws {
     let (session, container) = try makeSession()
-    _ = container
     try session.identityService.createNewIdentity()
     let npub = try TestKeyMaterialFactory.makeNPub()
 
@@ -46,11 +45,14 @@ final class AppSessionLocalFlowTests: XCTestCase {
     let didAddInvalid = await session.addContact(npub: "not-an-npub", displayName: "Bob")
     XCTAssertFalse(didAddInvalid)
     XCTAssertEqual(session.composeError, "Invalid Contact Key (npub).")
+
+    let contacts = try fetchContacts(in: container.mainContext)
+    XCTAssertEqual(contacts.count, 1)
+    XCTAssertEqual(contacts.first?.npub, npub)
   }
 
   func testAddContactRejectsDuplicateAcrossWhitespaceVariant() async throws {
     let (session, container) = try makeSession()
-    _ = container
     try session.identityService.createNewIdentity()
     let npub = try TestKeyMaterialFactory.makeNPub()
 
@@ -60,6 +62,10 @@ final class AppSessionLocalFlowTests: XCTestCase {
     let didAddDuplicate = await session.addContact(npub: "  \(npub)  ", displayName: "Alice 2")
     XCTAssertFalse(didAddDuplicate)
     XCTAssertEqual(session.composeError, "This contact is already in your list.")
+
+    let contacts = try fetchContacts(in: container.mainContext)
+    XCTAssertEqual(contacts.count, 1)
+    XCTAssertEqual(contacts.first?.npub, npub)
   }
 
   func testUpdateContactAliasCanSetAndClearAlias() async throws {
@@ -266,8 +272,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
   }
 
   func testRelayConnectivityStateClassification() throws {
-    let (session, container) = try makeSession()
-    _ = container
+    let (session, _) = try makeSession()
 
     XCTAssertEqual(session.relayConnectivityState(for: []), .noEnabledRelays)
     XCTAssertEqual(
