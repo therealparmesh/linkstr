@@ -278,8 +278,7 @@ struct SettingsView: View {
         .foregroundStyle(LinkstrTheme.textPrimary)
 
       Text(title)
-        .font(.custom(LinkstrTheme.titleFont, size: 14))
-        .foregroundStyle(LinkstrTheme.textPrimary)
+        .linkstrPrimarySectionTitleTextStyle()
 
       Spacer()
 

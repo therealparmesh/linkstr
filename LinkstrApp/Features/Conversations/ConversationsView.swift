@@ -399,7 +399,12 @@ private struct SessionPostsView: View {
           )
           .padding(.top, 24)
         } else {
-          LinkstrSectionHeader(title: "posts")
+          HStack {
+            Text("posts")
+              .linkstrPrimarySectionTitleTextStyle()
+            Spacer()
+          }
+          .padding(.horizontal, 2)
 
           ForEach(posts) { post in
             let summaries = reactionSummariesByPostID[post.rootID] ?? []

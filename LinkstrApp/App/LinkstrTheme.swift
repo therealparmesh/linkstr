@@ -67,9 +67,21 @@ struct LinkstrNeonCard: ViewModifier {
   }
 }
 
+private struct LinkstrPrimarySectionTitleTextStyle: ViewModifier {
+  func body(content: Content) -> some View {
+    content
+      .font(.custom(LinkstrTheme.titleFont, size: 14))
+      .foregroundStyle(LinkstrTheme.textPrimary)
+  }
+}
+
 extension View {
   func linkstrNeonCard() -> some View {
     modifier(LinkstrNeonCard())
+  }
+
+  func linkstrPrimarySectionTitleTextStyle() -> some View {
+    modifier(LinkstrPrimarySectionTitleTextStyle())
   }
 
   func linkstrTabBarContentInset() -> some View {
