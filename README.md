@@ -32,6 +32,8 @@
 - Boot starts relay runtime when identity is available.
 - If no identity exists, onboarding is shown.
 - If identity exists, the main app shell is shown.
+- The app uses a Tokyo Night color scheme across all surfaces.
+- Main app shell uses native iOS tab/navigation bars with dark material chrome aligned to that palette.
 
 ### Identity and account lifecycle
 
@@ -210,13 +212,13 @@
 ### Contacts
 
 - Contacts mirror the account's Nostr follow list (`kind:3`, NIP-02).
-- Follow and unfollow actions publish a full replacement follow-list event and wait for relay acceptance.
+- Add/remove contact actions publish a full replacement follow-list event and wait for relay acceptance.
 - Incoming follow-list events from the signed-in author reconcile local contacts (latest event wins).
 - Local aliases are private per-account device data and are never published to relays.
-- Contact management supports follow/unfollow and local-alias edit.
-- Add-follow input supports manual entry, paste, and QR scan.
+- Contact management supports add/remove and local-alias edit.
+- Add-contact input supports manual entry, paste, and QR scan.
 - Contact-key helper controls render directly below the field in the same compact control row pattern used by post compose.
-- Duplicate follows are blocked per account scope.
+- Duplicate contacts are blocked per account scope.
 
 ### Share tab
 
@@ -238,7 +240,7 @@
 - SwiftData persistence is local-first and survives app relaunch.
 - Persisted local entities include:
   - Relay configuration and enabled state.
-  - Contacts/follows and private local aliases.
+  - Contacts and private local aliases.
   - Sessions, member snapshots, root posts, reactions, read state, and archive state.
   - Cached media references and metadata hydration state.
 - Local entities are owner-scoped by pubkey.
