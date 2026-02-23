@@ -139,6 +139,7 @@
 - Relay header shows `connected_or_readonly / total`.
 - Relay rows show a live status dot (`connecting`, `connected`, `read-only`, `failed`, `disabled`) and optional inline error text.
 - Relay error rows reserve layout height to avoid jitter when status text appears/disappears.
+- Offline relay toast signaling is suppressed during initial connection and only shown after a previously healthy relay drops in the same foreground lifecycle.
 
 ### Relay send gating
 
@@ -175,6 +176,7 @@
 - Reaction events do not trigger notifications.
 - Self-echoed events do not trigger notifications.
 - Foreground presentation remains enabled (`banner`, `list`, `sound`).
+- Background delivery is best-effort only; when the app is suspended and sockets are not active, incoming events are surfaced on next reconnect/foreground.
 
 ### Media and link behavior
 
