@@ -29,17 +29,6 @@ struct DeepLinkVideoView: View {
         videoBlock
 
         sourceInfoBlock
-
-        if let sourceURL, mediaStrategy != .link {
-          Button {
-            openURL(sourceURL)
-          } label: {
-            Text("open in safari")
-              .frame(maxWidth: .infinity)
-          }
-          .frame(maxWidth: .infinity)
-          .buttonStyle(LinkstrSecondaryButtonStyle())
-        }
       }
       .padding(12)
     }
@@ -53,8 +42,8 @@ struct DeepLinkVideoView: View {
       case .extractionPreferred, .embedOnly:
         AdaptiveVideoPlaybackView(
           sourceURL: sourceURL,
-          showOpenSourceButtonInEmbedMode: false,
-          openSourceAction: nil
+          showOpenSourceButtonInEmbedMode: true,
+          openSourceAction: { openURL(sourceURL) }
         )
       case .link:
         Button("open in safari") {

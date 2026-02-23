@@ -23,10 +23,10 @@
 
 - On launch, the app enters a blocking boot flow with visible status text.
 - Boot status labels are user-visible and progress through:
-  - `Loading account…`
-  - `Preparing local data…`
-  - `Connecting relays…`
-  - `Starting session…`
+  - `loading account…`
+  - `preparing local data…`
+  - `connecting relays…`
+  - `starting session…`
 - Boot loads identity from keychain and configures local notifications.
 - Boot ensures default relays exist if the local relay list is empty.
 - Boot starts relay runtime when identity is available.
@@ -70,7 +70,7 @@
   - Missing previous members become inactive.
 - Sessions can be archived/unarchived from a session-row long-press menu.
 - Session list shows active sessions by default.
-- Archived sessions are filtered via compact `Active` / `Archived` pills shown only when archived sessions exist.
+- Archived sessions are filtered via compact `active` / `archived` pills shown only when archived sessions exist.
 - The archive filter pills are anchored above the main tab bar.
 - Archive is non-destructive.
 
@@ -184,12 +184,20 @@
 - URL classification drives playback mode (extract/embed/link fallback).
 - Canonicalization handles mobile host variants (for example `m.facebook.com`).
 - For extraction-capable providers, local playback is attempted first with explicit controls to switch to embed mode.
+- Local/embed action rows are normalized across post detail and deep-link playback surfaces.
 - In local playback mode with a locally cached media file, users can export via `Save...`:
   - `Save to Photos` (requests Photos add-only permission).
   - `Save to Files` (document export flow, no broad media permission).
 - If extraction fails, embed mode remains available and offers retry-local plus Safari open actions.
+- Embed URLs prefer provider-native patterns where available:
+  - TikTok `embed/v2`.
+  - Instagram `/embed`.
+  - Facebook plugin `/plugins/video.php`.
+  - YouTube `/embed`.
+  - Rumble oEmbed iframe URL.
 - Facebook videos/reels use Facebook plugin embed URLs (`/plugins/video.php`) with canonicalized `href` targets.
 - Rumble embeds are resolved from provider oEmbed iframe URLs when available.
+- Embedded web playback allows provider element fullscreen when supported by the provider and iframe context.
 - Media actions are normalized:
   - One action button uses full width.
   - Two action buttons split width evenly with spacing.
@@ -220,6 +228,7 @@
 
 - Deep link format is `linkstr://open?p=...`.
 - Valid deep links open a full-screen playback surface.
+- Deep-link playback reuses the same adaptive local/embed controls as in post detail.
 - Dismissing deep link playback clears pending deep-link state.
 
 ### Local data and security

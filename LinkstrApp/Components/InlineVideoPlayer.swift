@@ -20,8 +20,10 @@ struct InlineVideoPlayer: View {
             .onAppear { player.play() }
         } else {
           ProgressView()
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         }
       }
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
 
       Button {
         isShowingFullscreenPlayer = true
@@ -227,77 +229,7 @@ struct AdaptiveVideoPlaybackView: View {
         mediaSurface {
           InlineVideoPlayer(media: media)
         }
-        if let openSourceAction {
-          VStack(spacing: 8) {
-            HStack(spacing: 8) {
-              Button {
-                localPlaybackMode = .embedPreferred
-              } label: {
-                Text("use embedded")
-                  .frame(maxWidth: .infinity)
-              }
-              .frame(maxWidth: .infinity)
-              .buttonStyle(LinkstrSecondaryButtonStyle())
-
-              Button {
-                openSourceAction()
-              } label: {
-                Text("open in safari")
-                  .frame(maxWidth: .infinity)
-              }
-              .frame(maxWidth: .infinity)
-              .buttonStyle(LinkstrSecondaryButtonStyle())
-            }
-
-            if let exportFileURL {
-              Button {
-                exportTarget = LocalMediaExportTarget(
-                  fileURL: exportFileURL,
-                  allowsPhotoSave: supportsPhotoSave(fileURL: exportFileURL)
-                )
-              } label: {
-                Text("save...")
-                  .frame(maxWidth: .infinity)
-              }
-              .frame(maxWidth: .infinity)
-              .buttonStyle(LinkstrSecondaryButtonStyle())
-            }
-          }
-        } else {
-          if let exportFileURL {
-            HStack(spacing: 8) {
-              Button {
-                localPlaybackMode = .embedPreferred
-              } label: {
-                Text("use embedded")
-                  .frame(maxWidth: .infinity)
-              }
-              .frame(maxWidth: .infinity)
-              .buttonStyle(LinkstrSecondaryButtonStyle())
-
-              Button {
-                exportTarget = LocalMediaExportTarget(
-                  fileURL: exportFileURL,
-                  allowsPhotoSave: supportsPhotoSave(fileURL: exportFileURL)
-                )
-              } label: {
-                Text("save...")
-                  .frame(maxWidth: .infinity)
-              }
-              .frame(maxWidth: .infinity)
-              .buttonStyle(LinkstrSecondaryButtonStyle())
-            }
-          } else {
-            Button {
-              localPlaybackMode = .embedPreferred
-            } label: {
-              Text("use embedded")
-                .frame(maxWidth: .infinity)
-            }
-            .frame(maxWidth: .infinity)
-            .buttonStyle(LinkstrSecondaryButtonStyle())
-          }
-        }
+        extractionReadyActions(exportFileURL: exportFileURL)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -305,13 +237,15 @@ struct AdaptiveVideoPlaybackView: View {
       embedPlaybackBlock(embedURL: embedURL, allowsTryLocalPlayback: true)
 
     case nil:
-      HStack(spacing: 8) {
-        ProgressView()
-        Text("preparing video playback...")
-          .font(.footnote)
-          .foregroundStyle(.secondary)
+      mediaSurface {
+        VStack(spacing: 8) {
+          ProgressView()
+          Text("preparing video playback...")
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
       }
-      .padding(.vertical, 8)
     }
   }
 
@@ -329,57 +263,85 @@ struct AdaptiveVideoPlaybackView: View {
 
       let canOpenSource = showOpenSourceButtonInEmbedMode && openSourceAction != nil
 
-      if allowsTryLocalPlayback, let openSourceAction, canOpenSource {
+      if allowsTryLocalPlayback, canOpenSource, let openSourceAction {
         HStack(spacing: 8) {
-          Button {
-            Task {
-              localPlaybackMode = .localPreferred
-              extractionState = nil
-              extractionFallbackReason = nil
-              await prepareMediaIfNeeded()
-            }
-          } label: {
-            Text("try local playback")
-              .frame(maxWidth: .infinity)
-          }
-          .frame(maxWidth: .infinity)
-          .buttonStyle(LinkstrSecondaryButtonStyle())
-
-          Button {
-            openSourceAction()
-          } label: {
-            Text("open in safari")
-              .frame(maxWidth: .infinity)
-          }
-          .frame(maxWidth: .infinity)
-          .buttonStyle(LinkstrSecondaryButtonStyle())
+          retryLocalPlaybackButton
+          openInSafariButton(action: openSourceAction)
         }
       } else if allowsTryLocalPlayback {
-        Button {
-          Task {
-            localPlaybackMode = .localPreferred
-            extractionState = nil
-            extractionFallbackReason = nil
-            await prepareMediaIfNeeded()
-          }
-        } label: {
-          Text("try local playback")
-            .frame(maxWidth: .infinity)
-        }
-        .frame(maxWidth: .infinity)
-        .buttonStyle(LinkstrSecondaryButtonStyle())
+        retryLocalPlaybackButton
       } else if canOpenSource, let openSourceAction {
-        Button {
-          openSourceAction()
-        } label: {
-          Text("open in safari")
-            .frame(maxWidth: .infinity)
-        }
-        .frame(maxWidth: .infinity)
-        .buttonStyle(LinkstrSecondaryButtonStyle())
+        openInSafariButton(action: openSourceAction)
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  @ViewBuilder
+  private func extractionReadyActions(exportFileURL: URL?) -> some View {
+    if let openSourceAction {
+      VStack(spacing: 8) {
+        HStack(spacing: 8) {
+          useEmbeddedButton
+          openInSafariButton(action: openSourceAction)
+        }
+        if let exportFileURL {
+          saveButton(for: exportFileURL)
+        }
+      }
+    } else if let exportFileURL {
+      HStack(spacing: 8) {
+        useEmbeddedButton
+        saveButton(for: exportFileURL)
+      }
+    } else {
+      useEmbeddedButton
+    }
+  }
+
+  private var useEmbeddedButton: some View {
+    secondaryActionButton("use embedded") {
+      localPlaybackMode = .embedPreferred
+    }
+  }
+
+  private var retryLocalPlaybackButton: some View {
+    secondaryActionButton("try local playback") {
+      retryLocalPlayback()
+    }
+  }
+
+  private func openInSafariButton(action: @escaping () -> Void) -> some View {
+    secondaryActionButton("open in safari") {
+      action()
+    }
+  }
+
+  private func saveButton(for fileURL: URL) -> some View {
+    secondaryActionButton("save...") {
+      exportTarget = LocalMediaExportTarget(
+        fileURL: fileURL,
+        allowsPhotoSave: supportsPhotoSave(fileURL: fileURL)
+      )
+    }
+  }
+
+  private func secondaryActionButton(_ title: String, action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+      Text(title)
+        .frame(maxWidth: .infinity)
+    }
+    .frame(maxWidth: .infinity)
+    .buttonStyle(LinkstrSecondaryButtonStyle())
+  }
+
+  private func retryLocalPlayback() {
+    Task {
+      localPlaybackMode = .localPreferred
+      extractionState = nil
+      extractionFallbackReason = nil
+      await prepareMediaIfNeeded()
+    }
   }
 
   private func mediaSurface<Content: View>(@ViewBuilder content: () -> Content) -> some View {

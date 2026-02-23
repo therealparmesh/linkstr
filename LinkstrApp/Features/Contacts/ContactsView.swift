@@ -337,6 +337,7 @@ struct LinkstrQRScannerSheet: View {
       case .checking:
         ProgressView()
           .tint(.white)
+          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
       case .authorized:
         LinkstrQRScannerRepresentable(
           onScanned: { value in

@@ -36,6 +36,9 @@ struct EmbeddedWebView: UIViewRepresentable {
     config.allowsAirPlayForMediaPlayback = true
     config.mediaTypesRequiringUserActionForPlayback = []
     config.defaultWebpagePreferences.allowsContentJavaScript = true
+    if #available(iOS 16.4, *) {
+      config.preferences.isElementFullscreenEnabled = true
+    }
 
     let webView = WKWebView(frame: .zero, configuration: config)
     webView.navigationDelegate = context.coordinator
