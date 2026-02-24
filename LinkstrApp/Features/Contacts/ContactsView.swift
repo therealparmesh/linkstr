@@ -58,18 +58,18 @@ private struct ContactRowView: View {
 
       VStack(alignment: .leading, spacing: 3) {
         Text(contact.displayName)
-          .font(.custom(LinkstrTheme.titleFont, size: 16))
+          .font(LinkstrTheme.title(16))
           .foregroundStyle(LinkstrTheme.textPrimary)
           .lineLimit(1)
         Text(contact.npub)
-          .font(.custom(LinkstrTheme.bodyFont, size: 13))
+          .font(LinkstrTheme.body(13))
           .foregroundStyle(LinkstrTheme.textSecondary)
           .lineLimit(1)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
 
       Image(systemName: "chevron.right")
-        .font(.system(size: 12, weight: .semibold))
+        .font(LinkstrTheme.system(12, weight: .semibold))
         .foregroundStyle(LinkstrTheme.textSecondary.opacity(0.8))
     }
     .padding(.horizontal, 4)
@@ -86,14 +86,14 @@ private struct ContactDetailView: View {
 
   let contact: ContactEntity
 
-  @State private var displayName: String
+  @State private var alias: String
   @State private var isSaving = false
   @State private var isRemoving = false
   @State private var isPresentingDeleteConfirmation = false
 
   init(contact: ContactEntity) {
     self.contact = contact
-    _displayName = State(initialValue: contact.localAlias ?? "")
+    _alias = State(initialValue: contact.localAlias ?? "")
   }
 
   var body: some View {
@@ -101,8 +101,8 @@ private struct ContactDetailView: View {
       LinkstrBackgroundView()
       ScrollView {
         VStack(alignment: .leading, spacing: 12) {
-          LinkstrSectionHeader(title: "local alias (optional)")
-          TextField("alias", text: $displayName)
+          LinkstrSectionHeader(title: "alias (optional)")
+          TextField("alias", text: $alias)
             .textInputAutocapitalization(.words)
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
@@ -114,7 +114,7 @@ private struct ContactDetailView: View {
 
           LinkstrSectionHeader(title: "contact key (npub)")
           Text(contact.npub)
-            .font(.custom(LinkstrTheme.bodyFont, size: 13))
+            .font(LinkstrTheme.body(13))
             .foregroundStyle(LinkstrTheme.textSecondary)
             .lineLimit(1)
             .textSelection(.enabled)
@@ -181,7 +181,7 @@ private struct ContactDetailView: View {
   private func saveAlias() {
     guard !isSaving else { return }
     isSaving = true
-    let didSave = session.updateContactAlias(contact, displayName: displayName)
+    let didSave = session.updateContactAlias(contact, alias: alias)
     isSaving = false
     if didSave {
       dismiss()
@@ -206,7 +206,7 @@ struct AddContactSheet: View {
   @EnvironmentObject private var session: AppSession
 
   @State private var npub = ""
-  @State private var displayName = ""
+  @State private var alias = ""
   @State private var isSubmitting = false
   @State private var isPresentingScanner = false
   @State private var scannerErrorMessage: String?
@@ -253,7 +253,7 @@ struct AddContactSheet: View {
             )
           }
 
-          TextField("alias (optional)", text: $displayName)
+          TextField("alias (optional)", text: $alias)
             .textInputAutocapitalization(.words)
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
@@ -264,7 +264,7 @@ struct AddContactSheet: View {
             )
 
           Text(normalizedScannerErrorMessage.isEmpty ? " " : normalizedScannerErrorMessage)
-            .font(.custom(LinkstrTheme.bodyFont, size: 12))
+            .font(LinkstrTheme.body(12))
             .foregroundStyle(LinkstrTheme.destructive.opacity(0.9))
             .frame(maxWidth: .infinity, minHeight: 20, alignment: .leading)
             .opacity(normalizedScannerErrorMessage.isEmpty ? 0 : 1)
@@ -313,7 +313,7 @@ struct AddContactSheet: View {
     guard !isSubmitting else { return }
     isSubmitting = true
     Task { @MainActor in
-      let didAdd = await session.addContact(npub: npub, displayName: displayName)
+      let didAdd = await session.addContact(npub: npub, alias: alias)
       isSubmitting = false
       if didAdd {
         dismiss()
@@ -359,10 +359,10 @@ struct LinkstrQRScannerSheet: View {
       case .failed(let message):
         VStack(spacing: 12) {
           Text("scanner error")
-            .font(.custom(LinkstrTheme.titleFont, size: 18))
+            .font(LinkstrTheme.title(18))
             .foregroundStyle(.white)
           Text(message)
-            .font(.custom(LinkstrTheme.bodyFont, size: 14))
+            .font(LinkstrTheme.body(14))
             .foregroundStyle(LinkstrTheme.textSecondary)
             .multilineTextAlignment(.center)
             .padding(.horizontal, 24)
@@ -375,7 +375,7 @@ struct LinkstrQRScannerSheet: View {
           Button("close") {
             dismiss()
           }
-          .font(.custom(LinkstrTheme.bodyFont, size: 16))
+          .font(LinkstrTheme.body(16))
           .foregroundStyle(.white)
           .padding(.horizontal, 12)
           .padding(.vertical, 8)
@@ -426,13 +426,13 @@ private struct LinkstrQRScannerAccessDeniedView: View {
   var body: some View {
     VStack(spacing: 12) {
       Image(systemName: "camera.fill")
-        .font(.system(size: 28))
+        .font(LinkstrTheme.system(28))
         .foregroundStyle(.white)
       Text("camera access required")
-        .font(.custom(LinkstrTheme.titleFont, size: 18))
+        .font(LinkstrTheme.title(18))
         .foregroundStyle(.white)
       Text("enable camera access in settings to scan a contact key (npub) qr code.")
-        .font(.custom(LinkstrTheme.bodyFont, size: 14))
+        .font(LinkstrTheme.body(14))
         .foregroundStyle(LinkstrTheme.textSecondary)
         .multilineTextAlignment(.center)
         .padding(.horizontal, 24)

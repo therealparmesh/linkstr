@@ -62,7 +62,7 @@ struct LinkstrReactionRow: View {
 
           if hasReadOnlyOverflow {
             Text("...")
-              .font(.custom(LinkstrTheme.bodyFont, size: 12))
+              .font(LinkstrTheme.body(12))
               .foregroundStyle(LinkstrTheme.textSecondary)
           }
         } else {
@@ -77,7 +77,7 @@ struct LinkstrReactionRow: View {
           if let onAddReaction {
             Button(action: onAddReaction) {
               Text("...")
-                .font(.custom(LinkstrTheme.bodyFont, size: 13))
+                .font(LinkstrTheme.body(13))
                 .foregroundStyle(LinkstrTheme.textPrimary.opacity(0.9))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
@@ -102,12 +102,12 @@ struct LinkstrReactionRow: View {
   private func readOnlySummaryText(_ summary: ReactionSummary) -> some View {
     HStack(alignment: .firstTextBaseline, spacing: 2) {
       Text(summary.emoji)
-        .font(.system(size: 15))
+        .font(LinkstrTheme.system(15))
         .foregroundStyle(LinkstrTheme.textPrimary.opacity(0.95))
 
       if summary.count > 1 {
         Text("\(summary.count)")
-          .font(.custom(LinkstrTheme.bodyFont, size: 10))
+          .font(LinkstrTheme.body(10))
           .foregroundStyle(LinkstrTheme.textSecondary)
       }
     }
@@ -133,9 +133,9 @@ struct LinkstrReactionRow: View {
   private func summaryChipLabel(_ summary: ReactionSummary) -> some View {
     HStack(spacing: 6) {
       Text(summary.emoji)
-        .font(.system(size: 15))
+        .font(LinkstrTheme.system(15))
       Text("\(summary.count)")
-        .font(.custom(LinkstrTheme.bodyFont, size: 12))
+        .font(LinkstrTheme.body(12))
         .foregroundStyle(LinkstrTheme.textPrimary.opacity(0.95))
     }
     .padding(.horizontal, 10)
@@ -176,11 +176,11 @@ struct LinkstrReactionRow: View {
   ) -> some View {
     HStack(spacing: 6) {
       Text(emoji)
-        .font(.system(size: 15))
+        .font(LinkstrTheme.system(15))
 
       if let count = summary?.count, count > 0 {
         Text("\(count)")
-          .font(.custom(LinkstrTheme.bodyFont, size: 12))
+          .font(LinkstrTheme.body(12))
           .foregroundStyle(LinkstrTheme.textPrimary.opacity(0.95))
       }
     }
@@ -365,19 +365,19 @@ struct PostDetailView: View {
     VStack(alignment: .leading, spacing: 10) {
       HStack {
         Text("sent by \(postSenderLabel)")
-          .font(.caption2)
+          .font(LinkstrTheme.body(11))
           .foregroundStyle(LinkstrTheme.textSecondary)
 
         Spacer()
 
         Text(post.timestamp.linkstrMessageTimestampLabel)
-          .font(.caption)
+          .font(LinkstrTheme.body(12))
           .foregroundStyle(LinkstrTheme.textSecondary)
       }
 
       if let title = post.metadataTitle, !title.isEmpty {
         Text(title)
-          .font(.custom(LinkstrTheme.titleFont, size: 18))
+          .font(LinkstrTheme.title(18))
           .foregroundStyle(LinkstrTheme.textPrimary)
       }
 
@@ -386,7 +386,7 @@ struct PostDetailView: View {
           openURL(parsedURL)
         } label: {
           Text(url)
-            .font(.custom(LinkstrTheme.bodyFont, size: 13))
+            .font(LinkstrTheme.body(13))
             .foregroundStyle(LinkstrTheme.textSecondary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .multilineTextAlignment(.leading)
@@ -395,14 +395,14 @@ struct PostDetailView: View {
         .buttonStyle(.plain)
       } else if let url = post.url {
         Text(url)
-          .font(.custom(LinkstrTheme.bodyFont, size: 13))
+          .font(LinkstrTheme.body(13))
           .foregroundStyle(LinkstrTheme.textSecondary)
           .textSelection(.enabled)
       }
 
       if let note = post.note, !note.isEmpty {
         Text(note)
-          .font(.custom(LinkstrTheme.bodyFont, size: 13))
+          .font(LinkstrTheme.body(13))
           .foregroundStyle(LinkstrTheme.textPrimary.opacity(0.94))
       }
 
@@ -426,11 +426,11 @@ struct PostDetailView: View {
           ForEach(reactionBreakdown) { entry in
             HStack(alignment: .center, spacing: 6) {
               Text("\(entry.displayName):")
-                .font(.custom(LinkstrTheme.bodyFont, size: 12))
+                .font(LinkstrTheme.body(12))
                 .foregroundStyle(LinkstrTheme.textSecondary)
 
               Text(entry.emojis.joined(separator: " "))
-                .font(.system(size: 15))
+                .font(LinkstrTheme.system(15))
                 .foregroundStyle(LinkstrTheme.textPrimary)
 
               Spacer(minLength: 0)

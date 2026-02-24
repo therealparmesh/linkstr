@@ -89,8 +89,11 @@ struct MainTabView: View {
     .navigationTitle("linkstr")
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
+      ToolbarItem(placement: .topBarLeading) {
+        leadingToolbarAccessory
+      }
       ToolbarItemGroup(placement: .topBarTrailing) {
-        toolbarAccessories
+        trailingToolbarAccessories
       }
     }
     .toolbarBackground(.hidden, for: .navigationBar)
@@ -116,7 +119,7 @@ struct MainTabView: View {
   }
 
   @ViewBuilder
-  private var toolbarAccessories: some View {
+  private var leadingToolbarAccessory: some View {
     switch selectedTab {
     case .sessions:
       if archivedSessionCount > 0 {
@@ -129,8 +132,18 @@ struct MainTabView: View {
           isShowingArchivedSessions ? "show active sessions" : "show archived sessions"
         )
         .tint(LinkstrTheme.neonCyan)
+      } else {
+        EmptyView()
       }
+    case .contacts, .share, .settings:
+      EmptyView()
+    }
+  }
 
+  @ViewBuilder
+  private var trailingToolbarAccessories: some View {
+    switch selectedTab {
+    case .sessions:
       Button {
         isPresentingNewSession = true
       } label: {

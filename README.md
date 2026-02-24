@@ -34,12 +34,14 @@
 - If identity exists, the main app shell is shown.
 - The app uses a Tokyo Night color scheme across all surfaces.
 - Main app shell uses native iOS tab/navigation bars with transparent chrome over the Tokyo Night app background.
+- Text sizing is controlled by centralized theme tokens with a slightly larger baseline for chat readability.
 
 ### Identity and account lifecycle
 
 - Users can create a new account (new keypair) or import an existing `nsec`.
 - The active identity is keychain-backed.
 - Settings and Share expose current `npub`.
+- Settings sections are collapsed by default and expand on demand.
 - `nsec` is hidden by default and only revealed on explicit action.
 - `Log Out (Keep Local Data)` clears active identity only.
 - `Log Out and Clear Local Data` clears identity and deletes account-scoped local data:
@@ -248,8 +250,8 @@
 - Contacts mirror the account's Nostr follow list (`kind:3`, NIP-02).
 - Add/remove contact actions publish a full replacement follow-list event and wait for relay acceptance.
 - Incoming follow-list events from the signed-in author reconcile local contacts (latest event wins).
-- Local aliases are private per-account device data and are never published to relays.
-- Contact management supports add/remove and local-alias edit.
+- Aliases are private per-account device data and are never published to relays.
+- Contact management supports add/remove and alias edit.
 - Add-contact input supports manual entry, paste, and QR scan.
 - Contact-key helper controls render directly below the field in the same compact control row pattern used by post compose.
 - Duplicate contacts are blocked per account scope.
@@ -274,7 +276,7 @@
 - SwiftData persistence is local-first and survives app relaunch.
 - Persisted local entities include:
   - Relay configuration and enabled state.
-  - Contacts and private local aliases.
+  - Contacts and private aliases.
   - Sessions, member snapshots, root posts, reactions, read state, and archive state.
   - Cached media references and metadata hydration state.
 - Local entities are owner-scoped by pubkey.

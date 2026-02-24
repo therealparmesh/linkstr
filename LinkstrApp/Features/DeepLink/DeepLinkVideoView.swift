@@ -55,7 +55,7 @@ struct DeepLinkVideoView: View {
       }
     } else {
       Text("invalid video url")
-        .font(.footnote)
+        .font(LinkstrTheme.body(12))
         .foregroundStyle(LinkstrTheme.textSecondary)
     }
   }
@@ -64,18 +64,18 @@ struct DeepLinkVideoView: View {
     VStack(alignment: .leading, spacing: 8) {
       if let host = normalizedDisplayHost {
         Text(host)
-          .font(.subheadline)
+          .font(LinkstrTheme.body(14))
           .foregroundStyle(LinkstrTheme.textPrimary)
       }
 
       Text(normalizedURLString ?? payload.url)
-        .font(.footnote)
+        .font(LinkstrTheme.body(12))
         .foregroundStyle(LinkstrTheme.textSecondary)
         .textSelection(.enabled)
 
       if let sharedAtDate {
         Text("shared \(sharedAtDate.formatted(date: .abbreviated, time: .shortened))")
-          .font(.footnote)
+          .font(LinkstrTheme.body(12))
           .foregroundStyle(LinkstrTheme.textSecondary)
       }
     }

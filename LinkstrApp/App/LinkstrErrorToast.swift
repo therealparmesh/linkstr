@@ -6,11 +6,11 @@ struct LinkstrErrorToast: View {
   var body: some View {
     HStack(spacing: 10) {
       Image(systemName: "exclamationmark.triangle.fill")
-        .font(.system(size: 14, weight: .semibold))
+        .font(LinkstrTheme.system(14, weight: .semibold))
         .foregroundStyle(LinkstrTheme.neonAmber)
 
       Text(message)
-        .font(.custom(LinkstrTheme.bodyFont, size: 13))
+        .font(LinkstrTheme.body(13))
         .foregroundStyle(LinkstrTheme.textPrimary)
         .lineLimit(2)
         .frame(maxWidth: .infinity, alignment: .leading)

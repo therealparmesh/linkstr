@@ -11,9 +11,9 @@ struct SettingsView: View {
   @State private var relayURL = ""
   @State private var revealedNsec = ""
   @State private var isNsecVisible = false
-  @State private var isRelaysExpanded = true
-  @State private var isStorageExpanded = true
-  @State private var isIdentityExpanded = true
+  @State private var isRelaysExpanded = false
+  @State private var isStorageExpanded = false
+  @State private var isIdentityExpanded = false
   @State private var isPresentingLogoutOptions = false
 
   var body: some View {
@@ -60,7 +60,7 @@ struct SettingsView: View {
           VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 8) {
               Text(relay.url)
-                .font(.custom(LinkstrTheme.bodyFont, size: 13))
+                .font(LinkstrTheme.body(13))
                 .foregroundStyle(LinkstrTheme.textPrimary)
                 .lineLimit(2)
               Spacer(minLength: 8)
@@ -72,7 +72,7 @@ struct SettingsView: View {
 
             let relayErrorText = normalizedInlineMessage(session.relayErrorMessage(for: relay))
             Text(relayErrorText.isEmpty ? " " : relayErrorText)
-              .font(.custom(LinkstrTheme.bodyFont, size: 12))
+              .font(LinkstrTheme.body(12))
               .foregroundStyle(LinkstrTheme.textSecondary)
               .fixedSize(horizontal: false, vertical: true)
               .frame(maxWidth: .infinity, minHeight: 30, alignment: .topLeading)
@@ -100,7 +100,7 @@ struct SettingsView: View {
                 session.removeRelay(relay)
               } label: {
                 Label("remove", systemImage: "trash")
-                  .font(.custom(LinkstrTheme.bodyFont, size: 13))
+                  .font(LinkstrTheme.body(13))
               }
               .buttonStyle(.bordered)
               .tint(LinkstrTheme.destructive)
@@ -193,7 +193,7 @@ struct SettingsView: View {
         if let npub = session.identityService.npub {
           LinkstrSectionHeader(title: "contact key (npub)")
           Text(npub)
-            .font(.custom(LinkstrTheme.bodyFont, size: 12))
+            .font(LinkstrTheme.body(12))
             .foregroundStyle(LinkstrTheme.textSecondary)
             .textSelection(.enabled)
             .padding(10)
@@ -238,7 +238,7 @@ struct SettingsView: View {
           if isNsecVisible {
             LinkstrSectionHeader(title: "secret key (nsec)")
             Text(revealedNsec.isEmpty ? "unable to reveal secret key (nsec)." : revealedNsec)
-              .font(.custom(LinkstrTheme.bodyFont, size: 12))
+              .font(LinkstrTheme.body(12))
               .foregroundStyle(LinkstrTheme.textSecondary)
               .textSelection(.enabled)
               .padding(10)
@@ -259,7 +259,7 @@ struct SettingsView: View {
           .tint(LinkstrTheme.destructive)
         } else {
           Text("no account found. sign in with a secret key (nsec) or create one.")
-            .font(.custom(LinkstrTheme.bodyFont, size: 12))
+            .font(LinkstrTheme.body(12))
             .foregroundStyle(LinkstrTheme.textSecondary)
         }
       }
@@ -274,7 +274,7 @@ struct SettingsView: View {
   {
     HStack(spacing: 8) {
       Image(systemName: systemImage)
-        .font(.system(size: 13, weight: .semibold))
+        .font(LinkstrTheme.system(13, weight: .semibold))
         .foregroundStyle(LinkstrTheme.textPrimary)
 
       Text(title)
@@ -284,7 +284,7 @@ struct SettingsView: View {
 
       if let badge {
         Text(badge)
-          .font(.custom(LinkstrTheme.bodyFont, size: 11))
+          .font(LinkstrTheme.body(11))
           .foregroundStyle(LinkstrTheme.textSecondary)
           .padding(.horizontal, 7)
           .padding(.vertical, 3)

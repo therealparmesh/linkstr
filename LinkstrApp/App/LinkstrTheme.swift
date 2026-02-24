@@ -15,9 +15,26 @@ enum LinkstrTheme {
 
   static let titleFont = "HelveticaNeue-Medium"
   static let bodyFont = "HelveticaNeue"
+  static let textScaleDelta: CGFloat = 1
   static let sectionStackSpacing: CGFloat = 26
   static let inputControlMinHeight: CGFloat = 44
   static let tabBarContentBottomInset: CGFloat = 96
+
+  static func scaledTextSize(_ base: CGFloat) -> CGFloat {
+    base + textScaleDelta
+  }
+
+  static func title(_ size: CGFloat) -> Font {
+    .custom(titleFont, size: scaledTextSize(size))
+  }
+
+  static func body(_ size: CGFloat) -> Font {
+    .custom(bodyFont, size: scaledTextSize(size))
+  }
+
+  static func system(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
+    .system(size: scaledTextSize(size), weight: weight)
+  }
 }
 
 struct LinkstrBackgroundView: View {
@@ -70,7 +87,7 @@ struct LinkstrNeonCard: ViewModifier {
 private struct LinkstrPrimarySectionTitleTextStyle: ViewModifier {
   func body(content: Content) -> some View {
     content
-      .font(.custom(LinkstrTheme.titleFont, size: 14))
+      .font(LinkstrTheme.title(14))
       .foregroundStyle(LinkstrTheme.textPrimary)
   }
 }
@@ -98,7 +115,7 @@ struct LinkstrSectionHeader: View {
   var body: some View {
     HStack {
       Text(title)
-        .font(.custom(LinkstrTheme.titleFont, size: 12))
+        .font(LinkstrTheme.title(12))
         .foregroundStyle(LinkstrTheme.textSecondary)
       Spacer()
     }
@@ -132,7 +149,7 @@ struct LinkstrPeerAvatar: View {
       .frame(width: size, height: size)
       .overlay {
         Text(initials(for: name))
-          .font(.custom(LinkstrTheme.titleFont, size: max(12, size * 0.38)))
+          .font(LinkstrTheme.title(max(12, size * 0.38)))
           .foregroundStyle(Color.white)
       }
   }

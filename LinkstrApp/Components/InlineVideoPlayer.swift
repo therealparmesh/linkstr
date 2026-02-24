@@ -29,7 +29,7 @@ struct InlineVideoPlayer: View {
         isShowingFullscreenPlayer = true
       } label: {
         Image(systemName: "arrow.up.left.and.arrow.down.right")
-          .font(.system(size: 14, weight: .semibold))
+          .font(LinkstrTheme.system(14, weight: .semibold))
           .foregroundStyle(LinkstrTheme.textPrimary)
           .padding(8)
           .background(
@@ -136,7 +136,7 @@ struct AdaptiveVideoPlaybackView: View {
         localPlaybackMode = .localPreferred
         await prepareMediaIfNeeded()
       }
-      .confirmationDialog(
+      .alert(
         "save local media",
         isPresented: Binding(
           get: { exportTarget != nil },
@@ -146,23 +146,23 @@ struct AdaptiveVideoPlaybackView: View {
             }
           }
         ),
-        titleVisibility: .visible
-      ) {
-        if let target = exportTarget {
-          if target.allowsPhotoSave {
-            Button("save to photos") {
-              saveToPhotos(target.fileURL)
-              exportTarget = nil
-            }
-          }
-          Button("save to files") {
-            fileExportItem = LocalFileExportItem(fileURL: target.fileURL)
+        presenting: exportTarget
+      ) { target in
+        if target.allowsPhotoSave {
+          Button("save to photos") {
+            saveToPhotos(target.fileURL)
             exportTarget = nil
           }
+        }
+        Button("save to files") {
+          fileExportItem = LocalFileExportItem(fileURL: target.fileURL)
+          exportTarget = nil
         }
         Button("cancel", role: .cancel) {
           exportTarget = nil
         }
+      } message: { _ in
+        Text("choose where to save this video.")
       }
       .sheet(item: $fileExportItem) { item in
         LocalFileExportSheet(url: item.fileURL) { result in
@@ -251,7 +251,7 @@ struct AdaptiveVideoPlaybackView: View {
         VStack(spacing: 8) {
           ProgressView()
           Text("preparing video playback...")
-            .font(.footnote)
+            .font(LinkstrTheme.body(12))
             .foregroundStyle(LinkstrTheme.textSecondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
@@ -267,7 +267,7 @@ struct AdaptiveVideoPlaybackView: View {
 
       if let extractionFallbackReason {
         Text("video playback unavailable: \(extractionFallbackReason)")
-          .font(.footnote)
+          .font(LinkstrTheme.body(12))
           .foregroundStyle(LinkstrTheme.textSecondary)
       }
 

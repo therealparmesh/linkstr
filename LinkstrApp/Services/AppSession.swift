@@ -1012,7 +1012,7 @@ final class AppSession: ObservableObject {
   @discardableResult
   func addContact(
     npub: String,
-    displayName: String,
+    alias: String,
     timeoutSeconds: TimeInterval = 12,
     pollIntervalSeconds: TimeInterval = 0.35
   ) async -> Bool {
@@ -1033,7 +1033,7 @@ final class AppSession: ObservableObject {
       return false
     }
 
-    let alias = contactStore.normalizeAlias(displayName)
+    let normalizedAlias = contactStore.normalizeAlias(alias)
 
     let nextFollowedPubkeys: [String]
     do {
@@ -1071,11 +1071,11 @@ final class AppSession: ObservableObject {
         ownerPubkey: ownerPubkey,
         pubkeyHexes: nextFollowedPubkeys
       )
-      if let alias {
+      if let normalizedAlias {
         try contactStore.updateAlias(
           ownerPubkey: ownerPubkey,
           targetPubkey: targetPubkey,
-          alias: alias
+          alias: normalizedAlias
         )
       }
       latestAppliedFollowListCreatedAt = .now
@@ -1089,15 +1089,15 @@ final class AppSession: ObservableObject {
   }
 
   @discardableResult
-  func updateContactAlias(_ contact: ContactEntity, displayName: String) -> Bool {
+  func updateContactAlias(_ contact: ContactEntity, alias: String) -> Bool {
     guard let ownerPubkey = identityService.pubkeyHex else {
       composeError = "you're signed out. sign in to manage contacts."
       return false
     }
 
     do {
-      let alias = contactStore.normalizeAlias(displayName)
-      try contactStore.updateAlias(contact, ownerPubkey: ownerPubkey, alias: alias)
+      let normalizedAlias = contactStore.normalizeAlias(alias)
+      try contactStore.updateAlias(contact, ownerPubkey: ownerPubkey, alias: normalizedAlias)
       composeError = nil
       return true
     } catch {

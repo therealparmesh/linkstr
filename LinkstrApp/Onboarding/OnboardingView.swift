@@ -16,10 +16,10 @@ struct OnboardingView: View {
         ScrollView {
           VStack(alignment: .leading, spacing: 18) {
             Text("welcome to linkstr.")
-              .font(.custom(LinkstrTheme.titleFont, size: 36))
+              .font(LinkstrTheme.title(36))
               .foregroundStyle(LinkstrTheme.textPrimary)
             Text("share videos and links privately with people who don’t use social media.")
-              .font(.custom(LinkstrTheme.bodyFont, size: 14))
+              .font(LinkstrTheme.body(14))
               .foregroundStyle(LinkstrTheme.textSecondary)
 
             VStack(alignment: .leading, spacing: formRowSpacing) {
@@ -59,7 +59,7 @@ struct OnboardingView: View {
                   .fill(LinkstrTheme.textSecondary.opacity(0.26))
                   .frame(height: 1)
                 Text("or")
-                  .font(.custom(LinkstrTheme.titleFont, size: 13))
+                  .font(LinkstrTheme.title(13))
                   .foregroundStyle(LinkstrTheme.textSecondary)
                 Rectangle()
                   .fill(LinkstrTheme.textSecondary.opacity(0.26))

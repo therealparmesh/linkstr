@@ -25,7 +25,7 @@ struct NewPostSheet: View {
             VStack(alignment: .leading, spacing: 8) {
               sectionLabel("session")
               Text(sessionEntity.name)
-                .font(.custom(LinkstrTheme.bodyFont, size: 15))
+                .font(LinkstrTheme.body(15))
                 .foregroundStyle(LinkstrTheme.textPrimary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(12)
@@ -40,7 +40,7 @@ struct NewPostSheet: View {
               sectionLabel("link")
 
               TextField("https://...", text: $url)
-                .font(.custom(LinkstrTheme.bodyFont, size: 14))
+                .font(LinkstrTheme.body(14))
                 .textInputAutocapitalization(.never)
                 .keyboardType(.URL)
                 .autocorrectionDisabled(true)
@@ -64,7 +64,7 @@ struct NewPostSheet: View {
               )
 
               Text(urlValidationHint ?? " ")
-                .font(.custom(LinkstrTheme.bodyFont, size: 12))
+                .font(LinkstrTheme.body(12))
                 .foregroundStyle(LinkstrTheme.destructive.opacity(0.92))
                 .frame(maxWidth: .infinity, minHeight: 14, alignment: .leading)
                 .opacity(urlValidationHint == nil ? 0 : 1)
@@ -77,7 +77,7 @@ struct NewPostSheet: View {
               ZStack(alignment: .topLeading) {
                 if note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                   Text("optional context for this session")
-                    .font(.custom(LinkstrTheme.bodyFont, size: 14))
+                    .font(LinkstrTheme.body(14))
                     .foregroundStyle(LinkstrTheme.textSecondary)
                     .padding(.top, 12)
                     .padding(.leading, 12)
@@ -85,7 +85,7 @@ struct NewPostSheet: View {
                 }
 
                 TextEditor(text: $note)
-                  .font(.custom(LinkstrTheme.bodyFont, size: 14))
+                  .font(LinkstrTheme.body(14))
                   .foregroundStyle(LinkstrTheme.textPrimary)
                   .scrollContentBackground(.hidden)
                   .frame(minHeight: 112, maxHeight: 180)
@@ -99,7 +99,7 @@ struct NewPostSheet: View {
             }
 
             Text("send requires a valid link. note is optional.")
-              .font(.custom(LinkstrTheme.bodyFont, size: 12))
+              .font(LinkstrTheme.body(12))
               .foregroundStyle(LinkstrTheme.textSecondary)
               .padding(.horizontal, 2)
           }
@@ -130,7 +130,7 @@ struct NewPostSheet: View {
           .disabled(!canSend)
 
           Text(isSending ? "waiting for relay reconnect before sending…" : " ")
-            .font(.custom(LinkstrTheme.bodyFont, size: 12))
+            .font(LinkstrTheme.body(12))
             .foregroundStyle(LinkstrTheme.textSecondary)
             .frame(maxWidth: .infinity, minHeight: 14, alignment: .center)
             .opacity(isSending ? 1 : 0)
@@ -171,7 +171,7 @@ struct NewPostSheet: View {
 
   private func sectionLabel(_ text: String) -> some View {
     Text(text)
-      .font(.custom(LinkstrTheme.titleFont, size: 12))
+      .font(LinkstrTheme.title(12))
       .foregroundStyle(LinkstrTheme.textSecondary)
   }
 
@@ -241,7 +241,7 @@ struct LinkstrInputAssistRow: View {
   ) -> some View {
     Button(action: action) {
       Label(title, systemImage: systemImage)
-        .font(.custom(LinkstrTheme.bodyFont, size: 12))
+        .font(LinkstrTheme.body(12))
         .foregroundStyle(tint)
     }
     .buttonStyle(.bordered)

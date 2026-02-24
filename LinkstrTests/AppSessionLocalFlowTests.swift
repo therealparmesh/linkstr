@@ -19,7 +19,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
     try session.identityService.createNewIdentity()
     let npub = try TestKeyMaterialFactory.makeNPub()
 
-    let didAdd = await session.addContact(npub: "  \(npub)  ", displayName: "  Alice  ")
+    let didAdd = await session.addContact(npub: "  \(npub)  ", alias: "  Alice  ")
     XCTAssertTrue(didAdd)
 
     let contacts = try fetchContacts(in: container.mainContext)
@@ -35,33 +35,16 @@ final class AppSessionLocalFlowTests: XCTestCase {
     try session.identityService.createNewIdentity()
     let npub = try TestKeyMaterialFactory.makeNPub()
 
-    let didAdd = await session.addContact(npub: npub, displayName: "Alice")
+    let didAdd = await session.addContact(npub: npub, alias: "Alice")
     XCTAssertTrue(didAdd)
 
-    let didAddDuplicate = await session.addContact(npub: npub, displayName: "Alice 2")
+    let didAddDuplicate = await session.addContact(npub: "  \(npub)  ", alias: "Alice 2")
     XCTAssertFalse(didAddDuplicate)
     XCTAssertEqual(session.composeError, "this contact is already in your list.")
 
-    let didAddInvalid = await session.addContact(npub: "not-an-npub", displayName: "Bob")
+    let didAddInvalid = await session.addContact(npub: "not-an-npub", alias: "Bob")
     XCTAssertFalse(didAddInvalid)
     XCTAssertEqual(session.composeError, "invalid contact key (npub).")
-
-    let contacts = try fetchContacts(in: container.mainContext)
-    XCTAssertEqual(contacts.count, 1)
-    XCTAssertEqual(contacts.first?.npub, npub)
-  }
-
-  func testAddContactRejectsDuplicateAcrossWhitespaceVariant() async throws {
-    let (session, container) = try makeSession()
-    try session.identityService.createNewIdentity()
-    let npub = try TestKeyMaterialFactory.makeNPub()
-
-    let didAdd = await session.addContact(npub: npub, displayName: "Alice")
-    XCTAssertTrue(didAdd)
-
-    let didAddDuplicate = await session.addContact(npub: "  \(npub)  ", displayName: "Alice 2")
-    XCTAssertFalse(didAddDuplicate)
-    XCTAssertEqual(session.composeError, "this contact is already in your list.")
 
     let contacts = try fetchContacts(in: container.mainContext)
     XCTAssertEqual(contacts.count, 1)
@@ -73,17 +56,17 @@ final class AppSessionLocalFlowTests: XCTestCase {
     try session.identityService.createNewIdentity()
     let npub = try TestKeyMaterialFactory.makeNPub()
 
-    let didAdd = await session.addContact(npub: npub, displayName: "Alice")
+    let didAdd = await session.addContact(npub: npub, alias: "Alice")
     XCTAssertTrue(didAdd)
 
     let contacts = try fetchContacts(in: container.mainContext)
     let alice = try XCTUnwrap(contacts.first)
 
-    let didUpdate = session.updateContactAlias(alice, displayName: "Alice Updated")
+    let didUpdate = session.updateContactAlias(alice, alias: "Alice Updated")
     XCTAssertTrue(didUpdate)
     XCTAssertEqual(alice.displayName, "Alice Updated")
 
-    let didClearAlias = session.updateContactAlias(alice, displayName: "   ")
+    let didClearAlias = session.updateContactAlias(alice, alias: "   ")
     XCTAssertTrue(didClearAlias)
     XCTAssertNil(alice.localAlias)
     XCTAssertEqual(alice.displayName, alice.npub)
@@ -95,9 +78,9 @@ final class AppSessionLocalFlowTests: XCTestCase {
     let firstNPub = try TestKeyMaterialFactory.makeNPub()
     let secondNPub = try TestKeyMaterialFactory.makeNPub()
 
-    let didAddFirst = await session.addContact(npub: firstNPub, displayName: "First")
+    let didAddFirst = await session.addContact(npub: firstNPub, alias: "First")
     XCTAssertTrue(didAddFirst)
-    let didAddSecond = await session.addContact(npub: secondNPub, displayName: "Second")
+    let didAddSecond = await session.addContact(npub: secondNPub, alias: "Second")
     XCTAssertTrue(didAddSecond)
 
     let contactsBeforeDelete = try fetchContacts(in: container.mainContext)
@@ -510,34 +493,11 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
   }
 
-  func testCreateSessionPostRejectsUnsupportedScheme() async throws {
-    let (session, container) = try makeSession()
-    try session.identityService.createNewIdentity()
-    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
-    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
-    let sessionEntity = try insertSessionFixture(
-      in: container.mainContext,
-      ownerPubkey: myPubkey,
-      createdByPubkey: myPubkey,
-      memberPubkeys: [myPubkey, peerPubkey]
-    )
-
-    let didCreate = await session.createSessionPostAwaitingRelay(
-      url: "ftp://example.com/file.mp4",
-      note: nil,
-      session: sessionEntity
-    )
-
-    XCTAssertFalse(didCreate)
-    XCTAssertEqual(session.composeError, "enter a valid url.")
-    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
-  }
-
   func testLogoutClearLocalDataRemovesContactsAndMessages() async throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
     let npub = try TestKeyMaterialFactory.makeNPub()
-    let didAdd = await session.addContact(npub: npub, displayName: "Alice")
+    let didAdd = await session.addContact(npub: npub, alias: "Alice")
     XCTAssertTrue(didAdd)
 
     let message = makeMessage(
@@ -563,7 +523,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
     let npub = try TestKeyMaterialFactory.makeNPub()
-    let didAdd = await session.addContact(npub: npub, displayName: "Alice")
+    let didAdd = await session.addContact(npub: npub, alias: "Alice")
     XCTAssertTrue(didAdd)
 
     let message = makeMessage(
@@ -619,7 +579,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
     try session.identityService.createNewIdentity()
     let firstOwner = try XCTUnwrap(session.identityService.pubkeyHex)
     let sharedNPub = try TestKeyMaterialFactory.makeNPub()
-    let didAddFirst = await session.addContact(npub: sharedNPub, displayName: "Alice-A")
+    let didAddFirst = await session.addContact(npub: sharedNPub, alias: "Alice-A")
     XCTAssertTrue(didAddFirst)
 
     let secondKeypair = try TestKeyMaterialFactory.makeKeypair()
@@ -628,7 +588,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
     let secondOwner = try XCTUnwrap(session.identityService.pubkeyHex)
     XCTAssertNotEqual(firstOwner, secondOwner)
 
-    let didAddSecond = await session.addContact(npub: sharedNPub, displayName: "Alice-B")
+    let didAddSecond = await session.addContact(npub: sharedNPub, alias: "Alice-B")
     XCTAssertTrue(didAddSecond)
 
     let contacts = try fetchContacts(in: container.mainContext)

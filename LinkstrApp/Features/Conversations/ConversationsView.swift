@@ -145,7 +145,7 @@ struct ConversationsView: View {
           } else {
             if isShowingArchivedSessions {
               Text("archived sessions. long-press to unarchive.")
-                .font(.custom(LinkstrTheme.bodyFont, size: 12))
+                .font(LinkstrTheme.body(12))
                 .foregroundStyle(LinkstrTheme.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .multilineTextAlignment(.center)
@@ -266,29 +266,29 @@ private struct SessionRowView: View {
       VStack(alignment: .leading, spacing: 3) {
         HStack(alignment: .firstTextBaseline) {
           Text(summary.session.name)
-            .font(.custom(LinkstrTheme.titleFont, size: 16))
+            .font(LinkstrTheme.title(16))
             .foregroundStyle(LinkstrTheme.textPrimary)
             .lineLimit(1)
 
           Spacer(minLength: 8)
 
           Text(summary.latestTimestamp.linkstrListTimestampLabel)
-            .font(.caption)
+            .font(LinkstrTheme.body(12))
             .foregroundStyle(LinkstrTheme.textSecondary)
         }
 
         HStack(spacing: 6) {
           Text(subtitle)
-            .font(.custom(LinkstrTheme.bodyFont, size: 13))
+            .font(LinkstrTheme.body(13))
             .foregroundStyle(LinkstrTheme.textSecondary)
             .lineLimit(1)
 
           Text("•")
-            .font(.caption2)
+            .font(LinkstrTheme.body(11))
             .foregroundStyle(LinkstrTheme.textSecondary)
 
           Text(summary.postCount == 1 ? "1 post" : "\(summary.postCount) posts")
-            .font(.custom(LinkstrTheme.bodyFont, size: 12))
+            .font(LinkstrTheme.body(12))
             .foregroundStyle(LinkstrTheme.textSecondary)
         }
       }
@@ -498,18 +498,18 @@ private struct PostCardView: View {
 
       VStack(alignment: .leading, spacing: 8) {
         Text(isOutgoing ? "sent by you" : "sent by \(senderLabel)")
-          .font(.caption2)
+          .font(LinkstrTheme.body(11))
           .foregroundStyle(LinkstrTheme.textSecondary)
           .lineLimit(1)
 
         Text(primaryText)
-          .font(.custom(LinkstrTheme.titleFont, size: 15))
+          .font(LinkstrTheme.title(15))
           .foregroundStyle(LinkstrTheme.textPrimary)
           .lineLimit(2)
 
         if let noteText {
           Text(noteText)
-            .font(.custom(LinkstrTheme.bodyFont, size: 12))
+            .font(LinkstrTheme.body(12))
             .foregroundStyle(LinkstrTheme.textPrimary.opacity(0.92))
             .lineLimit(2)
         }
@@ -522,7 +522,7 @@ private struct PostCardView: View {
           }
 
           Text(post.timestamp.linkstrListTimestampLabel)
-            .font(.caption)
+            .font(LinkstrTheme.body(12))
             .foregroundStyle(LinkstrTheme.textSecondary)
             .lineLimit(1)
         }
@@ -590,7 +590,7 @@ private struct PostCardView: View {
       .frame(width: 52, height: 52)
       .overlay {
         Image(systemName: "link")
-          .font(.body)
+          .font(LinkstrTheme.body(16))
           .foregroundStyle(LinkstrTheme.textSecondary)
       }
   }
@@ -630,7 +630,7 @@ struct NewSessionSheet: View {
 
             LinkstrSectionHeader(title: "members (optional)")
             Text("create solo or add contacts now. you can manage members later.")
-              .font(.custom(LinkstrTheme.bodyFont, size: 12))
+              .font(LinkstrTheme.body(12))
               .foregroundStyle(LinkstrTheme.textSecondary)
 
             TextField("search contacts", text: $query)
@@ -646,11 +646,11 @@ struct NewSessionSheet: View {
 
             if contacts.isEmpty {
               Text("no contacts yet. you can still create a solo session.")
-                .font(.custom(LinkstrTheme.bodyFont, size: 12))
+                .font(LinkstrTheme.body(12))
                 .foregroundStyle(LinkstrTheme.textSecondary)
             } else if filteredContacts.isEmpty {
               Text("no contacts match.")
-                .font(.custom(LinkstrTheme.bodyFont, size: 12))
+                .font(LinkstrTheme.body(12))
                 .foregroundStyle(LinkstrTheme.textSecondary)
             } else {
               VStack(spacing: 0) {
@@ -662,10 +662,10 @@ struct NewSessionSheet: View {
                       LinkstrPeerAvatar(name: contact.displayName, size: 30)
                       VStack(alignment: .leading, spacing: 2) {
                         Text(contact.displayName)
-                          .font(.custom(LinkstrTheme.bodyFont, size: 14))
+                          .font(LinkstrTheme.body(14))
                           .foregroundStyle(LinkstrTheme.textPrimary)
                         Text(contact.npub)
-                          .font(.custom(LinkstrTheme.bodyFont, size: 11))
+                          .font(LinkstrTheme.body(11))
                           .foregroundStyle(LinkstrTheme.textSecondary)
                           .lineLimit(1)
                       }
@@ -696,7 +696,7 @@ struct NewSessionSheet: View {
               selectedNPubs.isEmpty
                 ? "creating a solo session" : "\(selectedNPubs.count) member(s) selected"
             )
-            .font(.custom(LinkstrTheme.bodyFont, size: 12))
+            .font(LinkstrTheme.body(12))
             .foregroundStyle(LinkstrTheme.textSecondary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, 4)
@@ -727,7 +727,7 @@ struct NewSessionSheet: View {
           .disabled(isCreating || !canCreateSession)
 
           Text(isCreating ? "waiting for relay reconnect before creating…" : " ")
-            .font(.custom(LinkstrTheme.bodyFont, size: 12))
+            .font(LinkstrTheme.body(12))
             .foregroundStyle(LinkstrTheme.textSecondary)
             .frame(maxWidth: .infinity, minHeight: 14, alignment: .center)
             .opacity(isCreating ? 1 : 0)
@@ -812,7 +812,7 @@ private struct SessionMembersSheet: View {
 
             if visibleCurrentMembers.isEmpty {
               Text("only you are in this session.")
-                .font(.custom(LinkstrTheme.bodyFont, size: 12))
+                .font(LinkstrTheme.body(12))
                 .foregroundStyle(LinkstrTheme.textSecondary)
             } else {
               VStack(spacing: 0) {
@@ -821,10 +821,10 @@ private struct SessionMembersSheet: View {
                     LinkstrPeerAvatar(name: memberDisplayName(for: memberHex), size: 28)
                     VStack(alignment: .leading, spacing: 2) {
                       Text(memberDisplayName(for: memberHex))
-                        .font(.custom(LinkstrTheme.bodyFont, size: 14))
+                        .font(LinkstrTheme.body(14))
                         .foregroundStyle(LinkstrTheme.textPrimary)
                       Text(memberIdentityLabel(for: memberHex))
-                        .font(.custom(LinkstrTheme.bodyFont, size: 11))
+                        .font(LinkstrTheme.body(11))
                         .foregroundStyle(LinkstrTheme.textSecondary)
                         .lineLimit(1)
                     }
@@ -832,7 +832,7 @@ private struct SessionMembersSheet: View {
                     Button("remove", role: .destructive) {
                       includedMemberHexes.remove(memberHex)
                     }
-                    .font(.custom(LinkstrTheme.bodyFont, size: 12))
+                    .font(LinkstrTheme.body(12))
                   }
                   .padding(.vertical, 8)
 
@@ -858,11 +858,11 @@ private struct SessionMembersSheet: View {
 
             if contacts.isEmpty {
               Text("no contacts yet.")
-                .font(.custom(LinkstrTheme.bodyFont, size: 12))
+                .font(LinkstrTheme.body(12))
                 .foregroundStyle(LinkstrTheme.textSecondary)
             } else if filteredContacts.isEmpty {
               Text("no contacts match.")
-                .font(.custom(LinkstrTheme.bodyFont, size: 12))
+                .font(LinkstrTheme.body(12))
                 .foregroundStyle(LinkstrTheme.textSecondary)
             } else {
               VStack(spacing: 0) {
@@ -879,10 +879,10 @@ private struct SessionMembersSheet: View {
                       LinkstrPeerAvatar(name: contact.displayName, size: 28)
                       VStack(alignment: .leading, spacing: 2) {
                         Text(contact.displayName)
-                          .font(.custom(LinkstrTheme.bodyFont, size: 14))
+                          .font(LinkstrTheme.body(14))
                           .foregroundStyle(LinkstrTheme.textPrimary)
                         Text(contact.npub)
-                          .font(.custom(LinkstrTheme.bodyFont, size: 11))
+                          .font(LinkstrTheme.body(11))
                           .foregroundStyle(LinkstrTheme.textSecondary)
                           .lineLimit(1)
                       }

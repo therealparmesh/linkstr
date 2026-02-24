@@ -127,8 +127,8 @@ final class ContactStore {
     throw ContactStoreError.invalidContactKey
   }
 
-  func normalizeAlias(_ displayName: String) -> String? {
-    let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+  func normalizeAlias(_ alias: String) -> String? {
+    let trimmed = alias.trimmingCharacters(in: .whitespacesAndNewlines)
     return trimmed.isEmpty ? nil : trimmed
   }
 

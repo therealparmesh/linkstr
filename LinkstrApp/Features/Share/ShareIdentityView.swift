@@ -18,27 +18,30 @@ struct ShareIdentityView: View {
       ScrollView {
         VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
           if let qrImage = QRCodeGenerator.image(for: npub) {
-            VStack(spacing: 10) {
-              Image(uiImage: qrImage)
-                .interpolation(.none)
-                .resizable()
-                .scaledToFit()
-                .frame(maxWidth: 300)
+            VStack(alignment: .leading, spacing: 10) {
+              LinkstrSectionHeader(title: "qr code")
+              VStack(spacing: 10) {
+                Image(uiImage: qrImage)
+                  .interpolation(.none)
+                  .resizable()
+                  .scaledToFit()
+                  .frame(maxWidth: 300)
 
-              Text("scan to add this contact key (npub)")
-                .font(.custom(LinkstrTheme.bodyFont, size: 13))
-                .foregroundStyle(LinkstrTheme.textSecondary)
+                Text("scan to add this contact key (npub)")
+                  .font(LinkstrTheme.body(13))
+                  .foregroundStyle(LinkstrTheme.textSecondary)
+              }
+              .frame(maxWidth: .infinity)
             }
-            .frame(maxWidth: .infinity)
           }
 
           VStack(alignment: .leading, spacing: 10) {
             LinkstrSectionHeader(title: "your contact key (npub)")
             Text("others use this key to send links to you or add you as a contact.")
-              .font(.custom(LinkstrTheme.bodyFont, size: 13))
+              .font(LinkstrTheme.body(13))
               .foregroundStyle(LinkstrTheme.textSecondary)
             Text(npub)
-              .font(.custom(LinkstrTheme.bodyFont, size: 13))
+              .font(LinkstrTheme.body(13))
               .foregroundStyle(LinkstrTheme.textSecondary)
               .textSelection(.enabled)
               .padding(10)
@@ -58,7 +61,9 @@ struct ShareIdentityView: View {
             .tint(LinkstrTheme.neonCyan)
           }
         }
-        .padding(12)
+        .padding(.horizontal, 12)
+        .padding(.top, 14)
+        .padding(.bottom, 28)
       }
       .scrollBounceBehavior(.basedOnSize)
       .linkstrTabBarContentInset()

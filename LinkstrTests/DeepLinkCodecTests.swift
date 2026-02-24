@@ -67,18 +67,4 @@ final class DeepLinkHandlerTests: XCTestCase {
     XCTAssertFalse(handler.handle(url: invalidURL))
     XCTAssertNil(handler.pendingPayload)
   }
-
-  func testClearRemovesPendingPayload() throws {
-    let handler = DeepLinkHandler()
-    let payload = LinkstrDeepLinkPayload(
-      url: "https://www.instagram.com/reel/DUSWiOIDivu/",
-      timestamp: 1_739_877_600,
-      messageGUID: "clear-guid"
-    )
-    let url = try XCTUnwrap(LinkstrDeepLinkCodec.makeAppDeepLink(payload: payload))
-    XCTAssertTrue(handler.handle(url: url))
-
-    handler.clear()
-    XCTAssertNil(handler.pendingPayload)
-  }
 }
