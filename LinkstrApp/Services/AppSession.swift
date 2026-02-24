@@ -27,20 +27,14 @@ final class AppSession: ObservableObject {
     let payload: LinkstrPayload
     let ownerPubkey: String
     let senderPubkey: String
-    let sessionID: String
     let recipientPubkeys: [String]
     let normalizedURL: String
-    let normalizedNote: String?
   }
 
   private struct ReactionDraft {
     let payload: LinkstrPayload
     let ownerPubkey: String
     let senderPubkey: String
-    let sessionID: String
-    let postID: String
-    let emoji: String
-    let isActive: Bool
     let recipientPubkeys: [String]
   }
 
@@ -968,30 +962,13 @@ final class AppSession: ObservableObject {
       return nil
     }
 
-    let recipientPubkeys: [String]
-    do {
-      guard
-        try messageStore.isMemberActive(
-          sessionID: post.conversationID,
-          ownerPubkey: ownerPubkey,
-          memberPubkey: keypair.publicKey.hex,
-          at: .now
-        )
-      else {
-        composeError = "you're no longer a member of this session."
-        return nil
-      }
-
-      recipientPubkeys = try activeMemberPubkeys(
+    guard
+      let recipientPubkeys = resolveOutboundRecipients(
         sessionID: post.conversationID,
-        ownerPubkey: ownerPubkey
+        ownerPubkey: ownerPubkey,
+        senderPubkey: keypair.publicKey.hex
       )
-      guard recipientPubkeys.contains(keypair.publicKey.hex) else {
-        composeError = "you're no longer a member of this session."
-        return nil
-      }
-    } catch {
-      composeError = error.localizedDescription
+    else {
       return nil
     }
 
@@ -1022,10 +999,6 @@ final class AppSession: ObservableObject {
       ),
       ownerPubkey: ownerPubkey,
       senderPubkey: keypair.publicKey.hex,
-      sessionID: post.conversationID,
-      postID: post.rootID,
-      emoji: normalizedEmoji,
-      isActive: nextState,
       recipientPubkeys: recipientPubkeys
     )
   }
@@ -1045,31 +1018,13 @@ final class AppSession: ObservableObject {
       return nil
     }
 
-    let recipientPubkeys: [String]
-    do {
-      guard
-        try messageStore.isMemberActive(
-          sessionID: sessionID,
-          ownerPubkey: ownerPubkey,
-          memberPubkey: keypair.publicKey.hex,
-          at: .now
-        )
-      else {
-        composeError = "you're no longer a member of this session."
-        return nil
-      }
-      recipientPubkeys = try activeMemberPubkeys(
+    guard
+      let recipientPubkeys = resolveOutboundRecipients(
         sessionID: sessionID,
-        ownerPubkey: ownerPubkey
+        ownerPubkey: ownerPubkey,
+        senderPubkey: keypair.publicKey.hex
       )
-      guard recipientPubkeys.contains(keypair.publicKey.hex) else {
-        composeError = "you're no longer a member of this session."
-        return nil
-      }
-    } catch {
-      composeError = error.localizedDescription
-      return nil
-    }
+    else { return nil }
     guard !recipientPubkeys.isEmpty else {
       composeError = "session has no members. add members before sending."
       return nil
@@ -1090,31 +1045,30 @@ final class AppSession: ObservableObject {
       ),
       ownerPubkey: ownerPubkey,
       senderPubkey: keypair.publicKey.hex,
-      sessionID: sessionID,
       recipientPubkeys: recipientPubkeys,
-      normalizedURL: normalizedURL,
-      normalizedNote: normalizedNote
+      normalizedURL: normalizedURL
     )
   }
 
   private func persistSentRootPost(_ draft: RootPostDraft, eventID: String) throws {
+    let sessionID = draft.payload.conversationID
     _ = try messageStore.upsertSession(
       ownerPubkey: draft.ownerPubkey,
-      sessionID: draft.sessionID,
-      name: existingSessionName(for: draft.sessionID, ownerPubkey: draft.ownerPubkey),
+      sessionID: sessionID,
+      name: existingSessionName(for: sessionID, ownerPubkey: draft.ownerPubkey),
       createdByPubkey: draft.senderPubkey,
       updatedAt: .now
     )
     let message = try SessionMessageEntity(
       eventID: eventID,
       ownerPubkey: draft.ownerPubkey,
-      conversationID: draft.sessionID,
+      conversationID: sessionID,
       rootID: eventID,
       kind: .root,
       senderPubkey: draft.senderPubkey,
       receiverPubkey: draft.ownerPubkey,
       url: draft.normalizedURL,
-      note: draft.normalizedNote,
+      note: draft.payload.note,
       timestamp: .now,
       readAt: .now,
       linkType: URLClassifier.classify(draft.normalizedURL)
@@ -1124,13 +1078,21 @@ final class AppSession: ObservableObject {
   }
 
   private func persistReactionState(_ draft: ReactionDraft, eventID: String) throws {
+    guard let isActive = draft.payload.reactionActive else { return }
+    let emoji = draft.payload.emoji?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    guard !emoji.isEmpty else { return }
+    let sessionID = draft.payload.conversationID.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !sessionID.isEmpty else { return }
+    let postID = draft.payload.rootID.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !postID.isEmpty else { return }
+
     try messageStore.upsertReaction(
       ownerPubkey: draft.ownerPubkey,
-      sessionID: draft.sessionID,
-      postID: draft.postID,
-      emoji: draft.emoji,
+      sessionID: sessionID,
+      postID: postID,
+      emoji: emoji,
       senderPubkey: draft.senderPubkey,
-      isActive: draft.isActive,
+      isActive: isActive,
       updatedAt: .now,
       eventID: eventID
     )
@@ -1184,6 +1146,38 @@ final class AppSession: ObservableObject {
       activeOnly: true
     ).map(\.memberPubkey)
     return dedupedValidPubkeys(members)
+  }
+
+  private func resolveOutboundRecipients(
+    sessionID: String,
+    ownerPubkey: String,
+    senderPubkey: String
+  ) -> [String]? {
+    do {
+      guard
+        try messageStore.isMemberActive(
+          sessionID: sessionID,
+          ownerPubkey: ownerPubkey,
+          memberPubkey: senderPubkey,
+          at: .now
+        )
+      else {
+        composeError = "you're no longer a member of this session."
+        return nil
+      }
+      let recipientPubkeys = try activeMemberPubkeys(
+        sessionID: sessionID,
+        ownerPubkey: ownerPubkey
+      )
+      guard recipientPubkeys.contains(senderPubkey) else {
+        composeError = "you're no longer a member of this session."
+        return nil
+      }
+      return recipientPubkeys
+    } catch {
+      composeError = error.localizedDescription
+      return nil
+    }
   }
 
   private func dedupedValidPubkeys(_ pubkeyHexes: [String]) -> [String] {
@@ -1650,7 +1644,6 @@ final class AppSession: ObservableObject {
     guard
       inboundMembershipIsActive(
         sessionID: sessionID,
-        ownerPubkey: ownerPubkey,
         senderPubkey: incoming.senderPubkey,
         timestamp: incoming.createdAt,
         source: incoming.source
@@ -1709,7 +1702,6 @@ final class AppSession: ObservableObject {
     guard
       inboundMembershipIsActive(
         sessionID: sessionID,
-        ownerPubkey: ownerPubkey,
         senderPubkey: incoming.senderPubkey,
         timestamp: incoming.createdAt,
         source: incoming.source
@@ -1721,14 +1713,13 @@ final class AppSession: ObservableObject {
     if !payloadRootID.isEmpty, payloadRootID != incoming.eventID {
       return
     }
-    let canonicalPostID = incoming.eventID
     guard let payloadURL = incoming.payload.url,
       let normalizedURL = LinkstrURLValidator.normalizedWebURL(from: payloadURL)
     else {
       return
     }
 
-    let isEchoedOutgoing = identityService.pubkeyHex == incoming.senderPubkey
+    let isEchoedOutgoing = ownerPubkey == incoming.senderPubkey
     let existingSession: SessionEntity
     do {
       guard let session = try messageStore.session(sessionID: sessionID, ownerPubkey: ownerPubkey)
@@ -1761,7 +1752,7 @@ final class AppSession: ObservableObject {
         eventID: incoming.eventID,
         ownerPubkey: ownerPubkey,
         conversationID: sessionID,
-        rootID: canonicalPostID,
+        rootID: incoming.eventID,
         kind: .root,
         senderPubkey: incoming.senderPubkey,
         receiverPubkey: incoming.receiverPubkey,
@@ -1789,12 +1780,12 @@ final class AppSession: ObservableObject {
 
   private func inboundMembershipIsActive(
     sessionID: String,
-    ownerPubkey: String,
     senderPubkey: String,
     timestamp: Date,
     source: DirectMessageIngestSource
   ) -> Bool {
-    guard let myPubkey = identityService.pubkeyHex else { return false }
+    guard let ownerPubkey = identityService.pubkeyHex else { return false }
+    let myPubkey = ownerPubkey
 
     do {
       if source == .live {

@@ -328,6 +328,7 @@
 ## Future
 
 - Future proposals are tracked as separate docs and are not part of the current shipped behavior.
+- Proposal docs are directional/high-level and can change before implementation.
 - Delete session: [docs/future/delete-session.md](docs/future/delete-session.md)
 - Leave session: [docs/future/leave-session.md](docs/future/leave-session.md)
 

@@ -29,7 +29,7 @@ final class AccountStateEntity {
     updatedAt = .now
   }
 
-  private static func normalizedEventIDToken(_ eventID: String?) -> String? {
+  static func normalizedEventIDToken(_ eventID: String?) -> String? {
     guard let eventID else { return nil }
     let trimmed = eventID.trimmingCharacters(in: .whitespacesAndNewlines)
     return trimmed.isEmpty ? nil : trimmed

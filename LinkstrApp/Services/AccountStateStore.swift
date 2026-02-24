@@ -15,13 +15,13 @@ final class AccountStateStore {
     }
     return (
       state.followListUpdatedAt,
-      normalizedEventIDToken(state.followListEventID)
+      AccountStateEntity.normalizedEventIDToken(state.followListEventID)
     )
   }
 
   func setFollowListWatermark(ownerPubkey: String, createdAt: Date, eventID: String?) throws {
     let state = try ensureAccountState(ownerPubkey: ownerPubkey)
-    let normalizedEventID = normalizedEventIDToken(eventID)
+    let normalizedEventID = AccountStateEntity.normalizedEventIDToken(eventID)
     if state.followListUpdatedAt == createdAt && state.followListEventID == normalizedEventID {
       return
     }
@@ -50,11 +50,5 @@ final class AccountStateStore {
     modelContext.insert(state)
     try modelContext.save()
     return state
-  }
-
-  private func normalizedEventIDToken(_ eventID: String?) -> String? {
-    guard let eventID else { return nil }
-    let trimmed = eventID.trimmingCharacters(in: .whitespacesAndNewlines)
-    return trimmed.isEmpty ? nil : trimmed
   }
 }
