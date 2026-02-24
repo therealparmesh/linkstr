@@ -404,6 +404,17 @@ struct PostDetailView: View {
         Text(note)
           .font(LinkstrTheme.body(13))
           .foregroundStyle(LinkstrTheme.textPrimary.opacity(0.94))
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .padding(.horizontal, 10)
+          .padding(.vertical, 8)
+          .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+              .fill(LinkstrTheme.panelSoft)
+          )
+          .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+              .stroke(LinkstrTheme.textSecondary.opacity(0.18), lineWidth: 1)
+          )
       }
 
       mediaBlock
@@ -420,6 +431,11 @@ struct PostDetailView: View {
       )
 
       if !reactionBreakdown.isEmpty {
+        Divider()
+          .overlay(LinkstrTheme.textSecondary.opacity(0.18))
+          .padding(.top, 2)
+          .padding(.bottom, 1)
+
         VStack(alignment: .leading, spacing: 8) {
           LinkstrSectionHeader(title: "who reacted")
 

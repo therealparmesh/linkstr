@@ -109,6 +109,7 @@
 - Unsupported schemes are rejected.
 - Note text is trimmed and persisted only when non-empty.
 - In post detail, the raw link text is tappable and opens in the browser.
+- In post detail, note text is rendered in its own bubble for visual separation.
 - Send behavior is reconnect-and-timeout:
   - Composer remains on-screen while waiting to send.
   - Send waits for a usable relay path (default timeout 12 seconds).
@@ -128,6 +129,7 @@
   - Post detail uses interactive Slack-style reaction summary chips.
   - Inline quick toggles for `👍`, `👎`, `👀`.
   - `...` button that opens the full emoji picker sheet.
+  - Post detail separates the per-participant breakdown section with a divider.
   - Post detail shows per-participant breakdown rows (`display_name: emojis_reacted_with`).
 - Default quick options include `👍`, `👎`, `👀`.
 - Reaction state is keyed by:
@@ -281,6 +283,7 @@
 - Share tab exposes current account `npub`.
 - Share tab provides:
   - QR code.
+  - A centered scan helper caption below the QR code.
   - Raw key text.
   - Copy action.
 
