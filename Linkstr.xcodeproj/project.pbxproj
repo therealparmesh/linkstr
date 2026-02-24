@@ -24,6 +24,7 @@
 		401F645DC5E055DAB60CA01D /* IdentityServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FED3B5DF5A048969C4C2153 /* IdentityServiceTests.swift */; };
 		44CF9CF4B0623913AB1F02F2 /* LinkstrErrorToast.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71EA6AFE00388F8A47E323AB /* LinkstrErrorToast.swift */; };
 		4720DE0540BECD7B8B8DDEB8 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F601E426AE9DF9219162BF8C /* Assets.xcassets */; };
+		5178D101A3E14DC5B3D44931 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = C14D64D70F05458485A9FB4F /* PrivacyInfo.xcprivacy */; };
 		5C081B12920542652F7743FA /* URLClassifierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DF2BD42808FC977F554891B /* URLClassifierTests.swift */; };
 		5F537D896C188FD991549A9B /* LocalNotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6ED18846C164D6CF5E1A03D6 /* LocalNotificationService.swift */; };
 		61BE8DAE2BADCD8F36FE84C8 /* AppSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37C24617515D81FAA072295F /* AppSession.swift */; };
@@ -124,6 +125,7 @@
 		B704DE821A9D698172A93F4C /* RecipientSearchLogic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipientSearchLogic.swift; sourceTree = "<group>"; };
 		B818363C936E8DBB7C2F538E /* HLSDownloadManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HLSDownloadManager.swift; sourceTree = "<group>"; };
 		BF6BDEF486E9344C4611336E /* DeepLinkHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLinkHandler.swift; sourceTree = "<group>"; };
+		C14D64D70F05458485A9FB4F /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		C7805C59C56EC4D0C6C28B4B /* URLMetadataService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = URLMetadataService.swift; sourceTree = "<group>"; };
 		D3E55FD1E2DA44178AA72B96 /* ContactKeyParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactKeyParserTests.swift; sourceTree = "<group>"; };
 		D8CC474675B4FD0B86052DBD /* DeepLinkCodecTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLinkCodecTests.swift; sourceTree = "<group>"; };
@@ -291,14 +293,15 @@
 			path = App;
 			sourceTree = "<group>";
 		};
-		DF75E1745F49D36E1D753AA8 /* LinkstrApp */ = {
-			isa = PBXGroup;
-			children = (
-				F601E426AE9DF9219162BF8C /* Assets.xcassets */,
-				6EE663FE430C958339CB80F1 /* Info.plist */,
-				5B94E88691277DCC6F6DE7E3 /* LaunchScreen.storyboard */,
-				77319D5B63F27BDBC54D4DC3 /* Linkstr.entitlements */,
-				DC40DB9582FE292723A7139F /* App */,
+			DF75E1745F49D36E1D753AA8 /* LinkstrApp */ = {
+				isa = PBXGroup;
+				children = (
+					F601E426AE9DF9219162BF8C /* Assets.xcassets */,
+					6EE663FE430C958339CB80F1 /* Info.plist */,
+					C14D64D70F05458485A9FB4F /* PrivacyInfo.xcprivacy */,
+					5B94E88691277DCC6F6DE7E3 /* LaunchScreen.storyboard */,
+					77319D5B63F27BDBC54D4DC3 /* Linkstr.entitlements */,
+					DC40DB9582FE292723A7139F /* App */,
 				2ADA1A6CD70E15E0B8E2358E /* Components */,
 				E0EC38D5B9E054EBF974A6F6 /* Domain */,
 				BB6DA7B3FB941BDFBE7E8036 /* Features */,
@@ -422,15 +425,16 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		2D7950AB40289F825C488196 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				4720DE0540BECD7B8B8DDEB8 /* Assets.xcassets in Resources */,
-				F4F8174F250F6EC15A447D92 /* LaunchScreen.storyboard in Resources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
+			2D7950AB40289F825C488196 /* Resources */ = {
+				isa = PBXResourcesBuildPhase;
+				buildActionMask = 2147483647;
+				files = (
+					4720DE0540BECD7B8B8DDEB8 /* Assets.xcassets in Resources */,
+					F4F8174F250F6EC15A447D92 /* LaunchScreen.storyboard in Resources */,
+					5178D101A3E14DC5B3D44931 /* PrivacyInfo.xcprivacy in Resources */,
+				);
+				runOnlyForDeploymentPostprocessing = 0;
+			};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
