@@ -340,6 +340,10 @@ private struct SessionPostsView: View {
       .filter { $0.sessionID == sessionEntity.sessionID && $0.isActive }
   }
 
+  private var canManageMembers: Bool {
+    session.canManageMembers(for: sessionEntity)
+  }
+
   private var posts: [SessionMessageEntity] {
     scopedMessages
       .filter { $0.conversationID == sessionEntity.sessionID && $0.kind == .root }
@@ -435,7 +439,7 @@ private struct SessionPostsView: View {
           Image(systemName: "person.2")
             .linkstrToolbarIconLabel()
         }
-        .accessibilityLabel("members")
+        .accessibilityLabel(canManageMembers ? "manage members" : "members")
         .tint(LinkstrTheme.neonCyan)
 
         Button {
@@ -456,7 +460,8 @@ private struct SessionPostsView: View {
       SessionMembersSheet(
         sessionEntity: sessionEntity,
         contacts: scopedContacts,
-        activeMembers: scopedMembers
+        activeMembers: scopedMembers,
+        canManageMembers: canManageMembers
       )
       .environmentObject(session)
     }
@@ -782,17 +787,22 @@ private struct SessionMembersSheet: View {
   let sessionEntity: SessionEntity
   let contacts: [ContactEntity]
   let activeMembers: [SessionMemberEntity]
+  let canManageMembers: Bool
 
   @State private var includedMemberHexes: Set<String>
   @State private var query = ""
   @State private var isSaving = false
 
   init(
-    sessionEntity: SessionEntity, contacts: [ContactEntity], activeMembers: [SessionMemberEntity]
+    sessionEntity: SessionEntity,
+    contacts: [ContactEntity],
+    activeMembers: [SessionMemberEntity],
+    canManageMembers: Bool
   ) {
     self.sessionEntity = sessionEntity
     self.contacts = contacts
     self.activeMembers = activeMembers
+    self.canManageMembers = canManageMembers
     let initialMembers = activeMembers.map(\.memberPubkey)
     _includedMemberHexes = State(initialValue: Set(initialMembers))
   }
@@ -824,10 +834,12 @@ private struct SessionMembersSheet: View {
                         .lineLimit(1)
                     }
                     Spacer()
-                    Button("remove", role: .destructive) {
-                      includedMemberHexes.remove(memberHex)
+                    if canManageMembers {
+                      Button("remove", role: .destructive) {
+                        includedMemberHexes.remove(memberHex)
+                      }
+                      .font(LinkstrTheme.body(12))
                     }
-                    .font(LinkstrTheme.body(12))
                   }
                   .padding(.vertical, 8)
 
@@ -838,71 +850,77 @@ private struct SessionMembersSheet: View {
               .padding(.horizontal, 2)
             }
 
-            LinkstrSectionHeader(title: "add from contacts")
+            if canManageMembers {
+              LinkstrSectionHeader(title: "add from contacts")
 
-            TextField("search contacts", text: $query)
-              .textInputAutocapitalization(.never)
-              .autocorrectionDisabled(true)
-              .padding(.horizontal, 12)
-              .padding(.vertical, 10)
-              .frame(minHeight: LinkstrTheme.inputControlMinHeight)
-              .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                  .fill(LinkstrTheme.panelSoft)
-              )
+              TextField("search contacts", text: $query)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled(true)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .frame(minHeight: LinkstrTheme.inputControlMinHeight)
+                .background(
+                  RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(LinkstrTheme.panelSoft)
+                )
 
-            if contacts.isEmpty {
-              Text("no contacts yet.")
-                .font(LinkstrTheme.body(12))
-                .foregroundStyle(LinkstrTheme.textSecondary)
-            } else if filteredContacts.isEmpty {
-              Text("no contacts match.")
-                .font(LinkstrTheme.body(12))
-                .foregroundStyle(LinkstrTheme.textSecondary)
-            } else {
-              VStack(spacing: 0) {
-                ForEach(filteredContacts) { contact in
-                  let contactHex = contact.targetPubkey
-                  Button {
-                    if includedMemberHexes.contains(contactHex) {
-                      includedMemberHexes.remove(contactHex)
-                    } else {
-                      includedMemberHexes.insert(contactHex)
-                    }
-                  } label: {
-                    HStack(spacing: 10) {
-                      LinkstrPeerAvatar(name: contact.displayName, size: 28)
-                      VStack(alignment: .leading, spacing: 2) {
-                        Text(contact.displayName)
-                          .font(LinkstrTheme.body(14))
-                          .foregroundStyle(LinkstrTheme.textPrimary)
-                        Text(contact.npub)
-                          .font(LinkstrTheme.body(11))
-                          .foregroundStyle(LinkstrTheme.textSecondary)
-                          .lineLimit(1)
+              if contacts.isEmpty {
+                Text("no contacts yet.")
+                  .font(LinkstrTheme.body(12))
+                  .foregroundStyle(LinkstrTheme.textSecondary)
+              } else if filteredContacts.isEmpty {
+                Text("no contacts match.")
+                  .font(LinkstrTheme.body(12))
+                  .foregroundStyle(LinkstrTheme.textSecondary)
+              } else {
+                VStack(spacing: 0) {
+                  ForEach(filteredContacts) { contact in
+                    let contactHex = contact.targetPubkey
+                    Button {
+                      if includedMemberHexes.contains(contactHex) {
+                        includedMemberHexes.remove(contactHex)
+                      } else {
+                        includedMemberHexes.insert(contactHex)
                       }
+                    } label: {
+                      HStack(spacing: 10) {
+                        LinkstrPeerAvatar(name: contact.displayName, size: 28)
+                        VStack(alignment: .leading, spacing: 2) {
+                          Text(contact.displayName)
+                            .font(LinkstrTheme.body(14))
+                            .foregroundStyle(LinkstrTheme.textPrimary)
+                          Text(contact.npub)
+                            .font(LinkstrTheme.body(11))
+                            .foregroundStyle(LinkstrTheme.textSecondary)
+                            .lineLimit(1)
+                        }
 
-                      Spacer()
+                        Spacer()
 
-                      Image(
-                        systemName: includedMemberHexes.contains(contactHex)
-                          ? "checkmark.circle.fill" : "circle"
-                      )
-                      .foregroundStyle(
-                        includedMemberHexes.contains(contactHex)
-                          ? LinkstrTheme.neonCyan : LinkstrTheme.textSecondary
-                      )
+                        Image(
+                          systemName: includedMemberHexes.contains(contactHex)
+                            ? "checkmark.circle.fill" : "circle"
+                        )
+                        .foregroundStyle(
+                          includedMemberHexes.contains(contactHex)
+                            ? LinkstrTheme.neonCyan : LinkstrTheme.textSecondary
+                        )
+                      }
+                      .padding(.vertical, 8)
+                      .contentShape(Rectangle())
                     }
-                    .padding(.vertical, 8)
-                    .contentShape(Rectangle())
-                  }
-                  .buttonStyle(.plain)
+                    .buttonStyle(.plain)
 
-                  Divider()
-                    .overlay(LinkstrTheme.textSecondary.opacity(0.2))
+                    Divider()
+                      .overlay(LinkstrTheme.textSecondary.opacity(0.2))
+                  }
                 }
+                .padding(.horizontal, 2)
               }
-              .padding(.horizontal, 2)
+            } else {
+              Text("only the session creator can add or remove members.")
+                .font(LinkstrTheme.body(12))
+                .foregroundStyle(LinkstrTheme.textSecondary)
             }
           }
           .padding(.horizontal, 12)
@@ -916,17 +934,19 @@ private struct SessionMembersSheet: View {
       .toolbarColorScheme(.dark, for: .navigationBar)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
-          Button("cancel") {
+          Button(canManageMembers ? "cancel" : "done") {
             dismiss()
           }
           .disabled(isSaving)
         }
-        ToolbarItem(placement: .confirmationAction) {
-          Button(isSaving ? "saving…" : "save") {
-            saveMembers()
+        if canManageMembers {
+          ToolbarItem(placement: .confirmationAction) {
+            Button(isSaving ? "saving…" : "save") {
+              saveMembers()
+            }
+            .disabled(isSaving)
+            .tint(LinkstrTheme.neonCyan)
           }
-          .disabled(isSaving)
-          .tint(LinkstrTheme.neonCyan)
         }
       }
     }
@@ -976,6 +996,10 @@ private struct SessionMembersSheet: View {
   }
 
   private func saveMembers() {
+    guard canManageMembers else {
+      composeCreatorOnlyError()
+      return
+    }
     guard !isSaving else { return }
     isSaving = true
 
@@ -991,5 +1015,9 @@ private struct SessionMembersSheet: View {
         dismiss()
       }
     }
+  }
+
+  private func composeCreatorOnlyError() {
+    session.composeError = "only the session creator can manage members."
   }
 }

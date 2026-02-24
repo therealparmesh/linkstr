@@ -493,6 +493,39 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
   }
 
+  func testUpdateSessionMembersAwaitingRelayRequiresSessionCreator() async throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let creatorPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-creator-guard"
+    let sessionEntity = try insertSessionFixture(
+      in: container.mainContext,
+      ownerPubkey: myPubkey,
+      createdByPubkey: creatorPubkey,
+      memberPubkeys: [myPubkey, creatorPubkey, peerPubkey],
+      sessionID: sessionID
+    )
+    let peerNPub = try XCTUnwrap(PublicKey(hex: peerPubkey)?.npub)
+
+    let didUpdate = await session.updateSessionMembersAwaitingRelay(
+      session: sessionEntity,
+      memberNPubs: [peerNPub]
+    )
+
+    XCTAssertFalse(didUpdate)
+    XCTAssertEqual(session.composeError, "only the session creator can manage members.")
+
+    let members = try container.mainContext.fetch(
+      FetchDescriptor<SessionMemberEntity>(
+        predicate: #Predicate {
+          $0.ownerPubkey == myPubkey && $0.sessionID == sessionID && $0.isActive == true
+        }
+      ))
+    XCTAssertEqual(Set(members.map(\.memberPubkey)), Set([myPubkey, creatorPubkey, peerPubkey]))
+  }
+
   func testLogoutClearLocalDataRemovesContactsAndMessages() async throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()

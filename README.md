@@ -85,6 +85,7 @@
 - Session member management is available inside a session.
 - Members can be added only from existing contacts.
 - Members can be removed from active membership.
+- Only the session creator can add or remove members.
 - If a member no longer matches a local contact, UI falls back to `npub` (or truncated hex).
 - Current user is preserved in effective membership.
 

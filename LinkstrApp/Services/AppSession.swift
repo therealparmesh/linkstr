@@ -249,6 +249,11 @@ final class AppSession: ObservableObject {
     return reactions.filter { $0.ownerPubkey == ownerPubkey }
   }
 
+  func canManageMembers(for session: SessionEntity) -> Bool {
+    guard let myPubkey = identityService.pubkeyHex else { return false }
+    return session.createdByPubkey == myPubkey
+  }
+
   private func effectiveRelayStatus(for relay: RelayEntity) -> RelayHealthStatus {
     if let runtimeStatus = relayRuntimeStatusByURL[relay.url]?.status {
       return runtimeStatus
@@ -639,6 +644,16 @@ final class AppSession: ObservableObject {
     timeoutSeconds: TimeInterval = 12,
     pollIntervalSeconds: TimeInterval = 0.35
   ) async -> Bool {
+    guard let keypair = identityService.keypair, let ownerPubkey = identityService.pubkeyHex else {
+      composeError = "you're signed out. sign in to manage session members."
+      return false
+    }
+
+    guard canManageMembers(for: session) else {
+      composeError = "only the session creator can manage members."
+      return false
+    }
+
     guard
       await awaitRelayReadyForSend(
         timeoutSeconds: timeoutSeconds,
@@ -648,11 +663,6 @@ final class AppSession: ObservableObject {
       return false
     }
     startNostrIfPossible()
-
-    guard let keypair = identityService.keypair, let ownerPubkey = identityService.pubkeyHex else {
-      composeError = "you're signed out. sign in to manage session members."
-      return false
-    }
 
     let members = normalizedMemberPubkeys(
       fromNPubs: memberNPubs,
@@ -1400,13 +1410,21 @@ final class AppSession: ObservableObject {
       return
     }
 
-    let sessionName = existingSessionName(for: sessionID, ownerPubkey: ownerPubkey)
     do {
+      let existing = try messageStore.session(sessionID: sessionID, ownerPubkey: ownerPubkey)
+      if let existing, existing.createdByPubkey != incoming.senderPubkey {
+        return
+      }
+
+      let sessionName =
+        existing?.name ?? existingSessionName(for: sessionID, ownerPubkey: ownerPubkey)
+      let createdByPubkey = existing?.createdByPubkey ?? incoming.senderPubkey
+
       _ = try messageStore.upsertSession(
         ownerPubkey: ownerPubkey,
         sessionID: sessionID,
         name: sessionName,
-        createdByPubkey: incoming.senderPubkey,
+        createdByPubkey: createdByPubkey,
         updatedAt: incoming.createdAt
       )
       try messageStore.applyMemberSnapshot(
