@@ -11,6 +11,7 @@ struct LinkstrAppMain: App {
 
   init() {
     let schema = Schema([
+      AccountStateEntity.self,
       ContactEntity.self,
       RelayEntity.self,
       SessionEntity.self,

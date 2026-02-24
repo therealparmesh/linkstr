@@ -859,6 +859,70 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
   }
 
+  func testIngestAllowsHistoricalRootFromInactiveMemberWhenTimestampWasActive() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let creatorPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let removedPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-historical-root-from-removed-member"
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-create-historical-root-guard",
+        senderPubkey: creatorPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: Date(timeIntervalSince1970: 1800),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-create",
+          kind: .sessionCreate,
+          url: nil,
+          note: nil,
+          timestamp: 1800,
+          sessionName: "Historical Root Guard",
+          memberPubkeys: [creatorPubkey, myPubkey, removedPubkey]
+        )
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-members-remove-historical-root-peer",
+        senderPubkey: creatorPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: Date(timeIntervalSince1970: 1810),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-remove",
+          kind: .sessionMembers,
+          url: nil,
+          note: nil,
+          timestamp: 1810,
+          memberPubkeys: [creatorPubkey, myPubkey]
+        )
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "root-historical-from-removed-peer",
+        senderPubkey: removedPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: Date(timeIntervalSince1970: 1805),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "root-historical-from-removed-peer",
+          kind: .root,
+          url: "https://example.com/historical-root-removed-peer",
+          note: nil,
+          timestamp: 1805
+        ),
+        source: .historical
+      ))
+
+    let messages = try fetchMessages(in: container.mainContext)
+    XCTAssertEqual(messages.map(\.eventID), ["root-historical-from-removed-peer"])
+  }
+
   func testIngestIgnoresBackdatedReactionFromCurrentlyInactiveMember() throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
@@ -1510,12 +1574,14 @@ final class AppSessionLocalFlowTests: XCTestCase {
     )
     container.mainContext.insert(message)
     try container.mainContext.save()
+    XCTAssertEqual(try fetchAccountStates(in: container.mainContext).count, 1)
 
     session.logout(clearLocalData: true)
 
     XCTAssertNil(session.identityService.keypair)
     XCTAssertTrue(try fetchContacts(in: container.mainContext).isEmpty)
     XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
+    XCTAssertTrue(try fetchAccountStates(in: container.mainContext).isEmpty)
   }
 
   func testLogoutWithoutClearingLocalDataKeepsContactsAndMessages() async throws {
@@ -1722,6 +1788,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
     AppSession, ModelContainer
   ) {
     let schema = Schema([
+      AccountStateEntity.self,
       ContactEntity.self,
       RelayEntity.self,
       SessionEntity.self,
@@ -1762,19 +1829,25 @@ final class AppSessionLocalFlowTests: XCTestCase {
       FetchDescriptor<SessionReactionEntity>(sortBy: [SortDescriptor(\.updatedAt)]))
   }
 
+  private func fetchAccountStates(in context: ModelContext) throws -> [AccountStateEntity] {
+    try context.fetch(FetchDescriptor<AccountStateEntity>())
+  }
+
   private func makeIncomingMessage(
     eventID: String,
     senderPubkey: String,
     receiverPubkey: String,
     createdAt: Date,
-    payload: LinkstrPayload
+    payload: LinkstrPayload,
+    source: DirectMessageIngestSource = .live
   ) -> ReceivedDirectMessage {
     ReceivedDirectMessage(
       eventID: eventID,
       senderPubkey: senderPubkey,
       receiverPubkey: receiverPubkey,
       payload: payload,
-      createdAt: createdAt
+      createdAt: createdAt,
+      source: source
     )
   }
 

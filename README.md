@@ -188,8 +188,11 @@
   - `session_members` is accepted only from the stored creator pubkey and only when the session already exists.
   - `session_members` snapshots must include the creator pubkey.
   - Upsert sessions/member snapshots from accepted session events.
-  - Persist root posts only when sender and receiver are active session members at the event timestamp and are also active in the latest local membership snapshot.
-  - Upsert reaction state only when sender and receiver are active session members at the event timestamp, are also active in the latest local membership snapshot, and the root post exists locally.
+  - Live relay subscriptions use `since` filters so live ingest is new-event oriented.
+  - Persist root posts only when sender and receiver are active at the event timestamp.
+  - Live root ingest additionally requires sender and receiver to be active in the latest local membership snapshot.
+  - Upsert reaction state only when sender and receiver are active at the event timestamp and the root post exists locally.
+  - Live reaction ingest additionally requires sender and receiver to be active in the latest local membership snapshot.
 
 ### Notifications (best effort)
 
@@ -294,6 +297,7 @@
 - Persisted local entities include:
   - Relay configuration and enabled state.
   - Contacts and private aliases.
+  - Account-scoped app state (follow-list recency watermark).
   - Sessions, member snapshots, membership intervals, root posts, reactions, read state, and archive state.
   - Cached media references and metadata hydration state.
 - Local entities are owner-scoped by pubkey.

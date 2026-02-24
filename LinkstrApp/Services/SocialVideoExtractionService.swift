@@ -420,13 +420,7 @@ final class SocialVideoExtractionService: NSObject {
       }
     }
 
-    let negativeTokens = [
-      "logo", "watermark", "avatar", "icon", "poster", "thumb", "sprite", "preview", "init",
-      "audio",
-      "mute", "sticker", "ads", "track",
-    ]
-
-    if negativeTokens.contains(where: value.contains) {
+    if Self.blockedPlaybackCandidateTokens.contains(where: value.contains) {
       score -= 45
     }
     if value.contains("cdninstagram.com/v/t51.82787-15") || value.contains("fbcdn.net/h") {
@@ -469,8 +463,7 @@ final class SocialVideoExtractionService: NSObject {
 
   private func isKnownBadCandidate(_ url: URL) -> Bool {
     let value = url.absoluteString.lowercased()
-    let blocked = ["logo", "watermark", "preview", "thumb", "poster", "sprite", "init", "avatar"]
-    return blocked.contains(where: value.contains)
+    return Self.blockedVisualAssetTokens.contains(where: value.contains)
   }
 
   private func buildHeaders(
@@ -583,6 +576,11 @@ final class SocialVideoExtractionService: NSObject {
   private static let tikTokAPIUserAgent =
     "com.zhiliaoapp.musically/300904 (2018111632; U; Android 10; en_US; Pixel 4; Build/QQ3A.200805.001; Cronet/58.0.2991.0)"
   private static let tikTokFeedEndpoint = "https://api16-normal-useast5.tiktokv.us/aweme/v1/feed/"
+  private static let blockedVisualAssetTokens = [
+    "logo", "watermark", "avatar", "icon", "poster", "thumb", "sprite", "preview", "init",
+  ]
+  private static let blockedPlaybackCandidateTokens =
+    blockedVisualAssetTokens + ["audio", "mute", "sticker", "ads", "track"]
 
   private static let injectionScript = """
     (function() {

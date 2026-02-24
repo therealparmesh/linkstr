@@ -18,6 +18,11 @@ final class AppSession: ObservableObject {
     var updatedAt: Date
   }
 
+  private struct PendingRelayPersistenceState: Equatable {
+    let status: RelayHealthStatus
+    let message: String?
+  }
+
   private struct RootPostDraft {
     let payload: LinkstrPayload
     let ownerPubkey: String
@@ -45,6 +50,7 @@ final class AppSession: ObservableObject {
   private let contactStore: ContactStore
   private let relayStore: RelayStore
   private let messageStore: SessionMessageStore
+  private let accountStateStore: AccountStateStore
   private let testHasConnectedRelaysOverride: (() -> Bool)?
   private let testDisableNostrStartupOverride: Bool?
   private let testRelaySendOverride: ((LinkstrPayload, [String]) async throws -> String)?
@@ -62,14 +68,15 @@ final class AppSession: ObservableObject {
   private var enqueuedMetadataStorageIDs = Set<String>()
   private var isProcessingMetadataQueue = false
   @Published private var relayRuntimeStatusByURL: [String: RelayRuntimeStatus] = [:]
+  private var pendingRelayPersistenceByURL: [String: PendingRelayPersistenceState] = [:]
+  private var relayPersistenceFlushTask: Task<Void, Never>?
+  private let relayPersistenceDebounceNanoseconds: UInt64 = 250_000_000
   private var hasObservedHealthyRelayInCurrentForeground = false
   private let relayDisconnectGraceInterval: TimeInterval = 1.25
   private let foregroundRelayRestartCooldown: TimeInterval = 8
   private var lastForegroundRelayRestartAt: Date?
   private var latestAppliedFollowListCreatedAt: Date?
   private var latestAppliedFollowListEventID: String?
-  private let followListCreatedAtDefaultsPrefix = "linkstr.followList.createdAt."
-  private let followListEventIDDefaultsPrefix = "linkstr.followList.eventID."
 
   @Published var composeError: String?
   @Published var pendingSessionNavigationID: String?
@@ -94,6 +101,7 @@ final class AppSession: ObservableObject {
     self.contactStore = ContactStore(modelContext: modelContext)
     self.relayStore = RelayStore(modelContext: modelContext)
     self.messageStore = SessionMessageStore(modelContext: modelContext)
+    self.accountStateStore = AccountStateStore(modelContext: modelContext)
   }
 
   func boot() {
@@ -140,6 +148,7 @@ final class AppSession: ObservableObject {
     isForeground = false
     hasObservedHealthyRelayInCurrentForeground = false
     lastForegroundRelayRestartAt = nil
+    flushRelayPersistenceNow()
   }
 
   private func report(error: Error) {
@@ -273,49 +282,93 @@ final class AppSession: ObservableObject {
     }
 
     let now = Date()
-    let trimmedMessage = message?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let normalizedMessage = normalizedRelayStatusMessage(message)
     if let existing = relayRuntimeStatusByURL[relayURL],
       existing.status == .connected || existing.status == .readOnly,
       status == .disconnected,
-      trimmedMessage?.isEmpty != false,
+      normalizedMessage == nil,
       now.timeIntervalSince(existing.updatedAt) < relayDisconnectGraceInterval
     {
       // Keep healthy status briefly while relay pool restarts to avoid flicker.
       return
     }
 
+    if let existing = relayRuntimeStatusByURL[relayURL],
+      existing.status == status,
+      existing.message == normalizedMessage
+    {
+      relayRuntimeStatusByURL[relayURL]?.updatedAt = now
+      return
+    }
+
     relayRuntimeStatusByURL[relayURL] = RelayRuntimeStatus(
       status: status,
-      message: (trimmedMessage?.isEmpty == false) ? trimmedMessage : nil,
+      message: normalizedMessage,
       updatedAt: now
     )
-    persistRelayRuntimeStatus(
+    enqueueRelayPersistence(
       relayURL: relayURL,
       status: status,
-      message: trimmedMessage
+      message: normalizedMessage
     )
   }
 
-  private func persistRelayRuntimeStatus(
+  private func normalizedRelayStatusMessage(_ message: String?) -> String? {
+    guard let message else { return nil }
+    let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
+  }
+
+  private func enqueueRelayPersistence(
     relayURL: String,
     status: RelayHealthStatus,
     message: String?
   ) {
-    let normalizedMessage = message?.trimmingCharacters(in: .whitespacesAndNewlines)
-    let persistedMessage = (normalizedMessage?.isEmpty == false) ? normalizedMessage : nil
+    let nextState = PendingRelayPersistenceState(
+      status: status,
+      message: message
+    )
+    if pendingRelayPersistenceByURL[relayURL] == nextState {
+      return
+    }
+    pendingRelayPersistenceByURL[relayURL] = nextState
+    scheduleRelayPersistenceFlushIfNeeded()
+  }
+
+  private func scheduleRelayPersistenceFlushIfNeeded() {
+    guard relayPersistenceFlushTask == nil else { return }
+    relayPersistenceFlushTask = Task { @MainActor [weak self] in
+      guard let self else { return }
+      defer { self.relayPersistenceFlushTask = nil }
+      try? await Task.sleep(nanoseconds: self.relayPersistenceDebounceNanoseconds)
+      guard !Task.isCancelled else { return }
+      self.flushRelayPersistenceNow()
+    }
+  }
+
+  private func flushRelayPersistenceNow() {
+    relayPersistenceFlushTask?.cancel()
+    relayPersistenceFlushTask = nil
+
+    guard !pendingRelayPersistenceByURL.isEmpty else { return }
+    let pending = pendingRelayPersistenceByURL
+    pendingRelayPersistenceByURL.removeAll(keepingCapacity: true)
 
     do {
       let relays = try relayStore.fetchRelays()
-      guard let relay = relays.first(where: { $0.url == relayURL }) else { return }
-
+      let relaysByURL = Dictionary(uniqueKeysWithValues: relays.map { ($0.url, $0) })
       var didChange = false
-      if relay.status != status {
-        relay.status = status
-        didChange = true
-      }
-      if relay.lastError != persistedMessage {
-        relay.lastError = persistedMessage
-        didChange = true
+
+      for (relayURL, pendingState) in pending {
+        guard let relay = relaysByURL[relayURL] else { continue }
+        if relay.status != pendingState.status {
+          relay.status = pendingState.status
+          didChange = true
+        }
+        if relay.lastError != pendingState.message {
+          relay.lastError = pendingState.message
+          didChange = true
+        }
       }
 
       if didChange {
@@ -323,6 +376,10 @@ final class AppSession: ObservableObject {
       }
     } catch {
       // Keep runtime relay updates resilient even if local persistence fails.
+      for (relayURL, state) in pending {
+        pendingRelayPersistenceByURL[relayURL] = state
+      }
+      scheduleRelayPersistenceFlushIfNeeded()
     }
   }
 
@@ -330,6 +387,9 @@ final class AppSession: ObservableObject {
     let relays = (try? relayStore.fetchRelays()) ?? []
     let enabledURLs = Set(relays.filter(\.isEnabled).map(\.url))
     relayRuntimeStatusByURL = relayRuntimeStatusByURL.filter { enabledURLs.contains($0.key) }
+    pendingRelayPersistenceByURL = pendingRelayPersistenceByURL.filter {
+      enabledURLs.contains($0.key)
+    }
   }
 
   private func refreshRelayConnectivityAlert() throws {
@@ -493,6 +553,9 @@ final class AppSession: ObservableObject {
 
   func logout(clearLocalData: Bool) {
     let ownerPubkey = identityService.pubkeyHex
+    relayPersistenceFlushTask?.cancel()
+    relayPersistenceFlushTask = nil
+    pendingRelayPersistenceByURL.removeAll()
     nostrService.stop()
 
     do {
@@ -542,6 +605,9 @@ final class AppSession: ObservableObject {
 
     if isRunningTests, testSkipNostrNetworkStartup {
       relayRuntimeStatusByURL.removeAll()
+      pendingRelayPersistenceByURL.removeAll()
+      relayPersistenceFlushTask?.cancel()
+      relayPersistenceFlushTask = nil
       nostrService.start(
         keypair: keypair,
         relayURLs: [],
@@ -554,6 +620,9 @@ final class AppSession: ObservableObject {
     if shouldDisableNostrStartupForCurrentProcess() {
       // Keep local send paths available in tests without opening relay connections.
       relayRuntimeStatusByURL.removeAll()
+      pendingRelayPersistenceByURL.removeAll()
+      relayPersistenceFlushTask?.cancel()
+      relayPersistenceFlushTask = nil
       nostrService.start(
         keypair: keypair,
         relayURLs: [],
@@ -573,6 +642,9 @@ final class AppSession: ObservableObject {
     if relayURLs.isEmpty {
       nostrService.stop()
       relayRuntimeStatusByURL.removeAll()
+      pendingRelayPersistenceByURL.removeAll()
+      relayPersistenceFlushTask?.cancel()
+      relayPersistenceFlushTask = nil
       composeError = noEnabledRelaysMessage
       hasShownOfflineToastForCurrentOutage = false
       return
@@ -581,6 +653,9 @@ final class AppSession: ObservableObject {
       composeError = nil
     }
     relayRuntimeStatusByURL = relayRuntimeStatusByURL.filter { relayURLs.contains($0.key) }
+    pendingRelayPersistenceByURL = pendingRelayPersistenceByURL.filter {
+      relayURLs.contains($0.key)
+    }
 
     nostrService.start(
       keypair: keypair,
@@ -1577,7 +1652,8 @@ final class AppSession: ObservableObject {
         sessionID: sessionID,
         ownerPubkey: ownerPubkey,
         senderPubkey: incoming.senderPubkey,
-        timestamp: incoming.createdAt
+        timestamp: incoming.createdAt,
+        source: incoming.source
       )
     else {
       return
@@ -1635,7 +1711,8 @@ final class AppSession: ObservableObject {
         sessionID: sessionID,
         ownerPubkey: ownerPubkey,
         senderPubkey: incoming.senderPubkey,
-        timestamp: incoming.createdAt
+        timestamp: incoming.createdAt,
+        source: incoming.source
       )
     else {
       return
@@ -1714,30 +1791,33 @@ final class AppSession: ObservableObject {
     sessionID: String,
     ownerPubkey: String,
     senderPubkey: String,
-    timestamp: Date
+    timestamp: Date,
+    source: DirectMessageIngestSource
   ) -> Bool {
     guard let myPubkey = identityService.pubkeyHex else { return false }
 
     do {
-      guard
-        try messageStore.isMemberActive(
-          sessionID: sessionID,
-          ownerPubkey: ownerPubkey,
-          memberPubkey: senderPubkey,
-          at: .now
-        )
-      else {
-        return false
-      }
-      guard
-        try messageStore.isMemberActive(
-          sessionID: sessionID,
-          ownerPubkey: ownerPubkey,
-          memberPubkey: myPubkey,
-          at: .now
-        )
-      else {
-        return false
+      if source == .live {
+        guard
+          try messageStore.isMemberActive(
+            sessionID: sessionID,
+            ownerPubkey: ownerPubkey,
+            memberPubkey: senderPubkey,
+            at: .now
+          )
+        else {
+          return false
+        }
+        guard
+          try messageStore.isMemberActive(
+            sessionID: sessionID,
+            ownerPubkey: ownerPubkey,
+            memberPubkey: myPubkey,
+            at: .now
+          )
+        else {
+          return false
+        }
       }
       guard
         try messageStore.isMemberActive(
@@ -1904,40 +1984,35 @@ final class AppSession: ObservableObject {
   }
 
   private func loadPersistedFollowListState(ownerPubkey: String) {
-    let defaults = UserDefaults.standard
-    let createdAtKey = "\(followListCreatedAtDefaultsPrefix)\(ownerPubkey)"
-    let eventIDKey = "\(followListEventIDDefaultsPrefix)\(ownerPubkey)"
-
-    if let createdAtTimestamp = defaults.object(forKey: createdAtKey) as? Double {
-      latestAppliedFollowListCreatedAt = Date(timeIntervalSince1970: createdAtTimestamp)
-    } else {
-      latestAppliedFollowListCreatedAt = nil
+    do {
+      let watermark = try accountStateStore.followListWatermark(ownerPubkey: ownerPubkey)
+      latestAppliedFollowListCreatedAt = watermark.createdAt
+      let eventID = normalizedEventIDToken(watermark.eventID)
+      latestAppliedFollowListEventID = eventID.isEmpty ? nil : eventID
+    } catch {
+      resetFollowListStateInMemory()
     }
-
-    let eventID = normalizedEventIDToken(defaults.string(forKey: eventIDKey))
-    latestAppliedFollowListEventID = eventID.isEmpty ? nil : eventID
   }
 
   private func persistFollowListState(ownerPubkey: String, createdAt: Date, eventID: String?) {
-    let defaults = UserDefaults.standard
-    let createdAtKey = "\(followListCreatedAtDefaultsPrefix)\(ownerPubkey)"
-    let eventIDKey = "\(followListEventIDDefaultsPrefix)\(ownerPubkey)"
-
-    defaults.set(createdAt.timeIntervalSince1970, forKey: createdAtKey)
     let normalizedEventID = normalizedEventIDToken(eventID)
-    if normalizedEventID.isEmpty {
-      defaults.removeObject(forKey: eventIDKey)
-    } else {
-      defaults.set(normalizedEventID, forKey: eventIDKey)
+    do {
+      try accountStateStore.setFollowListWatermark(
+        ownerPubkey: ownerPubkey,
+        createdAt: createdAt,
+        eventID: normalizedEventID.isEmpty ? nil : normalizedEventID
+      )
+    } catch {
+      report(error: error)
     }
   }
 
   private func clearPersistedFollowListState(ownerPubkey: String) {
-    let defaults = UserDefaults.standard
-    let createdAtKey = "\(followListCreatedAtDefaultsPrefix)\(ownerPubkey)"
-    let eventIDKey = "\(followListEventIDDefaultsPrefix)\(ownerPubkey)"
-    defaults.removeObject(forKey: createdAtKey)
-    defaults.removeObject(forKey: eventIDKey)
+    do {
+      try accountStateStore.deleteAccountState(ownerPubkey: ownerPubkey)
+    } catch {
+      report(error: error)
+    }
   }
 
   private func normalizedRelayURL(from raw: String) -> URL? {

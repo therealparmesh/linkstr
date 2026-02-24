@@ -2,12 +2,18 @@ import Combine
 import Foundation
 import NostrSDK
 
+enum DirectMessageIngestSource {
+  case live
+  case historical
+}
+
 struct ReceivedDirectMessage {
   let eventID: String
   let senderPubkey: String
   let receiverPubkey: String
   let payload: LinkstrPayload
   let createdAt: Date
+  let source: DirectMessageIngestSource
 }
 
 struct ReceivedFollowList {
@@ -55,6 +61,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
   private var shouldMaintainConnection = false
   private var pendingPublishAcks: [String: PendingPublishAck] = [:]
   private var pendingPublishAckTimeoutTasks: [String: Task<Void, Never>] = [:]
+  private var liveSubscriptionSince: Int?
 
   private var keypair: Keypair?
   private var onIncoming: ((ReceivedDirectMessage) -> Void)?
@@ -114,6 +121,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     configuredRelayURLs = Set(relayURLs)
     activeBackfillStates = [:]
     completedBackfillKinds = []
+    liveSubscriptionSince = Int(Date.now.timeIntervalSince1970)
 
     let parsedRelayURLs = relayURLs.map { ($0, URL(string: $0)) }
     let validRelayURLs = Set(parsedRelayURLs.compactMap(\.1))
@@ -151,6 +159,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
       recipientFilter = Filter(
         kinds: [EventKind.giftWrap.rawValue],
         pubkeys: [keypair.publicKey.hex],
+        since: liveSubscriptionSince,
         limit: backfillPageSize
       )
 
@@ -158,6 +167,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
       authorFilter = Filter(
         authors: [keypair.publicKey.hex],
         kinds: [EventKind.giftWrap.rawValue],
+        since: liveSubscriptionSince,
         limit: backfillPageSize
       )
 
@@ -192,6 +202,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     recipientFilter = nil
     authorFilter = nil
     followListFilter = nil
+    liveSubscriptionSince = nil
     activeBackfillStates.removeAll()
     completedBackfillKinds.removeAll()
     let pendingEventIDs = Array(pendingPublishAcks.keys)
@@ -592,6 +603,13 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     }
   }
 
+  private func directMessageSource(for subscriptionID: String) -> DirectMessageIngestSource {
+    if subscriptionID.hasPrefix("linkstr-backfill-") {
+      return .historical
+    }
+    return .live
+  }
+
   private func handleIncomingEvent(_ relayEvent: RelayEvent) {
     guard let keypair else { return }
     let event = relayEvent.event
@@ -651,7 +669,8 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
         senderPubkey: rumor.pubkey,
         receiverPubkey: receiver,
         payload: payload,
-        createdAt: rumor.createdDate
+        createdAt: rumor.createdDate,
+        source: directMessageSource(for: relayEvent.subscriptionId)
       ))
   }
 
