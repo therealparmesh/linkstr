@@ -797,6 +797,149 @@ final class AppSessionLocalFlowTests: XCTestCase {
     )
   }
 
+  func testIngestIgnoresBackdatedRootFromCurrentlyInactiveMember() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let creatorPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-root-backdated-inactive"
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-create-backdated-root-guard",
+        senderPubkey: creatorPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: Date(timeIntervalSince1970: 1600),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-create",
+          kind: .sessionCreate,
+          url: nil,
+          note: nil,
+          timestamp: 1600,
+          sessionName: "Backdated Root Guard",
+          memberPubkeys: [creatorPubkey, myPubkey, peerPubkey]
+        )
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-members-remove-backdated-root-peer",
+        senderPubkey: creatorPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: Date(timeIntervalSince1970: 1610),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-remove",
+          kind: .sessionMembers,
+          url: nil,
+          note: nil,
+          timestamp: 1610,
+          memberPubkeys: [creatorPubkey, myPubkey]
+        )
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "root-backdated-from-removed-peer",
+        senderPubkey: peerPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: Date(timeIntervalSince1970: 1605),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "root-backdated-from-removed-peer",
+          kind: .root,
+          url: "https://example.com/backdated-root-removed-peer",
+          note: nil,
+          timestamp: 1605
+        )
+      ))
+
+    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
+  }
+
+  func testIngestIgnoresBackdatedReactionFromCurrentlyInactiveMember() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let creatorPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-reaction-backdated-inactive"
+    let rootEventID = "root-backdated-reaction-target"
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-create-backdated-reaction-guard",
+        senderPubkey: creatorPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: Date(timeIntervalSince1970: 1700),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-create",
+          kind: .sessionCreate,
+          url: nil,
+          note: nil,
+          timestamp: 1700,
+          sessionName: "Backdated Reaction Guard",
+          memberPubkeys: [creatorPubkey, myPubkey, peerPubkey]
+        )
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: rootEventID,
+        senderPubkey: creatorPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: Date(timeIntervalSince1970: 1704),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: rootEventID,
+          kind: .root,
+          url: "https://example.com/backdated-reaction-target",
+          note: nil,
+          timestamp: 1704
+        )
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-members-remove-backdated-reaction-peer",
+        senderPubkey: creatorPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: Date(timeIntervalSince1970: 1710),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-remove",
+          kind: .sessionMembers,
+          url: nil,
+          note: nil,
+          timestamp: 1710,
+          memberPubkeys: [creatorPubkey, myPubkey]
+        )
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "reaction-backdated-from-removed-peer",
+        senderPubkey: peerPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: Date(timeIntervalSince1970: 1705),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: rootEventID,
+          kind: .reaction,
+          url: nil,
+          note: nil,
+          timestamp: 1705,
+          emoji: "👍",
+          reactionActive: true
+        )
+      ))
+
+    XCTAssertTrue(try fetchReactions(in: container.mainContext).isEmpty)
+  }
+
   func testIngestIgnoresNonCreatorMembershipMutations() throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()

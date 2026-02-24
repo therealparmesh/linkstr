@@ -188,8 +188,8 @@
   - `session_members` is accepted only from the stored creator pubkey and only when the session already exists.
   - `session_members` snapshots must include the creator pubkey.
   - Upsert sessions/member snapshots from accepted session events.
-  - Persist root posts only when sender and receiver are active session members at the event timestamp.
-  - Upsert reaction state only when sender and receiver are active session members at the event timestamp and the root post exists locally.
+  - Persist root posts only when sender and receiver are active session members at the event timestamp and are also active in the latest local membership snapshot.
+  - Upsert reaction state only when sender and receiver are active session members at the event timestamp, are also active in the latest local membership snapshot, and the root post exists locally.
 
 ### Notifications (best effort)
 

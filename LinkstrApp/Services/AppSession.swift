@@ -1708,6 +1708,26 @@ final class AppSession: ObservableObject {
           sessionID: sessionID,
           ownerPubkey: ownerPubkey,
           memberPubkey: senderPubkey,
+          at: .now
+        )
+      else {
+        return false
+      }
+      guard
+        try messageStore.isMemberActive(
+          sessionID: sessionID,
+          ownerPubkey: ownerPubkey,
+          memberPubkey: myPubkey,
+          at: .now
+        )
+      else {
+        return false
+      }
+      guard
+        try messageStore.isMemberActive(
+          sessionID: sessionID,
+          ownerPubkey: ownerPubkey,
+          memberPubkey: senderPubkey,
           at: timestamp
         )
       else {
