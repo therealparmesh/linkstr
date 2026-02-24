@@ -337,7 +337,7 @@ open Linkstr.xcodeproj
 ### Run tests
 
 ```bash
-xcodebuild test -project Linkstr.xcodeproj -scheme Linkstr -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+xcodebuild test -project Linkstr.xcodeproj -scheme Linkstr -destination 'platform=iOS Simulator,name=iPhone 17'
 ```
 
-- If your simulator name differs, replace `name=iPhone 17 Pro` with one available locally.
+- If your simulator name differs, replace `name=iPhone 17` with one available locally.
