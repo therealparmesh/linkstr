@@ -48,7 +48,7 @@ final class AppSession: ObservableObject {
   private let messageStore: SessionMessageStore
   private let testHasConnectedRelaysOverride: (() -> Bool)?
   private let testDisableNostrStartupOverride: Bool?
-  private let testRelaySendOverride: ((LinkstrPayload, String) async throws -> String)?
+  private let testRelaySendOverride: ((LinkstrPayload, [String]) async throws -> String)?
   private let noEnabledRelaysMessage =
     "no relays are enabled. enable at least one relay in settings."
   private let relayOfflineMessage = "you're offline. waiting for a relay connection."
@@ -79,7 +79,7 @@ final class AppSession: ObservableObject {
     modelContext: ModelContext,
     testDisableNostrStartupOverride: Bool? = nil,
     testHasConnectedRelaysOverride: (() -> Bool)? = nil,
-    testRelaySendOverride: ((LinkstrPayload, String) async throws -> String)? = nil
+    testRelaySendOverride: ((LinkstrPayload, [String]) async throws -> String)? = nil
   ) {
     self.modelContext = modelContext
     self.testDisableNostrStartupOverride = testDisableNostrStartupOverride
@@ -594,7 +594,8 @@ final class AppSession: ObservableObject {
       myPubkey: keypair.publicKey.hex
     )
     let sessionID = makeLocalEventID()
-    let timestamp = Int64(Date.now.timeIntervalSince1970)
+    let now = Date.now
+    let timestamp = Int64(now.timeIntervalSince1970)
     let payload = LinkstrPayload(
       conversationID: sessionID,
       rootID: makeLocalEventID(),
@@ -614,7 +615,7 @@ final class AppSession: ObservableObject {
         )
       }
 
-      let updatedAt = Date(timeIntervalSince1970: TimeInterval(timestamp))
+      let updatedAt = now
       _ = try messageStore.upsertSession(
         ownerPubkey: ownerPubkey,
         sessionID: sessionID,
@@ -668,7 +669,8 @@ final class AppSession: ObservableObject {
       fromNPubs: memberNPubs,
       myPubkey: keypair.publicKey.hex
     )
-    let timestamp = Int64(Date.now.timeIntervalSince1970)
+    let now = Date.now
+    let timestamp = Int64(now.timeIntervalSince1970)
     let payload = LinkstrPayload(
       conversationID: session.sessionID,
       rootID: makeLocalEventID(),
@@ -680,14 +682,21 @@ final class AppSession: ObservableObject {
     )
 
     do {
+      let priorActiveMembers = try messageStore.members(
+        sessionID: session.sessionID,
+        ownerPubkey: ownerPubkey,
+        activeOnly: true
+      ).map(\.memberPubkey)
+      let updateRecipients = mergedPubkeys(priorActiveMembers, members)
+
       if shouldDisableNostrStartupForCurrentProcess() == false {
         _ = try await sendPayloadAwaitingRelayAcceptance(
           payload: payload,
-          recipientPubkeyHexes: members
+          recipientPubkeyHexes: updateRecipients
         )
       }
 
-      let updatedAt = Date(timeIntervalSince1970: TimeInterval(timestamp))
+      let updatedAt = now
       _ = try messageStore.upsertSession(
         ownerPubkey: ownerPubkey,
         sessionID: session.sessionID,
@@ -825,13 +834,26 @@ final class AppSession: ObservableObject {
 
     let recipientPubkeys: [String]
     do {
-      let fallbackPeer =
-        post.senderPubkey == keypair.publicKey.hex ? post.receiverPubkey : post.senderPubkey
+      guard
+        try messageStore.isMemberActive(
+          sessionID: post.conversationID,
+          ownerPubkey: ownerPubkey,
+          memberPubkey: keypair.publicKey.hex,
+          at: .now
+        )
+      else {
+        composeError = "you're no longer a member of this session."
+        return nil
+      }
+
       recipientPubkeys = try activeMemberPubkeys(
         sessionID: post.conversationID,
-        ownerPubkey: ownerPubkey,
-        fallbackPeerPubkey: fallbackPeer
+        ownerPubkey: ownerPubkey
       )
+      guard recipientPubkeys.contains(keypair.publicKey.hex) else {
+        composeError = "you're no longer a member of this session."
+        return nil
+      }
     } catch {
       composeError = error.localizedDescription
       return nil
@@ -889,11 +911,25 @@ final class AppSession: ObservableObject {
 
     let recipientPubkeys: [String]
     do {
+      guard
+        try messageStore.isMemberActive(
+          sessionID: sessionID,
+          ownerPubkey: ownerPubkey,
+          memberPubkey: keypair.publicKey.hex,
+          at: .now
+        )
+      else {
+        composeError = "you're no longer a member of this session."
+        return nil
+      }
       recipientPubkeys = try activeMemberPubkeys(
         sessionID: sessionID,
-        ownerPubkey: ownerPubkey,
-        fallbackPeerPubkey: nil
+        ownerPubkey: ownerPubkey
       )
+      guard recipientPubkeys.contains(keypair.publicKey.hex) else {
+        composeError = "you're no longer a member of this session."
+        return nil
+      }
     } catch {
       composeError = error.localizedDescription
       return nil
@@ -970,10 +1006,10 @@ final class AppSession: ObservableObject {
     recipientPubkeyHexes: [String]
   ) async throws -> String {
     if let testRelaySendOverride {
-      guard let firstRecipient = recipientPubkeyHexes.first else {
+      guard !recipientPubkeyHexes.isEmpty else {
         throw NostrServiceError.invalidPubkey
       }
-      return try await testRelaySendOverride(payload, firstRecipient)
+      return try await testRelaySendOverride(payload, recipientPubkeyHexes)
     }
     return try await nostrService.sendAwaitingRelayAcceptance(
       payload: payload,
@@ -1006,25 +1042,16 @@ final class AppSession: ObservableObject {
     return members
   }
 
-  private func activeMemberPubkeys(
-    sessionID: String,
-    ownerPubkey: String,
-    fallbackPeerPubkey: String?
-  ) throws -> [String] {
-    guard let myPubkey = identityService.pubkeyHex else {
-      return []
-    }
-
-    var members = try messageStore.members(
+  private func activeMemberPubkeys(sessionID: String, ownerPubkey: String) throws -> [String] {
+    let members = try messageStore.members(
       sessionID: sessionID,
       ownerPubkey: ownerPubkey,
       activeOnly: true
     ).map(\.memberPubkey)
+    return dedupedValidPubkeys(members)
+  }
 
-    if members.isEmpty, let fallbackPeerPubkey, PublicKey(hex: fallbackPeerPubkey) != nil {
-      members = [fallbackPeerPubkey]
-    }
-
+  private func dedupedValidPubkeys(_ pubkeyHexes: [String]) -> [String] {
     var deduped: [String] = []
     var seen = Set<String>()
 
@@ -1035,9 +1062,12 @@ final class AppSession: ObservableObject {
       deduped.append(pubkeyHex)
     }
 
-    appendIfValid(myPubkey)
-    members.forEach { appendIfValid($0) }
+    pubkeyHexes.forEach { appendIfValid($0) }
     return deduped
+  }
+
+  private func mergedPubkeys(_ first: [String], _ second: [String]) -> [String] {
+    dedupedValidPubkeys(first + second)
   }
 
   private func existingSessionName(for sessionID: String, ownerPubkey: String) -> String {
@@ -1348,6 +1378,12 @@ final class AppSession: ObservableObject {
     }
   }
 
+  #if DEBUG
+    func ingestForTesting(_ incoming: ReceivedDirectMessage) {
+      persistIncoming(incoming)
+    }
+  #endif
+
   private func persistIncoming(_ incoming: ReceivedDirectMessage) {
     switch incoming.payload.kind {
     case .sessionCreate:
@@ -1373,19 +1409,27 @@ final class AppSession: ObservableObject {
       return
     }
 
-    let incomingName = incoming.payload.sessionName?.trimmingCharacters(in: .whitespacesAndNewlines)
-    let sessionName =
-      (incomingName?.isEmpty == false)
-      ? incomingName!
-      : existingSessionName(for: sessionID, ownerPubkey: ownerPubkey)
-
     do {
+      let existing = try messageStore.session(sessionID: sessionID, ownerPubkey: ownerPubkey)
+      if let existing, existing.createdByPubkey != incoming.senderPubkey {
+        return
+      }
+
+      let incomingName = incoming.payload.sessionName?.trimmingCharacters(
+        in: .whitespacesAndNewlines)
+      let sessionName =
+        (incomingName?.isEmpty == false)
+        ? incomingName!
+        : (existing?.name ?? existingSessionName(for: sessionID, ownerPubkey: ownerPubkey))
+      let createdByPubkey = existing?.createdByPubkey ?? incoming.senderPubkey
+
       _ = try messageStore.upsertSession(
         ownerPubkey: ownerPubkey,
         sessionID: sessionID,
         name: sessionName,
-        createdByPubkey: incoming.senderPubkey,
-        updatedAt: incoming.createdAt
+        createdByPubkey: createdByPubkey,
+        updatedAt: incoming.createdAt,
+        isArchived: existing?.isArchived
       )
       try messageStore.applyMemberSnapshot(
         ownerPubkey: ownerPubkey,
@@ -1412,20 +1456,18 @@ final class AppSession: ObservableObject {
 
     do {
       let existing = try messageStore.session(sessionID: sessionID, ownerPubkey: ownerPubkey)
-      if let existing, existing.createdByPubkey != incoming.senderPubkey {
+      guard let existing else { return }
+      guard existing.createdByPubkey == incoming.senderPubkey else {
         return
       }
-
-      let sessionName =
-        existing?.name ?? existingSessionName(for: sessionID, ownerPubkey: ownerPubkey)
-      let createdByPubkey = existing?.createdByPubkey ?? incoming.senderPubkey
 
       _ = try messageStore.upsertSession(
         ownerPubkey: ownerPubkey,
         sessionID: sessionID,
-        name: sessionName,
-        createdByPubkey: createdByPubkey,
-        updatedAt: incoming.createdAt
+        name: existing.name,
+        createdByPubkey: existing.createdByPubkey,
+        updatedAt: incoming.createdAt,
+        isArchived: existing.isArchived
       )
       try messageStore.applyMemberSnapshot(
         ownerPubkey: ownerPubkey,
@@ -1448,6 +1490,16 @@ final class AppSession: ObservableObject {
     guard !sessionID.isEmpty else { return }
     let postID = incoming.payload.rootID.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !postID.isEmpty else { return }
+    guard
+      inboundMembershipIsActive(
+        sessionID: sessionID,
+        ownerPubkey: ownerPubkey,
+        senderPubkey: incoming.senderPubkey,
+        timestamp: incoming.createdAt
+      )
+    else {
+      return
+    }
 
     do {
       try messageStore.upsertReaction(
@@ -1486,6 +1538,16 @@ final class AppSession: ObservableObject {
 
     let sessionID = incoming.payload.conversationID.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !sessionID.isEmpty else { return }
+    guard
+      inboundMembershipIsActive(
+        sessionID: sessionID,
+        ownerPubkey: ownerPubkey,
+        senderPubkey: incoming.senderPubkey,
+        timestamp: incoming.createdAt
+      )
+    else {
+      return
+    }
     let payloadRootID = incoming.payload.rootID.trimmingCharacters(in: .whitespacesAndNewlines)
     let canonicalPostID = payloadRootID.isEmpty ? incoming.eventID : payloadRootID
     guard let payloadURL = incoming.payload.url,
@@ -1495,19 +1557,26 @@ final class AppSession: ObservableObject {
     }
 
     let isEchoedOutgoing = identityService.pubkeyHex == incoming.senderPubkey
-
-    let contacts = (try? contactStore.fetchContacts(ownerPubkey: ownerPubkey)) ?? []
-    let fallbackName = contactName(for: incoming.senderPubkey, contacts: contacts)
-    let sessionName = existingSessionName(for: sessionID, ownerPubkey: ownerPubkey)
-    let resolvedSessionName = sessionName == "session" ? fallbackName : sessionName
+    let existingSession: SessionEntity
+    do {
+      guard let session = try messageStore.session(sessionID: sessionID, ownerPubkey: ownerPubkey)
+      else {
+        return
+      }
+      existingSession = session
+    } catch {
+      report(error: error)
+      return
+    }
 
     do {
       _ = try messageStore.upsertSession(
         ownerPubkey: ownerPubkey,
         sessionID: sessionID,
-        name: resolvedSessionName,
-        createdByPubkey: incoming.senderPubkey,
-        updatedAt: incoming.createdAt
+        name: existingSession.name,
+        createdByPubkey: existingSession.createdByPubkey,
+        updatedAt: incoming.createdAt,
+        isArchived: existingSession.isArchived
       )
     } catch {
       report(error: error)
@@ -1544,6 +1613,42 @@ final class AppSession: ObservableObject {
 
     notifyForIncomingMessage(message)
     enqueueMetadataRefresh(for: message)
+  }
+
+  private func inboundMembershipIsActive(
+    sessionID: String,
+    ownerPubkey: String,
+    senderPubkey: String,
+    timestamp: Date
+  ) -> Bool {
+    guard let myPubkey = identityService.pubkeyHex else { return false }
+
+    do {
+      guard
+        try messageStore.isMemberActive(
+          sessionID: sessionID,
+          ownerPubkey: ownerPubkey,
+          memberPubkey: senderPubkey,
+          at: timestamp
+        )
+      else {
+        return false
+      }
+      guard
+        try messageStore.isMemberActive(
+          sessionID: sessionID,
+          ownerPubkey: ownerPubkey,
+          memberPubkey: myPubkey,
+          at: timestamp
+        )
+      else {
+        return false
+      }
+      return true
+    } catch {
+      report(error: error)
+      return false
+    }
   }
 
   private func notifyForIncomingMessage(_ message: SessionMessageEntity) {

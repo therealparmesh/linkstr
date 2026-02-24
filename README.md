@@ -48,6 +48,7 @@
   - Contacts.
   - Sessions.
   - Session members.
+  - Session membership intervals.
   - Session posts.
   - Reactions.
   - Cached media references.
@@ -72,6 +73,7 @@
 - Member updates are snapshot-based (`session_members`):
   - The active member set becomes exactly the snapshot.
   - Missing previous members become inactive.
+  - Update fanout targets both prior-active and next-active members so removed members receive the removal snapshot.
 - Sessions can be archived/unarchived from a session-row long-press menu.
 - Session list shows active sessions by default.
 - When archived sessions exist, a header archive toggle icon appears to the left of `+` in the sessions tab.
@@ -86,8 +88,9 @@
 - Members can be added only from existing contacts.
 - Members can be removed from active membership.
 - Only the session creator can add or remove members.
+- Non-creator membership mutations are ignored on ingest.
 - If a member no longer matches a local contact, UI falls back to `npub` (or truncated hex).
-- Current user is preserved in effective membership.
+- Outbound membership snapshots authored by this client always include the local sender key.
 
 ### Posts (root links)
 
@@ -109,11 +112,13 @@
   - Send waits for a usable relay path (default timeout 12 seconds).
   - On success, post persists locally and composer dismisses.
   - On failure/timeout, composer stays open and error is shown.
-- Posting recipient resolution always includes the current user in addition to any active session members.
+- Posting is blocked when the sender is not an active member of the target session.
+- Posting recipient resolution uses only active session members.
 
 ### Reactions
 
 - Reactions are emoji-only toggles tied to a post.
+- Reaction send is blocked when the sender is not an active member of the target session.
 - UX includes:
   - Session post list shows compact read-only reaction summaries (no interactive controls).
   - Post detail uses interactive Slack-style reaction summary chips.
@@ -172,9 +177,11 @@
 - Ingest processing rules:
   - Ignore undecodable/unvalidated payloads.
   - Deduplicate by event ID.
-  - Upsert sessions/member snapshots from session events.
-  - Persist root posts under account scope.
-  - Upsert reaction state by composite reaction key.
+  - `session_create` for an existing session is accepted only from the stored creator pubkey.
+  - `session_members` is accepted only from the stored creator pubkey and only when the session already exists.
+  - Upsert sessions/member snapshots from accepted session events.
+  - Persist root posts only when sender and receiver are active session members at the event timestamp.
+  - Upsert reaction state only when sender and receiver are active session members at the event timestamp.
 
 ### Notifications (best effort)
 
@@ -278,7 +285,7 @@
 - Persisted local entities include:
   - Relay configuration and enabled state.
   - Contacts and private aliases.
-  - Sessions, member snapshots, root posts, reactions, read state, and archive state.
+  - Sessions, member snapshots, membership intervals, root posts, reactions, read state, and archive state.
   - Cached media references and metadata hydration state.
 - Local entities are owner-scoped by pubkey.
 - Account scoping is enforced in storage and query paths to prevent cross-account bleed.

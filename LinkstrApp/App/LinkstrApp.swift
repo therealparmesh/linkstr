@@ -15,6 +15,7 @@ struct LinkstrAppMain: App {
       RelayEntity.self,
       SessionEntity.self,
       SessionMemberEntity.self,
+      SessionMemberIntervalEntity.self,
       SessionReactionEntity.self,
       SessionMessageEntity.self,
     ])

@@ -246,6 +246,50 @@ final class SessionMemberEntity {
 }
 
 @Model
+final class SessionMemberIntervalEntity {
+  @Attribute(.unique) var storageID: String
+  var ownerPubkey: String
+  var sessionID: String
+  var memberPubkeyHash: String
+  var encryptedMemberPubkey: String
+  var startAt: Date
+  var endAt: Date?
+
+  var memberPubkey: String {
+    LocalDataCrypto.shared.decryptString(encryptedMemberPubkey, ownerPubkey: ownerPubkey) ?? ""
+  }
+
+  init(
+    ownerPubkey: String,
+    sessionID: String,
+    memberPubkey: String,
+    startAt: Date,
+    endAt: Date? = nil
+  ) throws {
+    self.storageID = Self.storageID(ownerPubkey: ownerPubkey)
+    self.ownerPubkey = ownerPubkey
+    self.sessionID = sessionID
+    self.memberPubkeyHash = LocalDataCrypto.shared.digestHex(memberPubkey)
+    self.encryptedMemberPubkey =
+      try LocalDataCrypto.shared.encryptString(memberPubkey, ownerPubkey: ownerPubkey) ?? ""
+    self.startAt = startAt
+    self.endAt = endAt
+  }
+
+  static func storageID(ownerPubkey: String) -> String {
+    "\(ownerPubkey):\(UUID().uuidString.lowercased())"
+  }
+
+  func contains(_ timestamp: Date) -> Bool {
+    guard startAt <= timestamp else { return false }
+    if let endAt {
+      return timestamp < endAt
+    }
+    return true
+  }
+}
+
+@Model
 final class SessionReactionEntity {
   @Attribute(.unique) var storageID: String
   var ownerPubkey: String

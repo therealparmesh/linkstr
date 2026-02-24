@@ -133,6 +133,38 @@ final class SessionMessageStore {
     return try modelContext.fetch(descriptor)
   }
 
+  func isMemberActive(
+    sessionID: String,
+    ownerPubkey: String,
+    memberPubkey: String,
+    at timestamp: Date = .now
+  ) throws -> Bool {
+    let normalizedMemberPubkey = try normalizedPubkey(memberPubkey)
+    let memberHash = LocalDataCrypto.shared.digestHex(normalizedMemberPubkey)
+    let intervals = try memberIntervals(
+      sessionID: sessionID,
+      ownerPubkey: ownerPubkey,
+      memberPubkeyHash: memberHash
+    )
+    if let matchingInterval = intervals.last(where: { $0.contains(timestamp) }) {
+      let intervalPubkey = matchingInterval.memberPubkey
+      return intervalPubkey == normalizedMemberPubkey
+    }
+
+    // Backward-compat fallback for legacy rows created before interval tracking.
+    let existingMembers = try members(
+      sessionID: sessionID,
+      ownerPubkey: ownerPubkey,
+      activeOnly: false
+    )
+    guard let legacyMember = existingMembers.first(where: { $0.memberPubkeyHash == memberHash })
+    else {
+      return false
+    }
+    guard legacyMember.updatedAt <= timestamp else { return false }
+    return legacyMember.isActive
+  }
+
   func applyMemberSnapshot(
     ownerPubkey: String,
     sessionID: String,
@@ -160,6 +192,14 @@ final class SessionMessageStore {
           existing.apply(isActive: true, updatedAt: updatedAt)
           didChange = true
         }
+        if try ensureOpenMemberInterval(
+          ownerPubkey: ownerPubkey,
+          sessionID: sessionID,
+          memberPubkey: memberPubkey,
+          startedAt: updatedAt
+        ) {
+          didChange = true
+        }
       } else {
         let created = try SessionMemberEntity(
           ownerPubkey: ownerPubkey,
@@ -170,6 +210,12 @@ final class SessionMessageStore {
           updatedAt: updatedAt
         )
         modelContext.insert(created)
+        _ = try ensureOpenMemberInterval(
+          ownerPubkey: ownerPubkey,
+          sessionID: sessionID,
+          memberPubkey: memberPubkey,
+          startedAt: updatedAt
+        )
         didChange = true
       }
     }
@@ -178,6 +224,14 @@ final class SessionMessageStore {
       guard existing.updatedAt <= updatedAt else { continue }
       if !desiredHashes.contains(existing.memberPubkeyHash), existing.isActive {
         existing.apply(isActive: false, updatedAt: updatedAt)
+        if try closeOpenMemberInterval(
+          sessionID: sessionID,
+          ownerPubkey: ownerPubkey,
+          memberPubkeyHash: existing.memberPubkeyHash,
+          endedAt: updatedAt
+        ) {
+          didChange = true
+        }
         didChange = true
       }
     }
@@ -274,6 +328,10 @@ final class SessionMessageStore {
     let members = try modelContext.fetch(
       FetchDescriptor<SessionMemberEntity>(predicate: #Predicate { $0.ownerPubkey == ownerPubkey })
     )
+    let intervals = try modelContext.fetch(
+      FetchDescriptor<SessionMemberIntervalEntity>(
+        predicate: #Predicate { $0.ownerPubkey == ownerPubkey })
+    )
     let reactions = try modelContext.fetch(
       FetchDescriptor<SessionReactionEntity>(
         predicate: #Predicate { $0.ownerPubkey == ownerPubkey })
@@ -284,6 +342,7 @@ final class SessionMessageStore {
     messages.forEach(modelContext.delete)
     sessions.forEach(modelContext.delete)
     members.forEach(modelContext.delete)
+    intervals.forEach(modelContext.delete)
     reactions.forEach(modelContext.delete)
     try modelContext.save()
 
@@ -327,6 +386,66 @@ final class SessionMessageStore {
     }
 
     return normalized
+  }
+
+  private func memberIntervals(
+    sessionID: String,
+    ownerPubkey: String,
+    memberPubkeyHash: String
+  ) throws -> [SessionMemberIntervalEntity] {
+    let descriptor = FetchDescriptor<SessionMemberIntervalEntity>(
+      predicate: #Predicate {
+        $0.ownerPubkey == ownerPubkey
+          && $0.sessionID == sessionID
+          && $0.memberPubkeyHash == memberPubkeyHash
+      },
+      sortBy: [SortDescriptor(\.startAt)]
+    )
+    return try modelContext.fetch(descriptor)
+  }
+
+  private func ensureOpenMemberInterval(
+    ownerPubkey: String,
+    sessionID: String,
+    memberPubkey: String,
+    startedAt: Date
+  ) throws -> Bool {
+    let memberHash = LocalDataCrypto.shared.digestHex(memberPubkey)
+    let intervals = try memberIntervals(
+      sessionID: sessionID,
+      ownerPubkey: ownerPubkey,
+      memberPubkeyHash: memberHash
+    )
+    if intervals.contains(where: { $0.endAt == nil }) {
+      return false
+    }
+
+    let interval = try SessionMemberIntervalEntity(
+      ownerPubkey: ownerPubkey,
+      sessionID: sessionID,
+      memberPubkey: memberPubkey,
+      startAt: startedAt
+    )
+    modelContext.insert(interval)
+    return true
+  }
+
+  private func closeOpenMemberInterval(
+    sessionID: String,
+    ownerPubkey: String,
+    memberPubkeyHash: String,
+    endedAt: Date
+  ) throws -> Bool {
+    let intervals = try memberIntervals(
+      sessionID: sessionID,
+      ownerPubkey: ownerPubkey,
+      memberPubkeyHash: memberPubkeyHash
+    )
+    guard let openInterval = intervals.last(where: { $0.endAt == nil }) else {
+      return false
+    }
+    openInterval.endAt = max(openInterval.startAt, endedAt)
+    return true
   }
 
   private func normalizedPubkey(_ candidate: String) throws -> String {

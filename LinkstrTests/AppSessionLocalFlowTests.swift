@@ -526,6 +526,395 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertEqual(Set(members.map(\.memberPubkey)), Set([myPubkey, creatorPubkey, peerPubkey]))
   }
 
+  func testUpdateSessionMembersAwaitingRelayBroadcastsToPriorAndNextMembers() async throws {
+    var capturedRecipients: [String] = []
+    let (session, container) = try makeSession(
+      testDisableNostrStartupOverride: false,
+      testHasConnectedRelaysOverride: { true },
+      testRelaySendOverride: { _, recipients in
+        capturedRecipients = recipients
+        return "session-members-event"
+      }
+    )
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let priorPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let removedPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let addedPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let priorNPub = try XCTUnwrap(PublicKey(hex: priorPubkey)?.npub)
+    let addedNPub = try XCTUnwrap(PublicKey(hex: addedPubkey)?.npub)
+    let sessionID = "session-broadcast-fanout"
+
+    let sessionEntity = try insertSessionFixture(
+      in: container.mainContext,
+      ownerPubkey: myPubkey,
+      createdByPubkey: myPubkey,
+      memberPubkeys: [myPubkey, priorPubkey, removedPubkey],
+      sessionID: sessionID
+    )
+
+    let relay = RelayEntity(url: "wss://relay.example.com", status: .connected)
+    container.mainContext.insert(relay)
+    try container.mainContext.save()
+
+    let didUpdate = await session.updateSessionMembersAwaitingRelay(
+      session: sessionEntity,
+      memberNPubs: [priorNPub, addedNPub]
+    )
+
+    XCTAssertTrue(didUpdate)
+    XCTAssertEqual(
+      Set(capturedRecipients),
+      Set([myPubkey, priorPubkey, removedPubkey, addedPubkey])
+    )
+
+    let activeMembers = try container.mainContext.fetch(
+      FetchDescriptor<SessionMemberEntity>(
+        predicate: #Predicate {
+          $0.ownerPubkey == myPubkey && $0.sessionID == sessionID && $0.isActive == true
+        }
+      ))
+    XCTAssertEqual(
+      Set(activeMembers.map(\.memberPubkey)), Set([myPubkey, priorPubkey, addedPubkey]))
+  }
+
+  func testCreateSessionPostAwaitingRelayRequiresActiveSessionMembership() async throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let creatorPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionEntity = try insertSessionFixture(
+      in: container.mainContext,
+      ownerPubkey: myPubkey,
+      createdByPubkey: creatorPubkey,
+      memberPubkeys: [creatorPubkey, peerPubkey],
+      sessionID: "session-no-membership-send"
+    )
+
+    let didCreate = await session.createSessionPostAwaitingRelay(
+      url: "https://example.com/path",
+      note: "hello",
+      session: sessionEntity
+    )
+
+    XCTAssertFalse(didCreate)
+    XCTAssertEqual(session.composeError, "you're no longer a member of this session.")
+    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
+  }
+
+  func testToggleReactionAwaitingRelayRequiresActiveSessionMembership() async throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let creatorPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-no-membership-react"
+    _ = try insertSessionFixture(
+      in: container.mainContext,
+      ownerPubkey: myPubkey,
+      createdByPubkey: creatorPubkey,
+      memberPubkeys: [creatorPubkey, peerPubkey],
+      sessionID: sessionID
+    )
+
+    let post = makeMessage(
+      eventID: "react-target",
+      conversationID: sessionID,
+      rootID: "react-target",
+      kind: .root,
+      senderPubkey: peerPubkey,
+      receiverPubkey: myPubkey,
+      ownerPubkey: myPubkey
+    )
+    container.mainContext.insert(post)
+    try container.mainContext.save()
+
+    let didToggle = await session.toggleReactionAwaitingRelay(emoji: "👍", post: post)
+
+    XCTAssertFalse(didToggle)
+    XCTAssertEqual(session.composeError, "you're no longer a member of this session.")
+    XCTAssertTrue(try fetchReactions(in: container.mainContext).isEmpty)
+  }
+
+  func testIngestMembershipLifecycleHonorsMembershipWindows() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let creatorPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-membership-lifecycle"
+
+    let createdAt = Date(timeIntervalSince1970: 100)
+    let beforeRemoval = Date(timeIntervalSince1970: 110)
+    let removedAt = Date(timeIntervalSince1970: 120)
+    let duringRemoval = Date(timeIntervalSince1970: 130)
+    let readdedAt = Date(timeIntervalSince1970: 140)
+    let afterReadd = Date(timeIntervalSince1970: 150)
+    let backfillBeforeRemoval = Date(timeIntervalSince1970: 115)
+    let backfillDuringRemoval = Date(timeIntervalSince1970: 135)
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-create-1",
+        senderPubkey: creatorPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: createdAt,
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-create",
+          kind: .sessionCreate,
+          url: nil,
+          note: nil,
+          timestamp: Int64(createdAt.timeIntervalSince1970),
+          sessionName: "Lifecycle Session",
+          memberPubkeys: [creatorPubkey, myPubkey, peerPubkey]
+        )
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "root-before-removal",
+        senderPubkey: peerPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: beforeRemoval,
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "root-before-removal",
+          kind: .root,
+          url: "https://example.com/before-removal",
+          note: nil,
+          timestamp: Int64(beforeRemoval.timeIntervalSince1970)
+        )
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-members-remove",
+        senderPubkey: creatorPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: removedAt,
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-remove",
+          kind: .sessionMembers,
+          url: nil,
+          note: nil,
+          timestamp: Int64(removedAt.timeIntervalSince1970),
+          memberPubkeys: [creatorPubkey, peerPubkey]
+        )
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "root-during-removal",
+        senderPubkey: peerPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: duringRemoval,
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "root-during-removal",
+          kind: .root,
+          url: "https://example.com/during-removal",
+          note: nil,
+          timestamp: Int64(duringRemoval.timeIntervalSince1970)
+        )
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-members-readd",
+        senderPubkey: creatorPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: readdedAt,
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-readd",
+          kind: .sessionMembers,
+          url: nil,
+          note: nil,
+          timestamp: Int64(readdedAt.timeIntervalSince1970),
+          memberPubkeys: [creatorPubkey, myPubkey, peerPubkey]
+        )
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "root-after-readd",
+        senderPubkey: peerPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: afterReadd,
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "root-after-readd",
+          kind: .root,
+          url: "https://example.com/after-readd",
+          note: nil,
+          timestamp: Int64(afterReadd.timeIntervalSince1970)
+        )
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "root-backfill-before-removal",
+        senderPubkey: peerPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: backfillBeforeRemoval,
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "root-backfill-before-removal",
+          kind: .root,
+          url: "https://example.com/backfill-before",
+          note: nil,
+          timestamp: Int64(backfillBeforeRemoval.timeIntervalSince1970)
+        )
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "root-backfill-during-removal",
+        senderPubkey: peerPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: backfillDuringRemoval,
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "root-backfill-during-removal",
+          kind: .root,
+          url: "https://example.com/backfill-during",
+          note: nil,
+          timestamp: Int64(backfillDuringRemoval.timeIntervalSince1970)
+        )
+      ))
+
+    let messages = try fetchMessages(in: container.mainContext)
+    XCTAssertEqual(
+      Set(messages.map(\.eventID)),
+      Set([
+        "root-before-removal",
+        "root-after-readd",
+        "root-backfill-before-removal",
+      ])
+    )
+  }
+
+  func testIngestIgnoresNonCreatorMembershipMutations() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let creatorPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let attackerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-non-creator-mutation"
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-create-2",
+        senderPubkey: creatorPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: Date(timeIntervalSince1970: 200),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-create",
+          kind: .sessionCreate,
+          url: nil,
+          note: nil,
+          timestamp: 200,
+          sessionName: "Creator Session",
+          memberPubkeys: [creatorPubkey, myPubkey, peerPubkey]
+        )
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-members-attacker",
+        senderPubkey: attackerPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: Date(timeIntervalSince1970: 210),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-attack",
+          kind: .sessionMembers,
+          url: nil,
+          note: nil,
+          timestamp: 210,
+          memberPubkeys: [attackerPubkey, myPubkey]
+        )
+      ))
+
+    let activeMembers = try container.mainContext.fetch(
+      FetchDescriptor<SessionMemberEntity>(
+        predicate: #Predicate {
+          $0.ownerPubkey == myPubkey && $0.sessionID == sessionID && $0.isActive == true
+        }
+      ))
+    XCTAssertEqual(
+      Set(activeMembers.map(\.memberPubkey)), Set([creatorPubkey, myPubkey, peerPubkey]))
+  }
+
+  func testIngestIgnoresReactionFromInactiveMember() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let creatorPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-reaction-membership-guard"
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-create-3",
+        senderPubkey: creatorPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: Date(timeIntervalSince1970: 300),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-create",
+          kind: .sessionCreate,
+          url: nil,
+          note: nil,
+          timestamp: 300,
+          sessionName: "Reaction Guard",
+          memberPubkeys: [creatorPubkey, myPubkey, peerPubkey]
+        )
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-members-remove-peer",
+        senderPubkey: creatorPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: Date(timeIntervalSince1970: 310),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-remove",
+          kind: .sessionMembers,
+          url: nil,
+          note: nil,
+          timestamp: 310,
+          memberPubkeys: [creatorPubkey, myPubkey]
+        )
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "reaction-from-removed-peer",
+        senderPubkey: peerPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: Date(timeIntervalSince1970: 320),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "missing-root",
+          kind: .reaction,
+          url: nil,
+          note: nil,
+          timestamp: 320,
+          emoji: "👀",
+          reactionActive: true
+        )
+      ))
+
+    XCTAssertTrue(try fetchReactions(in: container.mainContext).isEmpty)
+  }
+
   func testLogoutClearLocalDataRemovesContactsAndMessages() async throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
@@ -734,6 +1123,14 @@ final class AppSessionLocalFlowTests: XCTestCase {
         updatedAt: createdAt
       )
       context.insert(member)
+
+      let interval = try SessionMemberIntervalEntity(
+        ownerPubkey: ownerPubkey,
+        sessionID: sessionID,
+        memberPubkey: memberPubkey,
+        startAt: createdAt
+      )
+      context.insert(interval)
     }
 
     try context.save()
@@ -743,7 +1140,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
   private func makeSession(
     testDisableNostrStartupOverride: Bool? = nil,
     testHasConnectedRelaysOverride: (() -> Bool)? = nil,
-    testRelaySendOverride: ((LinkstrPayload, String) async throws -> String)? = nil
+    testRelaySendOverride: ((LinkstrPayload, [String]) async throws -> String)? = nil
   ) throws -> (
     AppSession, ModelContainer
   ) {
@@ -752,6 +1149,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
       RelayEntity.self,
       SessionEntity.self,
       SessionMemberEntity.self,
+      SessionMemberIntervalEntity.self,
       SessionReactionEntity.self,
       SessionMessageEntity.self,
     ])
@@ -779,6 +1177,27 @@ final class AppSessionLocalFlowTests: XCTestCase {
   private func fetchMessages(in context: ModelContext) throws -> [SessionMessageEntity] {
     try context.fetch(
       FetchDescriptor<SessionMessageEntity>(sortBy: [SortDescriptor(\.timestamp)]))
+  }
+
+  private func fetchReactions(in context: ModelContext) throws -> [SessionReactionEntity] {
+    try context.fetch(
+      FetchDescriptor<SessionReactionEntity>(sortBy: [SortDescriptor(\.updatedAt)]))
+  }
+
+  private func makeIncomingMessage(
+    eventID: String,
+    senderPubkey: String,
+    receiverPubkey: String,
+    createdAt: Date,
+    payload: LinkstrPayload
+  ) -> ReceivedDirectMessage {
+    ReceivedDirectMessage(
+      eventID: eventID,
+      senderPubkey: senderPubkey,
+      receiverPubkey: receiverPubkey,
+      payload: payload,
+      createdAt: createdAt
+    )
   }
 
   private func makeMessage(
