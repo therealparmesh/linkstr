@@ -143,15 +143,6 @@ struct ConversationsView: View {
             )
             .padding(.top, 12)
           } else {
-            if isShowingArchivedSessions {
-              Text("archived sessions. long-press to unarchive.")
-                .font(LinkstrTheme.body(12))
-                .foregroundStyle(LinkstrTheme.textSecondary)
-                .frame(maxWidth: .infinity, alignment: .center)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 2)
-            }
-
             LazyVStack(spacing: 0) {
               ForEach(state.visibleSummaries) { summary in
                 Button {
@@ -441,15 +432,19 @@ private struct SessionPostsView: View {
         Button {
           isPresentingMembers = true
         } label: {
-          Label("members", systemImage: "person.2")
+          Image(systemName: "person.2")
+            .linkstrToolbarIconLabel()
         }
+        .accessibilityLabel("members")
         .tint(LinkstrTheme.neonCyan)
 
         Button {
           isPresentingNewPost = true
         } label: {
-          Label("new post", systemImage: "plus")
+          Image(systemName: "plus")
+            .linkstrToolbarIconLabel()
         }
+        .accessibilityLabel("new post")
         .tint(LinkstrTheme.neonCyan)
       }
     }

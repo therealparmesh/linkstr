@@ -64,6 +64,8 @@ final class AppSession: ObservableObject {
   @Published private var relayRuntimeStatusByURL: [String: RelayRuntimeStatus] = [:]
   private var hasObservedHealthyRelayInCurrentForeground = false
   private let relayDisconnectGraceInterval: TimeInterval = 1.25
+  private let foregroundRelayRestartCooldown: TimeInterval = 8
+  private var lastForegroundRelayRestartAt: Date?
   private var latestAppliedFollowListCreatedAt: Date?
   private var latestAppliedFollowListEventID: String?
 
@@ -126,12 +128,14 @@ final class AppSession: ObservableObject {
   func handleAppDidBecomeActive() {
     isForeground = true
     hasObservedHealthyRelayInCurrentForeground = false
+    lastForegroundRelayRestartAt = nil
     startNostrIfPossible(forceRestart: true)
   }
 
   func handleAppDidLeaveForeground() {
     isForeground = false
     hasObservedHealthyRelayInCurrentForeground = false
+    lastForegroundRelayRestartAt = nil
   }
 
   private func report(error: Error) {
@@ -262,6 +266,7 @@ final class AppSession: ObservableObject {
   ) {
     if status == .connected || status == .readOnly {
       hasObservedHealthyRelayInCurrentForeground = true
+      lastForegroundRelayRestartAt = nil
     }
 
     let now = Date()
@@ -292,13 +297,42 @@ final class AppSession: ObservableObject {
   private func refreshRelayConnectivityAlert() throws {
     let enabledRelays = try relayStore.fetchRelays().filter(\.isEnabled)
     switch relayConnectivityState(for: enabledRelays) {
-    case .online, .connecting, .readOnly:
+    case .online, .readOnly:
       clearOfflineToastIfPresent()
+    case .connecting:
+      return
     case .offline:
       showOfflineToastForCurrentOutageIfNeeded()
     case .noEnabledRelays:
       return
     }
+  }
+
+  private func maybeForceRestartRelaysForForegroundRecovery(triggeredBy status: RelayHealthStatus) {
+    guard isForeground else { return }
+    guard status == .failed || status == .disconnected else { return }
+    guard identityService.keypair != nil else { return }
+    guard !shouldDisableNostrStartupForCurrentProcess() else { return }
+
+    let enabledRelays: [RelayEntity]
+    do {
+      enabledRelays = try relayStore.fetchRelays().filter(\.isEnabled)
+    } catch {
+      return
+    }
+
+    guard !enabledRelays.isEmpty else { return }
+    guard relayConnectivityState(for: enabledRelays) == .offline else { return }
+
+    let now = Date()
+    if let lastForegroundRelayRestartAt,
+      now.timeIntervalSince(lastForegroundRelayRestartAt) < foregroundRelayRestartCooldown
+    {
+      return
+    }
+
+    lastForegroundRelayRestartAt = now
+    startNostrIfPossible(forceRestart: true)
   }
 
   private enum RelaySendWaitState {
@@ -511,6 +545,7 @@ final class AppSession: ObservableObject {
             message: message
           )
           try? self.refreshRelayConnectivityAlert()
+          self.maybeForceRestartRelaysForForegroundRecovery(triggeredBy: status)
         }
       },
       onFollowList: { [weak self] followList in

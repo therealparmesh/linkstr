@@ -107,6 +107,11 @@ extension View {
         .frame(height: LinkstrTheme.tabBarContentBottomInset)
     }
   }
+
+  func linkstrToolbarIconLabel() -> some View {
+    font(LinkstrTheme.system(16, weight: .semibold))
+      .frame(width: 28, height: 28, alignment: .center)
+  }
 }
 
 struct LinkstrSectionHeader: View {

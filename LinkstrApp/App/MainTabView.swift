@@ -127,6 +127,7 @@ struct MainTabView: View {
           isShowingArchivedSessions.toggle()
         } label: {
           Image(systemName: isShowingArchivedSessions ? "archivebox.fill" : "archivebox")
+            .linkstrToolbarIconLabel()
         }
         .accessibilityLabel(
           isShowingArchivedSessions ? "show active sessions" : "show archived sessions"
@@ -148,6 +149,7 @@ struct MainTabView: View {
         isPresentingNewSession = true
       } label: {
         Image(systemName: "plus")
+          .linkstrToolbarIconLabel()
       }
       .accessibilityLabel("new session")
       .tint(LinkstrTheme.neonCyan)
@@ -157,6 +159,7 @@ struct MainTabView: View {
         isPresentingAddContact = true
       } label: {
         Image(systemName: "person.badge.plus")
+          .linkstrToolbarIconLabel()
       }
       .accessibilityLabel("add contact")
       .tint(LinkstrTheme.neonCyan)

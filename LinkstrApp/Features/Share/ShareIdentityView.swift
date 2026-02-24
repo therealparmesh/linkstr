@@ -20,23 +20,25 @@ struct ShareIdentityView: View {
           if let qrImage = QRCodeGenerator.image(for: npub) {
             VStack(alignment: .leading, spacing: 10) {
               LinkstrSectionHeader(title: "qr code")
-              VStack(spacing: 10) {
-                Image(uiImage: qrImage)
-                  .interpolation(.none)
-                  .resizable()
-                  .scaledToFit()
-                  .frame(maxWidth: 300)
-
-                Text("scan to add this contact key (npub)")
-                  .font(LinkstrTheme.body(13))
-                  .foregroundStyle(LinkstrTheme.textSecondary)
-              }
-              .frame(maxWidth: .infinity)
+              Text("scan to add this contact key (npub)")
+                .font(LinkstrTheme.body(12))
+                .foregroundStyle(LinkstrTheme.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 2)
+              Image(uiImage: qrImage)
+                .interpolation(.none)
+                .resizable()
+                .scaledToFit()
+                .frame(maxWidth: 300)
+                .frame(maxWidth: .infinity, alignment: .center)
             }
           }
 
           VStack(alignment: .leading, spacing: 10) {
-            LinkstrSectionHeader(title: "your contact key (npub)")
+            Text("your contact key (npub)")
+              .linkstrPrimarySectionTitleTextStyle()
+              .padding(.horizontal, 2)
             Text("others use this key to send links to you or add you as a contact.")
               .font(LinkstrTheme.body(13))
               .foregroundStyle(LinkstrTheme.textSecondary)
