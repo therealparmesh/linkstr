@@ -1457,6 +1457,41 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertEqual(contacts.first?.targetPubkey, winnerPubkey)
   }
 
+  func testFollowListRecencyPersistsAcrossAppRestart() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let nsec = try session.identityService.revealNsec()
+    let winnerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let stalePubkey = try TestKeyMaterialFactory.makePubkeyHex()
+
+    session.ingestFollowListForTesting(
+      ReceivedFollowList(
+        eventID: "follow-restart-fresh",
+        authorPubkey: myPubkey,
+        followedPubkeys: [winnerPubkey],
+        createdAt: Date(timeIntervalSince1970: 1200)
+      ))
+
+    let restartedSession = AppSession(
+      modelContext: container.mainContext,
+      testSkipNostrNetworkStartup: true
+    )
+    restartedSession.importNsec(nsec)
+
+    restartedSession.ingestFollowListForTesting(
+      ReceivedFollowList(
+        eventID: "follow-restart-stale",
+        authorPubkey: myPubkey,
+        followedPubkeys: [stalePubkey],
+        createdAt: Date(timeIntervalSince1970: 1190)
+      ))
+
+    let contacts = try fetchContacts(in: container.mainContext)
+    XCTAssertEqual(contacts.count, 1)
+    XCTAssertEqual(contacts.first?.targetPubkey, winnerPubkey)
+  }
+
   func testLogoutClearLocalDataRemovesContactsAndMessages() async throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()

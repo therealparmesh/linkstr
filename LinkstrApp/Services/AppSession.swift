@@ -68,6 +68,8 @@ final class AppSession: ObservableObject {
   private var lastForegroundRelayRestartAt: Date?
   private var latestAppliedFollowListCreatedAt: Date?
   private var latestAppliedFollowListEventID: String?
+  private let followListCreatedAtDefaultsPrefix = "linkstr.followList.createdAt."
+  private let followListEventIDDefaultsPrefix = "linkstr.followList.eventID."
 
   @Published var composeError: String?
   @Published var pendingSessionNavigationID: String?
@@ -506,14 +508,14 @@ final class AppSession: ObservableObject {
     isProcessingMetadataQueue = false
     relayRuntimeStatusByURL.removeAll()
     pendingSessionNavigationID = nil
-    latestAppliedFollowListCreatedAt = nil
-    latestAppliedFollowListEventID = nil
+    resetFollowListStateInMemory()
 
     if let ownerPubkey, clearLocalData {
       clearCachedVideos(ownerPubkey: ownerPubkey)
       clearMessageCache(ownerPubkey: ownerPubkey)
       clearAllContacts(ownerPubkey: ownerPubkey)
       try? LocalDataCrypto.shared.clearKey(ownerPubkey: ownerPubkey)
+      clearPersistedFollowListState(ownerPubkey: ownerPubkey)
     }
 
     composeError = nil
@@ -521,6 +523,11 @@ final class AppSession: ObservableObject {
 
   private func refreshIdentityState() {
     hasIdentity = identityService.keypair != nil
+    guard let ownerPubkey = identityService.pubkeyHex else {
+      resetFollowListStateInMemory()
+      return
+    }
+    loadPersistedFollowListState(ownerPubkey: ownerPubkey)
   }
 
   func startNostrIfPossible(forceRestart: Bool = false) {
@@ -1206,8 +1213,10 @@ final class AppSession: ObservableObject {
           alias: normalizedAlias
         )
       }
-      latestAppliedFollowListCreatedAt = .now
+      let appliedAt = Date.now
+      latestAppliedFollowListCreatedAt = appliedAt
       latestAppliedFollowListEventID = nil
+      persistFollowListState(ownerPubkey: ownerPubkey, createdAt: appliedAt, eventID: nil)
       composeError = nil
       return true
     } catch {
@@ -1285,8 +1294,10 @@ final class AppSession: ObservableObject {
         ownerPubkey: ownerPubkey,
         pubkeyHexes: nextFollowedPubkeys
       )
-      latestAppliedFollowListCreatedAt = .now
+      let appliedAt = Date.now
+      latestAppliedFollowListCreatedAt = appliedAt
       latestAppliedFollowListEventID = nil
+      persistFollowListState(ownerPubkey: ownerPubkey, createdAt: appliedAt, eventID: nil)
       composeError = nil
       return true
     } catch {
@@ -1430,6 +1441,11 @@ final class AppSession: ObservableObject {
       latestAppliedFollowListCreatedAt = incoming.createdAt
       let incomingEventID = normalizedEventIDToken(incoming.eventID)
       latestAppliedFollowListEventID = incomingEventID.isEmpty ? nil : incomingEventID
+      persistFollowListState(
+        ownerPubkey: ownerPubkey,
+        createdAt: incoming.createdAt,
+        eventID: latestAppliedFollowListEventID
+      )
     } catch {
       report(error: error)
     }
@@ -1880,6 +1896,48 @@ final class AppSession: ObservableObject {
   private func normalizedEventIDToken(_ eventID: String?) -> String {
     guard let eventID else { return "" }
     return eventID.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  private func resetFollowListStateInMemory() {
+    latestAppliedFollowListCreatedAt = nil
+    latestAppliedFollowListEventID = nil
+  }
+
+  private func loadPersistedFollowListState(ownerPubkey: String) {
+    let defaults = UserDefaults.standard
+    let createdAtKey = "\(followListCreatedAtDefaultsPrefix)\(ownerPubkey)"
+    let eventIDKey = "\(followListEventIDDefaultsPrefix)\(ownerPubkey)"
+
+    if let createdAtTimestamp = defaults.object(forKey: createdAtKey) as? Double {
+      latestAppliedFollowListCreatedAt = Date(timeIntervalSince1970: createdAtTimestamp)
+    } else {
+      latestAppliedFollowListCreatedAt = nil
+    }
+
+    let eventID = normalizedEventIDToken(defaults.string(forKey: eventIDKey))
+    latestAppliedFollowListEventID = eventID.isEmpty ? nil : eventID
+  }
+
+  private func persistFollowListState(ownerPubkey: String, createdAt: Date, eventID: String?) {
+    let defaults = UserDefaults.standard
+    let createdAtKey = "\(followListCreatedAtDefaultsPrefix)\(ownerPubkey)"
+    let eventIDKey = "\(followListEventIDDefaultsPrefix)\(ownerPubkey)"
+
+    defaults.set(createdAt.timeIntervalSince1970, forKey: createdAtKey)
+    let normalizedEventID = normalizedEventIDToken(eventID)
+    if normalizedEventID.isEmpty {
+      defaults.removeObject(forKey: eventIDKey)
+    } else {
+      defaults.set(normalizedEventID, forKey: eventIDKey)
+    }
+  }
+
+  private func clearPersistedFollowListState(ownerPubkey: String) {
+    let defaults = UserDefaults.standard
+    let createdAtKey = "\(followListCreatedAtDefaultsPrefix)\(ownerPubkey)"
+    let eventIDKey = "\(followListEventIDDefaultsPrefix)\(ownerPubkey)"
+    defaults.removeObject(forKey: createdAtKey)
+    defaults.removeObject(forKey: eventIDKey)
   }
 
   private func normalizedRelayURL(from raw: String) -> URL? {

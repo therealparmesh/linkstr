@@ -266,6 +266,7 @@
 - Contacts mirror the account's Nostr follow list (`kind:3`, NIP-02).
 - Add/remove contact actions publish a full replacement follow-list event and wait for relay acceptance.
 - Incoming follow-list events from the signed-in author reconcile local contacts (newer timestamp wins; equal timestamp uses lexicographic event-ID tie-break).
+- Follow-list recency watermarks are persisted per account so app restart does not allow stale follow-list rollback.
 - Aliases are private per-account device data and are never published to relays.
 - Contact management supports add/remove and alias edit.
 - Add-contact input supports manual entry, paste, and QR scan.
