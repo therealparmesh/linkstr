@@ -19,7 +19,9 @@ struct ShareIdentityView: View {
         VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
           if let qrImage = QRCodeGenerator.image(for: npub) {
             VStack(alignment: .leading, spacing: 10) {
-              LinkstrSectionHeader(title: "qr code")
+              Text("qr code")
+                .linkstrPrimarySectionTitleTextStyle()
+                .padding(.horizontal, 2)
               Text("scan to add this contact key (npub)")
                 .font(LinkstrTheme.body(12))
                 .foregroundStyle(LinkstrTheme.textSecondary)

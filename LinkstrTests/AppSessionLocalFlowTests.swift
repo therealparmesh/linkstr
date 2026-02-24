@@ -915,6 +915,405 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertTrue(try fetchReactions(in: container.mainContext).isEmpty)
   }
 
+  func testIngestSessionCreateRequiresSenderAndReceiverInMemberSnapshot() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let creatorPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-create-missing-sender",
+        senderPubkey: creatorPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: Date(timeIntervalSince1970: 400),
+        payload: LinkstrPayload(
+          conversationID: "session-create-guard-1",
+          rootID: "op-create",
+          kind: .sessionCreate,
+          url: nil,
+          note: nil,
+          timestamp: 400,
+          sessionName: "Missing Sender",
+          memberPubkeys: [myPubkey, peerPubkey]
+        )
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-create-missing-receiver",
+        senderPubkey: creatorPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: Date(timeIntervalSince1970: 410),
+        payload: LinkstrPayload(
+          conversationID: "session-create-guard-2",
+          rootID: "op-create",
+          kind: .sessionCreate,
+          url: nil,
+          note: nil,
+          timestamp: 410,
+          sessionName: "Missing Receiver",
+          memberPubkeys: [creatorPubkey, peerPubkey]
+        )
+      ))
+
+    let sessions = try container.mainContext.fetch(FetchDescriptor<SessionEntity>())
+    XCTAssertTrue(sessions.isEmpty)
+  }
+
+  func testMembershipSnapshotIgnoresOlderBackfillThatAddsUnseenMembers() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let creatorPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let removedPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let stalePubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-membership-backfill-guard"
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-create-membership-guard",
+        senderPubkey: creatorPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: Date(timeIntervalSince1970: 500),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-create",
+          kind: .sessionCreate,
+          url: nil,
+          note: nil,
+          timestamp: 500,
+          sessionName: "Membership Guard",
+          memberPubkeys: [creatorPubkey, myPubkey, removedPubkey]
+        )
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-membership-remove",
+        senderPubkey: creatorPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: Date(timeIntervalSince1970: 600),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-remove",
+          kind: .sessionMembers,
+          url: nil,
+          note: nil,
+          timestamp: 600,
+          memberPubkeys: [creatorPubkey, myPubkey]
+        )
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-membership-stale-backfill",
+        senderPubkey: creatorPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: Date(timeIntervalSince1970: 550),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-stale",
+          kind: .sessionMembers,
+          url: nil,
+          note: nil,
+          timestamp: 550,
+          memberPubkeys: [creatorPubkey, myPubkey, stalePubkey]
+        )
+      ))
+
+    let activeMembers = try container.mainContext.fetch(
+      FetchDescriptor<SessionMemberEntity>(
+        predicate: #Predicate {
+          $0.ownerPubkey == myPubkey && $0.sessionID == sessionID && $0.isActive == true
+        }
+      ))
+
+    XCTAssertEqual(Set(activeMembers.map(\.memberPubkey)), Set([creatorPubkey, myPubkey]))
+    XCTAssertFalse(activeMembers.contains(where: { $0.memberPubkey == stalePubkey }))
+    XCTAssertFalse(activeMembers.contains(where: { $0.memberPubkey == removedPubkey }))
+  }
+
+  func testMembershipSnapshotUsesEventIDTiebreakForEqualTimestamp() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let creatorPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let winnerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let loserPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-membership-tiebreak"
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-create-tiebreak",
+        senderPubkey: creatorPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: Date(timeIntervalSince1970: 700),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-create",
+          kind: .sessionCreate,
+          url: nil,
+          note: nil,
+          timestamp: 700,
+          sessionName: "Tiebreak",
+          memberPubkeys: [creatorPubkey, myPubkey]
+        )
+      ))
+
+    let tieDate = Date(timeIntervalSince1970: 710)
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-members-z",
+        senderPubkey: creatorPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: tieDate,
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-z",
+          kind: .sessionMembers,
+          url: nil,
+          note: nil,
+          timestamp: 710,
+          memberPubkeys: [creatorPubkey, myPubkey, winnerPubkey]
+        )
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-members-a",
+        senderPubkey: creatorPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: tieDate,
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-a",
+          kind: .sessionMembers,
+          url: nil,
+          note: nil,
+          timestamp: 710,
+          memberPubkeys: [creatorPubkey, myPubkey, loserPubkey]
+        )
+      ))
+
+    let activeMembers = try container.mainContext.fetch(
+      FetchDescriptor<SessionMemberEntity>(
+        predicate: #Predicate {
+          $0.ownerPubkey == myPubkey && $0.sessionID == sessionID && $0.isActive == true
+        }
+      ))
+    XCTAssertEqual(
+      Set(activeMembers.map(\.memberPubkey)), Set([creatorPubkey, myPubkey, winnerPubkey]))
+    XCTAssertFalse(activeMembers.contains(where: { $0.memberPubkey == loserPubkey }))
+  }
+
+  func testIngestIgnoresReactionWithoutRootPost() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let creatorPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-orphan-reaction-guard"
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-create-orphan-reaction",
+        senderPubkey: creatorPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: Date(timeIntervalSince1970: 800),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-create",
+          kind: .sessionCreate,
+          url: nil,
+          note: nil,
+          timestamp: 800,
+          sessionName: "Orphan Reaction",
+          memberPubkeys: [creatorPubkey, myPubkey, peerPubkey]
+        )
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "reaction-without-root",
+        senderPubkey: peerPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: Date(timeIntervalSince1970: 810),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "root-does-not-exist",
+          kind: .reaction,
+          url: nil,
+          note: nil,
+          timestamp: 810,
+          emoji: "👍",
+          reactionActive: true
+        )
+      ))
+
+    XCTAssertTrue(try fetchReactions(in: container.mainContext).isEmpty)
+  }
+
+  func testIngestRootPostRejectsMismatchedPayloadRootID() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let creatorPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-rootid-guard"
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-create-rootid-guard",
+        senderPubkey: creatorPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: Date(timeIntervalSince1970: 900),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-create",
+          kind: .sessionCreate,
+          url: nil,
+          note: nil,
+          timestamp: 900,
+          sessionName: "Root ID Guard",
+          memberPubkeys: [creatorPubkey, myPubkey, peerPubkey]
+        )
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "root-event-id",
+        senderPubkey: peerPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: Date(timeIntervalSince1970: 910),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "payload-root-id",
+          kind: .root,
+          url: "https://example.com/root-mismatch",
+          note: nil,
+          timestamp: 910
+        )
+      ))
+
+    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
+  }
+
+  func testReactionStateUsesEventIDTiebreakForEqualTimestamp() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let creatorPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-reaction-tiebreak"
+    let rootEventID = "root-for-reaction-tiebreak"
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-create-reaction-tiebreak",
+        senderPubkey: creatorPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: Date(timeIntervalSince1970: 1000),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-create",
+          kind: .sessionCreate,
+          url: nil,
+          note: nil,
+          timestamp: 1000,
+          sessionName: "Reaction Tiebreak",
+          memberPubkeys: [creatorPubkey, myPubkey, peerPubkey]
+        )
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: rootEventID,
+        senderPubkey: peerPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: Date(timeIntervalSince1970: 1005),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: rootEventID,
+          kind: .root,
+          url: "https://example.com/reaction-tiebreak",
+          note: nil,
+          timestamp: 1005
+        )
+      ))
+
+    let tieDate = Date(timeIntervalSince1970: 1010)
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "reaction-z",
+        senderPubkey: peerPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: tieDate,
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: rootEventID,
+          kind: .reaction,
+          url: nil,
+          note: nil,
+          timestamp: 1010,
+          emoji: "👍",
+          reactionActive: false
+        )
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "reaction-a",
+        senderPubkey: peerPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: tieDate,
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: rootEventID,
+          kind: .reaction,
+          url: nil,
+          note: nil,
+          timestamp: 1010,
+          emoji: "👍",
+          reactionActive: true
+        )
+      ))
+
+    let reactions = try fetchReactions(in: container.mainContext)
+    XCTAssertEqual(reactions.count, 1)
+    XCTAssertFalse(try XCTUnwrap(reactions.first).isActive)
+  }
+
+  func testFollowListUsesEventIDTiebreakForEqualTimestamp() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let winnerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let loserPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let tieDate = Date(timeIntervalSince1970: 1100)
+
+    session.ingestFollowListForTesting(
+      ReceivedFollowList(
+        eventID: "follow-z",
+        authorPubkey: myPubkey,
+        followedPubkeys: [winnerPubkey],
+        createdAt: tieDate
+      ))
+
+    session.ingestFollowListForTesting(
+      ReceivedFollowList(
+        eventID: "follow-a",
+        authorPubkey: myPubkey,
+        followedPubkeys: [loserPubkey],
+        createdAt: tieDate
+      ))
+
+    let contacts = try fetchContacts(in: container.mainContext)
+    XCTAssertEqual(contacts.count, 1)
+    XCTAssertEqual(contacts.first?.targetPubkey, winnerPubkey)
+  }
+
   func testLogoutClearLocalDataRemovesContactsAndMessages() async throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
@@ -1160,7 +1559,8 @@ final class AppSessionLocalFlowTests: XCTestCase {
         modelContext: container.mainContext,
         testDisableNostrStartupOverride: testDisableNostrStartupOverride,
         testHasConnectedRelaysOverride: testHasConnectedRelaysOverride,
-        testRelaySendOverride: testRelaySendOverride
+        testRelaySendOverride: testRelaySendOverride,
+        testSkipNostrNetworkStartup: true
       ),
       container
     )

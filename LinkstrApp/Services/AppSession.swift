@@ -23,7 +23,6 @@ final class AppSession: ObservableObject {
     let ownerPubkey: String
     let senderPubkey: String
     let sessionID: String
-    let rootID: String
     let recipientPubkeys: [String]
     let normalizedURL: String
     let normalizedNote: String?
@@ -49,6 +48,7 @@ final class AppSession: ObservableObject {
   private let testHasConnectedRelaysOverride: (() -> Bool)?
   private let testDisableNostrStartupOverride: Bool?
   private let testRelaySendOverride: ((LinkstrPayload, [String]) async throws -> String)?
+  private let testSkipNostrNetworkStartup: Bool
   private let noEnabledRelaysMessage =
     "no relays are enabled. enable at least one relay in settings."
   private let relayOfflineMessage = "you're offline. waiting for a relay connection."
@@ -79,12 +79,14 @@ final class AppSession: ObservableObject {
     modelContext: ModelContext,
     testDisableNostrStartupOverride: Bool? = nil,
     testHasConnectedRelaysOverride: (() -> Bool)? = nil,
-    testRelaySendOverride: ((LinkstrPayload, [String]) async throws -> String)? = nil
+    testRelaySendOverride: ((LinkstrPayload, [String]) async throws -> String)? = nil,
+    testSkipNostrNetworkStartup: Bool = false
   ) {
     self.modelContext = modelContext
     self.testDisableNostrStartupOverride = testDisableNostrStartupOverride
     self.testHasConnectedRelaysOverride = testHasConnectedRelaysOverride
     self.testRelaySendOverride = testRelaySendOverride
+    self.testSkipNostrNetworkStartup = testSkipNostrNetworkStartup
     self.identityService = IdentityService()
     self.nostrService = NostrDMService()
     self.contactStore = ContactStore(modelContext: modelContext)
@@ -202,9 +204,6 @@ final class AppSession: ObservableObject {
     if !trimmedRuntime.isEmpty {
       return trimmedRuntime
     }
-    guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil else {
-      return nil
-    }
     let persisted = relay.lastError?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     return persisted.isEmpty ? nil : persisted
   }
@@ -258,10 +257,7 @@ final class AppSession: ObservableObject {
     if let runtimeStatus = relayRuntimeStatusByURL[relay.url]?.status {
       return runtimeStatus
     }
-    if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
-      return relay.status
-    }
-    return .disconnected
+    return relay.status
   }
 
   private func updateRuntimeRelayStatus(
@@ -291,6 +287,41 @@ final class AppSession: ObservableObject {
       message: (trimmedMessage?.isEmpty == false) ? trimmedMessage : nil,
       updatedAt: now
     )
+    persistRelayRuntimeStatus(
+      relayURL: relayURL,
+      status: status,
+      message: trimmedMessage
+    )
+  }
+
+  private func persistRelayRuntimeStatus(
+    relayURL: String,
+    status: RelayHealthStatus,
+    message: String?
+  ) {
+    let normalizedMessage = message?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let persistedMessage = (normalizedMessage?.isEmpty == false) ? normalizedMessage : nil
+
+    do {
+      let relays = try relayStore.fetchRelays()
+      guard let relay = relays.first(where: { $0.url == relayURL }) else { return }
+
+      var didChange = false
+      if relay.status != status {
+        relay.status = status
+        didChange = true
+      }
+      if relay.lastError != persistedMessage {
+        relay.lastError = persistedMessage
+        didChange = true
+      }
+
+      if didChange {
+        try modelContext.save()
+      }
+    } catch {
+      // Keep runtime relay updates resilient even if local persistence fails.
+    }
   }
 
   private func pruneRuntimeRelayStatusCache() {
@@ -494,11 +525,23 @@ final class AppSession: ObservableObject {
 
   func startNostrIfPossible(forceRestart: Bool = false) {
     guard let keypair = identityService.keypair else { return }
+    let isRunningTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
 
     if forceRestart {
       // iOS may suspend sockets while backgrounded; on foreground always rebuild the relay
       // session so send-gating reflects fresh connection state instead of stale sockets.
       nostrService.stop()
+    }
+
+    if isRunningTests, testSkipNostrNetworkStartup {
+      relayRuntimeStatusByURL.removeAll()
+      nostrService.start(
+        keypair: keypair,
+        relayURLs: [],
+        onIncoming: { _ in },
+        onRelayStatus: { _, _, _ in }
+      )
+      return
     }
 
     if shouldDisableNostrStartupForCurrentProcess() {
@@ -608,11 +651,14 @@ final class AppSession: ObservableObject {
     )
 
     do {
+      let membershipEventID: String
       if shouldDisableNostrStartupForCurrentProcess() == false {
-        _ = try await sendPayloadAwaitingRelayAcceptance(
+        membershipEventID = try await sendPayloadAwaitingRelayAcceptance(
           payload: payload,
           recipientPubkeyHexes: members
         )
+      } else {
+        membershipEventID = makeLocalEventID()
       }
 
       let updatedAt = now
@@ -627,7 +673,8 @@ final class AppSession: ObservableObject {
         ownerPubkey: ownerPubkey,
         sessionID: sessionID,
         memberPubkeys: members,
-        updatedAt: updatedAt
+        updatedAt: updatedAt,
+        eventID: membershipEventID
       )
       pendingSessionNavigationID = sessionID
       composeError = nil
@@ -689,11 +736,14 @@ final class AppSession: ObservableObject {
       ).map(\.memberPubkey)
       let updateRecipients = mergedPubkeys(priorActiveMembers, members)
 
+      let membershipEventID: String
       if shouldDisableNostrStartupForCurrentProcess() == false {
-        _ = try await sendPayloadAwaitingRelayAcceptance(
+        membershipEventID = try await sendPayloadAwaitingRelayAcceptance(
           payload: payload,
           recipientPubkeyHexes: updateRecipients
         )
+      } else {
+        membershipEventID = makeLocalEventID()
       }
 
       let updatedAt = now
@@ -709,7 +759,8 @@ final class AppSession: ObservableObject {
         ownerPubkey: ownerPubkey,
         sessionID: session.sessionID,
         memberPubkeys: members,
-        updatedAt: updatedAt
+        updatedAt: updatedAt,
+        eventID: membershipEventID
       )
       composeError = nil
       return true
@@ -783,13 +834,16 @@ final class AppSession: ObservableObject {
     }
 
     do {
+      let reactionEventID: String
       if shouldDisableNostrStartupForCurrentProcess() == false {
-        _ = try await sendPayloadAwaitingRelayAcceptance(
+        reactionEventID = try await sendPayloadAwaitingRelayAcceptance(
           payload: draft.payload,
           recipientPubkeyHexes: draft.recipientPubkeys
         )
+      } else {
+        reactionEventID = makeLocalEventID()
       }
-      try persistReactionState(draft)
+      try persistReactionState(draft, eventID: reactionEventID)
       composeError = nil
       return true
     } catch {
@@ -941,13 +995,12 @@ final class AppSession: ObservableObject {
 
     let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines)
     let normalizedNote = (trimmedNote?.isEmpty == false) ? trimmedNote : nil
-    let rootID = makeLocalEventID()
     let timestamp = Int64(Date.now.timeIntervalSince1970)
 
     return RootPostDraft(
       payload: LinkstrPayload(
         conversationID: sessionID,
-        rootID: rootID,
+        rootID: "",
         kind: .root,
         url: normalizedURL,
         note: normalizedNote,
@@ -956,7 +1009,6 @@ final class AppSession: ObservableObject {
       ownerPubkey: ownerPubkey,
       senderPubkey: keypair.publicKey.hex,
       sessionID: sessionID,
-      rootID: rootID,
       recipientPubkeys: recipientPubkeys,
       normalizedURL: normalizedURL,
       normalizedNote: normalizedNote
@@ -975,7 +1027,7 @@ final class AppSession: ObservableObject {
       eventID: eventID,
       ownerPubkey: draft.ownerPubkey,
       conversationID: draft.sessionID,
-      rootID: draft.rootID,
+      rootID: eventID,
       kind: .root,
       senderPubkey: draft.senderPubkey,
       receiverPubkey: draft.ownerPubkey,
@@ -989,7 +1041,7 @@ final class AppSession: ObservableObject {
     enqueueMetadataRefresh(for: message)
   }
 
-  private func persistReactionState(_ draft: ReactionDraft) throws {
+  private func persistReactionState(_ draft: ReactionDraft, eventID: String) throws {
     try messageStore.upsertReaction(
       ownerPubkey: draft.ownerPubkey,
       sessionID: draft.sessionID,
@@ -997,7 +1049,8 @@ final class AppSession: ObservableObject {
       emoji: draft.emoji,
       senderPubkey: draft.senderPubkey,
       isActive: draft.isActive,
-      updatedAt: .now
+      updatedAt: .now,
+      eventID: eventID
     )
   }
 
@@ -1359,10 +1412,13 @@ final class AppSession: ObservableObject {
       if incoming.createdAt < latestCreatedAt {
         return
       }
-      if incoming.createdAt == latestCreatedAt,
-        incoming.eventID == latestAppliedFollowListEventID
-      {
-        return
+      if incoming.createdAt == latestCreatedAt {
+        let incomingEventID = normalizedEventIDToken(incoming.eventID)
+        let latestEventID = normalizedEventIDToken(latestAppliedFollowListEventID)
+        guard !incomingEventID.isEmpty else { return }
+        if !latestEventID.isEmpty, incomingEventID <= latestEventID {
+          return
+        }
       }
     }
 
@@ -1372,7 +1428,8 @@ final class AppSession: ObservableObject {
         pubkeyHexes: incoming.followedPubkeys
       )
       latestAppliedFollowListCreatedAt = incoming.createdAt
-      latestAppliedFollowListEventID = incoming.eventID
+      let incomingEventID = normalizedEventIDToken(incoming.eventID)
+      latestAppliedFollowListEventID = incomingEventID.isEmpty ? nil : incomingEventID
     } catch {
       report(error: error)
     }
@@ -1381,6 +1438,10 @@ final class AppSession: ObservableObject {
   #if DEBUG
     func ingestForTesting(_ incoming: ReceivedDirectMessage) {
       persistIncoming(incoming)
+    }
+
+    func ingestFollowListForTesting(_ incoming: ReceivedFollowList) {
+      persistIncomingFollowList(incoming)
     }
   #endif
 
@@ -1408,6 +1469,8 @@ final class AppSession: ObservableObject {
     else {
       return
     }
+    guard members.contains(incoming.senderPubkey) else { return }
+    guard members.contains(ownerPubkey) else { return }
 
     do {
       let existing = try messageStore.session(sessionID: sessionID, ownerPubkey: ownerPubkey)
@@ -1435,7 +1498,8 @@ final class AppSession: ObservableObject {
         ownerPubkey: ownerPubkey,
         sessionID: sessionID,
         memberPubkeys: members,
-        updatedAt: incoming.createdAt
+        updatedAt: incoming.createdAt,
+        eventID: incoming.eventID
       )
     } catch {
       report(error: error)
@@ -1460,6 +1524,7 @@ final class AppSession: ObservableObject {
       guard existing.createdByPubkey == incoming.senderPubkey else {
         return
       }
+      guard members.contains(existing.createdByPubkey) else { return }
 
       _ = try messageStore.upsertSession(
         ownerPubkey: ownerPubkey,
@@ -1473,7 +1538,8 @@ final class AppSession: ObservableObject {
         ownerPubkey: ownerPubkey,
         sessionID: sessionID,
         memberPubkeys: members,
-        updatedAt: incoming.createdAt
+        updatedAt: incoming.createdAt,
+        eventID: incoming.eventID
       )
     } catch {
       report(error: error)
@@ -1502,6 +1568,15 @@ final class AppSession: ObservableObject {
     }
 
     do {
+      guard
+        try messageStore.hasRootPost(
+          ownerPubkey: ownerPubkey,
+          sessionID: sessionID,
+          rootID: postID
+        )
+      else {
+        return
+      }
       try messageStore.upsertReaction(
         ownerPubkey: ownerPubkey,
         sessionID: sessionID,
@@ -1509,7 +1584,8 @@ final class AppSession: ObservableObject {
         emoji: emoji,
         senderPubkey: incoming.senderPubkey,
         isActive: isActive,
-        updatedAt: incoming.createdAt
+        updatedAt: incoming.createdAt,
+        eventID: incoming.eventID
       )
     } catch {
       report(error: error)
@@ -1549,7 +1625,10 @@ final class AppSession: ObservableObject {
       return
     }
     let payloadRootID = incoming.payload.rootID.trimmingCharacters(in: .whitespacesAndNewlines)
-    let canonicalPostID = payloadRootID.isEmpty ? incoming.eventID : payloadRootID
+    if !payloadRootID.isEmpty, payloadRootID != incoming.eventID {
+      return
+    }
+    let canonicalPostID = incoming.eventID
     guard let payloadURL = incoming.payload.url,
       let normalizedURL = LinkstrURLValidator.normalizedWebURL(from: payloadURL)
     else {
@@ -1776,6 +1855,11 @@ final class AppSession: ObservableObject {
     guard let path else { return nil }
     let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
     return trimmed.isEmpty ? nil : trimmed
+  }
+
+  private func normalizedEventIDToken(_ eventID: String?) -> String {
+    guard let eventID else { return "" }
+    return eventID.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
   private func normalizedRelayURL(from raw: String) -> URL? {

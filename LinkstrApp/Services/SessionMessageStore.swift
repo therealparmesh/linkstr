@@ -169,13 +169,27 @@ final class SessionMessageStore {
     ownerPubkey: String,
     sessionID: String,
     memberPubkeys: [String],
-    updatedAt: Date
+    updatedAt: Date,
+    eventID: String? = nil
   ) throws {
     let normalizedMembers = normalizedPubkeys(memberPubkeys)
     guard !normalizedMembers.isEmpty else { return }
-
+    guard let sessionEntity = try session(sessionID: sessionID, ownerPubkey: ownerPubkey) else {
+      return
+    }
     let existingMembers = try members(
       sessionID: sessionID, ownerPubkey: ownerPubkey, activeOnly: false)
+    let fallbackSnapshotUpdatedAt = existingMembers.map(\.updatedAt).max()
+    guard
+      shouldApplyStateUpdate(
+        currentUpdatedAt: sessionEntity.membershipStateUpdatedAt ?? fallbackSnapshotUpdatedAt,
+        currentEventID: sessionEntity.membershipStateEventID,
+        incomingUpdatedAt: updatedAt,
+        incomingEventID: eventID
+      )
+    else {
+      return
+    }
     var existingByHash: [String: SessionMemberEntity] = [:]
     for member in existingMembers {
       existingByHash[member.memberPubkeyHash] = member
@@ -236,6 +250,16 @@ final class SessionMessageStore {
       }
     }
 
+    let normalizedEventID = normalizedEventIDToken(eventID)
+    let membershipEventID = normalizedEventID.isEmpty ? nil : normalizedEventID
+    if sessionEntity.membershipStateUpdatedAt != updatedAt
+      || sessionEntity.membershipStateEventID != membershipEventID
+    {
+      sessionEntity.membershipStateUpdatedAt = updatedAt
+      sessionEntity.membershipStateEventID = membershipEventID
+      didChange = true
+    }
+
     if didChange {
       try modelContext.save()
     }
@@ -262,11 +286,13 @@ final class SessionMessageStore {
     emoji: String,
     senderPubkey: String,
     isActive: Bool,
-    updatedAt: Date
+    updatedAt: Date,
+    eventID: String
   ) throws {
     let normalizedEmoji = emoji.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !normalizedEmoji.isEmpty else { return }
     let normalizedSenderPubkey = try normalizedPubkey(senderPubkey)
+    let normalizedEventID = normalizedEventIDToken(eventID)
 
     let storageID = SessionReactionEntity.storageID(
       ownerPubkey: ownerPubkey,
@@ -280,9 +306,19 @@ final class SessionMessageStore {
     )
 
     if let existing = try modelContext.fetch(descriptor).first {
-      guard existing.updatedAt <= updatedAt else { return }
+      guard
+        shouldApplyStateUpdate(
+          currentUpdatedAt: existing.updatedAt,
+          currentEventID: existing.lastEventID,
+          incomingUpdatedAt: updatedAt,
+          incomingEventID: normalizedEventID
+        )
+      else {
+        return
+      }
       existing.isActive = isActive
       existing.updatedAt = updatedAt
+      existing.lastEventID = normalizedEventID
       try modelContext.save()
       return
     }
@@ -294,10 +330,24 @@ final class SessionMessageStore {
       emoji: normalizedEmoji,
       senderPubkey: normalizedSenderPubkey,
       isActive: isActive,
-      updatedAt: updatedAt
+      updatedAt: updatedAt,
+      eventID: normalizedEventID
     )
     modelContext.insert(reaction)
     try modelContext.save()
+  }
+
+  func hasRootPost(ownerPubkey: String, sessionID: String, rootID: String) throws -> Bool {
+    let rootKindRaw = SessionMessageKind.root.rawValue
+    let descriptor = FetchDescriptor<SessionMessageEntity>(
+      predicate: #Predicate {
+        $0.ownerPubkey == ownerPubkey
+          && $0.conversationID == sessionID
+          && $0.rootID == rootID
+          && $0.kindRaw == rootKindRaw
+      }
+    )
+    return try modelContext.fetch(descriptor).isEmpty == false
   }
 
   func markRootPostRead(postID: String, ownerPubkey: String, myPubkey: String) throws {
@@ -460,5 +510,42 @@ final class SessionMessageStore {
     guard let path else { return nil }
     let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
     return trimmed.isEmpty ? nil : trimmed
+  }
+
+  private func normalizedEventIDToken(_ candidate: String?) -> String {
+    guard let candidate else { return "" }
+    return candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  private func shouldApplyStateUpdate(
+    currentUpdatedAt: Date?,
+    currentEventID: String?,
+    incomingUpdatedAt: Date,
+    incomingEventID: String?
+  ) -> Bool {
+    guard let currentUpdatedAt else { return true }
+    if incomingUpdatedAt > currentUpdatedAt { return true }
+    if incomingUpdatedAt < currentUpdatedAt { return false }
+
+    let incomingToken = normalizedEventIDToken(incomingEventID)
+    guard !incomingToken.isEmpty else { return false }
+
+    let currentToken = normalizedEventIDToken(currentEventID)
+    if currentToken.isEmpty { return true }
+    return incomingToken > currentToken
+  }
+
+  private func shouldApplyStateUpdate(
+    currentUpdatedAt: Date,
+    currentEventID: String?,
+    incomingUpdatedAt: Date,
+    incomingEventID: String?
+  ) -> Bool {
+    shouldApplyStateUpdate(
+      currentUpdatedAt: Optional(currentUpdatedAt),
+      currentEventID: currentEventID,
+      incomingUpdatedAt: incomingUpdatedAt,
+      incomingEventID: incomingEventID
+    )
   }
 }

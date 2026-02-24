@@ -145,6 +145,8 @@ final class SessionEntity {
   var createdAt: Date
   var updatedAt: Date
   var isArchived: Bool
+  var membershipStateUpdatedAt: Date?
+  var membershipStateEventID: String?
 
   var name: String {
     LocalDataCrypto.shared.decryptString(encryptedName, ownerPubkey: ownerPubkey) ?? ""
@@ -161,7 +163,9 @@ final class SessionEntity {
     createdByPubkey: String,
     createdAt: Date = .now,
     updatedAt: Date = .now,
-    isArchived: Bool = false
+    isArchived: Bool = false,
+    membershipStateUpdatedAt: Date? = nil,
+    membershipStateEventID: String? = nil
   ) throws {
     self.storageID = Self.storageID(ownerPubkey: ownerPubkey, sessionID: sessionID)
     self.ownerPubkey = ownerPubkey
@@ -174,6 +178,8 @@ final class SessionEntity {
     self.createdAt = createdAt
     self.updatedAt = updatedAt
     self.isArchived = isArchived
+    self.membershipStateUpdatedAt = membershipStateUpdatedAt
+    self.membershipStateEventID = membershipStateEventID
   }
 
   static func storageID(ownerPubkey: String, sessionID: String) -> String {
@@ -300,6 +306,7 @@ final class SessionReactionEntity {
   var encryptedSenderPubkey: String
   var isActive: Bool
   var updatedAt: Date
+  var lastEventID: String = ""
 
   var senderPubkey: String {
     LocalDataCrypto.shared.decryptString(encryptedSenderPubkey, ownerPubkey: ownerPubkey) ?? ""
@@ -312,7 +319,8 @@ final class SessionReactionEntity {
     emoji: String,
     senderPubkey: String,
     isActive: Bool,
-    updatedAt: Date = .now
+    updatedAt: Date = .now,
+    eventID: String = ""
   ) throws {
     self.storageID = Self.storageID(
       ownerPubkey: ownerPubkey,
@@ -330,6 +338,7 @@ final class SessionReactionEntity {
       try LocalDataCrypto.shared.encryptString(senderPubkey, ownerPubkey: ownerPubkey) ?? ""
     self.isActive = isActive
     self.updatedAt = updatedAt
+    self.lastEventID = eventID.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
   static func storageID(

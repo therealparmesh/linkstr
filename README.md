@@ -74,6 +74,8 @@
   - The active member set becomes exactly the snapshot.
   - Missing previous members become inactive.
   - Update fanout targets both prior-active and next-active members so removed members receive the removal snapshot.
+  - Snapshot application is monotonic by `created_at`; older snapshots are ignored.
+  - Equal-timestamp snapshot conflicts resolve by lexicographic event-ID tie-break.
 - Sessions can be archived/unarchived from a session-row long-press menu.
 - Session list shows active sessions by default.
 - When archived sessions exist, a header archive toggle icon appears to the left of `+` in the sessions tab.
@@ -114,6 +116,8 @@
   - On failure/timeout, composer stays open and error is shown.
 - Posting is blocked when the sender is not an active member of the target session.
 - Posting recipient resolution uses only active session members.
+- Root post identity is the Nostr event ID.
+- Inbound root payloads with a non-empty `root_id` that does not match the event ID are ignored.
 
 ### Reactions
 
@@ -132,6 +136,8 @@
   - Emoji.
   - Sender pubkey.
 - Transport carries reaction active/inactive state.
+- Reactions targeting unknown root posts are ignored.
+- Equal-timestamp reaction conflicts resolve by lexicographic event-ID tie-break.
 
 ### Read/unread semantics
 
@@ -177,11 +183,13 @@
 - Ingest processing rules:
   - Ignore undecodable/unvalidated payloads.
   - Deduplicate by event ID.
+  - `session_create` requires sender and receiver inclusion in the snapshot member set.
   - `session_create` for an existing session is accepted only from the stored creator pubkey.
   - `session_members` is accepted only from the stored creator pubkey and only when the session already exists.
+  - `session_members` snapshots must include the creator pubkey.
   - Upsert sessions/member snapshots from accepted session events.
   - Persist root posts only when sender and receiver are active session members at the event timestamp.
-  - Upsert reaction state only when sender and receiver are active session members at the event timestamp.
+  - Upsert reaction state only when sender and receiver are active session members at the event timestamp and the root post exists locally.
 
 ### Notifications (best effort)
 
@@ -257,7 +265,7 @@
 
 - Contacts mirror the account's Nostr follow list (`kind:3`, NIP-02).
 - Add/remove contact actions publish a full replacement follow-list event and wait for relay acceptance.
-- Incoming follow-list events from the signed-in author reconcile local contacts (latest event wins).
+- Incoming follow-list events from the signed-in author reconcile local contacts (newer timestamp wins; equal timestamp uses lexicographic event-ID tie-break).
 - Aliases are private per-account device data and are never published to relays.
 - Contact management supports add/remove and alias edit.
 - Add-contact input supports manual entry, paste, and QR scan.
@@ -291,7 +299,8 @@
 - Account scoping is enforced in storage and query paths to prevent cross-account bleed.
 - `Log Out (Keep Local Data)` preserves persisted local entities for later re-login.
 - `Log Out and Clear Local Data` removes the signed-in account’s persisted entities and cached media references.
-- Sensitive stored fields are encrypted at rest with per-owner local keys.
+- Sensitive content fields are encrypted at rest with per-owner local keys (aliases, session/member identity values, URLs/notes, metadata, and creator keys).
+- Operational identifiers and timestamps remain plaintext in local storage for indexing/querying.
 - Identity keys remain in keychain.
 - Keychain accessibility uses `WhenUnlocked` and prefers synchronizable items when available.
 - Simulator fallback key storage is used when simulator keychain is unavailable.

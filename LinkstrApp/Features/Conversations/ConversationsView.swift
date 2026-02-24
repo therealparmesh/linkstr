@@ -12,22 +12,6 @@ private struct SessionSummary: Identifiable {
   let postCount: Int
 }
 
-private struct SessionMessageIndex {
-  let rootsBySessionID: [String: [SessionMessageEntity]]
-
-  init(messages: [SessionMessageEntity]) {
-    var rootsBySessionID: [String: [SessionMessageEntity]] = [:]
-
-    for message in messages {
-      if message.kind == .root {
-        rootsBySessionID[message.conversationID, default: []].append(message)
-      }
-    }
-
-    self.rootsBySessionID = rootsBySessionID
-  }
-}
-
 private struct ConversationsViewState {
   let scopedSessions: [SessionEntity]
   let sessionByID: [String: SessionEntity]
@@ -205,18 +189,41 @@ struct ConversationsView: View {
     sessions: [SessionEntity],
     messages: [SessionMessageEntity]
   ) -> [SessionSummary] {
-    let index = SessionMessageIndex(messages: messages)
+    var aggregates:
+      [String: (
+        latestPost: SessionMessageEntity?,
+        hasUnread: Bool,
+        postCount: Int
+      )] = [:]
+    aggregates.reserveCapacity(max(1, sessions.count))
+
+    for message in messages where message.kind == .root {
+      let key = message.conversationID
+      var aggregate = aggregates[key] ?? (latestPost: nil, hasUnread: false, postCount: 0)
+
+      if let latestPost = aggregate.latestPost {
+        if message.timestamp > latestPost.timestamp {
+          aggregate.latestPost = message
+        }
+      } else {
+        aggregate.latestPost = message
+      }
+
+      aggregate.postCount += 1
+      aggregate.hasUnread = aggregate.hasUnread || hasUnreadIncomingRootPost(message)
+      aggregates[key] = aggregate
+    }
 
     return
       sessions
       .compactMap { sessionEntity in
-        let posts = index.rootsBySessionID[sessionEntity.sessionID] ?? []
-        let latestPost = posts.max(by: { $0.timestamp < $1.timestamp })
+        let aggregate = aggregates[sessionEntity.sessionID]
+        let latestPost = aggregate?.latestPost
         let latestTimestamp = latestPost?.timestamp ?? sessionEntity.updatedAt
         let latestPreview = previewText(for: latestPost)
         let latestNote = normalizedNote(latestPost?.note)
-
-        let hasUnread = posts.contains { hasUnreadIncomingRootPost($0) }
+        let hasUnread = aggregate?.hasUnread ?? false
+        let postCount = aggregate?.postCount ?? 0
 
         return SessionSummary(
           id: sessionEntity.sessionID,
@@ -225,7 +232,7 @@ struct ConversationsView: View {
           latestPreview: latestPreview,
           latestNote: latestNote,
           hasUnread: hasUnread,
-          postCount: posts.count
+          postCount: postCount
         )
       }
       .sorted { $0.latestTimestamp > $1.latestTimestamp }
