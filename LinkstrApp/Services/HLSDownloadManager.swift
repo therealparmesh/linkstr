@@ -4,7 +4,6 @@ import Foundation
 final class HLSDownloadManager: NSObject {
   static let shared = HLSDownloadManager()
 
-  private let fileManager = FileManager.default
   private var session: AVAssetDownloadURLSession!
   private var continuations: [Int: CheckedContinuation<URL, Error>] = [:]
   private var destinationURLByTaskID: [Int: URL] = [:]
@@ -18,7 +17,7 @@ final class HLSDownloadManager: NSObject {
 
   func download(assetURL: URL, headers: [String: String]) async throws -> URL {
     let destinationURL = ManagedLocalFileScope.shared.cachedHLSPackageURL(for: assetURL)
-    if fileManager.fileExists(atPath: destinationURL.path) {
+    if FileManager.default.fileExists(atPath: destinationURL.path) {
       return destinationURL
     }
 
@@ -55,10 +54,10 @@ extension HLSDownloadManager: AVAssetDownloadDelegate {
       destinationURLByTaskID.removeValue(forKey: taskIdentifier) ?? location
 
     do {
-      if fileManager.fileExists(atPath: destinationURL.path) {
-        try? fileManager.removeItem(at: destinationURL)
+      if FileManager.default.fileExists(atPath: destinationURL.path) {
+        try? FileManager.default.removeItem(at: destinationURL)
       }
-      try fileManager.moveItem(at: location, to: destinationURL)
+      try FileManager.default.moveItem(at: location, to: destinationURL)
       continuation.resume(returning: destinationURL)
     } catch {
       continuation.resume(throwing: error)
