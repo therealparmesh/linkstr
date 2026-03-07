@@ -13,6 +13,11 @@ struct ReactionSummary: Identifiable, Hashable {
     count > 10 ? "10+" : "\(count)"
   }
 
+  var readOnlyBadgeText: String? {
+    guard count > 1 else { return nil }
+    return badgeText
+  }
+
   static func summaries(from reactions: [SessionReactionEntity], myPubkey: String?)
     -> [ReactionSummary]
   {
@@ -129,29 +134,31 @@ struct LinkstrReactionRow: View {
   }
 
   private func readOnlySummaryText(_ summary: ReactionSummary) -> some View {
-    ZStack(alignment: .topTrailing) {
+    ZStack(alignment: .bottomTrailing) {
       Text(summary.emoji)
         .font(LinkstrTheme.system(17))
         .foregroundStyle(LinkstrTheme.textPrimary.opacity(0.95))
 
-      Text(summary.badgeText)
-        .font(LinkstrTheme.body(9))
-        .foregroundStyle(LinkstrTheme.textPrimary)
-        .padding(.horizontal, 4)
-        .padding(.vertical, 1)
-        .background(
-          Capsule()
-            .fill(LinkstrTheme.panel)
-        )
-        .overlay(
-          Capsule()
-            .stroke(LinkstrTheme.textSecondary.opacity(0.22), lineWidth: 1)
-        )
-        .offset(x: 8, y: -5)
+      if let badgeText = summary.readOnlyBadgeText {
+        Text(badgeText)
+          .font(LinkstrTheme.body(9))
+          .foregroundStyle(LinkstrTheme.textPrimary)
+          .padding(.horizontal, 4)
+          .padding(.vertical, 1)
+          .background(
+            Capsule()
+              .fill(LinkstrTheme.panel)
+          )
+          .overlay(
+            Capsule()
+              .stroke(LinkstrTheme.textSecondary.opacity(0.22), lineWidth: 1)
+          )
+          .offset(x: 7, y: 5)
+      }
     }
     .fixedSize(horizontal: true, vertical: false)
-    .padding(.vertical, 2)
-    .padding(.trailing, 10)
+    .padding(.vertical, 4)
+    .padding(.trailing, 8)
   }
 
   private func summaryChip(_ summary: ReactionSummary) -> some View {

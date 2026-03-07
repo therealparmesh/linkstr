@@ -993,13 +993,15 @@ actor TwitterStatusResolutionService {
 
       let trimmedHTML = html.trimmingCharacters(in: .whitespacesAndNewlines)
       guard !trimmedHTML.isEmpty else { return nil }
-      return embedDocumentHTML(from: trimmedHTML)
+      return TwitterEmbedDocumentBuilder.documentHTML(from: trimmedHTML)
     } catch {
       return nil
     }
   }
+}
 
-  private func embedDocumentHTML(from fragment: String) -> String {
+enum TwitterEmbedDocumentBuilder {
+  static func documentHTML(from fragment: String) -> String {
     """
     <!doctype html>
     <html>
@@ -1018,6 +1020,12 @@ actor TwitterStatusResolutionService {
           body {
             display: flex;
             justify-content: center;
+            opacity: 0;
+            transition: opacity 0.18s ease;
+          }
+
+          body.linkstr-embed-ready {
+            opacity: 1;
           }
 
           .twitter-tweet,
@@ -1028,6 +1036,79 @@ actor TwitterStatusResolutionService {
       </head>
       <body>
         \(fragment)
+        <script>
+          (() => {
+            const readyClass = "linkstr-embed-ready";
+            const body = document.body;
+            const root = document.documentElement;
+            const metricsHandler = window.webkit?.messageHandlers?.linkstrEmbedMetrics;
+
+            const height = () => Math.max(
+              root?.scrollHeight ?? 0,
+              body?.scrollHeight ?? 0,
+              root?.offsetHeight ?? 0,
+              body?.offsetHeight ?? 0,
+              root?.clientHeight ?? 0,
+              body?.clientHeight ?? 0
+            );
+
+            const postMetrics = (readyOverride) => {
+              metricsHandler?.postMessage({
+                height: Math.ceil(height()),
+                ready: readyOverride ?? body.classList.contains(readyClass)
+              });
+            };
+
+            const markReady = () => {
+              if (body.classList.contains(readyClass) === false) {
+                body.classList.add(readyClass);
+              }
+              postMetrics(true);
+            };
+
+            const hasRenderedTweet = () =>
+              document.querySelector("iframe[src*='platform.twitter.com']") ||
+              document.querySelector("iframe[src*='syndication.twitter.com']") ||
+              document.querySelector("twitter-widget") ||
+              document.querySelector(".twitter-tweet-rendered");
+
+            const refresh = () => {
+              postMetrics(false);
+              if (hasRenderedTweet()) {
+                markReady();
+              }
+            };
+
+            if (document.readyState === "loading") {
+              document.addEventListener("DOMContentLoaded", refresh, { once: true });
+            } else {
+              refresh();
+            }
+
+            window.addEventListener("load", refresh);
+            window.addEventListener("resize", () => postMetrics(false));
+            window.addEventListener("message", refresh);
+
+            new MutationObserver(refresh).observe(root, {
+              subtree: true,
+              childList: true,
+              attributes: true
+            });
+
+            if (window.ResizeObserver) {
+              new ResizeObserver(() => postMetrics(false)).observe(root);
+            }
+
+            [50, 140, 320, 700, 1400].forEach((delay, index, allDelays) => {
+              window.setTimeout(() => {
+                refresh();
+                if (delay === allDelays[allDelays.length - 1]) {
+                  markReady();
+                }
+              }, delay);
+            });
+          })();
+        </script>
       </body>
     </html>
     """

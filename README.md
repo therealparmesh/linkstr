@@ -134,7 +134,7 @@
 - Reactions are emoji-only toggles tied to a post.
 - Reaction send is blocked when the sender is not an active member of the target session.
 - UX includes:
-  - Session post list shows compact read-only reaction summaries (no interactive controls) with per-emoji count badges.
+  - Session post list shows compact read-only reaction summaries (no interactive controls); single reactions show emoji-only and higher counts use bottom-right badges.
   - Post detail uses interactive Slack-style reaction summary chips.
   - Inline quick toggles for `👍`, `👎`, `👀`.
   - `...` button that opens the full emoji picker sheet.
@@ -248,7 +248,7 @@
   - Rumble.
   - Instagram non-reel posts (`/p/`, `/tv/`).
   - Facebook non-reel videos (`/videos/`).
-- Twitter/X non-video statuses prefer official tweet embeds and otherwise fall back to browser open.
+- Twitter/X non-video statuses prefer official tweet embeds with deferred reveal and live height measurement, and otherwise fall back to browser open.
 - Generic links fall back to open-in-browser.
 
 #### Playback behavior

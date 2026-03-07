@@ -106,6 +106,8 @@ struct AdaptiveVideoPlaybackView: View {
   @State private var fileExportItem: LocalFileExportItem?
   @State private var exportFeedbackTitle = ""
   @State private var exportFeedbackMessage: String?
+  @State private var embeddedContentHeight: CGFloat?
+  @State private var isEmbeddedContentReady = false
 
   init(
     sourceURL: URL,
@@ -151,6 +153,8 @@ struct AdaptiveVideoPlaybackView: View {
           preferredEmbedSource = .url(preferredEmbedURL)
         }
         isResolvingPresentation = false
+        embeddedContentHeight = nil
+        isEmbeddedContentReady = false
         extractionState = nil
         extractionFallbackReason = nil
         localPlaybackMode = .localPreferred
@@ -296,8 +300,31 @@ struct AdaptiveVideoPlaybackView: View {
     allowsTryLocalPlayback: Bool
   ) -> some View {
     VStack(alignment: .leading, spacing: 8) {
-      mediaSurface {
-        EmbeddedWebView(source: embedSource)
+      mediaSurface(explicitHeight: embedSurfaceHeight(for: embedSource)) {
+        ZStack {
+          EmbeddedWebView(
+            source: embedSource,
+            onIntrinsicHeightChange: { height in
+              guard embedSource.usesManagedHTMLDocument else { return }
+              embeddedContentHeight = normalizedEmbedHeight(height)
+            },
+            onContentReadyChange: { isReady in
+              guard embedSource.usesManagedHTMLDocument else { return }
+              isEmbeddedContentReady = isReady
+            }
+          )
+          .opacity(shouldDeferEmbedReveal(for: embedSource) && !isEmbeddedContentReady ? 0 : 1)
+
+          if shouldDeferEmbedReveal(for: embedSource) && !isEmbeddedContentReady {
+            VStack(spacing: 8) {
+              ProgressView()
+              Text("loading post...")
+                .font(LinkstrTheme.body(12))
+                .foregroundStyle(LinkstrTheme.textSecondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+          }
+        }
       }
 
       if let extractionFallbackReason {
@@ -384,18 +411,31 @@ struct AdaptiveVideoPlaybackView: View {
   private func retryLocalPlayback() {
     Task {
       localPlaybackMode = .localPreferred
+      embeddedContentHeight = nil
+      isEmbeddedContentReady = false
       extractionState = nil
       extractionFallbackReason = nil
       await prepareMediaIfNeeded()
     }
   }
 
-  private func mediaSurface<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-    content()
-      .frame(maxWidth: .infinity)
-      .aspectRatio(effectiveMediaAspectRatio, contentMode: .fit)
-      .background(LinkstrTheme.panelSoft)
-      .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+  private func mediaSurface<Content: View>(
+    explicitHeight: CGFloat? = nil,
+    @ViewBuilder content: () -> Content
+  ) -> some View {
+    Group {
+      if let explicitHeight {
+        content()
+          .frame(maxWidth: .infinity)
+          .frame(height: explicitHeight)
+      } else {
+        content()
+          .frame(maxWidth: .infinity)
+          .aspectRatio(effectiveMediaAspectRatio, contentMode: .fit)
+      }
+    }
+    .background(LinkstrTheme.panelSoft)
+    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
   }
 
   private func prepareMediaIfNeeded() async {
@@ -469,6 +509,20 @@ struct AdaptiveVideoPlaybackView: View {
     }
 
     return .url(fallback)
+  }
+
+  private func shouldDeferEmbedReveal(for embedSource: EmbeddedWebSource) -> Bool {
+    embedSource.usesManagedHTMLDocument
+  }
+
+  private func embedSurfaceHeight(for embedSource: EmbeddedWebSource) -> CGFloat? {
+    guard embedSource.usesManagedHTMLDocument else { return nil }
+    return embeddedContentHeight
+  }
+
+  private func normalizedEmbedHeight(_ height: CGFloat) -> CGFloat {
+    guard height.isFinite else { return 220 }
+    return max(height.rounded(.up), 220)
   }
 
   private var effectiveMediaStrategy: URLClassifier.MediaStrategy {
