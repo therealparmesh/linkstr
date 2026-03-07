@@ -261,6 +261,7 @@
 
 - For extraction-capable providers, local playback is attempted first with explicit controls to switch to embed mode.
 - Local/embed action rows are normalized across post detail and deep-link playback surfaces.
+- Media playback surfaces temporarily acquire an `AVAudioSession` playback category while onscreen, so audio still plays when the iPhone silent switch is enabled.
 - In local playback mode with a locally cached media file, users can export via `Save...`:
   - `Save to Photos` (requests Photos add-only permission).
   - `Save to Files` (document export flow, no broad media permission).

@@ -18,6 +18,7 @@ struct InlineVideoPlayer: View {
         if let player {
           VideoPlayer(player: player)
             .onAppear { player.play() }
+            .scopedPlaybackAudioSession()
         } else {
           ProgressView()
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
@@ -42,6 +43,7 @@ struct InlineVideoPlayer: View {
     .fullScreenCover(isPresented: $isShowingFullscreenPlayer) {
       if let player {
         FullScreenAVPlayerView(player: player)
+          .scopedPlaybackAudioSession()
           .ignoresSafeArea()
           .background(Color.black)
       }
@@ -78,6 +80,30 @@ private struct FullScreenAVPlayerView: UIViewControllerRepresentable {
 
   func updateUIViewController(_ uiViewController: AVPlayerViewController, context: Context) {
     uiViewController.player = player
+  }
+}
+
+private struct ScopedPlaybackAudioSessionModifier: ViewModifier {
+  @State private var hasAcquiredPlaybackAudioSession = false
+
+  func body(content: Content) -> some View {
+    content
+      .onAppear {
+        guard !hasAcquiredPlaybackAudioSession else { return }
+        MediaAudioSessionController.shared.acquirePlayback()
+        hasAcquiredPlaybackAudioSession = true
+      }
+      .onDisappear {
+        guard hasAcquiredPlaybackAudioSession else { return }
+        MediaAudioSessionController.shared.releasePlayback()
+        hasAcquiredPlaybackAudioSession = false
+      }
+  }
+}
+
+extension View {
+  fileprivate func scopedPlaybackAudioSession() -> some View {
+    modifier(ScopedPlaybackAudioSessionModifier())
   }
 }
 
@@ -313,6 +339,7 @@ struct AdaptiveVideoPlaybackView: View {
               isEmbeddedContentReady = isReady
             }
           )
+          .scopedPlaybackAudioSession()
           .opacity(shouldDeferEmbedReveal(for: embedSource) && !isEmbeddedContentReady ? 0 : 1)
 
           if shouldDeferEmbedReveal(for: embedSource) && !isEmbeddedContentReady {
