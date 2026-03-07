@@ -15,67 +15,84 @@ struct ShareIdentityView: View {
   @ViewBuilder
   private var content: some View {
     if let npub = session.identityService.npub {
-      ScrollView {
-        VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
-          if let qrImage = QRCodeGenerator.image(for: npub) {
-            VStack(alignment: .leading, spacing: 10) {
-              Text("qr code")
-                .linkstrPrimarySectionTitleTextStyle()
-                .padding(.horizontal, 2)
-              Image(uiImage: qrImage)
-                .interpolation(.none)
-                .resizable()
-                .scaledToFit()
-                .frame(maxWidth: 300)
-                .frame(maxWidth: .infinity, alignment: .center)
-              Text("scan to add this contact key (npub)")
-                .font(LinkstrTheme.body(12))
-                .foregroundStyle(LinkstrTheme.textSecondary)
-                .frame(maxWidth: .infinity, alignment: .center)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 16)
-            }
+      GeometryReader { _ in
+        ViewThatFits(in: .vertical) {
+          VStack(spacing: 0) {
+            identityContent(npub: npub)
+            Spacer(minLength: 0)
           }
+          .padding(.horizontal, 12)
+          .padding(.top, 14)
+          .padding(.bottom, LinkstrTheme.tabBarContentBottomInset + 28)
 
-          VStack(alignment: .leading, spacing: 10) {
-            Text("your contact key (npub)")
-              .linkstrPrimarySectionTitleTextStyle()
-              .padding(.horizontal, 2)
-            Text("others use this key to send links to you or add you as a contact.")
-              .font(LinkstrTheme.body(13))
-              .foregroundStyle(LinkstrTheme.textSecondary)
-            Text(npub)
-              .font(LinkstrTheme.body(13))
-              .foregroundStyle(LinkstrTheme.textSecondary)
-              .textSelection(.enabled)
-              .padding(10)
-              .frame(maxWidth: .infinity, alignment: .leading)
-              .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                  .fill(LinkstrTheme.panelSoft)
-              )
-
-            Button {
-              UIPasteboard.general.string = npub
-            } label: {
-              Label("copy contact key (npub)", systemImage: "doc.on.doc")
-                .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(LinkstrTheme.neonCyan)
+          ScrollView {
+            identityContent(npub: npub)
+              .padding(.horizontal, 12)
+              .padding(.top, 14)
+              .padding(.bottom, 28)
           }
+          .linkstrTabBarContentInset()
         }
-        .padding(.horizontal, 12)
-        .padding(.top, 14)
-        .padding(.bottom, 28)
       }
-      .linkstrTabBarContentInset()
     } else {
       LinkstrCenteredEmptyStateView(
         title: "no identity",
         systemImage: "person.crop.circle.badge.exclamationmark",
         description: "create an account or sign in with a secret key (nsec) in settings."
       )
+    }
+  }
+
+  @ViewBuilder
+  private func identityContent(npub: String) -> some View {
+    VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
+      if let qrImage = QRCodeGenerator.image(for: npub) {
+        VStack(alignment: .leading, spacing: 10) {
+          Text("qr code")
+            .linkstrPrimarySectionTitleTextStyle()
+            .padding(.horizontal, 2)
+          Image(uiImage: qrImage)
+            .interpolation(.none)
+            .resizable()
+            .scaledToFit()
+            .frame(maxWidth: 300)
+            .frame(maxWidth: .infinity, alignment: .center)
+          Text("scan to add this contact key (npub)")
+            .font(LinkstrTheme.body(12))
+            .foregroundStyle(LinkstrTheme.textSecondary)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 16)
+        }
+      }
+
+      VStack(alignment: .leading, spacing: 10) {
+        Text("your contact key (npub)")
+          .linkstrPrimarySectionTitleTextStyle()
+          .padding(.horizontal, 2)
+        Text("others use this key to send links to you or add you as a contact.")
+          .font(LinkstrTheme.body(13))
+          .foregroundStyle(LinkstrTheme.textSecondary)
+        Text(npub)
+          .font(LinkstrTheme.body(13))
+          .foregroundStyle(LinkstrTheme.textSecondary)
+          .textSelection(.enabled)
+          .padding(10)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+              .fill(LinkstrTheme.panelSoft)
+          )
+
+        Button {
+          UIPasteboard.general.string = npub
+        } label: {
+          Label("copy contact key (npub)", systemImage: "doc.on.doc")
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(LinkstrTheme.neonCyan)
+      }
     }
   }
 }

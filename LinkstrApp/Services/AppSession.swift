@@ -2275,8 +2275,8 @@ final class AppSession: ObservableObject {
     let preview = await URLMetadataService.shared.fetchPreview(for: url)
     guard let preview else { return }
 
-    let currentTitle = normalizedMetadataTitle(message.metadataTitle)
-    let previewTitle = normalizedMetadataTitle(preview.title)
+    let currentTitle = LinkMetadataRefreshPolicy.normalizedTitle(message.metadataTitle)
+    let previewTitle = LinkMetadataRefreshPolicy.normalizedTitle(preview.title)
     let resolvedTitle = previewTitle ?? currentTitle
 
     let currentThumbnail = ManagedLocalFileScope.shared.normalizedManagedPath(message.thumbnailURL)
@@ -2301,24 +2301,11 @@ final class AppSession: ObservableObject {
   private func needsMetadataRefresh(_ message: SessionMessageEntity) -> Bool {
     guard message.kind == .root else { return false }
     guard message.url != nil else { return false }
-
-    let hasTitle = normalizedMetadataTitle(message.metadataTitle) != nil
-    if !hasTitle {
-      return true
-    }
-
-    guard
-      let thumbnailPath = ManagedLocalFileScope.shared.normalizedManagedPath(message.thumbnailURL)
-    else {
-      return false
-    }
-    return !FileManager.default.fileExists(atPath: thumbnailPath)
-  }
-
-  private func normalizedMetadataTitle(_ title: String?) -> String? {
-    guard let title else { return nil }
-    let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-    return trimmed.isEmpty ? nil : trimmed
+    return LinkMetadataRefreshPolicy.needsRefresh(
+      linkType: message.linkType,
+      title: message.metadataTitle,
+      thumbnailPath: ManagedLocalFileScope.shared.normalizedManagedPath(message.thumbnailURL)
+    )
   }
 
   private func resetFollowListStateInMemory() {

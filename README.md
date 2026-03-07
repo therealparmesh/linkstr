@@ -269,7 +269,8 @@
 - Canonical TikTok post URLs prefer exact `aweme_id` API playback candidates and avoid page-sniff fallback when exact extraction fails, to reduce accidental related-video matches.
 - Twitter/X status handling is resolved at runtime:
   - Video statuses use extraction-preferred playback.
-  - Non-video statuses use official tweet oEmbed HTML when available.
+  - Non-video statuses use the official X widgets render path, gated by `publish.twitter.com/oembed` availability.
+  - Embedded tweet taps that navigate away from the widget open externally instead of silently dying inside `WKWebView`.
   - If official tweet embed resolution fails, the fallback is a regular browser link.
 
 #### Embed URL patterns
@@ -280,7 +281,7 @@
   - Facebook plugin `/plugins/video.php`.
   - YouTube `/embed`.
   - Rumble oEmbed iframe URL.
-- Twitter/X embeds use official `publish.twitter.com/oembed` HTML rather than assuming `x.com/i/status/...` is always embeddable.
+- Twitter/X embeds use the official X widget factory (`widgets.js` / `createTweet`) instead of rendering the raw oEmbed fragment directly.
 - Facebook videos/reels use Facebook plugin embed URLs (`/plugins/video.php`) with canonicalized `href` targets.
 - Rumble embeds are resolved from provider oEmbed iframe URLs when available.
 - Embedded web playback allows provider element fullscreen when supported by the provider and iframe context.
@@ -291,6 +292,7 @@
   - One action button uses full width.
   - Two action buttons split width evenly with spacing.
 - Metadata hydration fetches title/thumbnail asynchronously for root posts.
+- X/Twitter status previews prefer the Twitter-specific status metadata path for author/title and media thumbnails before falling back to generic `LinkPresentation` metadata.
 - On boot, existing root posts are re-queued for metadata hydration when stale/missing.
 - Missing local thumbnail files are treated as stale and re-fetched.
 

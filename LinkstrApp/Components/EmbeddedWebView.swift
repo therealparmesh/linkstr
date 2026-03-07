@@ -1,6 +1,10 @@
 import SwiftUI
 import WebKit
 
+#if canImport(UIKit)
+  import UIKit
+#endif
+
 enum EmbeddedWebSource: Equatable {
   case url(URL)
   case html(document: String, baseURL: URL?)
@@ -27,7 +31,7 @@ struct EmbeddedWebView: UIViewRepresentable {
   var onIntrinsicHeightChange: ((CGFloat) -> Void)? = nil
   var onContentReadyChange: ((Bool) -> Void)? = nil
 
-  final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+  final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler, WKUIDelegate {
     static let metricsHandlerName = "linkstrEmbedMetrics"
     private static let metricPollDelays: [TimeInterval] = [0.05, 0.18, 0.4, 0.9, 1.6]
 
@@ -58,11 +62,35 @@ struct EmbeddedWebView: UIViewRepresentable {
         return
       }
 
+      if navigationAction.navigationType == .linkActivated {
+        guard WebNavigationGuard.allowsNavigation(to: targetURL) else {
+          decisionHandler(.cancel)
+          return
+        }
+        openExternally(targetURL)
+        decisionHandler(.cancel)
+        return
+      }
+
       if WebNavigationGuard.allowsNavigation(to: targetURL) {
         decisionHandler(.allow)
       } else {
         decisionHandler(.cancel)
       }
+    }
+
+    func webView(
+      _ webView: WKWebView,
+      createWebViewWith configuration: WKWebViewConfiguration,
+      for navigationAction: WKNavigationAction,
+      windowFeatures: WKWindowFeatures
+    ) -> WKWebView? {
+      if let targetURL = navigationAction.request.url,
+        WebNavigationGuard.allowsNavigation(to: targetURL)
+      {
+        openExternally(targetURL)
+      }
+      return nil
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -162,6 +190,12 @@ struct EmbeddedWebView: UIViewRepresentable {
 
       return (height: nil, ready: nil)
     }
+
+    private func openExternally(_ url: URL) {
+      #if canImport(UIKit)
+        UIApplication.shared.open(url)
+      #endif
+    }
   }
 
   func makeCoordinator() -> Coordinator {
@@ -181,6 +215,7 @@ struct EmbeddedWebView: UIViewRepresentable {
 
     let webView = WKWebView(frame: .zero, configuration: config)
     webView.navigationDelegate = context.coordinator
+    webView.uiDelegate = context.coordinator
     webView.scrollView.isScrollEnabled = false
     webView.scrollView.bounces = false
     webView.scrollView.showsVerticalScrollIndicator = false
@@ -222,6 +257,7 @@ struct EmbeddedWebView: UIViewRepresentable {
 
   static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
     uiView.navigationDelegate = nil
+    uiView.uiDelegate = nil
     uiView.configuration.userContentController.removeScriptMessageHandler(
       forName: Coordinator.metricsHandlerName
     )

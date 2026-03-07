@@ -40,7 +40,7 @@ final class SocialVideoExtractionService: NSObject {
     }
 
     if SocialURLHeuristics.isTwitterStatusURL(sourceURL) {
-      let summary = await loadTwitterStatusMediaSummary(from: sourceURL)
+      let summary = await TwitterStatusResolutionService.shared.mediaSummary(for: sourceURL)
       if summary.hasVideo == false {
         return .cannotExtract("This post does not include a playable video")
       }
@@ -148,18 +148,8 @@ final class SocialVideoExtractionService: NSObject {
     return nil
   }
 
-  private func loadTwitterStatusMediaURLs(from sourceURL: URL) async -> [URL] {
-    let summary = await loadTwitterStatusMediaSummary(from: sourceURL)
-    return summary.candidateURLs
-  }
-
   private func isTikTokURL(_ url: URL) -> Bool {
     SocialURLHeuristics.isTikTokHost(url)
-  }
-
-  private func loadTwitterStatusMediaSummary(from sourceURL: URL) async -> TwitterStatusMediaSummary
-  {
-    await TwitterStatusResolutionService.shared.mediaSummary(for: sourceURL)
   }
 
   private func matchesSourceIdentity(_ candidateURL: URL, sourceURL: URL) -> Bool {
@@ -780,8 +770,14 @@ private final class MediaCandidateCollector: NSObject, WKNavigationDelegate, WKS
 struct TwitterStatusMediaSummary: Equatable {
   let candidateURLs: [URL]
   let hasVideo: Bool
+  let preview: TwitterStatusPreview?
 
-  static let empty = TwitterStatusMediaSummary(candidateURLs: [], hasVideo: false)
+  static let empty = TwitterStatusMediaSummary(candidateURLs: [], hasVideo: false, preview: nil)
+}
+
+struct TwitterStatusPreview: Equatable {
+  let title: String?
+  let imageURL: URL?
 }
 
 struct TwitterStatusResolvedPresentation: Equatable {
@@ -801,33 +797,42 @@ actor TwitterStatusResolutionService {
   private var presentationCache: [String: TwitterStatusResolvedPresentation] = [:]
 
   func mediaSummary(for sourceURL: URL) async -> TwitterStatusMediaSummary {
-    let cacheKey = sourceURL.absoluteString
+    guard let cacheKey = cacheKey(for: sourceURL) else {
+      return .empty
+    }
     if let cached = mediaSummaryCache[cacheKey] {
       return cached
     }
 
     let summary = await fetchMediaSummary(for: sourceURL)
-    if summary.hasVideo || !summary.candidateURLs.isEmpty {
+    if summary.hasVideo || !summary.candidateURLs.isEmpty || summary.preview != nil {
       mediaSummaryCache[cacheKey] = summary
     }
     return summary
   }
 
+  func preview(for sourceURL: URL) async -> TwitterStatusPreview? {
+    let summary = await mediaSummary(for: sourceURL)
+    return summary.preview
+  }
+
   func resolvedPresentation(for sourceURL: URL) async -> TwitterStatusResolvedPresentation? {
-    guard SocialURLHeuristics.isTwitterStatusURL(sourceURL) else {
+    guard let statusID = SocialURLHeuristics.twitterStatusID(from: sourceURL) else {
       return nil
     }
 
-    let cacheKey = sourceURL.absoluteString
+    let cacheKey = statusID
     if let cached = presentationCache[cacheKey] {
       return cached
     }
 
     async let summaryTask = mediaSummary(for: sourceURL)
-    async let embedHTMLTask = fetchEmbedHTMLDocument(for: sourceURL)
+    async let embedAvailabilityTask = officialEmbedAvailable(for: sourceURL)
 
     let summary = await summaryTask
-    let embedHTMLDocument = await embedHTMLTask
+    let embedHTMLDocument =
+      await embedAvailabilityTask
+      ? TwitterEmbedDocumentBuilder.documentHTML(tweetID: statusID) : nil
 
     let fallbackEmbedURL =
       SocialURLHeuristics.twitterCanonicalStatusURL(from: sourceURL)
@@ -853,6 +858,10 @@ actor TwitterStatusResolutionService {
     return resolved
   }
 
+  private func cacheKey(for sourceURL: URL) -> String? {
+    SocialURLHeuristics.twitterStatusID(from: sourceURL)
+  }
+
   private func fetchMediaSummary(for sourceURL: URL) async -> TwitterStatusMediaSummary {
     guard let statusID = SocialURLHeuristics.twitterStatusID(from: sourceURL) else {
       return .empty
@@ -870,7 +879,9 @@ actor TwitterStatusResolutionService {
         if summary.hasVideo || !summary.candidateURLs.isEmpty {
           return summary
         }
-        fallbackSummary = summary
+        if fallbackSummary == nil || (fallbackSummary?.preview == nil && summary.preview != nil) {
+          fallbackSummary = summary
+        }
       }
     }
 
@@ -894,80 +905,17 @@ actor TwitterStatusResolutionService {
         return nil
       }
 
-      let mediaContainer = ((json["tweet"] as? [String: Any])?["media"] as? [String: Any]) ?? [:]
-      let mediaEntries = mediaEntries(from: mediaContainer)
-
-      var hasVideo = false
-      var candidateURLs: [URL] = []
-      var seen = Set<String>()
-
-      for entry in mediaEntries {
-        let type = (entry["type"] as? String)?.lowercased() ?? ""
-        let isVideoLike =
-          type == "video"
-          || type == "animated_gif"
-          || type == "gif"
-        guard isVideoLike else { continue }
-        hasVideo = true
-
-        collectMediaURL(entry["url"], into: &candidateURLs, seen: &seen)
-
-        if let formats = entry["formats"] as? [[String: Any]] {
-          for format in formats {
-            collectMediaURL(format["url"], into: &candidateURLs, seen: &seen)
-          }
-        }
-
-        if let variants = entry["variants"] as? [[String: Any]] {
-          for variant in variants {
-            collectMediaURL(variant["url"], into: &candidateURLs, seen: &seen)
-          }
-        }
-      }
-
-      return TwitterStatusMediaSummary(candidateURLs: candidateURLs, hasVideo: hasVideo)
+      return TwitterStatusResponseParser.mediaSummary(from: json)
     } catch {
       return nil
     }
   }
 
-  private func mediaEntries(from container: [String: Any]) -> [[String: Any]] {
-    let keys = ["videos", "all", "media", "items"]
-    for key in keys {
-      if let entries = container[key] as? [[String: Any]], !entries.isEmpty {
-        return entries
-      }
-    }
-
-    if let entry = container["video"] as? [String: Any] {
-      return [entry]
-    }
-
-    return []
-  }
-
-  private func collectMediaURL(
-    _ rawValue: Any?,
-    into urls: inout [URL],
-    seen: inout Set<String>
-  ) {
-    guard let raw = rawValue as? String else { return }
-    let normalized = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-    let lower = normalized.lowercased()
-    guard lower.hasPrefix("https://"), SocialVideoExtractionService.isLikelyMediaURLString(lower),
-      let url = URL(string: normalized),
-      seen.insert(lower).inserted
-    else {
-      return
-    }
-    urls.append(url)
-  }
-
-  private func fetchEmbedHTMLDocument(for sourceURL: URL) async -> String? {
+  private func officialEmbedAvailable(for sourceURL: URL) async -> Bool {
     guard let statusURL = SocialURLHeuristics.twitterCanonicalStatusURL(from: sourceURL),
       var components = URLComponents(string: "https://publish.twitter.com/oembed")
     else {
-      return nil
+      return false
     }
 
     components.queryItems = [
@@ -977,7 +925,7 @@ actor TwitterStatusResolutionService {
       URLQueryItem(name: "theme", value: "dark"),
       URLQueryItem(name: "align", value: "center"),
     ]
-    guard let endpoint = components.url else { return nil }
+    guard let endpoint = components.url else { return false }
 
     var request = URLRequest(url: endpoint)
     request.httpMethod = "GET"
@@ -993,20 +941,19 @@ actor TwitterStatusResolutionService {
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
         let html = json["html"] as? String
       else {
-        return nil
+        return false
       }
 
       let trimmedHTML = html.trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !trimmedHTML.isEmpty else { return nil }
-      return TwitterEmbedDocumentBuilder.documentHTML(from: trimmedHTML)
+      return !trimmedHTML.isEmpty
     } catch {
-      return nil
+      return false
     }
   }
 }
 
 enum TwitterEmbedDocumentBuilder {
-  static func documentHTML(from fragment: String) -> String {
+  static func documentHTML(tweetID: String) -> String {
     """
     <!doctype html>
     <html>
@@ -1023,8 +970,6 @@ enum TwitterEmbedDocumentBuilder {
           }
 
           body {
-            display: flex;
-            justify-content: center;
             opacity: 0;
             transition: opacity 0.18s ease;
           }
@@ -1033,28 +978,59 @@ enum TwitterEmbedDocumentBuilder {
             opacity: 1;
           }
 
-          .twitter-tweet,
-          blockquote {
-            margin: 0 !important;
+          #tweet-container {
+            width: 100%;
+            min-height: 220px;
+            display: flex;
+            justify-content: center;
+          }
+
+          #tweet-container > * {
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 auto !important;
+          }
+
+          #tweet-container iframe {
+            width: 100% !important;
+            max-width: 100% !important;
+          }
+
+          .linkstr-embed-fallback {
+            min-height: 220px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            color: rgba(255, 255, 255, 0.74);
+            text-align: center;
+            font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+            font-size: 15px;
+            line-height: 1.4;
           }
         </style>
       </head>
       <body>
-        \(fragment)
+        <div id="tweet-container"></div>
         <script>
           (() => {
+            const tweetID = "\(tweetID)";
             const readyClass = "linkstr-embed-ready";
             const body = document.body;
             const root = document.documentElement;
+            const container = document.getElementById("tweet-container");
             const metricsHandler = window.webkit?.messageHandlers?.linkstrEmbedMetrics;
 
             const height = () => Math.max(
               root?.scrollHeight ?? 0,
               body?.scrollHeight ?? 0,
+              container?.scrollHeight ?? 0,
               root?.offsetHeight ?? 0,
               body?.offsetHeight ?? 0,
+              container?.offsetHeight ?? 0,
               root?.clientHeight ?? 0,
-              body?.clientHeight ?? 0
+              body?.clientHeight ?? 0,
+              container?.clientHeight ?? 0
             );
 
             const postMetrics = (readyOverride) => {
@@ -1072,44 +1048,115 @@ enum TwitterEmbedDocumentBuilder {
             };
 
             const hasRenderedTweet = () =>
-              document.querySelector("iframe[src*='platform.twitter.com']") ||
-              document.querySelector("iframe[src*='syndication.twitter.com']") ||
-              document.querySelector("twitter-widget") ||
-              document.querySelector(".twitter-tweet-rendered");
+              container?.querySelector("iframe[src*='platform.twitter.com']") ||
+              container?.querySelector("iframe[src*='syndication.twitter.com']") ||
+              container?.querySelector("twitter-widget") ||
+              container?.querySelector(".twitter-tweet-rendered");
+
+            const sizeRenderedTweet = () => {
+              const rootElement = container?.firstElementChild;
+              if (rootElement) {
+                rootElement.style.width = "100%";
+                rootElement.style.maxWidth = "100%";
+                rootElement.style.margin = "0 auto";
+              }
+
+              const iframe = container?.querySelector("iframe");
+              if (iframe) {
+                iframe.style.width = "100%";
+                iframe.style.maxWidth = "100%";
+              }
+            };
+
+            const showFallback = () => {
+              if (!container || container.children.length > 0) {
+                markReady();
+                return;
+              }
+
+              container.innerHTML =
+                '<div class="linkstr-embed-fallback">couldn\\'t load this post preview. use open in safari.</div>';
+              markReady();
+            };
 
             const refresh = () => {
+              sizeRenderedTweet();
               postMetrics(false);
               if (hasRenderedTweet()) {
                 markReady();
               }
             };
 
-            if (document.readyState === "loading") {
-              document.addEventListener("DOMContentLoaded", refresh, { once: true });
-            } else {
-              refresh();
-            }
+            const renderTweet = () => {
+              const widgetAPI = window.twttr?.widgets;
+              if (!widgetAPI?.createTweet || !container) {
+                showFallback();
+                return;
+              }
 
-            window.addEventListener("load", refresh);
-            window.addEventListener("resize", () => postMetrics(false));
+              container.innerHTML = "";
+
+              const width = Math.min(
+                550,
+                Math.max(
+                  220,
+                  Math.floor(
+                    container.clientWidth ||
+                    root?.clientWidth ||
+                    window.innerWidth ||
+                    550
+                  )
+                )
+              );
+
+              widgetAPI.createTweet(tweetID, container, {
+                align: "center",
+                dnt: true,
+                theme: "dark",
+                width
+              }).then((element) => {
+                if (!element) {
+                  showFallback();
+                  return;
+                }
+
+                refresh();
+                [40, 120, 260, 520, 1000, 1800].forEach((delay) => {
+                  window.setTimeout(refresh, delay);
+                });
+              }).catch(showFallback);
+            };
+
+            const script = document.createElement("script");
+            script.src = "https://platform.twitter.com/widgets.js";
+            script.async = true;
+            script.onload = () => {
+              if (window.twttr?.ready) {
+                window.twttr.ready(renderTweet);
+              } else {
+                renderTweet();
+              }
+            };
+            script.onerror = showFallback;
+            document.head.appendChild(script);
+
+            window.addEventListener("resize", refresh);
             window.addEventListener("message", refresh);
 
-            new MutationObserver(refresh).observe(root, {
+            new MutationObserver(refresh).observe(body, {
               subtree: true,
               childList: true,
               attributes: true
             });
 
             if (window.ResizeObserver) {
-              new ResizeObserver(() => postMetrics(false)).observe(root);
+              new ResizeObserver(refresh).observe(body);
             }
 
-            [50, 140, 320, 700, 1400].forEach((delay, index, allDelays) => {
+            window.setTimeout(showFallback, 3200);
+            [80, 220, 480, 900, 1600].forEach((delay) => {
               window.setTimeout(() => {
                 refresh();
-                if (delay === allDelays[allDelays.length - 1]) {
-                  markReady();
-                }
               }, delay);
             });
           })();
@@ -1117,6 +1164,195 @@ enum TwitterEmbedDocumentBuilder {
       </body>
     </html>
     """
+  }
+}
+
+enum TwitterStatusResponseParser {
+  static func mediaSummary(from json: [String: Any]) -> TwitterStatusMediaSummary {
+    let mediaContainer = ((json["tweet"] as? [String: Any])?["media"] as? [String: Any]) ?? [:]
+    let mediaEntries = mediaEntries(from: mediaContainer, fallbackJSON: json)
+
+    var hasVideo = false
+    var candidateURLs: [URL] = []
+    var seen = Set<String>()
+
+    for entry in mediaEntries {
+      let type = (entry["type"] as? String)?.lowercased() ?? ""
+      let isVideoLike =
+        type == "video"
+        || type == "animated_gif"
+        || type == "gif"
+      guard isVideoLike else { continue }
+      hasVideo = true
+
+      collectMediaURL(entry["url"], into: &candidateURLs, seen: &seen)
+      collectMediaURL(entry["thumbnail_url"], into: &candidateURLs, seen: &seen)
+
+      if let formats = entry["formats"] as? [[String: Any]] {
+        for format in formats {
+          collectMediaURL(format["url"], into: &candidateURLs, seen: &seen)
+        }
+      }
+
+      if let variants = entry["variants"] as? [[String: Any]] {
+        for variant in variants {
+          collectMediaURL(variant["url"], into: &candidateURLs, seen: &seen)
+        }
+      }
+    }
+
+    return TwitterStatusMediaSummary(
+      candidateURLs: candidateURLs,
+      hasVideo: hasVideo,
+      preview: preview(from: json)
+    )
+  }
+
+  private static func mediaEntries(
+    from container: [String: Any],
+    fallbackJSON: [String: Any]
+  ) -> [[String: Any]] {
+    let keys = ["videos", "all", "media", "items", "photos"]
+    for key in keys {
+      if let entries = container[key] as? [[String: Any]], !entries.isEmpty {
+        return entries
+      }
+    }
+
+    if let entry = container["video"] as? [String: Any] {
+      return [entry]
+    }
+
+    if let entries = fallbackJSON["media_extended"] as? [[String: Any]], !entries.isEmpty {
+      return entries
+    }
+
+    return []
+  }
+
+  private static func preview(from json: [String: Any]) -> TwitterStatusPreview? {
+    let title = previewTitle(from: json)
+    let imageURL = previewImageURL(from: json)
+    guard title != nil || imageURL != nil else { return nil }
+    return TwitterStatusPreview(title: title, imageURL: imageURL)
+  }
+
+  private static func previewTitle(from json: [String: Any]) -> String? {
+    if let tweet = json["tweet"] as? [String: Any],
+      let author = tweet["author"] as? [String: Any]
+    {
+      return formattedPreviewTitle(
+        name: author["name"] as? String,
+        screenName: author["screen_name"] as? String
+      )
+    }
+
+    return formattedPreviewTitle(
+      name: json["user_name"] as? String,
+      screenName: json["user_screen_name"] as? String
+    )
+  }
+
+  private static func formattedPreviewTitle(name: String?, screenName: String?) -> String? {
+    let trimmedName = normalizedText(name)
+    let trimmedScreenName = normalizedText(screenName)
+
+    switch (trimmedName, trimmedScreenName) {
+    case (let name?, let screenName?):
+      return "\(name) (@\(screenName))"
+    case (let name?, nil):
+      return name
+    case (nil, let screenName?):
+      return "@\(screenName)"
+    case (nil, nil):
+      return nil
+    }
+  }
+
+  private static func previewImageURL(from json: [String: Any]) -> URL? {
+    if let tweet = json["tweet"] as? [String: Any],
+      let media = tweet["media"] as? [String: Any]
+    {
+      let preferredKeys = ["photos", "all", "videos", "media", "items"]
+      for key in preferredKeys {
+        if let entries = media[key] as? [[String: Any]],
+          let url = firstPreviewURL(in: entries)
+        {
+          return url
+        }
+      }
+    }
+
+    if let entries = json["media_extended"] as? [[String: Any]],
+      let url = firstPreviewURL(in: entries)
+    {
+      return url
+    }
+
+    if let rawURLs = json["mediaURLs"] as? [String] {
+      for rawURL in rawURLs {
+        if let url = validatedPreviewURL(from: rawURL) {
+          return url
+        }
+      }
+    }
+
+    return nil
+  }
+
+  private static func firstPreviewURL(in entries: [[String: Any]]) -> URL? {
+    for entry in entries {
+      let type = (entry["type"] as? String)?.lowercased()
+      if type == "photo" || type == "image" {
+        if let url = validatedPreviewURL(from: entry["url"] as? String) {
+          return url
+        }
+        if let url = validatedPreviewURL(from: entry["thumbnail_url"] as? String) {
+          return url
+        }
+      }
+    }
+
+    for entry in entries {
+      if let url = validatedPreviewURL(from: entry["thumbnail_url"] as? String) {
+        return url
+      }
+      if let url = validatedPreviewURL(from: entry["url"] as? String) {
+        return url
+      }
+    }
+
+    return nil
+  }
+
+  private static func collectMediaURL(
+    _ rawValue: Any?,
+    into urls: inout [URL],
+    seen: inout Set<String>
+  ) {
+    guard let raw = rawValue as? String else { return }
+    let normalized = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    let lower = normalized.lowercased()
+    guard lower.hasPrefix("https://"), SocialVideoExtractionService.isLikelyMediaURLString(lower),
+      let url = URL(string: normalized),
+      seen.insert(lower).inserted
+    else {
+      return
+    }
+    urls.append(url)
+  }
+
+  private static func validatedPreviewURL(from rawValue: String?) -> URL? {
+    guard let rawValue else { return nil }
+    let normalized = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard normalized.lowercased().hasPrefix("https://") else { return nil }
+    return URL(string: normalized)
+  }
+
+  private static func normalizedText(_ value: String?) -> String? {
+    guard let value else { return nil }
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
   }
 }
 

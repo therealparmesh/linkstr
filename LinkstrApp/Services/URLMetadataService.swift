@@ -7,6 +7,25 @@ struct LinkPreviewData {
   let thumbnailPath: String?
 }
 
+enum LinkMetadataRefreshPolicy {
+  static func needsRefresh(
+    linkType: LinkType,
+    title: String?,
+    thumbnailPath: String?,
+    fileExists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }
+  ) -> Bool {
+    guard normalizedTitle(title) != nil else { return true }
+    guard let thumbnailPath else { return linkType == .twitter }
+    return !fileExists(thumbnailPath)
+  }
+
+  static func normalizedTitle(_ title: String?) -> String? {
+    guard let title else { return nil }
+    let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
+  }
+}
+
 final class URLMetadataService {
   static let shared = URLMetadataService()
   private static let providerTimeout: TimeInterval = 6.0
@@ -14,20 +33,40 @@ final class URLMetadataService {
 
   func fetchPreview(for urlString: String) async -> LinkPreviewData? {
     guard let url = URL(string: urlString) else { return nil }
+
+    if let twitterPreview = await twitterPreview(for: url) {
+      return twitterPreview
+    }
+
+    return await genericPreview(for: url)
+  }
+
+  private func twitterPreview(for url: URL) async -> LinkPreviewData? {
+    guard SocialURLHeuristics.isTwitterStatusURL(url),
+      let preview = await TwitterStatusResolutionService.shared.preview(for: url)
+    else {
+      return nil
+    }
+
+    let thumbnailPath = try? await thumbnailPath(for: url, remoteImageURL: preview.imageURL)
+    guard preview.title != nil || thumbnailPath != nil else { return nil }
+    return LinkPreviewData(title: preview.title, thumbnailPath: thumbnailPath)
+  }
+
+  private func genericPreview(for url: URL) async -> LinkPreviewData? {
     let provider = LPMetadataProvider()
     provider.timeout = Self.providerTimeout
     do {
       let metadata = try await provider.startFetchingMetadata(for: url)
       let title = metadata.title
-      let thumbnailPath = try await makeThumbnailPath(
-        urlString: urlString, provider: metadata.imageProvider)
+      let thumbnailPath = try await thumbnailPath(for: url, provider: metadata.imageProvider)
       return LinkPreviewData(title: title, thumbnailPath: thumbnailPath)
     } catch {
       return nil
     }
   }
 
-  private func makeThumbnailPath(urlString: String, provider: NSItemProvider?) async throws
+  private func thumbnailPath(for url: URL, provider: NSItemProvider?) async throws
     -> String?
   {
     guard let provider else { return nil }
@@ -47,14 +86,31 @@ final class URLMetadataService {
       }
     }
 
-    guard image.size != .zero else { return nil }
-    guard let data = image.pngData() else { return nil }
+    return try writeThumbnailImage(image, sourceURL: url)
+  }
 
+  private func thumbnailPath(for url: URL, remoteImageURL: URL?) async throws -> String? {
+    guard let remoteImageURL else { return nil }
+
+    let (data, response) = try await URLSession.shared.data(from: remoteImageURL)
+    guard let httpResponse = response as? HTTPURLResponse,
+      (200..<300).contains(httpResponse.statusCode)
+    else {
+      return nil
+    }
+
+    guard let image = UIImage(data: data) else { return nil }
+    return try writeThumbnailImage(image, sourceURL: url)
+  }
+
+  private func writeThumbnailImage(_ image: UIImage, sourceURL: URL) throws -> String? {
+    guard image.size != .zero else { return nil }
+    guard let normalizedPNGData = image.pngData() else { return nil }
     let fileURL = ManagedLocalFileScope.shared.thumbnailFileURL(
-      for: urlString.sha256Hex,
+      for: sourceURL.absoluteString.sha256Hex,
       fileExtension: "png"
     )
-    try data.write(to: fileURL, options: .atomic)
+    try normalizedPNGData.write(to: fileURL, options: .atomic)
     return fileURL.path
   }
 }
