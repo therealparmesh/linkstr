@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import UIKit
 
 @main
 struct LinkstrAppMain: App {
@@ -10,6 +11,8 @@ struct LinkstrAppMain: App {
   @StateObject private var deepLinkHandler = DeepLinkHandler()
 
   init() {
+    Self.configureScrollViewAppearance()
+
     let schema = Schema([
       AccountStateEntity.self,
       ContactEntity.self,
@@ -48,6 +51,20 @@ struct LinkstrAppMain: App {
       return true
     }
     return environment["LINKSTR_ALLOW_IN_MEMORY_STORE_FALLBACK"] == "1"
+  }
+
+  private static func configureScrollViewAppearance() {
+    let scrollViewAppearance = UIScrollView.appearance()
+    scrollViewAppearance.backgroundColor = .clear
+    scrollViewAppearance.bounces = false
+    scrollViewAppearance.alwaysBounceVertical = false
+    scrollViewAppearance.alwaysBounceHorizontal = false
+
+    let collectionViewAppearance = UICollectionView.appearance()
+    collectionViewAppearance.backgroundColor = .clear
+    collectionViewAppearance.bounces = false
+    collectionViewAppearance.alwaysBounceVertical = false
+    collectionViewAppearance.alwaysBounceHorizontal = false
   }
 
   var body: some Scene {

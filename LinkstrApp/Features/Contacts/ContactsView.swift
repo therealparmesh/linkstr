@@ -43,7 +43,6 @@ struct ContactsView: View {
         .padding(.horizontal, 12)
         .padding(.top, 6)
       }
-      .scrollBounceBehavior(.basedOnSize)
       .linkstrTabBarContentInset()
     }
   }
@@ -143,7 +142,6 @@ private struct ContactDetailView: View {
         .padding(.horizontal, 12)
         .padding(.top, 12)
       }
-      .scrollBounceBehavior(.basedOnSize)
       .linkstrTabBarContentInset()
     }
     .navigationTitle("contact")

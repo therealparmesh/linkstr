@@ -82,7 +82,6 @@ struct OnboardingView: View {
           .padding(16)
           .padding(.bottom, 32)
         }
-        .scrollBounceBehavior(.basedOnSize)
       }
       .navigationBarTitleDisplayMode(.inline)
       .toolbarBackground(.hidden, for: .navigationBar)

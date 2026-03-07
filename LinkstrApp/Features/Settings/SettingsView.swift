@@ -53,7 +53,6 @@ struct SettingsView: View {
       .padding(.top, 14)
       .padding(.bottom, 28)
     }
-    .scrollBounceBehavior(.basedOnSize)
     .linkstrTabBarContentInset()
     .alert("log out", isPresented: $isPresentingLogoutOptions) {
       Button("log out (keep local data)") {

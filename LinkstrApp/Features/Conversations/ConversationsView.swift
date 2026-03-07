@@ -117,7 +117,6 @@ struct ConversationsView: View {
         .padding(.horizontal, 12)
         .padding(.top, 6)
       }
-      .scrollBounceBehavior(.basedOnSize)
       .linkstrTabBarContentInset()
     }
   }

@@ -59,11 +59,6 @@ struct MainTabView: View {
     scopedSessions.filter(\.isArchived).count
   }
 
-  init() {
-    UIScrollView.appearance().backgroundColor = .clear
-    UICollectionView.appearance().backgroundColor = .clear
-  }
-
   var body: some View {
     TabView(selection: $selectedTab) {
       tabContent(.sessions)

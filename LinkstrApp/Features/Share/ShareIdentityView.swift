@@ -69,7 +69,6 @@ struct ShareIdentityView: View {
         .padding(.top, 14)
         .padding(.bottom, 28)
       }
-      .scrollBounceBehavior(.basedOnSize)
       .linkstrTabBarContentInset()
     } else {
       LinkstrCenteredEmptyStateView(

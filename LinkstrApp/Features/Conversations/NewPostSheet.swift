@@ -107,7 +107,6 @@ struct NewPostSheet: View {
         .padding(.horizontal, 12)
         .padding(.top, 14)
         .padding(.bottom, 120)
-        .scrollBounceBehavior(.basedOnSize)
       }
       .navigationTitle("new post")
       .navigationBarTitleDisplayMode(.inline)
