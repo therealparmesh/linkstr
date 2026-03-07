@@ -360,8 +360,7 @@ final class SessionMessageStore {
     )
     let messages = try modelContext.fetch(messageDescriptor)
     let matchingMessages = messages.filter { $0.senderMatches(normalizedDeletedByPubkey) }
-    let thumbnailPaths = Set(matchingMessages.compactMap { normalizedPath($0.thumbnailURL) })
-    let cachedMediaPaths = Set(matchingMessages.compactMap { normalizedPath($0.cachedMediaPath) })
+    let storedFileURLs = managedStoredFileURLs(for: matchingMessages)
     if !matchingMessages.isEmpty {
       matchingMessages.forEach(modelContext.delete)
       didChange = true
@@ -384,12 +383,7 @@ final class SessionMessageStore {
       try modelContext.save()
     }
 
-    for path in thumbnailPaths {
-      try? FileManager.default.removeItem(atPath: path)
-    }
-    for path in cachedMediaPaths {
-      try? FileManager.default.removeItem(atPath: path)
-    }
+    removeManagedFiles(at: storedFileURLs)
 
     return didChange
   }
@@ -508,8 +502,7 @@ final class SessionMessageStore {
         predicate: #Predicate { $0.ownerPubkey == ownerPubkey })
     )
 
-    let thumbnailPaths = Set(messages.compactMap { normalizedPath($0.thumbnailURL) })
-    let cachedMediaPaths = Set(messages.compactMap { normalizedPath($0.cachedMediaPath) })
+    let storedFileURLs = managedStoredFileURLs(for: messages)
 
     messages.forEach(modelContext.delete)
     sessions.forEach(modelContext.delete)
@@ -519,12 +512,7 @@ final class SessionMessageStore {
     deletions.forEach(modelContext.delete)
     try modelContext.save()
 
-    for path in thumbnailPaths {
-      try? FileManager.default.removeItem(atPath: path)
-    }
-    for path in cachedMediaPaths {
-      try? FileManager.default.removeItem(atPath: path)
-    }
+    removeManagedFiles(at: storedFileURLs)
   }
 
   func clearCachedVideos(ownerPubkey: String) throws {
@@ -535,8 +523,10 @@ final class SessionMessageStore {
 
     var didChange = false
     for message in messages where message.cachedMediaPath != nil {
-      if let path = message.cachedMediaPath {
-        try? FileManager.default.removeItem(at: URL(fileURLWithPath: path))
+      if let fileURL = ManagedLocalFileScope.shared.managedFileURL(
+        fromPath: message.cachedMediaPath)
+      {
+        try? FileManager.default.removeItem(at: fileURL)
       }
       message.cachedMediaPath = nil
       message.cachedMediaSourceURL = nil
@@ -632,12 +622,6 @@ final class SessionMessageStore {
     return key.hex
   }
 
-  private func normalizedPath(_ path: String?) -> String? {
-    guard let path else { return nil }
-    let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
-    return trimmed.isEmpty ? nil : trimmed
-  }
-
   private func normalizedEventIDToken(_ candidate: String?) -> String {
     guard let candidate else { return "" }
     return candidate.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -673,5 +657,22 @@ final class SessionMessageStore {
       incomingUpdatedAt: incomingUpdatedAt,
       incomingEventID: incomingEventID
     )
+  }
+
+  private func managedStoredFileURLs(for messages: [SessionMessageEntity]) -> Set<URL> {
+    Set(
+      messages.flatMap { message in
+        [
+          ManagedLocalFileScope.shared.managedFileURL(fromPath: message.thumbnailURL),
+          ManagedLocalFileScope.shared.managedFileURL(fromPath: message.cachedMediaPath),
+        ].compactMap { $0 }
+      }
+    )
+  }
+
+  private func removeManagedFiles(at fileURLs: Set<URL>) {
+    for fileURL in fileURLs {
+      try? FileManager.default.removeItem(at: fileURL)
+    }
   }
 }

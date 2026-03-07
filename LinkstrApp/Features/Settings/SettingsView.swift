@@ -3,6 +3,7 @@ import SwiftUI
 import UIKit
 
 struct SettingsView: View {
+  @Environment(\.scenePhase) private var scenePhase
   @EnvironmentObject private var session: AppSession
 
   @Query(sort: [SortDescriptor(\RelayEntity.url)])
@@ -25,6 +26,19 @@ struct SettingsView: View {
       content
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    .onChange(of: scenePhase) { _, newValue in
+      switch newValue {
+      case .active:
+        break
+      case .inactive, .background:
+        hideSensitiveIdentityContent()
+      @unknown default:
+        hideSensitiveIdentityContent()
+      }
+    }
+    .onDisappear {
+      hideSensitiveIdentityContent()
+    }
   }
 
   private var content: some View {
@@ -239,7 +253,7 @@ struct SettingsView: View {
           HStack(spacing: 8) {
             Button {
               if isNsecVisible {
-                isNsecVisible = false
+                hideSensitiveIdentityContent()
               } else {
                 revealedNsec = (try? session.identityService.revealNsec()) ?? ""
                 isNsecVisible = true
@@ -274,6 +288,7 @@ struct SettingsView: View {
               .font(LinkstrTheme.body(12))
               .foregroundStyle(LinkstrTheme.textSecondary)
               .textSelection(.enabled)
+              .privacySensitive()
               .padding(10)
               .frame(maxWidth: .infinity, alignment: .leading)
               .background(
@@ -382,5 +397,10 @@ struct SettingsView: View {
   private func normalizedInlineMessage(_ message: String?) -> String {
     guard let message else { return "" }
     return message.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  private func hideSensitiveIdentityContent() {
+    isNsecVisible = false
+    revealedNsec = ""
   }
 }

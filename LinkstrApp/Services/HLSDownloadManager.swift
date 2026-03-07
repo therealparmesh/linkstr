@@ -4,8 +4,10 @@ import Foundation
 final class HLSDownloadManager: NSObject {
   static let shared = HLSDownloadManager()
 
+  private let fileManager = FileManager.default
   private var session: AVAssetDownloadURLSession!
   private var continuations: [Int: CheckedContinuation<URL, Error>] = [:]
+  private var destinationURLByTaskID: [Int: URL] = [:]
 
   private override init() {
     super.init()
@@ -15,6 +17,11 @@ final class HLSDownloadManager: NSObject {
   }
 
   func download(assetURL: URL, headers: [String: String]) async throws -> URL {
+    let destinationURL = ManagedLocalFileScope.shared.cachedHLSPackageURL(for: assetURL)
+    if fileManager.fileExists(atPath: destinationURL.path) {
+      return destinationURL
+    }
+
     let options = ["AVURLAssetHTTPHeaderFieldsKey": headers]
     let asset = AVURLAsset(url: assetURL, options: options)
     let isProtected = try await asset.load(.hasProtectedContent)
@@ -31,6 +38,7 @@ final class HLSDownloadManager: NSObject {
 
     return try await withCheckedThrowingContinuation { continuation in
       continuations[task.taskIdentifier] = continuation
+      destinationURLByTaskID[task.taskIdentifier] = destinationURL
       task.resume()
     }
   }
@@ -41,12 +49,24 @@ extension HLSDownloadManager: AVAssetDownloadDelegate {
     _ session: URLSession, assetDownloadTask: AVAssetDownloadTask,
     didFinishDownloadingTo location: URL
   ) {
-    if let continuation = continuations.removeValue(forKey: assetDownloadTask.taskIdentifier) {
-      continuation.resume(returning: location)
+    let taskIdentifier = assetDownloadTask.taskIdentifier
+    guard let continuation = continuations.removeValue(forKey: taskIdentifier) else { return }
+    let destinationURL =
+      destinationURLByTaskID.removeValue(forKey: taskIdentifier) ?? location
+
+    do {
+      if fileManager.fileExists(atPath: destinationURL.path) {
+        try? fileManager.removeItem(at: destinationURL)
+      }
+      try fileManager.moveItem(at: location, to: destinationURL)
+      continuation.resume(returning: destinationURL)
+    } catch {
+      continuation.resume(throwing: error)
     }
   }
 
   func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+    destinationURLByTaskID.removeValue(forKey: task.taskIdentifier)
     guard let continuation = continuations.removeValue(forKey: task.taskIdentifier), let error
     else {
       return

@@ -351,7 +351,12 @@ final class AppSessionLocalFlowTests: XCTestCase {
     let (session, container) = try makeSession(
       testDisableNostrStartupOverride: false,
       testHasConnectedRelaysOverride: { true },
-      testRelaySendOverride: { _, _ in "await-root-event" }
+      testRelaySendOverride: { _, _ in
+        SentPayloadReceipt(
+          rumorEventID: "await-root-event",
+          publishedEventIDs: ["giftwrap-await-root-1", "giftwrap-await-root-2"]
+        )
+      }
     )
     try session.identityService.createNewIdentity()
     let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
@@ -470,6 +475,42 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertNil(session.composeError)
   }
 
+  func testCreateSessionPostPersistsPublishedTransportEventIDsFromRelayReceipt() async throws {
+    let (session, container) = try makeSession(
+      testDisableNostrStartupOverride: false,
+      testHasConnectedRelaysOverride: { true },
+      testRelaySendOverride: { _, _ in
+        SentPayloadReceipt(
+          rumorEventID: "root-rumor-id",
+          publishedEventIDs: ["giftwrap-root-a", "giftwrap-root-b"]
+        )
+      }
+    )
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionEntity = try insertSessionFixture(
+      in: container.mainContext,
+      ownerPubkey: myPubkey,
+      createdByPubkey: myPubkey,
+      memberPubkeys: [myPubkey, peerPubkey]
+    )
+
+    let didCreate = await session.createSessionPostAwaitingRelay(
+      url: "https://example.com/path",
+      note: "hello",
+      session: sessionEntity,
+      timeoutSeconds: 0.05,
+      pollIntervalSeconds: 0.01
+    )
+
+    XCTAssertTrue(didCreate)
+    let message = try XCTUnwrap(try fetchMessages(in: container.mainContext).first)
+    XCTAssertEqual(message.eventID, "root-rumor-id")
+    XCTAssertEqual(message.rootID, "root-rumor-id")
+    XCTAssertEqual(message.publishedTransportEventIDs, ["giftwrap-root-a", "giftwrap-root-b"])
+  }
+
   func testDeletePostClearsLocalRootReactionsAndPersistsDeletionWatermarkWhenNostrIsDisabled()
     async throws
   {
@@ -516,20 +557,25 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertEqual(deletions.first?.deletedByPubkey, myPubkey)
   }
 
-  func testDeletePostAwaitingRelayBroadcastsDeleteToKnownFormerMembers() async throws {
+  func testDeletePostAwaitingRelayUsesStoredGiftWrapIDsAndBroadcastsToKnownFormerMembers()
+    async throws
+  {
     var capturedRecipients: [String] = []
-    var publishedEventKinds: [Int] = []
+    var publishedDeletionEvent: NostrEvent?
     let (session, container) = try makeSession(
       testDisableNostrStartupOverride: false,
       testHasConnectedRelaysOverride: { true },
       testRelayEventPublishOverride: { event in
-        publishedEventKinds.append(event.kind.rawValue)
+        publishedDeletionEvent = event
         return "kind5-delete-event"
       },
       testRelaySendOverride: { payload, recipients in
         XCTAssertEqual(payload.kind, .rootDelete)
         capturedRecipients = recipients
-        return "giftwrap-delete-event"
+        return SentPayloadReceipt(
+          rumorEventID: "giftwrap-delete-event",
+          publishedEventIDs: ["giftwrap-delete-wrapper"]
+        )
       }
     )
     try session.identityService.createNewIdentity()
@@ -566,7 +612,8 @@ final class AppSessionLocalFlowTests: XCTestCase {
       kind: .root,
       senderPubkey: myPubkey,
       receiverPubkey: activePeerPubkey,
-      ownerPubkey: myPubkey
+      ownerPubkey: myPubkey,
+      publishedTransportEventIDs: ["giftwrap-root-delete-a", "giftwrap-root-delete-b"]
     )
     container.mainContext.insert(rootPost)
     try container.mainContext.save()
@@ -578,7 +625,16 @@ final class AppSessionLocalFlowTests: XCTestCase {
     )
 
     XCTAssertTrue(didDelete)
-    XCTAssertEqual(publishedEventKinds, [5])
+    let deletionEvent = try XCTUnwrap(publishedDeletionEvent)
+    XCTAssertEqual(deletionEvent.kind.rawValue, EventKind.deletion.rawValue)
+    XCTAssertEqual(
+      Set(deletionEvent.tags.filter { $0.name == "e" }.map(\.value)),
+      Set(["giftwrap-root-delete-a", "giftwrap-root-delete-b"])
+    )
+    XCTAssertEqual(
+      deletionEvent.tags.filter { $0.name == "k" }.map(\.value),
+      [String(EventKind.giftWrap.rawValue)]
+    )
     XCTAssertEqual(Set(capturedRecipients), Set([myPubkey, activePeerPubkey, formerPeerPubkey]))
     XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
     XCTAssertEqual(try fetchPostDeletions(in: container.mainContext).count, 1)
@@ -598,10 +654,8 @@ final class AppSessionLocalFlowTests: XCTestCase {
       sessionID: sessionID
     )
 
-    let thumbnailURL = URL(fileURLWithPath: NSTemporaryDirectory())
-      .appendingPathComponent("linkstr-delete-thumb-\(UUID().uuidString).png")
-    let cachedMediaURL = URL(fileURLWithPath: NSTemporaryDirectory())
-      .appendingPathComponent("linkstr-delete-media-\(UUID().uuidString).mp4")
+    let thumbnailURL = makeManagedThumbnailURL()
+    let cachedMediaURL = makeManagedVideoURL()
     try Data("thumbnail".utf8).write(to: thumbnailURL, options: .atomic)
     try Data("media".utf8).write(to: cachedMediaURL, options: .atomic)
 
@@ -627,6 +681,107 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertTrue(didDelete)
     XCTAssertFalse(FileManager.default.fileExists(atPath: thumbnailURL.path))
     XCTAssertFalse(FileManager.default.fileExists(atPath: cachedMediaURL.path))
+  }
+
+  func testDeletePostDoesNotRemoveUnmanagedLocalFiles() async throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-delete-unmanaged-files"
+    _ = try insertSessionFixture(
+      in: container.mainContext,
+      ownerPubkey: myPubkey,
+      createdByPubkey: myPubkey,
+      memberPubkeys: [myPubkey, peerPubkey],
+      sessionID: sessionID
+    )
+
+    let thumbnailURL = makeUnmanagedTempURL(prefix: "linkstr-delete-thumb", fileExtension: "png")
+    let cachedMediaURL = makeUnmanagedTempURL(prefix: "linkstr-delete-media", fileExtension: "mp4")
+    defer {
+      try? FileManager.default.removeItem(at: thumbnailURL)
+      try? FileManager.default.removeItem(at: cachedMediaURL)
+    }
+    try Data("thumbnail".utf8).write(to: thumbnailURL, options: .atomic)
+    try Data("media".utf8).write(to: cachedMediaURL, options: .atomic)
+
+    let rootPost = makeMessage(
+      eventID: "root-delete-unmanaged-files",
+      conversationID: sessionID,
+      rootID: "root-delete-unmanaged-files",
+      kind: .root,
+      senderPubkey: myPubkey,
+      receiverPubkey: peerPubkey,
+      ownerPubkey: myPubkey
+    )
+    try rootPost.setMetadata(title: "delete unmanaged files", thumbnailURL: thumbnailURL.path)
+    rootPost.cachedMediaPath = cachedMediaURL.path
+    container.mainContext.insert(rootPost)
+    try container.mainContext.save()
+
+    let didDelete = await session.deletePostAwaitingRelay(rootPost)
+
+    XCTAssertTrue(didDelete)
+    XCTAssertTrue(FileManager.default.fileExists(atPath: thumbnailURL.path))
+    XCTAssertTrue(FileManager.default.fileExists(atPath: cachedMediaURL.path))
+  }
+
+  func testDeletePostAwaitingRelayWarnsWhenPublishedTransportIDsAreUnavailable() async throws {
+    var didPublishDeletionEvent = false
+    let (session, container) = try makeSession(
+      testDisableNostrStartupOverride: false,
+      testHasConnectedRelaysOverride: { true },
+      testRelayEventPublishOverride: { _ in
+        didPublishDeletionEvent = true
+        return "unexpected-kind5-delete"
+      },
+      testRelaySendOverride: { payload, _ in
+        XCTAssertEqual(payload.kind, .rootDelete)
+        return SentPayloadReceipt(
+          rumorEventID: "root-delete-watermark",
+          publishedEventIDs: ["root-delete-wrapper"]
+        )
+      }
+    )
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-delete-legacy-root"
+    _ = try insertSessionFixture(
+      in: container.mainContext,
+      ownerPubkey: myPubkey,
+      createdByPubkey: myPubkey,
+      memberPubkeys: [myPubkey, peerPubkey],
+      sessionID: sessionID
+    )
+
+    let rootPost = makeMessage(
+      eventID: "legacy-root-delete",
+      conversationID: sessionID,
+      rootID: "legacy-root-delete",
+      kind: .root,
+      senderPubkey: myPubkey,
+      receiverPubkey: peerPubkey,
+      ownerPubkey: myPubkey
+    )
+    container.mainContext.insert(rootPost)
+    try container.mainContext.save()
+
+    let didDelete = await session.deletePostAwaitingRelay(
+      rootPost,
+      timeoutSeconds: 0.05,
+      pollIntervalSeconds: 0.01
+    )
+
+    XCTAssertTrue(didDelete)
+    XCTAssertFalse(didPublishDeletionEvent)
+    XCTAssertEqual(
+      session.composeError,
+      "post deleted, but relay deletion is unavailable for older copies of this post."
+    )
+    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
+    XCTAssertEqual(try fetchPostDeletions(in: container.mainContext).count, 1)
   }
 
   func testCreateSessionPostRejectsInvalidURL() async throws {
@@ -692,7 +847,10 @@ final class AppSessionLocalFlowTests: XCTestCase {
       testHasConnectedRelaysOverride: { true },
       testRelaySendOverride: { _, recipients in
         capturedRecipients = recipients
-        return "session-members-event"
+        return SentPayloadReceipt(
+          rumorEventID: "session-members-event",
+          publishedEventIDs: ["session-members-wrapper"]
+        )
       }
     )
     try session.identityService.createNewIdentity()
@@ -2070,6 +2228,59 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertEqual(try fetchMessages(in: container.mainContext).count, 1)
   }
 
+  func testIncomingDuplicateOutgoingRootMergesPublishedTransportEventIDs() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-merge-root-wrappers"
+    _ = try insertSessionFixture(
+      in: container.mainContext,
+      ownerPubkey: myPubkey,
+      createdByPubkey: myPubkey,
+      memberPubkeys: [myPubkey, peerPubkey],
+      sessionID: sessionID
+    )
+
+    let rootPost = makeMessage(
+      eventID: "root-merge-wrapper",
+      conversationID: sessionID,
+      rootID: "root-merge-wrapper",
+      kind: .root,
+      senderPubkey: myPubkey,
+      receiverPubkey: peerPubkey,
+      ownerPubkey: myPubkey,
+      publishedTransportEventIDs: ["giftwrap-root-a"]
+    )
+    container.mainContext.insert(rootPost)
+    try container.mainContext.save()
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "root-merge-wrapper",
+        transportEventID: "giftwrap-root-b",
+        senderPubkey: myPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: .now,
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "root-merge-wrapper",
+          kind: .root,
+          url: "https://example.com/root-merge-wrapper",
+          note: "hello",
+          timestamp: Int64(Date.now.timeIntervalSince1970)
+        )
+      )
+    )
+
+    let messages = try fetchMessages(in: container.mainContext)
+    XCTAssertEqual(messages.count, 1)
+    XCTAssertEqual(
+      Set(try XCTUnwrap(messages.first).publishedTransportEventIDs),
+      Set(["giftwrap-root-a", "giftwrap-root-b"])
+    )
+  }
+
   func testReactionSummaryBadgeTextCapsAtTenPlus() {
     XCTAssertEqual(
       ReactionSummary(emoji: "🔥", count: 1, includesCurrentUser: false).badgeText,
@@ -2129,8 +2340,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
     try session.identityService.createNewIdentity()
     let ownerPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
 
-    let thumbnailURL = URL(fileURLWithPath: NSTemporaryDirectory())
-      .appendingPathComponent("linkstr-thumbnail-\(UUID().uuidString).png")
+    let thumbnailURL = makeManagedThumbnailURL()
     try Data("thumbnail".utf8).write(to: thumbnailURL, options: .atomic)
 
     let message = makeMessage(
@@ -2151,6 +2361,36 @@ final class AppSessionLocalFlowTests: XCTestCase {
     session.logout(clearLocalData: true)
 
     XCTAssertFalse(FileManager.default.fileExists(atPath: thumbnailURL.path))
+  }
+
+  func testLogoutClearLocalDataDoesNotRemoveUnmanagedThumbnailFiles() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let ownerPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+
+    let thumbnailURL = makeUnmanagedTempURL(
+      prefix: "linkstr-unmanaged-thumbnail",
+      fileExtension: "png"
+    )
+    defer { try? FileManager.default.removeItem(at: thumbnailURL) }
+    try Data("thumbnail".utf8).write(to: thumbnailURL, options: .atomic)
+
+    let message = makeMessage(
+      eventID: "message-unmanaged-thumbnail",
+      conversationID: "conversation-unmanaged-thumbnail",
+      rootID: "message-unmanaged-thumbnail",
+      kind: .root,
+      senderPubkey: "peer",
+      receiverPubkey: ownerPubkey,
+      ownerPubkey: ownerPubkey
+    )
+    try message.setMetadata(title: "Title", thumbnailURL: thumbnailURL.path)
+    container.mainContext.insert(message)
+    try container.mainContext.save()
+
+    session.logout(clearLocalData: true)
+
+    XCTAssertTrue(FileManager.default.fileExists(atPath: thumbnailURL.path))
   }
 
   func testContactDuplicationIsScopedPerAccount() async throws {
@@ -2299,7 +2539,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
     testHasConnectedRelaysOverride: (() -> Bool)? = nil,
     testFollowListPublishOverride: (([String]) async throws -> String)? = nil,
     testRelayEventPublishOverride: ((NostrEvent) async throws -> String)? = nil,
-    testRelaySendOverride: ((LinkstrPayload, [String]) async throws -> String)? = nil
+    testRelaySendOverride: ((LinkstrPayload, [String]) async throws -> SentPayloadReceipt)? = nil
   ) throws -> (
     AppSession, ModelContainer
   ) {
@@ -2357,8 +2597,28 @@ final class AppSessionLocalFlowTests: XCTestCase {
     try context.fetch(FetchDescriptor<AccountStateEntity>())
   }
 
+  private func makeManagedThumbnailURL() -> URL {
+    ManagedLocalFileScope.shared.thumbnailFileURL(
+      for: "test-thumbnail-\(UUID().uuidString)",
+      fileExtension: "png"
+    )
+  }
+
+  private func makeManagedVideoURL() -> URL {
+    ManagedLocalFileScope.shared.cachedVideoFileURL(
+      for: URL(string: "https://example.com/video-\(UUID().uuidString).mp4")!,
+      preferredExtension: "mp4"
+    )
+  }
+
+  private func makeUnmanagedTempURL(prefix: String, fileExtension: String) -> URL {
+    URL(fileURLWithPath: NSTemporaryDirectory())
+      .appendingPathComponent("\(prefix)-\(UUID().uuidString).\(fileExtension)")
+  }
+
   private func makeIncomingMessage(
     eventID: String,
+    transportEventID: String? = nil,
     senderPubkey: String,
     receiverPubkey: String,
     createdAt: Date,
@@ -2367,6 +2627,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
   ) -> ReceivedDirectMessage {
     ReceivedDirectMessage(
       eventID: eventID,
+      transportEventID: transportEventID,
       senderPubkey: senderPubkey,
       receiverPubkey: receiverPubkey,
       payload: payload,
@@ -2382,7 +2643,8 @@ final class AppSessionLocalFlowTests: XCTestCase {
     kind: SessionMessageKind,
     senderPubkey: String,
     receiverPubkey: String,
-    ownerPubkey: String
+    ownerPubkey: String,
+    publishedTransportEventIDs: [String] = []
   ) -> SessionMessageEntity {
     guard
       let message = try? SessionMessageEntity(
@@ -2397,7 +2659,8 @@ final class AppSessionLocalFlowTests: XCTestCase {
         note: "note-\(eventID)",
         timestamp: .now,
         readAt: nil,
-        linkType: .generic
+        linkType: .generic,
+        publishedTransportEventIDs: publishedTransportEventIDs
       )
     else {
       fatalError("Failed building test message for \(eventID)")

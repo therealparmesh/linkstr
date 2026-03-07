@@ -501,9 +501,9 @@ private struct PostCardView: View {
 
   @ViewBuilder
   private var thumbnailView: some View {
-    if let thumbnailPath = post.thumbnailURL {
+    if let thumbnailURL = ManagedLocalFileScope.shared.managedFileURL(fromPath: post.thumbnailURL) {
       AsyncImage(
-        url: URL(fileURLWithPath: thumbnailPath),
+        url: thumbnailURL,
         transaction: Transaction(animation: .easeInOut(duration: 0.12))
       ) { phase in
         switch phase {

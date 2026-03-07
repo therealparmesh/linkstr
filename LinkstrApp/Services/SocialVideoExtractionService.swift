@@ -676,6 +676,7 @@ private final class MediaCandidateCollector: NSObject, WKNavigationDelegate, WKS
     config.allowsInlineMediaPlayback = true
     config.mediaTypesRequiringUserActionForPlayback = []
     config.defaultWebpagePreferences.allowsContentJavaScript = true
+    config.websiteDataStore = .nonPersistent()
 
     let controller = WKUserContentController()
     controller.add(self, name: "linkstrVideo")
@@ -754,6 +755,10 @@ private final class MediaCandidateCollector: NSObject, WKNavigationDelegate, WKS
   ) {
     if let url = navigationAction.request.url {
       registerCandidate(url)
+      guard WebNavigationGuard.allowsNavigation(to: url) else {
+        decisionHandler(.cancel)
+        return
+      }
     }
     decisionHandler(.allow)
   }

@@ -44,6 +44,7 @@ final class AppSession: ObservableObject {
     let senderPubkey: String
     let recipientPubkeys: [String]
     let rootID: String
+    let publishedTransportEventIDs: [String]
   }
 
   let identityService: IdentityService
@@ -57,7 +58,8 @@ final class AppSession: ObservableObject {
   private let testDisableNostrStartupOverride: Bool?
   private let testFollowListPublishOverride: (([String]) async throws -> String)?
   private let testRelayEventPublishOverride: ((NostrEvent) async throws -> String)?
-  private let testRelaySendOverride: ((LinkstrPayload, [String]) async throws -> String)?
+  private let testRelaySendOverride:
+    ((LinkstrPayload, [String]) async throws -> SentPayloadReceipt)?
   private let testSkipNostrNetworkStartup: Bool
   private let noEnabledRelaysMessage =
     "no relays are enabled. enable at least one relay in settings."
@@ -94,7 +96,7 @@ final class AppSession: ObservableObject {
     testHasConnectedRelaysOverride: (() -> Bool)? = nil,
     testFollowListPublishOverride: (([String]) async throws -> String)? = nil,
     testRelayEventPublishOverride: ((NostrEvent) async throws -> String)? = nil,
-    testRelaySendOverride: ((LinkstrPayload, [String]) async throws -> String)? = nil,
+    testRelaySendOverride: ((LinkstrPayload, [String]) async throws -> SentPayloadReceipt)? = nil,
     testSkipNostrNetworkStartup: Bool = false
   ) {
     self.modelContext = modelContext
@@ -807,7 +809,7 @@ final class AppSession: ObservableObject {
         membershipEventID = try await sendPayloadAwaitingRelayAcceptance(
           payload: payload,
           recipientPubkeyHexes: members
-        )
+        ).rumorEventID
       } else {
         membershipEventID = makeLocalEventID()
       }
@@ -892,7 +894,7 @@ final class AppSession: ObservableObject {
         membershipEventID = try await sendPayloadAwaitingRelayAcceptance(
           payload: payload,
           recipientPubkeyHexes: updateRecipients
-        )
+        ).rumorEventID
       } else {
         membershipEventID = makeLocalEventID()
       }
@@ -954,7 +956,7 @@ final class AppSession: ObservableObject {
     do {
       // Test-only local send path when relay startup is disabled in-process.
       let eventID = makeLocalEventID()
-      try persistSentRootPost(draft, eventID: eventID)
+      try persistSentRootPost(draft, receipt: localSendReceipt(withRumorEventID: eventID))
       composeError = nil
       return true
     } catch {
@@ -990,7 +992,7 @@ final class AppSession: ObservableObject {
         reactionEventID = try await sendPayloadAwaitingRelayAcceptance(
           payload: draft.payload,
           recipientPubkeyHexes: draft.recipientPubkeys
-        )
+        ).rumorEventID
       } else {
         reactionEventID = makeLocalEventID()
       }
@@ -1040,24 +1042,40 @@ final class AppSession: ObservableObject {
     }
 
     do {
-      let deletionRequestEventID = try await publishEventAwaitingRelayAcceptance(
-        makeRootPostDeletionEvent(rootID: draft.rootID, signedBy: keypair)
-      )
+      let deletionRequestEventID: String?
+      if draft.publishedTransportEventIDs.isEmpty {
+        deletionRequestEventID = nil
+      } else {
+        deletionRequestEventID = try await publishEventAwaitingRelayAcceptance(
+          makeRootPostDeletionEvent(
+            publishedTransportEventIDs: draft.publishedTransportEventIDs,
+            signedBy: keypair
+          )
+        )
+      }
 
       let deletionWatermarkEventID: String
       do {
         deletionWatermarkEventID = try await sendPayloadAwaitingRelayAcceptance(
           payload: draft.payload,
           recipientPubkeyHexes: draft.recipientPubkeys
-        )
+        ).rumorEventID
       } catch {
-        try persistRootDeletion(draft, eventID: deletionRequestEventID)
-        composeError = "post deleted, but other members may keep seeing it until sync catches up."
-        return true
+        if let deletionRequestEventID {
+          try persistRootDeletion(draft, eventID: deletionRequestEventID)
+          composeError = "post deleted, but other members may keep seeing it until sync catches up."
+          return true
+        }
+        throw error
       }
 
       try persistRootDeletion(draft, eventID: deletionWatermarkEventID)
-      composeError = nil
+      if deletionRequestEventID == nil {
+        composeError =
+          "post deleted, but relay deletion is unavailable for older copies of this post."
+      } else {
+        composeError = nil
+      }
       return true
     } catch {
       report(error: error)
@@ -1075,11 +1093,11 @@ final class AppSession: ObservableObject {
     }
 
     do {
-      let eventID = try await sendPayloadAwaitingRelayAcceptance(
+      let receipt = try await sendPayloadAwaitingRelayAcceptance(
         payload: draft.payload,
         recipientPubkeyHexes: draft.recipientPubkeys
       )
-      try persistSentRootPost(draft, eventID: eventID)
+      try persistSentRootPost(draft, receipt: receipt)
       composeError = nil
       return true
     } catch {
@@ -1177,7 +1195,8 @@ final class AppSession: ObservableObject {
       ownerPubkey: ownerPubkey,
       senderPubkey: keypair.publicKey.hex,
       recipientPubkeys: recipientPubkeys,
-      rootID: post.rootID
+      rootID: post.rootID,
+      publishedTransportEventIDs: post.publishedTransportEventIDs
     )
   }
 
@@ -1228,7 +1247,7 @@ final class AppSession: ObservableObject {
     )
   }
 
-  private func persistSentRootPost(_ draft: RootPostDraft, eventID: String) throws {
+  private func persistSentRootPost(_ draft: RootPostDraft, receipt: SentPayloadReceipt) throws {
     let sessionID = draft.payload.conversationID
     _ = try messageStore.upsertSession(
       ownerPubkey: draft.ownerPubkey,
@@ -1238,10 +1257,10 @@ final class AppSession: ObservableObject {
       updatedAt: .now
     )
     let message = try SessionMessageEntity(
-      eventID: eventID,
+      eventID: receipt.rumorEventID,
       ownerPubkey: draft.ownerPubkey,
       conversationID: sessionID,
-      rootID: eventID,
+      rootID: receipt.rumorEventID,
       kind: .root,
       senderPubkey: draft.senderPubkey,
       receiverPubkey: draft.ownerPubkey,
@@ -1249,7 +1268,8 @@ final class AppSession: ObservableObject {
       note: draft.payload.note,
       timestamp: .now,
       readAt: .now,
-      linkType: URLClassifier.classify(draft.normalizedURL)
+      linkType: URLClassifier.classify(draft.normalizedURL),
+      publishedTransportEventIDs: receipt.publishedEventIDs
     )
     try messageStore.insert(message)
     enqueueMetadataRefresh(for: message)
@@ -1308,7 +1328,7 @@ final class AppSession: ObservableObject {
   private func sendPayloadAwaitingRelayAcceptance(
     payload: LinkstrPayload,
     recipientPubkeyHexes: [String]
-  ) async throws -> String {
+  ) async throws -> SentPayloadReceipt {
     if let testRelaySendOverride {
       guard !recipientPubkeyHexes.isEmpty else {
         throw NostrServiceError.invalidPubkey
@@ -1319,6 +1339,10 @@ final class AppSession: ObservableObject {
       payload: payload,
       toMany: recipientPubkeyHexes
     )
+  }
+
+  private func localSendReceipt(withRumorEventID rumorEventID: String) -> SentPayloadReceipt {
+    SentPayloadReceipt(rumorEventID: rumorEventID, publishedEventIDs: [])
   }
 
   private func normalizedMemberPubkeys(fromNPubs memberNPubs: [String], myPubkey: String)
@@ -1429,18 +1453,26 @@ final class AppSession: ObservableObject {
     dedupedValidPubkeys(first + second)
   }
 
-  private func makeRootPostDeletionEvent(rootID: String, signedBy keypair: Keypair) throws
+  private func makeRootPostDeletionEvent(
+    publishedTransportEventIDs: [String],
+    signedBy keypair: Keypair
+  ) throws
     -> NostrEvent
   {
-    let normalizedRootID = rootID.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !normalizedRootID.isEmpty else {
+    let normalizedEventIDs =
+      publishedTransportEventIDs
+      .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+      .filter { !$0.isEmpty }
+    guard !normalizedEventIDs.isEmpty else {
       throw LinkstrPayloadError.invalidRootID
     }
 
+    let eventTags = try normalizedEventIDs.map { try customTag(name: "e", value: $0) }
+
     return try NostrEvent.Builder<NostrEvent>(kind: .deletion)
       .content("linkstr post deletion request")
-      .appendTags(try customTag(name: "e", value: normalizedRootID))
-      .appendTags(try customTag(name: "k", value: String(EventKind.unknown(44_001).rawValue)))
+      .appendTags(contentsOf: eventTags)
+      .appendTags(try customTag(name: "k", value: String(EventKind.giftWrap.rawValue)))
       .build(signedBy: keypair)
   }
 
@@ -1997,15 +2029,20 @@ final class AppSession: ObservableObject {
   private func persistIncomingRootPost(_ incoming: ReceivedDirectMessage) {
     guard let ownerPubkey = identityService.pubkeyHex else { return }
 
+    let sessionID = incoming.payload.conversationID.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !sessionID.isEmpty else { return }
+    let transportEventIDs = incoming.transportEventID.map { [$0] } ?? []
+
     do {
-      let storageID = SessionMessageEntity.storageID(
+      if let existing = try messageStore.rootPost(
         ownerPubkey: ownerPubkey,
-        eventID: incoming.eventID
-      )
-      if let existing = try messageStore.message(storageID: storageID) {
-        if existing.kind == .root {
-          enqueueMetadataRefresh(for: existing)
+        sessionID: sessionID,
+        rootID: incoming.eventID
+      ) {
+        if existing.appendPublishedTransportEventIDs(transportEventIDs) {
+          try modelContext.save()
         }
+        enqueueMetadataRefresh(for: existing)
         return
       }
     } catch {
@@ -2013,8 +2050,6 @@ final class AppSession: ObservableObject {
       return
     }
 
-    let sessionID = incoming.payload.conversationID.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !sessionID.isEmpty else { return }
     guard
       inboundMembershipIsActive(
         sessionID: sessionID,
@@ -2089,7 +2124,8 @@ final class AppSession: ObservableObject {
         note: incoming.payload.note,
         timestamp: incoming.createdAt,
         readAt: isEchoedOutgoing ? incoming.createdAt : nil,
-        linkType: URLClassifier.classify(normalizedURL)
+        linkType: URLClassifier.classify(normalizedURL),
+        publishedTransportEventIDs: transportEventIDs
       )
     } catch {
       report(error: error)
@@ -2284,8 +2320,8 @@ final class AppSession: ObservableObject {
     let previewTitle = normalizedMetadataTitle(preview.title)
     let resolvedTitle = previewTitle ?? currentTitle
 
-    let currentThumbnail = normalizedThumbnailPath(message.thumbnailURL)
-    let previewThumbnail = normalizedThumbnailPath(preview.thumbnailPath)
+    let currentThumbnail = ManagedLocalFileScope.shared.normalizedManagedPath(message.thumbnailURL)
+    let previewThumbnail = ManagedLocalFileScope.shared.normalizedManagedPath(preview.thumbnailPath)
     let resolvedThumbnail: String?
     if let previewThumbnail {
       resolvedThumbnail = previewThumbnail
@@ -2312,7 +2348,9 @@ final class AppSession: ObservableObject {
       return true
     }
 
-    guard let thumbnailPath = normalizedThumbnailPath(message.thumbnailURL) else {
+    guard
+      let thumbnailPath = ManagedLocalFileScope.shared.normalizedManagedPath(message.thumbnailURL)
+    else {
       return false
     }
     return !FileManager.default.fileExists(atPath: thumbnailPath)
@@ -2321,12 +2359,6 @@ final class AppSession: ObservableObject {
   private func normalizedMetadataTitle(_ title: String?) -> String? {
     guard let title else { return nil }
     let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-    return trimmed.isEmpty ? nil : trimmed
-  }
-
-  private func normalizedThumbnailPath(_ path: String?) -> String? {
-    guard let path else { return nil }
-    let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
     return trimmed.isEmpty ? nil : trimmed
   }
 

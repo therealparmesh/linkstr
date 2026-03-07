@@ -535,12 +535,13 @@ struct PostDetailView: View {
         showOpenSourceButtonInEmbedMode: true,
         openSourceAction: { openURL(url) },
         resolveCachedLocalMedia: { sourceURL in
-          guard let path = post.cachedMediaPath,
+          guard
+            let localURL = ManagedLocalFileScope.shared.managedFileURL(
+              fromPath: post.cachedMediaPath),
             post.cachedMediaSourceURL == sourceURL.absoluteString
           else {
             return nil
           }
-          let localURL = URL(fileURLWithPath: path)
           guard FileManager.default.fileExists(atPath: localURL.path) else {
             post.cachedMediaPath = nil
             post.cachedMediaSourceURL = nil
@@ -550,7 +551,16 @@ struct PostDetailView: View {
         },
         persistLocalMedia: { sourceURL, media in
           guard media.isLocalFile else { return }
-          post.cachedMediaPath = media.playbackURL.path
+          guard
+            let managedURL = ManagedLocalFileScope.shared.managedFileURL(
+              fromPath: media.playbackURL.path
+            )
+          else {
+            post.cachedMediaPath = nil
+            post.cachedMediaSourceURL = nil
+            return
+          }
+          post.cachedMediaPath = managedURL.path
           post.cachedMediaSourceURL = sourceURL.absoluteString
         }
       )

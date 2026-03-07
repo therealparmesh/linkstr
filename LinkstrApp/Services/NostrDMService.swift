@@ -9,11 +9,17 @@ enum DirectMessageIngestSource {
 
 struct ReceivedDirectMessage {
   let eventID: String
+  let transportEventID: String?
   let senderPubkey: String
   let receiverPubkey: String
   let payload: LinkstrPayload
   let createdAt: Date
   let source: DirectMessageIngestSource
+}
+
+struct SentPayloadReceipt: Equatable {
+  let rumorEventID: String
+  let publishedEventIDs: [String]
 }
 
 struct ReceivedFollowList {
@@ -41,12 +47,6 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     var receivedGiftWrapCount = 0
   }
 
-  private struct PendingPublishAck {
-    var expectedRelayURLs: Set<String>
-    var failedRelayMessagesByURL: [String: String]
-    let continuation: CheckedContinuation<Void, Error>
-  }
-
   private var relayPool: RelayPool?
   private var eventCancellable: AnyCancellable?
   private var processedEventIDs = Set<String>()
@@ -59,8 +59,9 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
   private var authorFilter: Filter?
   private var reconnectTask: Task<Void, Never>?
   private var shouldMaintainConnection = false
-  private var pendingPublishAcks: [String: PendingPublishAck] = [:]
-  private var pendingPublishAckTimeoutTasks: [String: Task<Void, Never>] = [:]
+  private var publishAckTracker = PublishAckTracker()
+  private var pendingPublishContinuations: [UUID: CheckedContinuation<Void, Error>] = [:]
+  private var pendingPublishBatchTimeoutTasks: [UUID: Task<Void, Never>] = [:]
   private var liveSubscriptionSince: Int?
 
   private var keypair: Keypair?
@@ -205,11 +206,12 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     liveSubscriptionSince = nil
     activeBackfillStates.removeAll()
     completedBackfillKinds.removeAll()
-    let pendingEventIDs = Array(pendingPublishAcks.keys)
-    for eventID in pendingEventIDs {
-      finishPendingPublishAck(
-        eventID: eventID,
-        result: .failure(NostrServiceError.relayUnavailable)
+    let pendingBatchIDs = publishAckTracker.cancelAll()
+    for batchID in pendingBatchIDs {
+      finishPendingPublishBatch(
+        batchID: batchID,
+        result: .failure(NostrServiceError.relayUnavailable),
+        removeFromTracker: false
       )
     }
     onIncoming = nil
@@ -237,48 +239,28 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     payload: LinkstrPayload,
     toMany recipientPubkeyHexes: [String],
     timeoutSeconds: TimeInterval = 8
-  ) async throws -> String {
+  ) async throws -> SentPayloadReceipt {
     guard relayPool != nil else {
       throw NostrServiceError.relayUnavailable
     }
 
     let events = try buildRumorAndGiftWrapEvents(
       payload: payload, recipientPubkeyHexes: recipientPubkeyHexes)
-    guard let ackEventID = events.ackEventID else {
+    let publishedEvents =
+      events.giftWrapForRecipients
+      + (events.giftWrapForSender.map { [$0] } ?? [])
+    guard !publishedEvents.isEmpty else {
       throw NostrServiceError.relayUnavailable
     }
-    let expectedRelayURLs = connectedRelayURLs()
-    guard !expectedRelayURLs.isEmpty else {
-      throw NostrServiceError.relayUnavailable
-    }
+    let publishedEventIDs = try await publishEventsAwaitingRelayAcceptance(
+      publishedEvents,
+      timeoutSeconds: timeoutSeconds
+    )
 
-    try await withCheckedThrowingContinuation {
-      (continuation: CheckedContinuation<Void, Error>) in
-      pendingPublishAcks[ackEventID] = PendingPublishAck(
-        expectedRelayURLs: expectedRelayURLs,
-        failedRelayMessagesByURL: [:],
-        continuation: continuation
-      )
-
-      pendingPublishAckTimeoutTasks[ackEventID] = Task { @MainActor [weak self] in
-        guard let self else { return }
-        try? await Task.sleep(for: .seconds(max(0.1, timeoutSeconds)))
-        guard !Task.isCancelled else { return }
-        self.finishPendingPublishAck(
-          eventID: ackEventID,
-          result: .failure(NostrServiceError.publishTimedOut)
-        )
-      }
-
-      for giftWrap in events.giftWrapForRecipients {
-        relayPool?.publishEvent(giftWrap)
-      }
-      if let giftWrapForSender = events.giftWrapForSender {
-        relayPool?.publishEvent(giftWrapForSender)
-      }
-    }
-
-    return events.rumorEvent.id
+    return SentPayloadReceipt(
+      rumorEventID: events.rumorEvent.id,
+      publishedEventIDs: publishedEventIDs
+    )
   }
 
   func publishFollowListAwaitingRelayAcceptance(
@@ -294,31 +276,10 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
 
     let parsedPubkeys = try parsePublicKeys(followedPubkeyHexes)
     let followEvent = try followList(withPubkeys: parsedPubkeys.map(\.hex), signedBy: keypair)
-    let expectedRelayURLs = connectedRelayURLs()
-    guard !expectedRelayURLs.isEmpty else {
-      throw NostrServiceError.relayUnavailable
-    }
-
-    try await withCheckedThrowingContinuation {
-      (continuation: CheckedContinuation<Void, Error>) in
-      pendingPublishAcks[followEvent.id] = PendingPublishAck(
-        expectedRelayURLs: expectedRelayURLs,
-        failedRelayMessagesByURL: [:],
-        continuation: continuation
-      )
-
-      pendingPublishAckTimeoutTasks[followEvent.id] = Task { @MainActor [weak self] in
-        guard let self else { return }
-        try? await Task.sleep(for: .seconds(max(0.1, timeoutSeconds)))
-        guard !Task.isCancelled else { return }
-        self.finishPendingPublishAck(
-          eventID: followEvent.id,
-          result: .failure(NostrServiceError.publishTimedOut)
-        )
-      }
-
-      relayPool?.publishEvent(followEvent)
-    }
+    _ = try await publishEventsAwaitingRelayAcceptance(
+      [followEvent],
+      timeoutSeconds: timeoutSeconds
+    )
 
     return followEvent.id
   }
@@ -331,31 +292,10 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
       throw NostrServiceError.relayUnavailable
     }
 
-    let expectedRelayURLs = connectedRelayURLs()
-    guard !expectedRelayURLs.isEmpty else {
-      throw NostrServiceError.relayUnavailable
-    }
-
-    try await withCheckedThrowingContinuation {
-      (continuation: CheckedContinuation<Void, Error>) in
-      pendingPublishAcks[event.id] = PendingPublishAck(
-        expectedRelayURLs: expectedRelayURLs,
-        failedRelayMessagesByURL: [:],
-        continuation: continuation
-      )
-
-      pendingPublishAckTimeoutTasks[event.id] = Task { @MainActor [weak self] in
-        guard let self else { return }
-        try? await Task.sleep(for: .seconds(max(0.1, timeoutSeconds)))
-        guard !Task.isCancelled else { return }
-        self.finishPendingPublishAck(
-          eventID: event.id,
-          result: .failure(NostrServiceError.publishTimedOut)
-        )
-      }
-
-      relayPool?.publishEvent(event)
-    }
+    _ = try await publishEventsAwaitingRelayAcceptance(
+      [event],
+      timeoutSeconds: timeoutSeconds
+    )
 
     return event.id
   }
@@ -381,8 +321,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
   ) throws -> (
     rumorEvent: NostrEvent,
     giftWrapForRecipients: [NostrEvent],
-    giftWrapForSender: NostrEvent?,
-    ackEventID: String?
+    giftWrapForSender: NostrEvent?
   ) {
     guard let keypair else {
       throw NostrServiceError.missingIdentity
@@ -431,9 +370,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     } else {
       giftWrapForSender = nil
     }
-
-    let ackEventID = giftWrapForSender?.id ?? giftWrapForRecipients.first?.id
-    return (rumorEvent, giftWrapForRecipients, giftWrapForSender, ackEventID)
+    return (rumorEvent, giftWrapForRecipients, giftWrapForSender)
   }
 
   private func backfillSubscriptionID(kind: BackfillSubscriptionKind, page: Int, until: Int?)
@@ -478,15 +415,63 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     )
   }
 
-  private func finishPendingPublishAck(eventID: String, result: Result<Void, Error>) {
-    guard let pending = pendingPublishAcks.removeValue(forKey: eventID) else { return }
-    pendingPublishAckTimeoutTasks.removeValue(forKey: eventID)?.cancel()
+  private func publishEventsAwaitingRelayAcceptance(
+    _ events: [NostrEvent],
+    timeoutSeconds: TimeInterval = 8
+  ) async throws -> [String] {
+    let eventIDs = events.map(\.id)
+    guard !eventIDs.isEmpty else {
+      throw NostrServiceError.relayUnavailable
+    }
+
+    let expectedRelayURLs = connectedRelayURLs()
+    guard !expectedRelayURLs.isEmpty else {
+      throw NostrServiceError.relayUnavailable
+    }
+
+    try await withCheckedThrowingContinuation {
+      (continuation: CheckedContinuation<Void, Error>) in
+      let batchID = publishAckTracker.registerBatch(
+        eventIDs: eventIDs,
+        expectedRelayURLs: expectedRelayURLs
+      )
+      pendingPublishContinuations[batchID] = continuation
+      pendingPublishBatchTimeoutTasks[batchID] = Task { @MainActor [weak self] in
+        guard let self else { return }
+        try? await Task.sleep(for: .seconds(max(0.1, timeoutSeconds)))
+        guard !Task.isCancelled else { return }
+        self.finishPendingPublishBatch(
+          batchID: batchID,
+          result: .failure(NostrServiceError.publishTimedOut)
+        )
+      }
+
+      for event in events {
+        relayPool?.publishEvent(event)
+      }
+    }
+
+    return eventIDs
+  }
+
+  private func finishPendingPublishBatch(
+    batchID: UUID,
+    result: Result<Void, Error>,
+    removeFromTracker: Bool = true
+  ) {
+    if removeFromTracker {
+      publishAckTracker.removeBatch(batchID)
+    }
+    pendingPublishBatchTimeoutTasks.removeValue(forKey: batchID)?.cancel()
+    guard let continuation = pendingPublishContinuations.removeValue(forKey: batchID) else {
+      return
+    }
 
     switch result {
     case .success:
-      pending.continuation.resume()
+      continuation.resume()
     case .failure(let error):
-      pending.continuation.resume(throwing: error)
+      continuation.resume(throwing: error)
     }
   }
 
@@ -496,38 +481,41 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     success: Bool,
     message: String
   ) {
-    guard var pending = pendingPublishAcks[eventID] else { return }
-
-    if success {
-      finishPendingPublishAck(eventID: eventID, result: .success(()))
+    guard
+      let completion = publishAckTracker.acknowledge(
+        relayURL: relayURL,
+        eventID: eventID,
+        success: success,
+        message: message
+      )
+    else {
       return
     }
 
-    pending.failedRelayMessagesByURL[relayURL] = message
-    pending.expectedRelayURLs.remove(relayURL)
-    pendingPublishAcks[eventID] = pending
-
-    if pending.expectedRelayURLs.isEmpty {
-      let fallbackMessage =
-        pending.failedRelayMessagesByURL.values.first ?? "relays rejected this message."
-      finishPendingPublishAck(
-        eventID: eventID,
-        result: .failure(NostrServiceError.publishRejected(fallbackMessage))
+    switch completion.outcome {
+    case .succeeded:
+      finishPendingPublishBatch(
+        batchID: completion.batchID, result: .success(()), removeFromTracker: false)
+    case .failed(let failureMessage):
+      finishPendingPublishBatch(
+        batchID: completion.batchID,
+        result: .failure(NostrServiceError.publishRejected(failureMessage)),
+        removeFromTracker: false
       )
     }
   }
 
   private func pruneRelayFromPublishWaitlists(relayURL: String) {
-    for eventID in Array(pendingPublishAcks.keys) {
-      guard var pending = pendingPublishAcks[eventID] else { continue }
-      guard pending.expectedRelayURLs.remove(relayURL) != nil else { continue }
-      pendingPublishAcks[eventID] = pending
-
-      if pending.expectedRelayURLs.isEmpty {
-        let message = pending.failedRelayMessagesByURL.values.first ?? "relay connection dropped."
-        finishPendingPublishAck(
-          eventID: eventID,
-          result: .failure(NostrServiceError.publishRejected(message))
+    for completion in publishAckTracker.pruneRelay(relayURL) {
+      switch completion.outcome {
+      case .succeeded:
+        finishPendingPublishBatch(
+          batchID: completion.batchID, result: .success(()), removeFromTracker: false)
+      case .failed(let failureMessage):
+        finishPendingPublishBatch(
+          batchID: completion.batchID,
+          result: .failure(NostrServiceError.publishRejected(failureMessage)),
+          removeFromTracker: false
         )
       }
     }
@@ -690,19 +678,22 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
 
     guard rumor.kind == linkstrRumorKind else { return }
 
-    guard !processedEventIDs.contains(rumor.id) else { return }
-
     guard let payload = decodeValidatedPayload(from: rumor.content) else {
       return
     }
 
-    rememberProcessedEventID(rumor.id)
+    let alreadyProcessedRumor = processedEventIDs.contains(rumor.id)
+    guard !alreadyProcessedRumor || payload.kind == .root else { return }
+    if !alreadyProcessedRumor {
+      rememberProcessedEventID(rumor.id)
+    }
 
     let receiver = keypair.publicKey.hex
 
     onIncoming?(
       ReceivedDirectMessage(
         eventID: rumor.id,
+        transportEventID: wrapped.id,
         senderPubkey: rumor.pubkey,
         receiverPubkey: receiver,
         payload: payload,

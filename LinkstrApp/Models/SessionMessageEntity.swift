@@ -27,6 +27,7 @@ final class SessionMessageEntity {
   var encryptedMetadataTitle: String?
   var cachedMediaPath: String?
   var cachedMediaSourceURL: String?
+  var publishedTransportEventIDsStorage: String?
 
   var senderPubkey: String {
     LocalDataCrypto.shared.decryptString(encryptedSenderPubkey, ownerPubkey: ownerPubkey) ?? ""
@@ -50,6 +51,10 @@ final class SessionMessageEntity {
 
   var metadataTitle: String? {
     LocalDataCrypto.shared.decryptString(encryptedMetadataTitle, ownerPubkey: ownerPubkey)
+  }
+
+  var publishedTransportEventIDs: [String] {
+    Self.normalizedTransportEventIDs(fromStorage: publishedTransportEventIDsStorage)
   }
 
   var kind: SessionMessageKind {
@@ -79,7 +84,8 @@ final class SessionMessageEntity {
     thumbnailURL: String? = nil,
     metadataTitle: String? = nil,
     cachedMediaPath: String? = nil,
-    cachedMediaSourceURL: String? = nil
+    cachedMediaSourceURL: String? = nil,
+    publishedTransportEventIDs: [String] = []
   ) throws {
     let crypto = LocalDataCrypto.shared
     self.storageID = Self.storageID(ownerPubkey: ownerPubkey, eventID: eventID)
@@ -106,6 +112,8 @@ final class SessionMessageEntity {
       try crypto.encryptString(metadataTitle, ownerPubkey: ownerPubkey)
     self.cachedMediaPath = cachedMediaPath
     self.cachedMediaSourceURL = cachedMediaSourceURL
+    self.publishedTransportEventIDsStorage =
+      Self.transportEventIDStorageValue(from: publishedTransportEventIDs)
   }
 
   static func storageID(ownerPubkey: String, eventID: String) -> String {
@@ -131,6 +139,45 @@ final class SessionMessageEntity {
 
   func senderMatches(_ pubkeyHex: String) -> Bool {
     senderPubkeyHash == LocalDataCrypto.shared.digestHex(pubkeyHex)
+  }
+
+  @discardableResult
+  func appendPublishedTransportEventIDs(_ eventIDs: [String]) -> Bool {
+    let next = Self.normalizedTransportEventIDs(
+      publishedTransportEventIDs + eventIDs
+    )
+    let nextStorage = next.isEmpty ? nil : next.joined(separator: ",")
+    guard nextStorage != publishedTransportEventIDsStorage else { return false }
+    publishedTransportEventIDsStorage = nextStorage
+    return true
+  }
+
+  func setPublishedTransportEventIDs(_ eventIDs: [String]) {
+    publishedTransportEventIDsStorage = Self.transportEventIDStorageValue(from: eventIDs)
+  }
+
+  private static func transportEventIDStorageValue(from eventIDs: [String]) -> String? {
+    let normalized = normalizedTransportEventIDs(eventIDs)
+    return normalized.isEmpty ? nil : normalized.joined(separator: ",")
+  }
+
+  private static func normalizedTransportEventIDs(_ candidates: [String]) -> [String] {
+    var normalized: [String] = []
+    var seen = Set<String>()
+
+    for candidate in candidates {
+      let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !trimmed.isEmpty else { continue }
+      guard seen.insert(trimmed).inserted else { continue }
+      normalized.append(trimmed)
+    }
+
+    return normalized
+  }
+
+  private static func normalizedTransportEventIDs(fromStorage storage: String?) -> [String] {
+    guard let storage else { return [] }
+    return normalizedTransportEventIDs(storage.split(separator: ",").map(String.init))
   }
 }
 

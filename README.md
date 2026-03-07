@@ -43,6 +43,7 @@
 - Settings and Share expose current `npub`.
 - Settings sections are collapsed by default and expand on demand.
 - `nsec` is hidden by default and only revealed on explicit action.
+- Revealed `nsec` is cleared again when the Settings identity view disappears or the app moves inactive/background.
 - Settings includes `Delete Account` inside Identity with a two-step destructive confirmation flow.
 - `Log Out (Keep Local Data)` clears active identity only.
 - `Log Out and Clear Local Data` clears identity and deletes account-scoped local data:
@@ -125,8 +126,10 @@
 - Posting recipient resolution uses only active session members.
 - Root post identity is the Nostr event ID.
 - Inbound root payloads with a non-empty `root_id` that does not match the event ID are ignored.
+- Outgoing root posts persist the relay-visible gift-wrap event IDs that carried that root payload.
 - Post detail exposes delete only for posts sent by the signed-in user.
-- Post delete publishes a Nostr deletion request (`kind:5`) and also sends a Linkstr delete notice to known current and former session members so encrypted session feeds converge on the removal.
+- Post delete publishes a Nostr deletion request (`kind:5`) against the stored gift-wrap event IDs when available, and also sends a Linkstr delete notice to known current and former session members so encrypted session feeds converge on the removal.
+- Older locally stored root posts without recorded gift-wrap IDs skip relay-side `kind:5` publication and still use the Linkstr delete notice plus local tombstoning.
 - Post delete persists a local deletion watermark so historical backfill cannot resurrect a previously deleted root post.
 
 ### Reactions
@@ -187,7 +190,7 @@
 ### Nostr transport and ingest
 
 - Payloads are JSON-encoded and published through `NostrSDK` gift wraps.
-- Outgoing publish awaits relay `OK` acceptance with timeout.
+- Outgoing publish awaits relay `OK` acceptance with timeout, and fanout sends only succeed after each published gift-wrap has at least one accepted relay path.
 - Accepted incoming payload kinds are:
   - `session_create`
   - `session_members`
@@ -196,6 +199,7 @@
 - Ingest processing rules:
   - Ignore undecodable/unvalidated payloads.
   - Deduplicate by event ID.
+  - Self-authored duplicate root echoes merge additional gift-wrap transport IDs into the stored root post instead of creating duplicate posts.
   - `session_create` requires sender and receiver inclusion in the snapshot member set.
   - `session_create` for an existing session is accepted only from the stored creator pubkey.
   - `session_members` is accepted only from the stored creator pubkey and only when the session already exists.
@@ -235,6 +239,7 @@
   - Requires network connectivity.
   - Subject to provider playback restrictions and UX.
   - Fullscreen depends on provider iframe support.
+- Hidden provider-sniff web views use non-persistent website data and reject non-web navigation schemes.
 
 #### Provider support
 
@@ -324,6 +329,7 @@
   - Account-scoped app state (follow-list recency watermark).
   - Sessions, member snapshots, membership intervals, root posts, post deletion watermarks, reactions, read state, and archive state.
   - Cached media references and metadata hydration state.
+- Managed thumbnails and cached video files live under app-owned directories, and cleanup only removes files from those managed paths.
 - Local entities are owner-scoped by pubkey.
 - Account scoping is enforced in storage and query paths to prevent cross-account bleed.
 - `Log Out (Keep Local Data)` preserves persisted local entities for later re-login.

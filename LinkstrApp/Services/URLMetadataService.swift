@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 import LinkPresentation
 import UIKit
@@ -51,17 +50,10 @@ final class URLMetadataService {
     guard image.size != .zero else { return nil }
     guard let data = image.pngData() else { return nil }
 
-    let digest = SHA256.hash(data: Data(urlString.utf8)).map { String(format: "%02x", $0) }.joined()
-    let base =
-      FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-      ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
-      ?? URL(fileURLWithPath: NSTemporaryDirectory())
-    let thumbDir =
-      base
-      .appendingPathComponent("linkstr", isDirectory: true)
-      .appendingPathComponent("thumbnails", isDirectory: true)
-    try? FileManager.default.createDirectory(at: thumbDir, withIntermediateDirectories: true)
-    let fileURL = thumbDir.appendingPathComponent(digest).appendingPathExtension("png")
+    let fileURL = ManagedLocalFileScope.shared.thumbnailFileURL(
+      for: urlString.sha256Hex,
+      fileExtension: "png"
+    )
     try data.write(to: fileURL, options: .atomic)
     return fileURL.path
   }

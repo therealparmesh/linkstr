@@ -1,27 +1,17 @@
-import CryptoKit
 import Foundation
 
 final class VideoCacheService {
   static let shared = VideoCacheService()
 
   private let fileManager = FileManager.default
-  private let cacheDirectory: URL
 
-  private init() {
-    let base =
-      fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
-      ?? URL(fileURLWithPath: NSTemporaryDirectory())
-    cacheDirectory = base.appendingPathComponent("linkstr_videos", isDirectory: true)
-
-    if !fileManager.fileExists(atPath: cacheDirectory.path) {
-      try? fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
-    }
-  }
+  private init() {}
 
   func cachedFileURL(for remoteURL: URL, preferredExtension: String) -> URL {
-    let fileName = remoteURL.absoluteString.sha256Hex
-    return cacheDirectory.appendingPathComponent(fileName).appendingPathExtension(
-      preferredExtension)
+    ManagedLocalFileScope.shared.cachedVideoFileURL(
+      for: remoteURL,
+      preferredExtension: preferredExtension
+    )
   }
 
   func downloadMP4(from remoteURL: URL, headers: [String: String]) async throws -> URL {
@@ -44,12 +34,5 @@ final class VideoCacheService {
 
     try fileManager.moveItem(at: tmpURL, to: destination)
     return destination
-  }
-}
-
-extension String {
-  fileprivate var sha256Hex: String {
-    let digest = SHA256.hash(data: Data(self.utf8))
-    return digest.map { String(format: "%02x", $0) }.joined()
   }
 }

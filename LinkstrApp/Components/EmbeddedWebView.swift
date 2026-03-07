@@ -58,8 +58,7 @@ struct EmbeddedWebView: UIViewRepresentable {
         return
       }
 
-      let scheme = targetURL.scheme?.lowercased() ?? ""
-      if ["http", "https", "about", "data", "blob"].contains(scheme) {
+      if WebNavigationGuard.allowsNavigation(to: targetURL) {
         decisionHandler(.allow)
       } else {
         decisionHandler(.cancel)
