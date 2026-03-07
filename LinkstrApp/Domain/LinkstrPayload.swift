@@ -1,5 +1,4 @@
 import Foundation
-import NostrSDK
 
 enum LinkstrPayloadKind: String, Codable {
   case root
@@ -119,19 +118,7 @@ struct LinkstrPayload: Codable, Hashable {
 
   func normalizedMemberPubkeys() -> [String]? {
     guard let memberPubkeys else { return nil }
-    var seen = Set<String>()
-    var normalized: [String] = []
-    for candidate in memberPubkeys {
-      let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
-      guard let publicKey = PublicKey(hex: trimmed) else {
-        return nil
-      }
-      let normalizedHex = publicKey.hex
-      guard !seen.contains(normalizedHex) else { continue }
-      seen.insert(normalizedHex)
-      normalized.append(normalizedHex)
-    }
-    return normalized
+    return NostrValueNormalizer.validatedNormalizedPubkeyHexes(memberPubkeys)
   }
 }
 

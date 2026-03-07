@@ -1,5 +1,4 @@
 import Foundation
-import NostrSDK
 import SwiftData
 
 @MainActor
@@ -139,7 +138,9 @@ final class SessionMessageStore {
     memberPubkey: String,
     at timestamp: Date = .now
   ) throws -> Bool {
-    let normalizedMemberPubkey = try normalizedPubkey(memberPubkey)
+    guard let normalizedMemberPubkey = NostrValueNormalizer.normalizedPubkeyHex(memberPubkey) else {
+      throw NostrServiceError.invalidPubkey
+    }
     let memberHash = LocalDataCrypto.shared.digestHex(normalizedMemberPubkey)
     let intervals = try memberIntervals(
       sessionID: sessionID,
@@ -181,7 +182,7 @@ final class SessionMessageStore {
       sessionID: sessionID, ownerPubkey: ownerPubkey, activeOnly: false)
     let fallbackSnapshotUpdatedAt = existingMembers.map(\.updatedAt).max()
     guard
-      shouldApplyStateUpdate(
+      NostrValueNormalizer.shouldApplyStateUpdate(
         currentUpdatedAt: sessionEntity.membershipStateUpdatedAt ?? fallbackSnapshotUpdatedAt,
         currentEventID: sessionEntity.membershipStateEventID,
         incomingUpdatedAt: updatedAt,
@@ -250,8 +251,7 @@ final class SessionMessageStore {
       }
     }
 
-    let normalizedEventID = normalizedEventIDToken(eventID)
-    let membershipEventID = normalizedEventID.isEmpty ? nil : normalizedEventID
+    let membershipEventID = NostrValueNormalizer.normalizedEventID(eventID)
     if sessionEntity.membershipStateUpdatedAt != updatedAt
       || sessionEntity.membershipStateEventID != membershipEventID
     {
@@ -298,7 +298,10 @@ final class SessionMessageStore {
     rootID: String,
     deletedByPubkey: String
   ) throws -> Bool {
-    let normalizedDeletedByPubkey = try normalizedPubkey(deletedByPubkey)
+    guard let normalizedDeletedByPubkey = NostrValueNormalizer.normalizedPubkeyHex(deletedByPubkey)
+    else {
+      throw NostrServiceError.invalidPubkey
+    }
     return try postDeletions(ownerPubkey: ownerPubkey, sessionID: sessionID, rootID: rootID)
       .contains { $0.deletedByMatches(normalizedDeletedByPubkey) }
   }
@@ -312,8 +315,11 @@ final class SessionMessageStore {
     updatedAt: Date,
     eventID: String
   ) throws -> Bool {
-    let normalizedDeletedByPubkey = try normalizedPubkey(deletedByPubkey)
-    let normalizedEventID = normalizedEventIDToken(eventID)
+    guard let normalizedDeletedByPubkey = NostrValueNormalizer.normalizedPubkeyHex(deletedByPubkey)
+    else {
+      throw NostrServiceError.invalidPubkey
+    }
+    let normalizedEventID = NostrValueNormalizer.normalizedEventID(eventID) ?? ""
     let deletionStorageID = SessionPostDeletionEntity.storageID(
       ownerPubkey: ownerPubkey,
       sessionID: sessionID,
@@ -326,7 +332,7 @@ final class SessionMessageStore {
 
     var didChange = false
     if let existingDeletion = try modelContext.fetch(deletionDescriptor).first {
-      if shouldApplyStateUpdate(
+      if NostrValueNormalizer.shouldApplyStateUpdate(
         currentUpdatedAt: existingDeletion.updatedAt,
         currentEventID: existingDeletion.lastEventID,
         incomingUpdatedAt: updatedAt,
@@ -400,8 +406,10 @@ final class SessionMessageStore {
   ) throws {
     let normalizedEmoji = emoji.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !normalizedEmoji.isEmpty else { return }
-    let normalizedSenderPubkey = try normalizedPubkey(senderPubkey)
-    let normalizedEventID = normalizedEventIDToken(eventID)
+    guard let normalizedSenderPubkey = NostrValueNormalizer.normalizedPubkeyHex(senderPubkey) else {
+      throw NostrServiceError.invalidPubkey
+    }
+    let normalizedEventID = NostrValueNormalizer.normalizedEventID(eventID) ?? ""
 
     let storageID = SessionReactionEntity.storageID(
       ownerPubkey: ownerPubkey,
@@ -416,7 +424,7 @@ final class SessionMessageStore {
 
     if let existing = try modelContext.fetch(descriptor).first {
       guard
-        shouldApplyStateUpdate(
+        NostrValueNormalizer.shouldApplyStateUpdate(
           currentUpdatedAt: existing.updatedAt,
           currentEventID: existing.lastEventID,
           incomingUpdatedAt: updatedAt,
@@ -538,20 +546,7 @@ final class SessionMessageStore {
   }
 
   private func normalizedPubkeys(_ candidates: [String]) -> [String] {
-    var normalized: [String] = []
-    var seen = Set<String>()
-
-    for candidate in candidates {
-      guard let key = PublicKey(hex: candidate.trimmingCharacters(in: .whitespacesAndNewlines))
-      else {
-        continue
-      }
-      guard !seen.contains(key.hex) else { continue }
-      seen.insert(key.hex)
-      normalized.append(key.hex)
-    }
-
-    return normalized
+    NostrValueNormalizer.dedupedNormalizedPubkeyHexes(candidates)
   }
 
   private func memberIntervals(
@@ -612,51 +607,6 @@ final class SessionMessageStore {
     }
     openInterval.endAt = max(openInterval.startAt, endedAt)
     return true
-  }
-
-  private func normalizedPubkey(_ candidate: String) throws -> String {
-    let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard let key = PublicKey(hex: trimmed) else {
-      throw NostrServiceError.invalidPubkey
-    }
-    return key.hex
-  }
-
-  private func normalizedEventIDToken(_ candidate: String?) -> String {
-    guard let candidate else { return "" }
-    return candidate.trimmingCharacters(in: .whitespacesAndNewlines)
-  }
-
-  private func shouldApplyStateUpdate(
-    currentUpdatedAt: Date?,
-    currentEventID: String?,
-    incomingUpdatedAt: Date,
-    incomingEventID: String?
-  ) -> Bool {
-    guard let currentUpdatedAt else { return true }
-    if incomingUpdatedAt > currentUpdatedAt { return true }
-    if incomingUpdatedAt < currentUpdatedAt { return false }
-
-    let incomingToken = normalizedEventIDToken(incomingEventID)
-    guard !incomingToken.isEmpty else { return false }
-
-    let currentToken = normalizedEventIDToken(currentEventID)
-    if currentToken.isEmpty { return true }
-    return incomingToken > currentToken
-  }
-
-  private func shouldApplyStateUpdate(
-    currentUpdatedAt: Date,
-    currentEventID: String?,
-    incomingUpdatedAt: Date,
-    incomingEventID: String?
-  ) -> Bool {
-    shouldApplyStateUpdate(
-      currentUpdatedAt: Optional(currentUpdatedAt),
-      currentEventID: currentEventID,
-      incomingUpdatedAt: incomingUpdatedAt,
-      incomingEventID: incomingEventID
-    )
   }
 
   private func managedStoredFileURLs(for messages: [SessionMessageEntity]) -> Set<URL> {

@@ -48,11 +48,11 @@ struct MainTabView: View {
   private var allSessions: [SessionEntity]
 
   private var scopedContacts: [ContactEntity] {
-    session.scopedContacts(from: contacts)
+    OwnerScopedCollections.contacts(contacts, ownerPubkey: session.identityService.pubkeyHex)
   }
 
   private var scopedSessions: [SessionEntity] {
-    session.scopedSessions(from: allSessions)
+    OwnerScopedCollections.sessions(allSessions, ownerPubkey: session.identityService.pubkeyHex)
   }
 
   private var archivedSessionCount: Int {

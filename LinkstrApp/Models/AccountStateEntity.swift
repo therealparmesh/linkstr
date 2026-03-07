@@ -18,20 +18,14 @@ final class AccountStateEntity {
   ) {
     self.ownerPubkey = ownerPubkey
     self.followListUpdatedAt = followListUpdatedAt
-    self.followListEventID = Self.normalizedEventIDToken(followListEventID)
+    self.followListEventID = NostrValueNormalizer.normalizedEventID(followListEventID)
     self.createdAt = createdAt
     self.updatedAt = updatedAt
   }
 
   func setFollowListWatermark(createdAt: Date, eventID: String?) {
     followListUpdatedAt = createdAt
-    followListEventID = Self.normalizedEventIDToken(eventID)
+    followListEventID = NostrValueNormalizer.normalizedEventID(eventID)
     updatedAt = .now
-  }
-
-  static func normalizedEventIDToken(_ eventID: String?) -> String? {
-    guard let eventID else { return nil }
-    let trimmed = eventID.trimmingCharacters(in: .whitespacesAndNewlines)
-    return trimmed.isEmpty ? nil : trimmed
   }
 }

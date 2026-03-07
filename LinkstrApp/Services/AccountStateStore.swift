@@ -15,13 +15,13 @@ final class AccountStateStore {
     }
     return (
       state.followListUpdatedAt,
-      AccountStateEntity.normalizedEventIDToken(state.followListEventID)
+      NostrValueNormalizer.normalizedEventID(state.followListEventID)
     )
   }
 
   func setFollowListWatermark(ownerPubkey: String, createdAt: Date, eventID: String?) throws {
     let state = try ensureAccountState(ownerPubkey: ownerPubkey)
-    let normalizedEventID = AccountStateEntity.normalizedEventIDToken(eventID)
+    let normalizedEventID = NostrValueNormalizer.normalizedEventID(eventID)
     if state.followListUpdatedAt == createdAt && state.followListEventID == normalizedEventID {
       return
     }

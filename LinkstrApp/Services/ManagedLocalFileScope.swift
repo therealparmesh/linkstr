@@ -33,7 +33,8 @@ final class ManagedLocalFileScope {
 
   func cachedVideoFileURL(for remoteURL: URL, preferredExtension: String) -> URL {
     let fileName = remoteURL.absoluteString.sha256Hex
-    return videoDirectory.appendingPathComponent(fileName).appendingPathExtension(preferredExtension)
+    return videoDirectory.appendingPathComponent(fileName).appendingPathExtension(
+      preferredExtension)
   }
 
   func cachedHLSPackageURL(for remoteURL: URL) -> URL {

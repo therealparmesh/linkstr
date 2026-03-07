@@ -11,7 +11,6 @@ struct ReceivedDirectMessage {
   let eventID: String
   let transportEventID: String?
   let senderPubkey: String
-  let receiverPubkey: String
   let payload: LinkstrPayload
   let createdAt: Date
   let source: DirectMessageIngestSource
@@ -301,15 +300,16 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
   }
 
   private func parsePublicKeys(_ pubkeyHexes: [String]) throws -> [PublicKey] {
+    guard let normalizedPubkeys = NostrValueNormalizer.validatedNormalizedPubkeyHexes(pubkeyHexes)
+    else {
+      throw NostrServiceError.invalidPubkey
+    }
     var parsedPublicKeys: [PublicKey] = []
-    var seen = Set<String>()
-    for pubkeyHex in pubkeyHexes {
-      let trimmed = pubkeyHex.trimmingCharacters(in: .whitespacesAndNewlines)
-      guard let key = PublicKey(hex: trimmed) else {
+    parsedPublicKeys.reserveCapacity(normalizedPubkeys.count)
+    for normalizedPubkey in normalizedPubkeys {
+      guard let key = PublicKey(hex: normalizedPubkey) else {
         throw NostrServiceError.invalidPubkey
       }
-      guard !seen.contains(key.hex) else { continue }
-      seen.insert(key.hex)
       parsedPublicKeys.append(key)
     }
     return parsedPublicKeys
@@ -641,8 +641,8 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     if event.kind == .followList {
       guard let followListEvent = event as? FollowListEvent else { return }
       guard rememberProcessedEventIDIfNeeded(followListEvent.id) else { return }
-      let followedPubkeys = followListEvent.followedPubkeys.compactMap { followed -> String? in
-        PublicKey(hex: followed.lowercased())?.hex
+      let followedPubkeys = followListEvent.followedPubkeys.compactMap { followed in
+        NostrValueNormalizer.normalizedPubkeyHex(followed)
       }
       onFollowList?(
         ReceivedFollowList(
@@ -688,14 +688,11 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
       rememberProcessedEventID(rumor.id)
     }
 
-    let receiver = keypair.publicKey.hex
-
     onIncoming?(
       ReceivedDirectMessage(
         eventID: rumor.id,
         transportEventID: wrapped.id,
         senderPubkey: rumor.pubkey,
-        receiverPubkey: receiver,
         payload: payload,
         createdAt: rumor.createdDate,
         source: directMessageSource(for: relayEvent.subscriptionId)

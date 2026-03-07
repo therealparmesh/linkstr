@@ -117,12 +117,8 @@ final class ContactStore {
   }
 
   func normalizeFollowTarget(_ input: String) throws -> String {
-    let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
-    if let parsedNPub = PublicKey(npub: trimmed) {
-      return parsedNPub.hex
-    }
-    if let parsedHex = PublicKey(hex: trimmed.lowercased()) {
-      return parsedHex.hex
+    if let normalized = NostrValueNormalizer.normalizedPubkeyHex(fromAnyPublicKeyString: input) {
+      return normalized
     }
     throw ContactStoreError.invalidContactKey
   }
@@ -139,24 +135,11 @@ final class ContactStore {
 
   func followedPubkeys(ownerPubkey: String) throws -> [String] {
     let contacts = try fetchContacts(ownerPubkey: ownerPubkey)
-    var seen = Set<String>()
-    var output: [String] = []
-    output.reserveCapacity(contacts.count)
-    for contact in contacts {
-      guard PublicKey(hex: contact.targetPubkey) != nil else { continue }
-      guard seen.insert(contact.targetPubkey).inserted else { continue }
-      output.append(contact.targetPubkey)
-    }
-    return output
+    return NostrValueNormalizer.dedupedNormalizedPubkeyHexes(contacts.map(\.targetPubkey))
   }
 
   func replaceFollowedPubkeys(ownerPubkey: String, pubkeyHexes: [String]) throws {
-    var normalizedSet = Set<String>()
-    for rawPubkey in pubkeyHexes {
-      let trimmed = rawPubkey.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-      guard let parsed = PublicKey(hex: trimmed) else { continue }
-      normalizedSet.insert(parsed.hex)
-    }
+    let normalizedSet = Set(NostrValueNormalizer.dedupedNormalizedPubkeyHexes(pubkeyHexes))
 
     let existing = try fetchContacts(ownerPubkey: ownerPubkey)
     var existingByPubkey: [String: ContactEntity] = [:]
@@ -210,12 +193,14 @@ final class ContactStore {
     try updateAlias(contact, ownerPubkey: ownerPubkey, alias: alias)
   }
 
-  func contactName(for pubkeyHex: String, contacts: [ContactEntity]) -> String {
-    let canonicalPubkey = PublicKey(hex: pubkeyHex)?.hex ?? pubkeyHex
+  static func contactName(for pubkeyHex: String, contacts: [ContactEntity]) -> String {
+    let canonicalPubkey = NostrValueNormalizer.normalizedPubkeyHex(pubkeyHex) ?? pubkeyHex
     for contact in contacts where contact.targetPubkey == canonicalPubkey {
       return contact.displayName
     }
-    if let npub = PublicKey(hex: pubkeyHex)?.npub {
+    if let normalizedPubkey = NostrValueNormalizer.normalizedPubkeyHex(pubkeyHex),
+      let npub = PublicKey(hex: normalizedPubkey)?.npub
+    {
       return npub
     }
     return String(pubkeyHex.prefix(12))

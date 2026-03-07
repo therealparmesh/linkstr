@@ -312,23 +312,26 @@ struct PostDetailView: View {
   @State private var isDeletingPost = false
 
   private var scopedContacts: [ContactEntity] {
-    session.scopedContacts(from: contacts)
+    OwnerScopedCollections.contacts(contacts, ownerPubkey: session.identityService.pubkeyHex)
   }
 
   private var scopedReactions: [SessionReactionEntity] {
-    session.scopedReactions(from: allReactions)
-      .filter {
-        $0.sessionID == post.conversationID
-          && $0.postID == post.rootID
-          && $0.isActive
-      }
+    OwnerScopedCollections.reactions(
+      allReactions,
+      ownerPubkey: session.identityService.pubkeyHex
+    )
+    .filter {
+      $0.sessionID == post.conversationID
+        && $0.postID == post.rootID
+        && $0.isActive
+    }
   }
 
   private var postSenderLabel: String {
     if isOutgoing(post) {
       return "you"
     }
-    return session.contactName(for: post.senderPubkey, contacts: scopedContacts)
+    return ContactStore.contactName(for: post.senderPubkey, contacts: scopedContacts)
   }
 
   private var reactionSummaries: [ReactionSummary] {
@@ -346,7 +349,7 @@ struct PostDetailView: View {
       if let myPubkey, reaction.senderMatches(myPubkey) {
         return "you"
       }
-      return session.contactName(for: reaction.senderPubkey, contacts: scopedContacts)
+      return ContactStore.contactName(for: reaction.senderPubkey, contacts: scopedContacts)
     }
 
     return

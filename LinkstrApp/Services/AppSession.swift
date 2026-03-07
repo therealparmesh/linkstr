@@ -47,6 +47,19 @@ final class AppSession: ObservableObject {
     let publishedTransportEventIDs: [String]
   }
 
+  struct TestingOverrides {
+    var disableNostrStartup: Bool?
+    var hasConnectedRelays: (() -> Bool)?
+    var publishFollowList: (([String]) async throws -> String)?
+    var publishRelayEvent: ((NostrEvent) async throws -> String)?
+    var sendPayload: ((LinkstrPayload, [String]) async throws -> SentPayloadReceipt)?
+    var skipNostrNetworkStartup = false
+  }
+
+  private enum MutationPreparationError: Error {
+    case relayBlocked
+  }
+
   let identityService: IdentityService
   let nostrService: NostrDMService
   let modelContext: ModelContext
@@ -54,13 +67,7 @@ final class AppSession: ObservableObject {
   private let relayStore: RelayStore
   private let messageStore: SessionMessageStore
   private let accountStateStore: AccountStateStore
-  private let testHasConnectedRelaysOverride: (() -> Bool)?
-  private let testDisableNostrStartupOverride: Bool?
-  private let testFollowListPublishOverride: (([String]) async throws -> String)?
-  private let testRelayEventPublishOverride: ((NostrEvent) async throws -> String)?
-  private let testRelaySendOverride:
-    ((LinkstrPayload, [String]) async throws -> SentPayloadReceipt)?
-  private let testSkipNostrNetworkStartup: Bool
+  private let testingOverrides: TestingOverrides
   private let noEnabledRelaysMessage =
     "no relays are enabled. enable at least one relay in settings."
   private let relayOfflineMessage = "you're offline. waiting for a relay connection."
@@ -92,20 +99,10 @@ final class AppSession: ObservableObject {
 
   init(
     modelContext: ModelContext,
-    testDisableNostrStartupOverride: Bool? = nil,
-    testHasConnectedRelaysOverride: (() -> Bool)? = nil,
-    testFollowListPublishOverride: (([String]) async throws -> String)? = nil,
-    testRelayEventPublishOverride: ((NostrEvent) async throws -> String)? = nil,
-    testRelaySendOverride: ((LinkstrPayload, [String]) async throws -> SentPayloadReceipt)? = nil,
-    testSkipNostrNetworkStartup: Bool = false
+    testingOverrides: TestingOverrides = .init()
   ) {
     self.modelContext = modelContext
-    self.testDisableNostrStartupOverride = testDisableNostrStartupOverride
-    self.testHasConnectedRelaysOverride = testHasConnectedRelaysOverride
-    self.testFollowListPublishOverride = testFollowListPublishOverride
-    self.testRelayEventPublishOverride = testRelayEventPublishOverride
-    self.testRelaySendOverride = testRelaySendOverride
-    self.testSkipNostrNetworkStartup = testSkipNostrNetworkStartup
+    self.testingOverrides = testingOverrides
     self.identityService = IdentityService()
     self.nostrService = NostrDMService()
     self.contactStore = ContactStore(modelContext: modelContext)
@@ -205,8 +202,8 @@ final class AppSession: ObservableObject {
   }
 
   private func hasConnectedRelays() -> Bool {
-    if let testHasConnectedRelaysOverride {
-      return testHasConnectedRelaysOverride()
+    if let hasConnectedRelaysOverride = testingOverrides.hasConnectedRelays {
+      return hasConnectedRelaysOverride()
     }
     return nostrService.hasConnectedRelays()
   }
@@ -234,39 +231,6 @@ final class AppSession: ObservableObject {
       relay.isEnabled
         && (relayStatus(for: relay) == .connected || relayStatus(for: relay) == .readOnly)
     }
-  }
-
-  func scopedContacts(from contacts: [ContactEntity]) -> [ContactEntity] {
-    guard let ownerPubkey = identityService.pubkeyHex else { return [] }
-    return
-      contacts
-      .filter { $0.ownerPubkey == ownerPubkey }
-      .sorted {
-        $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
-      }
-  }
-
-  func scopedMessages(from messages: [SessionMessageEntity]) -> [SessionMessageEntity] {
-    guard let ownerPubkey = identityService.pubkeyHex else { return [] }
-    return messages.filter { $0.ownerPubkey == ownerPubkey }
-  }
-
-  func scopedSessions(from sessions: [SessionEntity]) -> [SessionEntity] {
-    guard let ownerPubkey = identityService.pubkeyHex else { return [] }
-    return
-      sessions
-      .filter { $0.ownerPubkey == ownerPubkey }
-      .sorted { $0.updatedAt > $1.updatedAt }
-  }
-
-  func scopedSessionMembers(from members: [SessionMemberEntity]) -> [SessionMemberEntity] {
-    guard let ownerPubkey = identityService.pubkeyHex else { return [] }
-    return members.filter { $0.ownerPubkey == ownerPubkey }
-  }
-
-  func scopedReactions(from reactions: [SessionReactionEntity]) -> [SessionReactionEntity] {
-    guard let ownerPubkey = identityService.pubkeyHex else { return [] }
-    return reactions.filter { $0.ownerPubkey == ownerPubkey }
   }
 
   func canManageMembers(for session: SessionEntity) -> Bool {
@@ -520,13 +484,33 @@ final class AppSession: ObservableObject {
   }
 
   private func shouldDisableNostrStartupForCurrentProcess() -> Bool {
-    if let testDisableNostrStartupOverride {
-      return testDisableNostrStartupOverride
+    if let disableNostrStartupOverride = testingOverrides.disableNostrStartup {
+      return disableNostrStartupOverride
     }
 
     let isRunningTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     if !isRunningTests { return false }
     return !isEnvironmentFlagEnabled("LINKSTR_ENABLE_NOSTR_IN_TESTS")
+  }
+
+  private func isRelayPublicationEnabledForCurrentProcess() -> Bool {
+    !shouldDisableNostrStartupForCurrentProcess()
+  }
+
+  private func prepareRelayMutationIfNeeded(
+    timeoutSeconds: TimeInterval,
+    pollIntervalSeconds: TimeInterval
+  ) async throws {
+    guard isRelayPublicationEnabledForCurrentProcess() else { return }
+    guard
+      await awaitRelayReadyForSend(
+        timeoutSeconds: timeoutSeconds,
+        pollIntervalSeconds: pollIntervalSeconds
+      )
+    else {
+      throw MutationPreparationError.relayBlocked
+    }
+    startNostrIfPossible()
   }
 
   private func shouldFetchMetadataForCurrentProcess() -> Bool {
@@ -590,18 +574,12 @@ final class AppSession: ObservableObject {
       return false
     }
 
-    if shouldDisableNostrStartupForCurrentProcess() == false {
-      guard
-        await awaitRelayReadyForSend(
-          timeoutSeconds: timeoutSeconds,
-          pollIntervalSeconds: pollIntervalSeconds
-        )
-      else {
-        return false
-      }
-      startNostrIfPossible()
-
-      do {
+    do {
+      try await prepareRelayMutationIfNeeded(
+        timeoutSeconds: timeoutSeconds,
+        pollIntervalSeconds: pollIntervalSeconds
+      )
+      if isRelayPublicationEnabledForCurrentProcess() {
         _ = try await publishFollowListAwaitingRelayAcceptance(followedPubkeyHexes: [])
         _ = try await publishEventAwaitingRelayAcceptance(
           makeVanishEvent(
@@ -609,10 +587,12 @@ final class AppSession: ObservableObject {
             signedBy: keypair
           )
         )
-      } catch {
-        report(error: error)
-        return false
       }
+    } catch MutationPreparationError.relayBlocked {
+      return false
+    } catch {
+      report(error: error)
+      return false
     }
 
     resetRuntimeSessionState()
@@ -674,7 +654,7 @@ final class AppSession: ObservableObject {
       nostrService.stop()
     }
 
-    if isRunningTests, testSkipNostrNetworkStartup {
+    if isRunningTests, testingOverrides.skipNostrNetworkStartup {
       relayRuntimeStatusByURL.removeAll()
       pendingRelayPersistenceByURL.removeAll()
       relayPersistenceFlushTask?.cancel()
@@ -770,18 +750,20 @@ final class AppSession: ObservableObject {
       return false
     }
 
-    guard
-      await awaitRelayReadyForSend(
+    guard let keypair = identityService.keypair, let ownerPubkey = identityService.pubkeyHex else {
+      composeError = "you're signed out. sign in to create sessions."
+      return false
+    }
+
+    do {
+      try await prepareRelayMutationIfNeeded(
         timeoutSeconds: timeoutSeconds,
         pollIntervalSeconds: pollIntervalSeconds
       )
-    else {
+    } catch MutationPreparationError.relayBlocked {
       return false
-    }
-    startNostrIfPossible()
-
-    guard let keypair = identityService.keypair, let ownerPubkey = identityService.pubkeyHex else {
-      composeError = "you're signed out. sign in to create sessions."
+    } catch {
+      report(error: error)
       return false
     }
 
@@ -805,7 +787,7 @@ final class AppSession: ObservableObject {
 
     do {
       let membershipEventID: String
-      if shouldDisableNostrStartupForCurrentProcess() == false {
+      if isRelayPublicationEnabledForCurrentProcess() {
         membershipEventID = try await sendPayloadAwaitingRelayAcceptance(
           payload: payload,
           recipientPubkeyHexes: members
@@ -855,15 +837,17 @@ final class AppSession: ObservableObject {
       return false
     }
 
-    guard
-      await awaitRelayReadyForSend(
+    do {
+      try await prepareRelayMutationIfNeeded(
         timeoutSeconds: timeoutSeconds,
         pollIntervalSeconds: pollIntervalSeconds
       )
-    else {
+    } catch MutationPreparationError.relayBlocked {
+      return false
+    } catch {
+      report(error: error)
       return false
     }
-    startNostrIfPossible()
 
     let members = normalizedMemberPubkeys(
       fromNPubs: memberNPubs,
@@ -890,7 +874,7 @@ final class AppSession: ObservableObject {
       let updateRecipients = mergedPubkeys(priorActiveMembers, members)
 
       let membershipEventID: String
-      if shouldDisableNostrStartupForCurrentProcess() == false {
+      if isRelayPublicationEnabledForCurrentProcess() {
         membershipEventID = try await sendPayloadAwaitingRelayAcceptance(
           payload: payload,
           recipientPubkeyHexes: updateRecipients
@@ -931,28 +915,30 @@ final class AppSession: ObservableObject {
     timeoutSeconds: TimeInterval = 12,
     pollIntervalSeconds: TimeInterval = 0.35
   ) async -> Bool {
-    guard
-      await awaitRelayReadyForSend(
+    guard let draft = makeRootPostDraft(url: url, note: note, sessionID: session.sessionID) else {
+      return false
+    }
+
+    do {
+      try await prepareRelayMutationIfNeeded(
         timeoutSeconds: timeoutSeconds,
         pollIntervalSeconds: pollIntervalSeconds
       )
-    else {
+    } catch MutationPreparationError.relayBlocked {
+      return false
+    } catch {
+      report(error: error)
       return false
     }
-    startNostrIfPossible()
 
-    if shouldDisableNostrStartupForCurrentProcess() {
-      return createPostInSession(url: url, note: note, sessionID: session.sessionID)
+    if !isRelayPublicationEnabledForCurrentProcess() {
+      return createPostLocally(draft)
     }
-    return await createPostAwaitingRelayDelivery(url: url, note: note, sessionID: session.sessionID)
+    return await createPostAwaitingRelayDelivery(draft)
   }
 
   @discardableResult
-  private func createPostInSession(url: String, note: String?, sessionID: String) -> Bool {
-    guard let draft = makeRootPostDraft(url: url, note: note, sessionID: sessionID) else {
-      return false
-    }
-
+  private func createPostLocally(_ draft: RootPostDraft) -> Bool {
     do {
       // Test-only local send path when relay startup is disabled in-process.
       let eventID = makeLocalEventID()
@@ -972,23 +958,25 @@ final class AppSession: ObservableObject {
     timeoutSeconds: TimeInterval = 12,
     pollIntervalSeconds: TimeInterval = 0.35
   ) async -> Bool {
-    guard
-      await awaitRelayReadyForSend(
-        timeoutSeconds: timeoutSeconds,
-        pollIntervalSeconds: pollIntervalSeconds
-      )
-    else {
-      return false
-    }
-    startNostrIfPossible()
-
     guard let draft = makeReactionDraft(emoji: emoji, post: post) else {
       return false
     }
 
     do {
+      try await prepareRelayMutationIfNeeded(
+        timeoutSeconds: timeoutSeconds,
+        pollIntervalSeconds: pollIntervalSeconds
+      )
+    } catch MutationPreparationError.relayBlocked {
+      return false
+    } catch {
+      report(error: error)
+      return false
+    }
+
+    do {
       let reactionEventID: String
-      if shouldDisableNostrStartupForCurrentProcess() == false {
+      if isRelayPublicationEnabledForCurrentProcess() {
         reactionEventID = try await sendPayloadAwaitingRelayAcceptance(
           payload: draft.payload,
           recipientPubkeyHexes: draft.recipientPubkeys
@@ -1015,7 +1003,7 @@ final class AppSession: ObservableObject {
       return false
     }
 
-    if shouldDisableNostrStartupForCurrentProcess() {
+    if !isRelayPublicationEnabledForCurrentProcess() {
       do {
         try persistRootDeletion(draft, eventID: makeLocalEventID())
         composeError = nil
@@ -1026,15 +1014,17 @@ final class AppSession: ObservableObject {
       }
     }
 
-    guard
-      await awaitRelayReadyForSend(
+    do {
+      try await prepareRelayMutationIfNeeded(
         timeoutSeconds: timeoutSeconds,
         pollIntervalSeconds: pollIntervalSeconds
       )
-    else {
+    } catch MutationPreparationError.relayBlocked {
+      return false
+    } catch {
+      report(error: error)
       return false
     }
-    startNostrIfPossible()
 
     guard let keypair = identityService.keypair else {
       composeError = "you're signed out. sign in to manage this post."
@@ -1083,15 +1073,7 @@ final class AppSession: ObservableObject {
     }
   }
 
-  private func createPostAwaitingRelayDelivery(
-    url: String,
-    note: String?,
-    sessionID: String
-  ) async -> Bool {
-    guard let draft = makeRootPostDraft(url: url, note: note, sessionID: sessionID) else {
-      return false
-    }
-
+  private func createPostAwaitingRelayDelivery(_ draft: RootPostDraft) async -> Bool {
     do {
       let receipt = try await sendPayloadAwaitingRelayAcceptance(
         payload: draft.payload,
@@ -1263,7 +1245,6 @@ final class AppSession: ObservableObject {
       rootID: receipt.rumorEventID,
       kind: .root,
       senderPubkey: draft.senderPubkey,
-      receiverPubkey: draft.ownerPubkey,
       url: draft.normalizedURL,
       note: draft.payload.note,
       timestamp: .now,
@@ -1310,8 +1291,8 @@ final class AppSession: ObservableObject {
   private func publishFollowListAwaitingRelayAcceptance(followedPubkeyHexes: [String]) async throws
     -> String
   {
-    if let testFollowListPublishOverride {
-      return try await testFollowListPublishOverride(followedPubkeyHexes)
+    if let publishFollowListOverride = testingOverrides.publishFollowList {
+      return try await publishFollowListOverride(followedPubkeyHexes)
     }
     return try await nostrService.publishFollowListAwaitingRelayAcceptance(
       followedPubkeyHexes: followedPubkeyHexes
@@ -1319,8 +1300,8 @@ final class AppSession: ObservableObject {
   }
 
   private func publishEventAwaitingRelayAcceptance(_ event: NostrEvent) async throws -> String {
-    if let testRelayEventPublishOverride {
-      return try await testRelayEventPublishOverride(event)
+    if let publishRelayEventOverride = testingOverrides.publishRelayEvent {
+      return try await publishRelayEventOverride(event)
     }
     return try await nostrService.publishEventAwaitingRelayAcceptance(event)
   }
@@ -1329,11 +1310,11 @@ final class AppSession: ObservableObject {
     payload: LinkstrPayload,
     recipientPubkeyHexes: [String]
   ) async throws -> SentPayloadReceipt {
-    if let testRelaySendOverride {
+    if let sendPayloadOverride = testingOverrides.sendPayload {
       guard !recipientPubkeyHexes.isEmpty else {
         throw NostrServiceError.invalidPubkey
       }
-      return try await testRelaySendOverride(payload, recipientPubkeyHexes)
+      return try await sendPayloadOverride(payload, recipientPubkeyHexes)
     }
     return try await nostrService.sendAwaitingRelayAcceptance(
       payload: payload,
@@ -1349,25 +1330,18 @@ final class AppSession: ObservableObject {
     -> [String]
   {
     var members: [String] = []
-    var seen = Set<String>()
-
-    func appendMember(_ pubkeyHex: String) {
-      guard PublicKey(hex: pubkeyHex) != nil else { return }
-      guard !seen.contains(pubkeyHex) else { return }
-      seen.insert(pubkeyHex)
-      members.append(pubkeyHex)
+    if let normalizedMyPubkey = NostrValueNormalizer.normalizedPubkeyHex(myPubkey) {
+      members.append(normalizedMyPubkey)
     }
-
-    appendMember(myPubkey)
     for npub in memberNPubs {
-      guard let member = PublicKey(npub: npub.trimmingCharacters(in: .whitespacesAndNewlines))
-      else {
-        continue
-      }
-      appendMember(member.hex)
+      guard
+        let memberPubkey = NostrValueNormalizer.normalizedPubkeyHex(
+          fromAnyPublicKeyString: npub)
+      else { continue }
+      members.append(memberPubkey)
     }
 
-    return members
+    return NostrValueNormalizer.dedupedNormalizedPubkeyHexes(members)
   }
 
   private func activeMemberPubkeys(sessionID: String, ownerPubkey: String) throws -> [String] {
@@ -1376,7 +1350,7 @@ final class AppSession: ObservableObject {
       ownerPubkey: ownerPubkey,
       activeOnly: true
     ).map(\.memberPubkey)
-    return dedupedValidPubkeys(members)
+    return NostrValueNormalizer.dedupedNormalizedPubkeyHexes(members)
   }
 
   private func resolveOutboundRecipients(
@@ -1422,7 +1396,8 @@ final class AppSession: ObservableObject {
         ownerPubkey: ownerPubkey,
         activeOnly: false
       ).map(\.memberPubkey)
-      let recipientPubkeys = dedupedValidPubkeys(knownMemberPubkeys + [senderPubkey])
+      let recipientPubkeys = NostrValueNormalizer.dedupedNormalizedPubkeyHexes(
+        knownMemberPubkeys + [senderPubkey])
       guard recipientPubkeys.contains(senderPubkey) else {
         composeError = "this post is no longer associated with a valid session membership set."
         return nil
@@ -1434,23 +1409,8 @@ final class AppSession: ObservableObject {
     }
   }
 
-  private func dedupedValidPubkeys(_ pubkeyHexes: [String]) -> [String] {
-    var deduped: [String] = []
-    var seen = Set<String>()
-
-    func appendIfValid(_ pubkeyHex: String) {
-      guard PublicKey(hex: pubkeyHex) != nil else { return }
-      guard !seen.contains(pubkeyHex) else { return }
-      seen.insert(pubkeyHex)
-      deduped.append(pubkeyHex)
-    }
-
-    pubkeyHexes.forEach { appendIfValid($0) }
-    return deduped
-  }
-
   private func mergedPubkeys(_ first: [String], _ second: [String]) -> [String] {
-    dedupedValidPubkeys(first + second)
+    NostrValueNormalizer.dedupedNormalizedPubkeyHexes(first + second)
   }
 
   private func makeRootPostDeletionEvent(
@@ -1460,9 +1420,7 @@ final class AppSession: ObservableObject {
     -> NostrEvent
   {
     let normalizedEventIDs =
-      publishedTransportEventIDs
-      .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-      .filter { !$0.isEmpty }
+      publishedTransportEventIDs.compactMap(NostrValueNormalizer.normalizedEventID)
     guard !normalizedEventIDs.isEmpty else {
       throw LinkstrPayloadError.invalidRootID
     }
@@ -1520,6 +1478,31 @@ final class AppSession: ObservableObject {
     return "session"
   }
 
+  private func updatedFollowedPubkeys(
+    ownerPubkey: String,
+    mutating mutation: (inout Set<String>) -> Void
+  ) throws -> [String] {
+    var followedPubkeys = Set(try contactStore.followedPubkeys(ownerPubkey: ownerPubkey))
+    mutation(&followedPubkeys)
+    return followedPubkeys.sorted()
+  }
+
+  private func persistLocalFollowedPubkeys(
+    ownerPubkey: String,
+    followedPubkeys: [String],
+    aliasMutation: (() throws -> Void)? = nil
+  ) throws {
+    try contactStore.replaceFollowedPubkeys(
+      ownerPubkey: ownerPubkey,
+      pubkeyHexes: followedPubkeys
+    )
+    try aliasMutation?()
+    let appliedAt = Date.now
+    latestAppliedFollowListCreatedAt = appliedAt
+    latestAppliedFollowListEventID = nil
+    persistFollowListState(ownerPubkey: ownerPubkey, createdAt: appliedAt, eventID: nil)
+  }
+
   @discardableResult
   func addContact(
     npub: String,
@@ -1548,51 +1531,45 @@ final class AppSession: ObservableObject {
 
     let nextFollowedPubkeys: [String]
     do {
-      var set = Set(try contactStore.followedPubkeys(ownerPubkey: ownerPubkey))
-      set.insert(targetPubkey)
-      nextFollowedPubkeys = Array(set).sorted()
+      nextFollowedPubkeys = try updatedFollowedPubkeys(ownerPubkey: ownerPubkey) {
+        followedPubkeys in
+        followedPubkeys.insert(targetPubkey)
+      }
     } catch {
       report(error: error)
       return false
     }
 
-    if shouldDisableNostrStartupForCurrentProcess() == false {
-      guard
-        await awaitRelayReadyForSend(
-          timeoutSeconds: timeoutSeconds,
-          pollIntervalSeconds: pollIntervalSeconds
-        )
-      else {
-        return false
-      }
-      startNostrIfPossible()
-
-      do {
+    do {
+      try await prepareRelayMutationIfNeeded(
+        timeoutSeconds: timeoutSeconds,
+        pollIntervalSeconds: pollIntervalSeconds
+      )
+      if isRelayPublicationEnabledForCurrentProcess() {
         _ = try await publishFollowListAwaitingRelayAcceptance(
           followedPubkeyHexes: nextFollowedPubkeys
         )
-      } catch {
-        report(error: error)
-        return false
       }
+    } catch MutationPreparationError.relayBlocked {
+      return false
+    } catch {
+      report(error: error)
+      return false
     }
 
     do {
-      try contactStore.replaceFollowedPubkeys(
+      try persistLocalFollowedPubkeys(
         ownerPubkey: ownerPubkey,
-        pubkeyHexes: nextFollowedPubkeys
-      )
-      if let normalizedAlias {
-        try contactStore.updateAlias(
-          ownerPubkey: ownerPubkey,
-          targetPubkey: targetPubkey,
-          alias: normalizedAlias
-        )
+        followedPubkeys: nextFollowedPubkeys
+      ) { [self] in
+        if let normalizedAlias {
+          try contactStore.updateAlias(
+            ownerPubkey: ownerPubkey,
+            targetPubkey: targetPubkey,
+            alias: normalizedAlias
+          )
+        }
       }
-      let appliedAt = Date.now
-      latestAppliedFollowListCreatedAt = appliedAt
-      latestAppliedFollowListEventID = nil
-      persistFollowListState(ownerPubkey: ownerPubkey, createdAt: appliedAt, eventID: nil)
       composeError = nil
       return true
     } catch {
@@ -1636,44 +1613,37 @@ final class AppSession: ObservableObject {
 
     let nextFollowedPubkeys: [String]
     do {
-      var set = Set(try contactStore.followedPubkeys(ownerPubkey: ownerPubkey))
-      set.remove(contact.targetPubkey)
-      nextFollowedPubkeys = Array(set).sorted()
+      nextFollowedPubkeys = try updatedFollowedPubkeys(ownerPubkey: ownerPubkey) {
+        followedPubkeys in
+        followedPubkeys.remove(contact.targetPubkey)
+      }
     } catch {
       report(error: error)
       return false
     }
 
-    if shouldDisableNostrStartupForCurrentProcess() == false {
-      guard
-        await awaitRelayReadyForSend(
-          timeoutSeconds: timeoutSeconds,
-          pollIntervalSeconds: pollIntervalSeconds
-        )
-      else {
-        return false
-      }
-      startNostrIfPossible()
-
-      do {
+    do {
+      try await prepareRelayMutationIfNeeded(
+        timeoutSeconds: timeoutSeconds,
+        pollIntervalSeconds: pollIntervalSeconds
+      )
+      if isRelayPublicationEnabledForCurrentProcess() {
         _ = try await publishFollowListAwaitingRelayAcceptance(
           followedPubkeyHexes: nextFollowedPubkeys
         )
-      } catch {
-        report(error: error)
-        return false
       }
+    } catch MutationPreparationError.relayBlocked {
+      return false
+    } catch {
+      report(error: error)
+      return false
     }
 
     do {
-      try contactStore.replaceFollowedPubkeys(
+      try persistLocalFollowedPubkeys(
         ownerPubkey: ownerPubkey,
-        pubkeyHexes: nextFollowedPubkeys
+        followedPubkeys: nextFollowedPubkeys
       )
-      let appliedAt = Date.now
-      latestAppliedFollowListCreatedAt = appliedAt
-      latestAppliedFollowListEventID = nil
-      persistFollowListState(ownerPubkey: ownerPubkey, createdAt: appliedAt, eventID: nil)
       composeError = nil
       return true
     } catch {
@@ -1787,26 +1757,17 @@ final class AppSession: ObservableObject {
     }
   }
 
-  func contactName(for pubkeyHex: String, contacts: [ContactEntity]) -> String {
-    contactStore.contactName(for: pubkeyHex, contacts: contacts)
-  }
-
   private func persistIncomingFollowList(_ incoming: ReceivedFollowList) {
     guard let ownerPubkey = identityService.pubkeyHex else { return }
     guard incoming.authorPubkey == ownerPubkey else { return }
 
-    if let latestCreatedAt = latestAppliedFollowListCreatedAt {
-      if incoming.createdAt < latestCreatedAt {
-        return
-      }
-      if incoming.createdAt == latestCreatedAt {
-        let incomingEventID = normalizedEventIDToken(incoming.eventID)
-        let latestEventID = normalizedEventIDToken(latestAppliedFollowListEventID)
-        guard !incomingEventID.isEmpty else { return }
-        if !latestEventID.isEmpty, incomingEventID <= latestEventID {
-          return
-        }
-      }
+    if !NostrValueNormalizer.shouldApplyStateUpdate(
+      currentUpdatedAt: latestAppliedFollowListCreatedAt,
+      currentEventID: latestAppliedFollowListEventID,
+      incomingUpdatedAt: incoming.createdAt,
+      incomingEventID: incoming.eventID
+    ) {
+      return
     }
 
     do {
@@ -1815,8 +1776,7 @@ final class AppSession: ObservableObject {
         pubkeyHexes: incoming.followedPubkeys
       )
       latestAppliedFollowListCreatedAt = incoming.createdAt
-      let incomingEventID = normalizedEventIDToken(incoming.eventID)
-      latestAppliedFollowListEventID = incomingEventID.isEmpty ? nil : incomingEventID
+      latestAppliedFollowListEventID = NostrValueNormalizer.normalizedEventID(incoming.eventID)
       persistFollowListState(
         ownerPubkey: ownerPubkey,
         createdAt: incoming.createdAt,
@@ -2119,7 +2079,6 @@ final class AppSession: ObservableObject {
         rootID: incoming.eventID,
         kind: .root,
         senderPubkey: incoming.senderPubkey,
-        receiverPubkey: incoming.receiverPubkey,
         url: normalizedURL,
         note: incoming.payload.note,
         timestamp: incoming.createdAt,
@@ -2208,7 +2167,7 @@ final class AppSession: ObservableObject {
     }
 
     let contacts = (try? contactStore.fetchContacts(ownerPubkey: myPubkey)) ?? []
-    let senderName = contactName(for: message.senderPubkey, contacts: contacts)
+    let senderName = ContactStore.contactName(for: message.senderPubkey, contacts: contacts)
     LocalNotificationService.shared.postIncomingPostNotification(
       senderName: senderName,
       url: message.url,
@@ -2230,7 +2189,7 @@ final class AppSession: ObservableObject {
     }
 
     let contacts = (try? contactStore.fetchContacts(ownerPubkey: myPubkey)) ?? []
-    let senderName = contactName(for: senderPubkey, contacts: contacts)
+    let senderName = ContactStore.contactName(for: senderPubkey, contacts: contacts)
     LocalNotificationService.shared.postIncomingReactionNotification(
       senderName: senderName,
       emoji: emoji,
@@ -2362,11 +2321,6 @@ final class AppSession: ObservableObject {
     return trimmed.isEmpty ? nil : trimmed
   }
 
-  private func normalizedEventIDToken(_ eventID: String?) -> String {
-    guard let eventID else { return "" }
-    return eventID.trimmingCharacters(in: .whitespacesAndNewlines)
-  }
-
   private func resetFollowListStateInMemory() {
     latestAppliedFollowListCreatedAt = nil
     latestAppliedFollowListEventID = nil
@@ -2376,20 +2330,18 @@ final class AppSession: ObservableObject {
     do {
       let watermark = try accountStateStore.followListWatermark(ownerPubkey: ownerPubkey)
       latestAppliedFollowListCreatedAt = watermark.createdAt
-      let eventID = normalizedEventIDToken(watermark.eventID)
-      latestAppliedFollowListEventID = eventID.isEmpty ? nil : eventID
+      latestAppliedFollowListEventID = NostrValueNormalizer.normalizedEventID(watermark.eventID)
     } catch {
       resetFollowListStateInMemory()
     }
   }
 
   private func persistFollowListState(ownerPubkey: String, createdAt: Date, eventID: String?) {
-    let normalizedEventID = normalizedEventIDToken(eventID)
     do {
       try accountStateStore.setFollowListWatermark(
         ownerPubkey: ownerPubkey,
         createdAt: createdAt,
-        eventID: normalizedEventID.isEmpty ? nil : normalizedEventID
+        eventID: NostrValueNormalizer.normalizedEventID(eventID)
       )
     } catch {
       report(error: error)
@@ -2483,7 +2435,6 @@ final class AppSession: ObservableObject {
           rootID: sampleEventID,
           kind: .root,
           senderPubkey: myPubkey,
-          receiverPubkey: peerPubkey,
           url: sampleURL,
           note: "seeded simulator post",
           timestamp: .now,

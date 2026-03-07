@@ -29,8 +29,9 @@ struct ConversationsView: View {
   private var allMessages: [SessionMessageEntity]
 
   private var viewState: ConversationsViewState {
-    let scopedSessions = session.scopedSessions(from: allSessions)
-    let scopedMessages = session.scopedMessages(from: allMessages)
+    let ownerPubkey = session.identityService.pubkeyHex
+    let scopedSessions = OwnerScopedCollections.sessions(allSessions, ownerPubkey: ownerPubkey)
+    let scopedMessages = OwnerScopedCollections.messages(allMessages, ownerPubkey: ownerPubkey)
     let summaries = makeSummaries(sessions: scopedSessions, messages: scopedMessages)
 
     var visibleSummaries: [SessionSummary] = []
@@ -280,20 +281,20 @@ struct SessionPostsView: View {
   @State private var isPresentingMembers = false
 
   private var scopedMessages: [SessionMessageEntity] {
-    session.scopedMessages(from: allMessages)
+    OwnerScopedCollections.messages(allMessages, ownerPubkey: session.identityService.pubkeyHex)
   }
 
   private var scopedContacts: [ContactEntity] {
-    session.scopedContacts(from: allContacts)
+    OwnerScopedCollections.contacts(allContacts, ownerPubkey: session.identityService.pubkeyHex)
   }
 
   private var scopedMembers: [SessionMemberEntity] {
-    session.scopedSessionMembers(from: allMembers)
+    OwnerScopedCollections.members(allMembers, ownerPubkey: session.identityService.pubkeyHex)
       .filter { $0.sessionID == sessionEntity.sessionID && $0.isActive }
   }
 
   private var scopedReactions: [SessionReactionEntity] {
-    session.scopedReactions(from: allReactions)
+    OwnerScopedCollections.reactions(allReactions, ownerPubkey: session.identityService.pubkeyHex)
       .filter { $0.sessionID == sessionEntity.sessionID && $0.isActive }
   }
 
@@ -416,7 +417,7 @@ struct SessionPostsView: View {
     if isOutgoing(message) {
       return "you"
     }
-    return session.contactName(for: message.senderPubkey, contacts: scopedContacts)
+    return ContactStore.contactName(for: message.senderPubkey, contacts: scopedContacts)
   }
 
   private func hasUnreadIncomingRootPost(_ post: SessionMessageEntity) -> Bool {

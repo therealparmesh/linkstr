@@ -74,7 +74,7 @@ final class SessionMessageEntity {
     rootID: String,
     kind: SessionMessageKind,
     senderPubkey: String,
-    receiverPubkey: String,
+    receiverPubkey: String? = nil,
     url: String?,
     note: String?,
     timestamp: Date,
@@ -88,18 +88,24 @@ final class SessionMessageEntity {
     publishedTransportEventIDs: [String] = []
   ) throws {
     let crypto = LocalDataCrypto.shared
+    let normalizedSenderPubkey =
+      NostrValueNormalizer.normalizedPubkeyHex(senderPubkey)
+      ?? senderPubkey.trimmingCharacters(in: .whitespacesAndNewlines)
+    let resolvedReceiverPubkey =
+      NostrValueNormalizer.normalizedPubkeyHex(receiverPubkey ?? ownerPubkey)
+      ?? (receiverPubkey ?? ownerPubkey).trimmingCharacters(in: .whitespacesAndNewlines)
     self.storageID = Self.storageID(ownerPubkey: ownerPubkey, eventID: eventID)
     self.eventID = eventID
     self.ownerPubkey = ownerPubkey
     self.conversationID = conversationID
     self.rootID = rootID
     self.kindRaw = kind.rawValue
-    self.senderPubkeyHash = crypto.digestHex(senderPubkey)
-    self.receiverPubkeyHash = crypto.digestHex(receiverPubkey)
+    self.senderPubkeyHash = crypto.digestHex(normalizedSenderPubkey)
+    self.receiverPubkeyHash = crypto.digestHex(resolvedReceiverPubkey)
     self.encryptedSenderPubkey =
-      try crypto.encryptString(senderPubkey, ownerPubkey: ownerPubkey) ?? ""
+      try crypto.encryptString(normalizedSenderPubkey, ownerPubkey: ownerPubkey) ?? ""
     self.encryptedReceiverPubkey =
-      try crypto.encryptString(receiverPubkey, ownerPubkey: ownerPubkey) ?? ""
+      try crypto.encryptString(resolvedReceiverPubkey, ownerPubkey: ownerPubkey) ?? ""
     self.encryptedURL = try crypto.encryptString(url, ownerPubkey: ownerPubkey)
     self.encryptedNote = try crypto.encryptString(note, ownerPubkey: ownerPubkey)
     self.timestamp = timestamp
@@ -150,10 +156,6 @@ final class SessionMessageEntity {
     guard nextStorage != publishedTransportEventIDsStorage else { return false }
     publishedTransportEventIDsStorage = nextStorage
     return true
-  }
-
-  func setPublishedTransportEventIDs(_ eventIDs: [String]) {
-    publishedTransportEventIDsStorage = Self.transportEventIDStorageValue(from: eventIDs)
   }
 
   private static func transportEventIDStorageValue(from eventIDs: [String]) -> String? {

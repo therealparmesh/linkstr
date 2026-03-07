@@ -195,6 +195,7 @@
   - `session_create`
   - `session_members`
   - `root`
+  - `root_delete`
   - `reaction`
 - Ingest processing rules:
   - Ignore undecodable/unvalidated payloads.

@@ -9,7 +9,7 @@ struct ContactsView: View {
   private var contacts: [ContactEntity]
 
   private var scopedContacts: [ContactEntity] {
-    session.scopedContacts(from: contacts)
+    OwnerScopedCollections.contacts(contacts, ownerPubkey: session.identityService.pubkeyHex)
   }
 
   var body: some View {
