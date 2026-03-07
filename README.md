@@ -43,6 +43,7 @@
 - Settings and Share expose current `npub`.
 - Settings sections are collapsed by default and expand on demand.
 - `nsec` is hidden by default and only revealed on explicit action.
+- Settings includes `Delete Account` inside Identity with a two-step destructive confirmation flow.
 - `Log Out (Keep Local Data)` clears active identity only.
 - `Log Out and Clear Local Data` clears identity and deletes account-scoped local data:
   - Contacts.
@@ -53,6 +54,11 @@
   - Reactions.
   - Cached media references.
   - Local encryption key material for that owner scope.
+- `Delete Account` clears identity and the same account-scoped local data as `Log Out and Clear Local Data`.
+- When relays are available, `Delete Account` also:
+  - Publishes an empty follow list (`kind:3`) before local deletion.
+  - Publishes a Nostr `Request to Vanish` (`kind:62`) to enabled relays.
+- `Delete Account` is send-gated like other relay-backed mutations and does not proceed while relay confirmation is unavailable.
 
 ### Sessions
 
@@ -119,19 +125,23 @@
 - Posting recipient resolution uses only active session members.
 - Root post identity is the Nostr event ID.
 - Inbound root payloads with a non-empty `root_id` that does not match the event ID are ignored.
+- Post detail exposes delete only for posts sent by the signed-in user.
+- Post delete publishes a Nostr deletion request (`kind:5`) and also sends a Linkstr delete notice to known current and former session members so encrypted session feeds converge on the removal.
+- Post delete persists a local deletion watermark so historical backfill cannot resurrect a previously deleted root post.
 
 ### Reactions
 
 - Reactions are emoji-only toggles tied to a post.
 - Reaction send is blocked when the sender is not an active member of the target session.
 - UX includes:
-  - Session post list shows compact read-only reaction summaries (no interactive controls).
+  - Session post list shows compact read-only reaction summaries (no interactive controls) with per-emoji count badges.
   - Post detail uses interactive Slack-style reaction summary chips.
   - Inline quick toggles for `👍`, `👎`, `👀`.
   - `...` button that opens the full emoji picker sheet.
   - Post detail separates the per-participant breakdown section with a divider.
   - Post detail shows per-participant breakdown rows (`display_name: emojis_reacted_with`).
 - Default quick options include `👍`, `👎`, `👀`.
+- Read-only reaction count badges cap visually at `10+`.
 - Reaction state is keyed by:
   - Session ID.
   - Post/root ID.
@@ -140,6 +150,7 @@
 - Transport carries reaction active/inactive state.
 - Reactions targeting unknown root posts are ignored.
 - Equal-timestamp reaction conflicts resolve by lexicographic event-ID tie-break.
+- Reactions tied to a deleted post are removed with that post.
 
 ### Read/unread semantics
 
@@ -193,6 +204,7 @@
   - Live relay subscriptions use `since` filters so live ingest is new-event oriented.
   - Persist root posts only when sender and receiver are active at the event timestamp.
   - Live root ingest additionally requires sender and receiver to be active in the latest local membership snapshot.
+  - Linkstr delete notices remove matching stored root posts only when the delete sender matches the original post sender.
   - Upsert reaction state only when sender and receiver are active at the event timestamp and the root post exists locally.
   - Live reaction ingest additionally requires sender and receiver to be active in the latest local membership snapshot.
 
@@ -200,8 +212,10 @@
 
 - Notifications are local notifications based on incoming relay events.
 - APNs remote push is not implemented.
-- Current notification type is inbound root post only.
-- Reaction events do not trigger notifications.
+- Current notification types are:
+  - Inbound root posts.
+  - Inbound active emoji reactions.
+- Reaction deactivations do not trigger notifications.
 - Self-echoed events do not trigger notifications.
 - Foreground presentation remains enabled (`banner`, `list`, `sound`).
 - Background delivery is best-effort only; when the app is suspended and sockets are not active, incoming events are surfaced on next reconnect/foreground.
@@ -228,12 +242,13 @@
   - TikTok videos.
   - Instagram Reels.
   - Facebook Reels.
-  - Twitter/X video posts.
+  - Twitter/X statuses only when provider metadata confirms video media is present.
 - Embed-only providers (web player only, no extraction):
   - YouTube.
   - Rumble.
   - Instagram non-reel posts (`/p/`, `/tv/`).
   - Facebook non-reel videos (`/videos/`).
+- Twitter/X non-video statuses prefer official tweet embeds and otherwise fall back to browser open.
 - Generic links fall back to open-in-browser.
 
 #### Playback behavior
@@ -244,6 +259,11 @@
   - `Save to Photos` (requests Photos add-only permission).
   - `Save to Files` (document export flow, no broad media permission).
 - If extraction fails, embed mode remains available and offers retry-local plus Safari open actions.
+- Canonical TikTok post URLs prefer exact `aweme_id` API playback candidates and avoid page-sniff fallback when exact extraction fails, to reduce accidental related-video matches.
+- Twitter/X status handling is resolved at runtime:
+  - Video statuses use extraction-preferred playback.
+  - Non-video statuses use official tweet oEmbed HTML when available.
+  - If official tweet embed resolution fails, the fallback is a regular browser link.
 
 #### Embed URL patterns
 
@@ -253,6 +273,7 @@
   - Facebook plugin `/plugins/video.php`.
   - YouTube `/embed`.
   - Rumble oEmbed iframe URL.
+- Twitter/X embeds use official `publish.twitter.com/oembed` HTML rather than assuming `x.com/i/status/...` is always embeddable.
 - Facebook videos/reels use Facebook plugin embed URLs (`/plugins/video.php`) with canonicalized `href` targets.
 - Rumble embeds are resolved from provider oEmbed iframe URLs when available.
 - Embedded web playback allows provider element fullscreen when supported by the provider and iframe context.
@@ -301,7 +322,7 @@
   - Relay configuration and enabled state.
   - Contacts and private aliases.
   - Account-scoped app state (follow-list recency watermark).
-  - Sessions, member snapshots, membership intervals, root posts, reactions, read state, and archive state.
+  - Sessions, member snapshots, membership intervals, root posts, post deletion watermarks, reactions, read state, and archive state.
   - Cached media references and metadata hydration state.
 - Local entities are owner-scoped by pubkey.
 - Account scoping is enforced in storage and query paths to prevent cross-account bleed.

@@ -470,6 +470,165 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertNil(session.composeError)
   }
 
+  func testDeletePostClearsLocalRootReactionsAndPersistsDeletionWatermarkWhenNostrIsDisabled()
+    async throws
+  {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionEntity = try insertSessionFixture(
+      in: container.mainContext,
+      ownerPubkey: myPubkey,
+      createdByPubkey: myPubkey,
+      memberPubkeys: [myPubkey, peerPubkey]
+    )
+
+    let didCreate = await session.createSessionPostAwaitingRelay(
+      url: "https://example.com/delete-me",
+      note: "bye",
+      session: sessionEntity
+    )
+    XCTAssertTrue(didCreate)
+
+    let rootPost = try XCTUnwrap(try fetchMessages(in: container.mainContext).first)
+    let reaction = try SessionReactionEntity(
+      ownerPubkey: myPubkey,
+      sessionID: sessionEntity.sessionID,
+      postID: rootPost.rootID,
+      emoji: "🔥",
+      senderPubkey: peerPubkey,
+      isActive: true,
+      eventID: "reaction-delete-root"
+    )
+    container.mainContext.insert(reaction)
+    try container.mainContext.save()
+
+    let didDelete = await session.deletePostAwaitingRelay(rootPost)
+
+    XCTAssertTrue(didDelete)
+    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
+    XCTAssertTrue(try fetchReactions(in: container.mainContext).isEmpty)
+    let deletions = try fetchPostDeletions(in: container.mainContext)
+    XCTAssertEqual(deletions.count, 1)
+    XCTAssertEqual(deletions.first?.sessionID, sessionEntity.sessionID)
+    XCTAssertEqual(deletions.first?.rootID, rootPost.rootID)
+    XCTAssertEqual(deletions.first?.deletedByPubkey, myPubkey)
+  }
+
+  func testDeletePostAwaitingRelayBroadcastsDeleteToKnownFormerMembers() async throws {
+    var capturedRecipients: [String] = []
+    var publishedEventKinds: [Int] = []
+    let (session, container) = try makeSession(
+      testDisableNostrStartupOverride: false,
+      testHasConnectedRelaysOverride: { true },
+      testRelayEventPublishOverride: { event in
+        publishedEventKinds.append(event.kind.rawValue)
+        return "kind5-delete-event"
+      },
+      testRelaySendOverride: { payload, recipients in
+        XCTAssertEqual(payload.kind, .rootDelete)
+        capturedRecipients = recipients
+        return "giftwrap-delete-event"
+      }
+    )
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let activePeerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let formerPeerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-delete-fanout"
+    _ = try insertSessionFixture(
+      in: container.mainContext,
+      ownerPubkey: myPubkey,
+      createdByPubkey: myPubkey,
+      memberPubkeys: [myPubkey, activePeerPubkey, formerPeerPubkey],
+      sessionID: sessionID
+    )
+
+    let formerMember = try XCTUnwrap(
+      container.mainContext.fetch(
+        FetchDescriptor<SessionMemberEntity>(
+          predicate: #Predicate {
+            $0.ownerPubkey == myPubkey
+              && $0.sessionID == sessionID
+              && $0.isActive == true
+          }
+        )
+      ).first(where: { $0.memberPubkey == formerPeerPubkey })
+    )
+    formerMember.isActive = false
+    try container.mainContext.save()
+
+    let rootPost = makeMessage(
+      eventID: "root-delete-fanout",
+      conversationID: sessionID,
+      rootID: "root-delete-fanout",
+      kind: .root,
+      senderPubkey: myPubkey,
+      receiverPubkey: activePeerPubkey,
+      ownerPubkey: myPubkey
+    )
+    container.mainContext.insert(rootPost)
+    try container.mainContext.save()
+
+    let didDelete = await session.deletePostAwaitingRelay(
+      rootPost,
+      timeoutSeconds: 0.05,
+      pollIntervalSeconds: 0.01
+    )
+
+    XCTAssertTrue(didDelete)
+    XCTAssertEqual(publishedEventKinds, [5])
+    XCTAssertEqual(Set(capturedRecipients), Set([myPubkey, activePeerPubkey, formerPeerPubkey]))
+    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
+    XCTAssertEqual(try fetchPostDeletions(in: container.mainContext).count, 1)
+  }
+
+  func testDeletePostRemovesStoredThumbnailAndCachedMediaFiles() async throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-delete-files"
+    _ = try insertSessionFixture(
+      in: container.mainContext,
+      ownerPubkey: myPubkey,
+      createdByPubkey: myPubkey,
+      memberPubkeys: [myPubkey, peerPubkey],
+      sessionID: sessionID
+    )
+
+    let thumbnailURL = URL(fileURLWithPath: NSTemporaryDirectory())
+      .appendingPathComponent("linkstr-delete-thumb-\(UUID().uuidString).png")
+    let cachedMediaURL = URL(fileURLWithPath: NSTemporaryDirectory())
+      .appendingPathComponent("linkstr-delete-media-\(UUID().uuidString).mp4")
+    try Data("thumbnail".utf8).write(to: thumbnailURL, options: .atomic)
+    try Data("media".utf8).write(to: cachedMediaURL, options: .atomic)
+
+    let rootPost = makeMessage(
+      eventID: "root-delete-files",
+      conversationID: sessionID,
+      rootID: "root-delete-files",
+      kind: .root,
+      senderPubkey: myPubkey,
+      receiverPubkey: peerPubkey,
+      ownerPubkey: myPubkey
+    )
+    try rootPost.setMetadata(title: "delete files", thumbnailURL: thumbnailURL.path)
+    rootPost.cachedMediaPath = cachedMediaURL.path
+    container.mainContext.insert(rootPost)
+    try container.mainContext.save()
+
+    XCTAssertTrue(FileManager.default.fileExists(atPath: thumbnailURL.path))
+    XCTAssertTrue(FileManager.default.fileExists(atPath: cachedMediaURL.path))
+
+    let didDelete = await session.deletePostAwaitingRelay(rootPost)
+
+    XCTAssertTrue(didDelete)
+    XCTAssertFalse(FileManager.default.fileExists(atPath: thumbnailURL.path))
+    XCTAssertFalse(FileManager.default.fileExists(atPath: cachedMediaURL.path))
+  }
+
   func testCreateSessionPostRejectsInvalidURL() async throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
@@ -1362,6 +1521,173 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertTrue(try fetchReactions(in: container.mainContext).isEmpty)
   }
 
+  func testIngestRootDeleteRemovesMatchingStoredPostAndReactions() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let senderPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-root-delete"
+    _ = try insertSessionFixture(
+      in: container.mainContext,
+      ownerPubkey: myPubkey,
+      createdByPubkey: senderPubkey,
+      memberPubkeys: [myPubkey, senderPubkey],
+      sessionID: sessionID
+    )
+
+    let rootPost = makeMessage(
+      eventID: "root-delete-target",
+      conversationID: sessionID,
+      rootID: "root-delete-target",
+      kind: .root,
+      senderPubkey: senderPubkey,
+      receiverPubkey: myPubkey,
+      ownerPubkey: myPubkey
+    )
+    container.mainContext.insert(rootPost)
+    let reaction = try SessionReactionEntity(
+      ownerPubkey: myPubkey,
+      sessionID: sessionID,
+      postID: rootPost.rootID,
+      emoji: "🔥",
+      senderPubkey: myPubkey,
+      isActive: true,
+      eventID: "reaction-root-delete-target"
+    )
+    container.mainContext.insert(reaction)
+    try container.mainContext.save()
+
+    let deletionDate = Date(timeIntervalSince1970: 815)
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "root-delete-event",
+        senderPubkey: senderPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: deletionDate,
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: rootPost.rootID,
+          kind: .rootDelete,
+          url: nil,
+          note: nil,
+          timestamp: Int64(deletionDate.timeIntervalSince1970)
+        )
+      ))
+
+    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
+    XCTAssertTrue(try fetchReactions(in: container.mainContext).isEmpty)
+    let deletions = try fetchPostDeletions(in: container.mainContext)
+    XCTAssertEqual(deletions.count, 1)
+    XCTAssertEqual(deletions.first?.rootID, rootPost.rootID)
+    XCTAssertEqual(deletions.first?.deletedByPubkey, senderPubkey)
+  }
+
+  func testIngestRootDeleteBeforeRootPostPreventsLaterInsert() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let senderPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-root-delete-precedes-post"
+    _ = try insertSessionFixture(
+      in: container.mainContext,
+      ownerPubkey: myPubkey,
+      createdByPubkey: senderPubkey,
+      memberPubkeys: [myPubkey, senderPubkey],
+      sessionID: sessionID
+    )
+
+    let deletionDate = Date(timeIntervalSince1970: 1_500)
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "root-delete-preseed",
+        senderPubkey: senderPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: deletionDate,
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "root-preseed",
+          kind: .rootDelete,
+          url: nil,
+          note: nil,
+          timestamp: Int64(deletionDate.timeIntervalSince1970)
+        ),
+        source: .historical
+      ))
+
+    let rootDate = Date(timeIntervalSince1970: 1_450)
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "root-preseed",
+        senderPubkey: senderPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: rootDate,
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "root-preseed",
+          kind: .root,
+          url: "https://example.com/preseed",
+          note: nil,
+          timestamp: Int64(rootDate.timeIntervalSince1970)
+        ),
+        source: .historical
+      ))
+
+    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
+    let deletions = try fetchPostDeletions(in: container.mainContext)
+    XCTAssertEqual(deletions.count, 1)
+    XCTAssertEqual(deletions.first?.rootID, "root-preseed")
+  }
+
+  func testIngestRootDeleteIgnoresMismatchedSender() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let rootSenderPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let differentSenderPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-root-delete-mismatch"
+    _ = try insertSessionFixture(
+      in: container.mainContext,
+      ownerPubkey: myPubkey,
+      createdByPubkey: rootSenderPubkey,
+      memberPubkeys: [myPubkey, rootSenderPubkey, differentSenderPubkey],
+      sessionID: sessionID
+    )
+
+    let rootPost = makeMessage(
+      eventID: "root-mismatch-target",
+      conversationID: sessionID,
+      rootID: "root-mismatch-target",
+      kind: .root,
+      senderPubkey: rootSenderPubkey,
+      receiverPubkey: myPubkey,
+      ownerPubkey: myPubkey
+    )
+    container.mainContext.insert(rootPost)
+    try container.mainContext.save()
+
+    let deletionDate = Date(timeIntervalSince1970: 1_600)
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "root-delete-mismatch",
+        senderPubkey: differentSenderPubkey,
+        receiverPubkey: myPubkey,
+        createdAt: deletionDate,
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: rootPost.rootID,
+          kind: .rootDelete,
+          url: nil,
+          note: nil,
+          timestamp: Int64(deletionDate.timeIntervalSince1970)
+        )
+      ))
+
+    let messages = try fetchMessages(in: container.mainContext)
+    XCTAssertEqual(messages.count, 1)
+    XCTAssertEqual(messages.first?.rootID, rootPost.rootID)
+    XCTAssertTrue(try fetchPostDeletions(in: container.mainContext).isEmpty)
+  }
+
   func testIngestRootPostRejectsMismatchedPayloadRootID() throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
@@ -1610,6 +1936,170 @@ final class AppSessionLocalFlowTests: XCTestCase {
     XCTAssertEqual(try fetchMessages(in: container.mainContext).count, 1)
   }
 
+  func testDeleteAccountClearsLocalDataAndIdentityWhenNostrNetworkIsDisabled() async throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let ownerPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let npub = try TestKeyMaterialFactory.makeNPub()
+
+    let didAdd = await session.addContact(npub: npub, alias: "Alice")
+    XCTAssertTrue(didAdd)
+
+    let message = makeMessage(
+      eventID: "message-delete-account",
+      conversationID: "conversation-delete-account",
+      rootID: "message-delete-account",
+      kind: .root,
+      senderPubkey: "peer",
+      receiverPubkey: ownerPubkey,
+      ownerPubkey: ownerPubkey
+    )
+    container.mainContext.insert(message)
+
+    let reaction = try SessionReactionEntity(
+      ownerPubkey: ownerPubkey,
+      sessionID: "conversation-delete-account",
+      postID: "message-delete-account",
+      emoji: "🔥",
+      senderPubkey: "peer",
+      isActive: true,
+      eventID: "reaction-delete-account"
+    )
+    container.mainContext.insert(reaction)
+    try container.mainContext.save()
+
+    XCTAssertEqual(try fetchContacts(in: container.mainContext).count, 1)
+    XCTAssertEqual(try fetchMessages(in: container.mainContext).count, 1)
+    XCTAssertEqual(try fetchReactions(in: container.mainContext).count, 1)
+    XCTAssertEqual(try fetchAccountStates(in: container.mainContext).count, 1)
+
+    let didDelete = await session.deleteAccountAwaitingRelay()
+
+    XCTAssertTrue(didDelete)
+    XCTAssertNil(session.identityService.keypair)
+    XCTAssertTrue(try fetchContacts(in: container.mainContext).isEmpty)
+    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
+    XCTAssertTrue(try fetchReactions(in: container.mainContext).isEmpty)
+    XCTAssertTrue(try fetchAccountStates(in: container.mainContext).isEmpty)
+  }
+
+  func testDeleteAccountAwaitingRelayPublishesFollowListAndVanishBeforeLocalCleanup()
+    async throws
+  {
+    var publishedFollowLists: [[String]] = []
+    var publishedEventKinds: [Int] = []
+    let (session, container) = try makeSession(
+      testDisableNostrStartupOverride: false,
+      testHasConnectedRelaysOverride: { true },
+      testFollowListPublishOverride: { followedPubkeys in
+        publishedFollowLists.append(followedPubkeys)
+        return "follow-list-delete-account"
+      },
+      testRelayEventPublishOverride: { event in
+        publishedEventKinds.append(event.kind.rawValue)
+        return "vanish-delete-account"
+      }
+    )
+    try session.identityService.createNewIdentity()
+    let ownerPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let npub = try TestKeyMaterialFactory.makeNPub()
+
+    let didAdd = await session.addContact(npub: npub, alias: "Alice")
+    XCTAssertTrue(didAdd)
+    let message = makeMessage(
+      eventID: "message-delete-account-online",
+      conversationID: "conversation-delete-account-online",
+      rootID: "message-delete-account-online",
+      kind: .root,
+      senderPubkey: "peer",
+      receiverPubkey: ownerPubkey,
+      ownerPubkey: ownerPubkey
+    )
+    container.mainContext.insert(message)
+    try container.mainContext.save()
+
+    let didDelete = await session.deleteAccountAwaitingRelay(
+      timeoutSeconds: 0.05,
+      pollIntervalSeconds: 0.01
+    )
+
+    XCTAssertTrue(didDelete)
+    XCTAssertEqual(publishedFollowLists.last, [])
+    XCTAssertEqual(publishedEventKinds, [62])
+    XCTAssertNil(session.identityService.keypair)
+    XCTAssertTrue(try fetchContacts(in: container.mainContext).isEmpty)
+    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
+  }
+
+  func testDeleteAccountAwaitingRelayKeepsLocalDataWhenRelayPublishFails() async throws {
+    let (session, container) = try makeSession(
+      testDisableNostrStartupOverride: false,
+      testHasConnectedRelaysOverride: { true },
+      testFollowListPublishOverride: { _ in "follow-list-delete-account" },
+      testRelayEventPublishOverride: { _ in
+        throw NostrServiceError.publishRejected("blocked: policy")
+      }
+    )
+    try session.identityService.createNewIdentity()
+    let ownerPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let npub = try TestKeyMaterialFactory.makeNPub()
+
+    let didAdd = await session.addContact(npub: npub, alias: "Alice")
+    XCTAssertTrue(didAdd)
+    let message = makeMessage(
+      eventID: "message-delete-account-failure",
+      conversationID: "conversation-delete-account-failure",
+      rootID: "message-delete-account-failure",
+      kind: .root,
+      senderPubkey: "peer",
+      receiverPubkey: ownerPubkey,
+      ownerPubkey: ownerPubkey
+    )
+    container.mainContext.insert(message)
+    try container.mainContext.save()
+
+    let didDelete = await session.deleteAccountAwaitingRelay(
+      timeoutSeconds: 0.05,
+      pollIntervalSeconds: 0.01
+    )
+
+    XCTAssertFalse(didDelete)
+    XCTAssertEqual(session.composeError, "blocked: policy")
+    XCTAssertNotNil(session.identityService.keypair)
+    XCTAssertEqual(try fetchContacts(in: container.mainContext).count, 1)
+    XCTAssertEqual(try fetchMessages(in: container.mainContext).count, 1)
+  }
+
+  func testReactionSummaryBadgeTextCapsAtTenPlus() {
+    XCTAssertEqual(
+      ReactionSummary(emoji: "🔥", count: 1, includesCurrentUser: false).badgeText,
+      "1"
+    )
+    XCTAssertEqual(
+      ReactionSummary(emoji: "🔥", count: 10, includesCurrentUser: false).badgeText,
+      "10"
+    )
+    XCTAssertEqual(
+      ReactionSummary(emoji: "🔥", count: 11, includesCurrentUser: false).badgeText,
+      "10+"
+    )
+  }
+
+  func testIncomingReactionNotificationBodyUsesPreviewWhenAvailable() {
+    XCTAssertEqual(
+      LocalNotificationService.incomingReactionBody(emoji: "🔥", postPreview: "A very good post"),
+      "reacted with 🔥 to A very good post"
+    )
+    XCTAssertEqual(
+      LocalNotificationService.incomingReactionBody(emoji: "🔥", postPreview: nil),
+      "reacted with 🔥"
+    )
+    XCTAssertEqual(
+      LocalNotificationService.incomingReactionBody(emoji: "🔥", postPreview: "   "),
+      "reacted with 🔥"
+    )
+  }
+
   func testLogoutClearLocalDataRemovesStoredThumbnailFiles() throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
@@ -1783,6 +2273,8 @@ final class AppSessionLocalFlowTests: XCTestCase {
   private func makeSession(
     testDisableNostrStartupOverride: Bool? = nil,
     testHasConnectedRelaysOverride: (() -> Bool)? = nil,
+    testFollowListPublishOverride: (([String]) async throws -> String)? = nil,
+    testRelayEventPublishOverride: ((NostrEvent) async throws -> String)? = nil,
     testRelaySendOverride: ((LinkstrPayload, [String]) async throws -> String)? = nil
   ) throws -> (
     AppSession, ModelContainer
@@ -1795,6 +2287,7 @@ final class AppSessionLocalFlowTests: XCTestCase {
       SessionMemberEntity.self,
       SessionMemberIntervalEntity.self,
       SessionReactionEntity.self,
+      SessionPostDeletionEntity.self,
       SessionMessageEntity.self,
     ])
     let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -1804,6 +2297,8 @@ final class AppSessionLocalFlowTests: XCTestCase {
         modelContext: container.mainContext,
         testDisableNostrStartupOverride: testDisableNostrStartupOverride,
         testHasConnectedRelaysOverride: testHasConnectedRelaysOverride,
+        testFollowListPublishOverride: testFollowListPublishOverride,
+        testRelayEventPublishOverride: testRelayEventPublishOverride,
         testRelaySendOverride: testRelaySendOverride,
         testSkipNostrNetworkStartup: true
       ),
@@ -1827,6 +2322,11 @@ final class AppSessionLocalFlowTests: XCTestCase {
   private func fetchReactions(in context: ModelContext) throws -> [SessionReactionEntity] {
     try context.fetch(
       FetchDescriptor<SessionReactionEntity>(sortBy: [SortDescriptor(\.updatedAt)]))
+  }
+
+  private func fetchPostDeletions(in context: ModelContext) throws -> [SessionPostDeletionEntity] {
+    try context.fetch(
+      FetchDescriptor<SessionPostDeletionEntity>(sortBy: [SortDescriptor(\.updatedAt)]))
   }
 
   private func fetchAccountStates(in context: ModelContext) throws -> [AccountStateEntity] {

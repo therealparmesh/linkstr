@@ -27,7 +27,7 @@ final class LocalNotificationService: NSObject {
   ) {
     let content = UNMutableNotificationContent()
     content.title = "\(senderName) shared a post"
-    content.body = notificationBody(note: note, fallback: url ?? "open linkstr to view")
+    content.body = Self.incomingPostBody(note: note, fallback: url ?? "open linkstr to view")
     content.sound = .default
     content.threadIdentifier = conversationID
 
@@ -39,9 +39,38 @@ final class LocalNotificationService: NSObject {
     UNUserNotificationCenter.current().add(request)
   }
 
-  private func notificationBody(note: String?, fallback: String) -> String {
+  func postIncomingReactionNotification(
+    senderName: String,
+    emoji: String,
+    postPreview: String?,
+    eventID: String,
+    conversationID: String
+  ) {
+    let content = UNMutableNotificationContent()
+    content.title = "\(senderName) reacted \(emoji)"
+    content.body = Self.incomingReactionBody(emoji: emoji, postPreview: postPreview)
+    content.sound = .default
+    content.threadIdentifier = conversationID
+
+    let request = UNNotificationRequest(
+      identifier: "linkstr-reaction-\(eventID)",
+      content: content,
+      trigger: UNTimeIntervalNotificationTrigger(timeInterval: 0.1, repeats: false)
+    )
+    UNUserNotificationCenter.current().add(request)
+  }
+
+  static func incomingPostBody(note: String?, fallback: String) -> String {
     let trimmed = note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     return trimmed.isEmpty ? fallback : trimmed
+  }
+
+  static func incomingReactionBody(emoji: String, postPreview: String?) -> String {
+    let normalizedPreview = postPreview?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    guard !normalizedPreview.isEmpty else {
+      return "reacted with \(emoji)"
+    }
+    return "reacted with \(emoji) to \(normalizedPreview)"
   }
 }
 

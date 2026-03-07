@@ -15,6 +15,9 @@ struct SettingsView: View {
   @State private var isStorageExpanded = false
   @State private var isIdentityExpanded = false
   @State private var isPresentingLogoutOptions = false
+  @State private var isPresentingDeleteAccountConfirm = false
+  @State private var isPresentingDeleteAccountFinalConfirm = false
+  @State private var isDeletingAccount = false
 
   var body: some View {
     ZStack {
@@ -49,6 +52,36 @@ struct SettingsView: View {
     } message: {
       Text(
         "choose whether to keep this account's local contacts/messages on this device or remove them before signing out."
+      )
+    }
+    .alert("delete account", isPresented: $isPresentingDeleteAccountConfirm) {
+      Button("continue", role: .destructive) {
+        isPresentingDeleteAccountFinalConfirm = true
+      }
+      Button("cancel", role: .cancel) {}
+    } message: {
+      Text(
+        "this requests relay-side account deletion on your active nostr relays, clears this account's local data on this device, and signs you out."
+      )
+    }
+    .alert("are you absolutely sure?", isPresented: $isPresentingDeleteAccountFinalConfirm) {
+      Button("delete account permanently", role: .destructive) {
+        guard !isDeletingAccount else { return }
+        isDeletingAccount = true
+        Task {
+          let didDelete = await session.deleteAccountAwaitingRelay()
+          await MainActor.run {
+            isDeletingAccount = false
+            if didDelete == false {
+              isPresentingDeleteAccountFinalConfirm = false
+            }
+          }
+        }
+      }
+      Button("cancel", role: .cancel) {}
+    } message: {
+      Text(
+        "this removes contacts, sessions, reactions, cached media, and local encryption keys for this account after the relay deletion request succeeds."
       )
     }
   }
@@ -257,6 +290,28 @@ struct SettingsView: View {
           }
           .buttonStyle(.borderedProminent)
           .tint(LinkstrTheme.destructive)
+
+          VStack(alignment: .leading, spacing: 8) {
+            Text(
+              "delete account sends a nostr vanish request to your enabled relays, clears this account's local data, and signs you out."
+            )
+            .font(LinkstrTheme.body(12))
+            .foregroundStyle(LinkstrTheme.textSecondary)
+
+            Button(role: .destructive) {
+              isPresentingDeleteAccountConfirm = true
+            } label: {
+              Label(
+                isDeletingAccount ? "deleting account..." : "delete account",
+                systemImage: "person.crop.circle.badge.xmark"
+              )
+              .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .tint(LinkstrTheme.destructive)
+            .disabled(isDeletingAccount)
+          }
+          .padding(.top, 6)
         } else {
           Text("no account found. sign in with a secret key (nsec) or create one.")
             .font(LinkstrTheme.body(12))

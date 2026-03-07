@@ -279,6 +279,121 @@ final class SessionMessageStore {
     return try modelContext.fetch(descriptor)
   }
 
+  func postDeletions(ownerPubkey: String, sessionID: String, rootID: String) throws
+    -> [SessionPostDeletionEntity]
+  {
+    let descriptor = FetchDescriptor<SessionPostDeletionEntity>(
+      predicate: #Predicate {
+        $0.ownerPubkey == ownerPubkey
+          && $0.sessionID == sessionID
+          && $0.rootID == rootID
+      }
+    )
+    return try modelContext.fetch(descriptor)
+  }
+
+  func hasRootDeletion(
+    ownerPubkey: String,
+    sessionID: String,
+    rootID: String,
+    deletedByPubkey: String
+  ) throws -> Bool {
+    let normalizedDeletedByPubkey = try normalizedPubkey(deletedByPubkey)
+    return try postDeletions(ownerPubkey: ownerPubkey, sessionID: sessionID, rootID: rootID)
+      .contains { $0.deletedByMatches(normalizedDeletedByPubkey) }
+  }
+
+  @discardableResult
+  func applyRootDeletion(
+    ownerPubkey: String,
+    sessionID: String,
+    rootID: String,
+    deletedByPubkey: String,
+    updatedAt: Date,
+    eventID: String
+  ) throws -> Bool {
+    let normalizedDeletedByPubkey = try normalizedPubkey(deletedByPubkey)
+    let normalizedEventID = normalizedEventIDToken(eventID)
+    let deletionStorageID = SessionPostDeletionEntity.storageID(
+      ownerPubkey: ownerPubkey,
+      sessionID: sessionID,
+      rootID: rootID,
+      deletedByPubkey: normalizedDeletedByPubkey
+    )
+    let deletionDescriptor = FetchDescriptor<SessionPostDeletionEntity>(
+      predicate: #Predicate { $0.storageID == deletionStorageID }
+    )
+
+    var didChange = false
+    if let existingDeletion = try modelContext.fetch(deletionDescriptor).first {
+      if shouldApplyStateUpdate(
+        currentUpdatedAt: existingDeletion.updatedAt,
+        currentEventID: existingDeletion.lastEventID,
+        incomingUpdatedAt: updatedAt,
+        incomingEventID: normalizedEventID
+      ) {
+        existingDeletion.updatedAt = updatedAt
+        existingDeletion.lastEventID = normalizedEventID
+        didChange = true
+      }
+    } else {
+      let deletion = try SessionPostDeletionEntity(
+        ownerPubkey: ownerPubkey,
+        sessionID: sessionID,
+        rootID: rootID,
+        deletedByPubkey: normalizedDeletedByPubkey,
+        updatedAt: updatedAt,
+        eventID: normalizedEventID
+      )
+      modelContext.insert(deletion)
+      didChange = true
+    }
+
+    let rootKindRaw = SessionMessageKind.root.rawValue
+    let messageDescriptor = FetchDescriptor<SessionMessageEntity>(
+      predicate: #Predicate {
+        $0.ownerPubkey == ownerPubkey
+          && $0.conversationID == sessionID
+          && $0.rootID == rootID
+          && $0.kindRaw == rootKindRaw
+      }
+    )
+    let messages = try modelContext.fetch(messageDescriptor)
+    let matchingMessages = messages.filter { $0.senderMatches(normalizedDeletedByPubkey) }
+    let thumbnailPaths = Set(matchingMessages.compactMap { normalizedPath($0.thumbnailURL) })
+    let cachedMediaPaths = Set(matchingMessages.compactMap { normalizedPath($0.cachedMediaPath) })
+    if !matchingMessages.isEmpty {
+      matchingMessages.forEach(modelContext.delete)
+      didChange = true
+    }
+
+    let reactionDescriptor = FetchDescriptor<SessionReactionEntity>(
+      predicate: #Predicate {
+        $0.ownerPubkey == ownerPubkey
+          && $0.sessionID == sessionID
+          && $0.postID == rootID
+      }
+    )
+    let reactions = try modelContext.fetch(reactionDescriptor)
+    if !reactions.isEmpty {
+      reactions.forEach(modelContext.delete)
+      didChange = true
+    }
+
+    if didChange {
+      try modelContext.save()
+    }
+
+    for path in thumbnailPaths {
+      try? FileManager.default.removeItem(atPath: path)
+    }
+    for path in cachedMediaPaths {
+      try? FileManager.default.removeItem(atPath: path)
+    }
+
+    return didChange
+  }
+
   func upsertReaction(
     ownerPubkey: String,
     sessionID: String,
@@ -337,7 +452,9 @@ final class SessionMessageStore {
     try modelContext.save()
   }
 
-  func hasRootPost(ownerPubkey: String, sessionID: String, rootID: String) throws -> Bool {
+  func rootPost(ownerPubkey: String, sessionID: String, rootID: String) throws
+    -> SessionMessageEntity?
+  {
     let rootKindRaw = SessionMessageKind.root.rawValue
     let descriptor = FetchDescriptor<SessionMessageEntity>(
       predicate: #Predicate {
@@ -347,7 +464,7 @@ final class SessionMessageStore {
           && $0.kindRaw == rootKindRaw
       }
     )
-    return try modelContext.fetch(descriptor).isEmpty == false
+    return try modelContext.fetch(descriptor).first
   }
 
   func markRootPostRead(postID: String, ownerPubkey: String, myPubkey: String) throws {
@@ -386,17 +503,26 @@ final class SessionMessageStore {
       FetchDescriptor<SessionReactionEntity>(
         predicate: #Predicate { $0.ownerPubkey == ownerPubkey })
     )
+    let deletions = try modelContext.fetch(
+      FetchDescriptor<SessionPostDeletionEntity>(
+        predicate: #Predicate { $0.ownerPubkey == ownerPubkey })
+    )
 
     let thumbnailPaths = Set(messages.compactMap { normalizedPath($0.thumbnailURL) })
+    let cachedMediaPaths = Set(messages.compactMap { normalizedPath($0.cachedMediaPath) })
 
     messages.forEach(modelContext.delete)
     sessions.forEach(modelContext.delete)
     members.forEach(modelContext.delete)
     intervals.forEach(modelContext.delete)
     reactions.forEach(modelContext.delete)
+    deletions.forEach(modelContext.delete)
     try modelContext.save()
 
     for path in thumbnailPaths {
+      try? FileManager.default.removeItem(atPath: path)
+    }
+    for path in cachedMediaPaths {
       try? FileManager.default.removeItem(atPath: path)
     }
   }

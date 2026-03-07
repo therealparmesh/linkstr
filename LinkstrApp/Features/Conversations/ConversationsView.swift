@@ -14,14 +14,13 @@ private struct SessionSummary: Identifiable {
 
 private struct ConversationsViewState {
   let scopedSessions: [SessionEntity]
-  let sessionByID: [String: SessionEntity]
   let visibleSummaries: [SessionSummary]
-  let archivedSessionCount: Int
 }
 
 struct ConversationsView: View {
   @EnvironmentObject private var session: AppSession
   @Binding var isShowingArchivedSessions: Bool
+  let openSession: (String) -> Void
 
   @Query(sort: [SortDescriptor(\SessionEntity.updatedAt, order: .reverse)])
   private var allSessions: [SessionEntity]
@@ -29,27 +28,16 @@ struct ConversationsView: View {
   @Query(sort: [SortDescriptor(\SessionMessageEntity.timestamp, order: .reverse)])
   private var allMessages: [SessionMessageEntity]
 
-  @State private var selectedSessionID: String?
-  @State private var isShowingSelectedSession = false
-
   private var viewState: ConversationsViewState {
     let scopedSessions = session.scopedSessions(from: allSessions)
     let scopedMessages = session.scopedMessages(from: allMessages)
     let summaries = makeSummaries(sessions: scopedSessions, messages: scopedMessages)
 
-    var sessionByID: [String: SessionEntity] = [:]
-    sessionByID.reserveCapacity(scopedSessions.count)
-    for sessionEntity in scopedSessions {
-      sessionByID[sessionEntity.sessionID] = sessionEntity
-    }
-
     var visibleSummaries: [SessionSummary] = []
     visibleSummaries.reserveCapacity(summaries.count)
-    var archivedSessionCount = 0
 
     for summary in summaries {
       if summary.session.isArchived {
-        archivedSessionCount += 1
         if isShowingArchivedSessions {
           visibleSummaries.append(summary)
         }
@@ -60,9 +48,7 @@ struct ConversationsView: View {
 
     return ConversationsViewState(
       scopedSessions: scopedSessions,
-      sessionByID: sessionByID,
-      visibleSummaries: visibleSummaries,
-      archivedSessionCount: archivedSessionCount
+      visibleSummaries: visibleSummaries
     )
   }
 
@@ -75,33 +61,6 @@ struct ConversationsView: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     .scrollContentBackground(.hidden)
-    .navigationDestination(isPresented: $isShowingSelectedSession) {
-      if let sessionID = selectedSessionID,
-        let targetSession = state.sessionByID[sessionID]
-      {
-        SessionPostsView(sessionEntity: targetSession)
-      } else {
-        ContentUnavailableView(
-          "session unavailable",
-          systemImage: "exclamationmark.triangle",
-          description: Text("this session is no longer available.")
-        )
-      }
-    }
-    .onAppear {
-      navigateToPendingSessionIfNeeded(scopedSessions: state.scopedSessions)
-    }
-    .onChange(of: session.pendingSessionNavigationID) { _, _ in
-      navigateToPendingSessionIfNeeded(scopedSessions: state.scopedSessions)
-    }
-    .onChange(of: state.scopedSessions.map(\.sessionID)) { _, _ in
-      navigateToPendingSessionIfNeeded(scopedSessions: state.scopedSessions)
-    }
-    .onChange(of: state.archivedSessionCount) { _, count in
-      if count == 0, isShowingArchivedSessions {
-        isShowingArchivedSessions = false
-      }
-    }
   }
 
   @ViewBuilder
@@ -130,8 +89,7 @@ struct ConversationsView: View {
             LazyVStack(spacing: 0) {
               ForEach(state.visibleSummaries) { summary in
                 Button {
-                  selectedSessionID = summary.session.sessionID
-                  isShowingSelectedSession = true
+                  openSession(summary.session.sessionID)
                 } label: {
                   SessionRowView(summary: summary)
                 }
@@ -237,14 +195,6 @@ struct ConversationsView: View {
       }
       .sorted { $0.latestTimestamp > $1.latestTimestamp }
   }
-
-  private func navigateToPendingSessionIfNeeded(scopedSessions: [SessionEntity]) {
-    guard let pendingID = session.pendingSessionNavigationID else { return }
-    guard scopedSessions.contains(where: { $0.sessionID == pendingID }) else { return }
-    selectedSessionID = pendingID
-    isShowingSelectedSession = true
-    session.clearPendingSessionNavigationID()
-  }
 }
 
 private struct SessionRowView: View {
@@ -309,7 +259,7 @@ private struct SessionRowView: View {
   }
 }
 
-private struct SessionPostsView: View {
+struct SessionPostsView: View {
   @EnvironmentObject private var session: AppSession
 
   @Query(sort: [SortDescriptor(\SessionMessageEntity.timestamp, order: .reverse)])
@@ -364,27 +314,10 @@ private struct SessionPostsView: View {
     summariesByPostID.reserveCapacity(reactionsByPostID.count)
 
     for (postID, reactionsForPost) in reactionsByPostID {
-      let groupedByEmoji = Dictionary(grouping: reactionsForPost, by: \.emoji)
-      let summaries =
-        groupedByEmoji
-        .map { emoji, reactions -> ReactionSummary in
-          ReactionSummary(
-            emoji: emoji,
-            count: reactions.count,
-            includesCurrentUser: reactions.contains { reaction in
-              guard let myPubkey else { return false }
-              return reaction.senderMatches(myPubkey)
-            }
-          )
-        }
-        .sorted {
-          if $0.count == $1.count {
-            return $0.emoji < $1.emoji
-          }
-          return $0.count > $1.count
-        }
-
-      summariesByPostID[postID] = summaries
+      summariesByPostID[postID] = ReactionSummary.summaries(
+        from: reactionsForPost,
+        myPubkey: myPubkey
+      )
     }
 
     return summariesByPostID

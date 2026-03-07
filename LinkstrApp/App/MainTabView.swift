@@ -4,6 +4,10 @@ import SwiftUI
 struct MainTabView: View {
   @EnvironmentObject private var session: AppSession
 
+  private struct SessionNavigationTarget: Identifiable, Hashable {
+    let id: String
+  }
+
   private enum AppTab: String, CaseIterable, Identifiable {
     case sessions
     case contacts
@@ -35,6 +39,7 @@ struct MainTabView: View {
   @State private var isPresentingNewSession = false
   @State private var isPresentingAddContact = false
   @State private var isShowingArchivedSessions = false
+  @State private var selectedSessionTarget: SessionNavigationTarget?
 
   @Query(sort: [SortDescriptor(\ContactEntity.createdAt)])
   private var contacts: [ContactEntity]
@@ -88,6 +93,17 @@ struct MainTabView: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     .navigationTitle("linkstr")
     .navigationBarTitleDisplayMode(.inline)
+    .navigationDestination(item: $selectedSessionTarget) { target in
+      if let targetSession = scopedSessions.first(where: { $0.sessionID == target.id }) {
+        SessionPostsView(sessionEntity: targetSession)
+      } else {
+        ContentUnavailableView(
+          "session unavailable",
+          systemImage: "exclamationmark.triangle",
+          description: Text("this session is no longer available.")
+        )
+      }
+    }
     .toolbar {
       ToolbarItem(placement: .topBarLeading) {
         leadingToolbarAccessory
@@ -109,6 +125,15 @@ struct MainTabView: View {
       if count == 0, isShowingArchivedSessions {
         isShowingArchivedSessions = false
       }
+    }
+    .onAppear {
+      navigateToPendingSessionIfNeeded()
+    }
+    .onChange(of: session.pendingSessionNavigationID) { _, _ in
+      navigateToPendingSessionIfNeeded()
+    }
+    .onChange(of: scopedSessions.map(\.sessionID)) { _, _ in
+      navigateToPendingSessionIfNeeded()
     }
     .sheet(isPresented: $isPresentingNewSession) {
       NewSessionSheet(contacts: scopedContacts)
@@ -173,7 +198,10 @@ struct MainTabView: View {
   private func tabContent(_ tab: AppTab) -> some View {
     switch tab {
     case .sessions:
-      ConversationsView(isShowingArchivedSessions: $isShowingArchivedSessions)
+      ConversationsView(
+        isShowingArchivedSessions: $isShowingArchivedSessions,
+        openSession: openSession
+      )
     case .contacts:
       ContactsView()
     case .share:
@@ -181,5 +209,17 @@ struct MainTabView: View {
     case .settings:
       SettingsView()
     }
+  }
+
+  private func openSession(_ sessionID: String) {
+    selectedTab = .sessions
+    selectedSessionTarget = SessionNavigationTarget(id: sessionID)
+  }
+
+  private func navigateToPendingSessionIfNeeded() {
+    guard let pendingID = session.pendingSessionNavigationID else { return }
+    guard scopedSessions.contains(where: { $0.sessionID == pendingID }) else { return }
+    openSession(pendingID)
+    session.clearPendingSessionNavigationID()
   }
 }

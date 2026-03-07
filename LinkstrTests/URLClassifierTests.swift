@@ -152,6 +152,33 @@ final class URLClassifierTests: XCTestCase {
     )
   }
 
+  func testTwitterCanonicalStatusURLNormalizesStatusVariants() {
+    XCTAssertEqual(
+      SocialURLHeuristics.twitterCanonicalStatusURL(
+        from: URL(string: "https://fixupx.com/nyjets/status/924685391524798464/video/1")!
+      )?.absoluteString,
+      "https://x.com/i/status/924685391524798464"
+    )
+    XCTAssertEqual(
+      SocialURLHeuristics.twitterCanonicalStatusURL(
+        from: URL(string: "https://twitter.com/FloodSocial/status/861627479294746624/photo/1")!
+      )?.absoluteString,
+      "https://x.com/i/status/861627479294746624"
+    )
+  }
+
+  func testTwitterEmbedOnlyFallbackUsesTweetCardAspectRatio() {
+    let sourceURL = URL(string: "https://x.com/jack/status/20")!
+    let strategy = URLClassifier.MediaStrategy.embedOnly(
+      embedURL: URL(string: "https://x.com/i/status/20")!)
+
+    XCTAssertEqual(
+      URLClassifier.preferredMediaAspectRatio(for: sourceURL, strategy: strategy),
+      4.0 / 5.0,
+      accuracy: 0.0001
+    )
+  }
+
   func testYouTubeEmbedForShortsAndYoutuBe() {
     let shorts = URLClassifier.mediaStrategy(for: "https://www.youtube.com/shorts/dQw4w9WgXcQ")
     guard case .embedOnly(let shortsEmbedURL) = shorts else {

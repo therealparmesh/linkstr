@@ -3,6 +3,7 @@ import NostrSDK
 
 enum LinkstrPayloadKind: String, Codable {
   case root
+  case rootDelete = "root_delete"
   case sessionCreate = "session_create"
   case sessionMembers = "session_members"
   case reaction
@@ -83,6 +84,11 @@ struct LinkstrPayload: Codable, Hashable {
     case .root:
       guard let url, LinkstrURLValidator.normalizedWebURL(from: url) != nil else {
         throw LinkstrPayloadError.invalidRootURL
+      }
+    case .rootDelete:
+      let trimmedRootID = rootID.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !trimmedRootID.isEmpty else {
+        throw LinkstrPayloadError.invalidRootID
       }
     case .sessionCreate:
       let trimmedName = sessionName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""

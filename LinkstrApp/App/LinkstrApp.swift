@@ -18,6 +18,7 @@ struct LinkstrAppMain: App {
       SessionMemberEntity.self,
       SessionMemberIntervalEntity.self,
       SessionReactionEntity.self,
+      SessionPostDeletionEntity.self,
       SessionMessageEntity.self,
     ])
     let container: ModelContainer

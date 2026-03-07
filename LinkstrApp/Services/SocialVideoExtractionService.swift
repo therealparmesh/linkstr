@@ -22,21 +22,31 @@ final class SocialVideoExtractionService: NSObject {
 
   func extractPlayableMedia(from sourceURL: URL) async -> ExtractionState {
     if isTikTokURL(sourceURL) {
-      let directTikTokCandidates = await loadTikTokAPIPlayURLs(from: sourceURL)
-      if let resolved = await resolvePlayableMedia(
-        from: directTikTokCandidates,
-        sourceURL: sourceURL,
-        userAgent: Self.tikTokAPIUserAgent,
-        cookies: []
-      ) {
-        return resolved
+      if SocialURLHeuristics.tikTokVideoID(from: sourceURL) != nil {
+        let directTikTokCandidates = await loadTikTokAPIPlayURLs(from: sourceURL)
+        if let resolved = await resolvePlayableMedia(
+          from: directTikTokCandidates,
+          sourceURL: sourceURL,
+          userAgent: Self.tikTokAPIUserAgent,
+          cookies: []
+        ) {
+          return resolved
+        }
+
+        // For canonical TikTok post URLs, prefer failing into embed mode over risking a related
+        // clip from page-level sniffing.
+        return .cannotExtract("Could not find a usable video stream for this post")
       }
     }
 
     if SocialURLHeuristics.isTwitterStatusURL(sourceURL) {
-      let directTwitterCandidates = await loadTwitterStatusMediaURLs(from: sourceURL)
+      let summary = await loadTwitterStatusMediaSummary(from: sourceURL)
+      if summary.hasVideo == false {
+        return .cannotExtract("This post does not include a playable video")
+      }
+
       if let resolved = await resolvePlayableMedia(
-        from: directTwitterCandidates,
+        from: summary.candidateURLs,
         sourceURL: sourceURL,
         userAgent: Self.mobileUserAgent,
         cookies: [],
@@ -139,99 +149,17 @@ final class SocialVideoExtractionService: NSObject {
   }
 
   private func loadTwitterStatusMediaURLs(from sourceURL: URL) async -> [URL] {
-    guard let statusID = SocialURLHeuristics.twitterStatusID(from: sourceURL) else {
-      return []
-    }
-
-    let endpoints = [
-      "https://api.vxtwitter.com/Twitter/status/\(statusID)",
-      "https://api.fxtwitter.com/status/\(statusID)",
-    ]
-
-    var candidates: [URL] = []
-    for raw in endpoints {
-      guard let endpoint = URL(string: raw) else { continue }
-      let endpointCandidates = await loadMediaURLsFromJSONEndpoint(endpoint)
-      candidates.append(contentsOf: endpointCandidates)
-    }
-
-    var seen = Set<String>()
-    return candidates.filter { url in
-      seen.insert(url.absoluteString.lowercased()).inserted
-    }
-  }
-
-  private func loadMediaURLsFromJSONEndpoint(_ endpoint: URL) async -> [URL] {
-    var request = URLRequest(url: endpoint)
-    request.httpMethod = "GET"
-    request.timeoutInterval = 10
-    request.setValue(Self.mobileUserAgent, forHTTPHeaderField: "User-Agent")
-    request.setValue("application/json", forHTTPHeaderField: "Accept")
-
-    do {
-      let (data, response) = try await URLSession.shared.data(for: request)
-      guard let httpResponse = response as? HTTPURLResponse,
-        (200..<300).contains(httpResponse.statusCode),
-        !data.isEmpty
-      else {
-        return []
-      }
-
-      let json = try JSONSerialization.jsonObject(with: data)
-      let stringCandidates = extractStringValues(from: json)
-
-      var seen = Set<String>()
-      return stringCandidates.compactMap { raw in
-        let normalized = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard likelyTwitterMediaCandidate(normalized),
-          let url = URL(string: normalized),
-          url.scheme?.lowercased() == "https"
-        else {
-          return nil
-        }
-
-        let key = url.absoluteString.lowercased()
-        guard seen.insert(key).inserted else { return nil }
-        return url
-      }
-    } catch {
-      return []
-    }
-  }
-
-  private func extractStringValues(from any: Any) -> [String] {
-    if let value = any as? String {
-      return [value]
-    }
-
-    if let values = any as? [Any] {
-      return values.flatMap(extractStringValues(from:))
-    }
-
-    if let dict = any as? [String: Any] {
-      return dict.values.flatMap(extractStringValues(from:))
-    }
-
-    return []
-  }
-
-  private func likelyTwitterMediaCandidate(_ raw: String) -> Bool {
-    let lower = raw.lowercased()
-    guard lower.hasPrefix("http") else { return false }
-
-    if lower.contains("video.twimg.com")
-      || lower.contains("/ext_tw_video/")
-      || lower.contains("/amplify_video/")
-      || lower.contains("/tweet_video/")
-    {
-      return true
-    }
-
-    return Self.isLikelyMediaURLString(lower)
+    let summary = await loadTwitterStatusMediaSummary(from: sourceURL)
+    return summary.candidateURLs
   }
 
   private func isTikTokURL(_ url: URL) -> Bool {
     SocialURLHeuristics.isTikTokHost(url)
+  }
+
+  private func loadTwitterStatusMediaSummary(from sourceURL: URL) async -> TwitterStatusMediaSummary
+  {
+    await TwitterStatusResolutionService.shared.mediaSummary(for: sourceURL)
   }
 
   private func matchesSourceIdentity(_ candidateURL: URL, sourceURL: URL) -> Bool {
@@ -841,6 +769,268 @@ private final class MediaCandidateCollector: NSObject, WKNavigationDelegate, WKS
     }
 
     registerCandidate(url)
+  }
+}
+
+struct TwitterStatusMediaSummary: Equatable {
+  let candidateURLs: [URL]
+  let hasVideo: Bool
+
+  static let empty = TwitterStatusMediaSummary(candidateURLs: [], hasVideo: false)
+}
+
+struct TwitterStatusResolvedPresentation: Equatable {
+  let strategy: URLClassifier.MediaStrategy
+  let embedHTMLDocument: String?
+}
+
+actor TwitterStatusResolutionService {
+  static let shared = TwitterStatusResolutionService()
+
+  private let requestTimeout: TimeInterval = 8
+  private let userAgent =
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15"
+    + " (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+
+  private var mediaSummaryCache: [String: TwitterStatusMediaSummary] = [:]
+  private var presentationCache: [String: TwitterStatusResolvedPresentation] = [:]
+
+  func mediaSummary(for sourceURL: URL) async -> TwitterStatusMediaSummary {
+    let cacheKey = sourceURL.absoluteString
+    if let cached = mediaSummaryCache[cacheKey] {
+      return cached
+    }
+
+    let summary = await fetchMediaSummary(for: sourceURL)
+    if summary.hasVideo || !summary.candidateURLs.isEmpty {
+      mediaSummaryCache[cacheKey] = summary
+    }
+    return summary
+  }
+
+  func resolvedPresentation(for sourceURL: URL) async -> TwitterStatusResolvedPresentation? {
+    guard SocialURLHeuristics.isTwitterStatusURL(sourceURL) else {
+      return nil
+    }
+
+    let cacheKey = sourceURL.absoluteString
+    if let cached = presentationCache[cacheKey] {
+      return cached
+    }
+
+    async let summaryTask = mediaSummary(for: sourceURL)
+    async let embedHTMLTask = fetchEmbedHTMLDocument(for: sourceURL)
+
+    let summary = await summaryTask
+    let embedHTMLDocument = await embedHTMLTask
+
+    let fallbackEmbedURL =
+      SocialURLHeuristics.twitterCanonicalStatusURL(from: sourceURL)
+      ?? URLClassifier.twitterEmbedFallbackURL(for: sourceURL)
+      ?? sourceURL
+
+    let strategy: URLClassifier.MediaStrategy
+    if summary.hasVideo {
+      strategy = .extractionPreferred(embedURL: fallbackEmbedURL)
+    } else if embedHTMLDocument != nil {
+      strategy = .embedOnly(embedURL: fallbackEmbedURL)
+    } else {
+      strategy = .link
+    }
+
+    let resolved = TwitterStatusResolvedPresentation(
+      strategy: strategy,
+      embedHTMLDocument: embedHTMLDocument
+    )
+    if strategy != .link || embedHTMLDocument != nil {
+      presentationCache[cacheKey] = resolved
+    }
+    return resolved
+  }
+
+  private func fetchMediaSummary(for sourceURL: URL) async -> TwitterStatusMediaSummary {
+    guard let statusID = SocialURLHeuristics.twitterStatusID(from: sourceURL) else {
+      return .empty
+    }
+
+    let endpoints = [
+      "https://api.vxtwitter.com/Twitter/status/\(statusID)",
+      "https://api.fxtwitter.com/status/\(statusID)",
+    ]
+
+    var fallbackSummary: TwitterStatusMediaSummary?
+    for rawEndpoint in endpoints {
+      guard let endpoint = URL(string: rawEndpoint) else { continue }
+      if let summary = await fetchMediaSummary(from: endpoint) {
+        if summary.hasVideo || !summary.candidateURLs.isEmpty {
+          return summary
+        }
+        fallbackSummary = summary
+      }
+    }
+
+    return fallbackSummary ?? .empty
+  }
+
+  private func fetchMediaSummary(from endpoint: URL) async -> TwitterStatusMediaSummary? {
+    var request = URLRequest(url: endpoint)
+    request.httpMethod = "GET"
+    request.timeoutInterval = requestTimeout
+    request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+    request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+    do {
+      let (data, response) = try await URLSession.shared.data(for: request)
+      guard let httpResponse = response as? HTTPURLResponse,
+        (200..<300).contains(httpResponse.statusCode),
+        !data.isEmpty,
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+      else {
+        return nil
+      }
+
+      let mediaContainer = ((json["tweet"] as? [String: Any])?["media"] as? [String: Any]) ?? [:]
+      let mediaEntries = mediaEntries(from: mediaContainer)
+
+      var hasVideo = false
+      var candidateURLs: [URL] = []
+      var seen = Set<String>()
+
+      for entry in mediaEntries {
+        let type = (entry["type"] as? String)?.lowercased() ?? ""
+        let isVideoLike =
+          type == "video"
+          || type == "animated_gif"
+          || type == "gif"
+        guard isVideoLike else { continue }
+        hasVideo = true
+
+        collectMediaURL(entry["url"], into: &candidateURLs, seen: &seen)
+
+        if let formats = entry["formats"] as? [[String: Any]] {
+          for format in formats {
+            collectMediaURL(format["url"], into: &candidateURLs, seen: &seen)
+          }
+        }
+
+        if let variants = entry["variants"] as? [[String: Any]] {
+          for variant in variants {
+            collectMediaURL(variant["url"], into: &candidateURLs, seen: &seen)
+          }
+        }
+      }
+
+      return TwitterStatusMediaSummary(candidateURLs: candidateURLs, hasVideo: hasVideo)
+    } catch {
+      return nil
+    }
+  }
+
+  private func mediaEntries(from container: [String: Any]) -> [[String: Any]] {
+    let keys = ["videos", "all", "media", "items"]
+    for key in keys {
+      if let entries = container[key] as? [[String: Any]], !entries.isEmpty {
+        return entries
+      }
+    }
+
+    if let entry = container["video"] as? [String: Any] {
+      return [entry]
+    }
+
+    return []
+  }
+
+  private func collectMediaURL(
+    _ rawValue: Any?,
+    into urls: inout [URL],
+    seen: inout Set<String>
+  ) {
+    guard let raw = rawValue as? String else { return }
+    let normalized = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    let lower = normalized.lowercased()
+    guard lower.hasPrefix("https://"), SocialVideoExtractionService.isLikelyMediaURLString(lower),
+      let url = URL(string: normalized),
+      seen.insert(lower).inserted
+    else {
+      return
+    }
+    urls.append(url)
+  }
+
+  private func fetchEmbedHTMLDocument(for sourceURL: URL) async -> String? {
+    guard let statusURL = SocialURLHeuristics.twitterCanonicalStatusURL(from: sourceURL),
+      var components = URLComponents(string: "https://publish.twitter.com/oembed")
+    else {
+      return nil
+    }
+
+    components.queryItems = [
+      URLQueryItem(name: "url", value: statusURL.absoluteString),
+      URLQueryItem(name: "omit_script", value: "false"),
+      URLQueryItem(name: "dnt", value: "true"),
+      URLQueryItem(name: "theme", value: "dark"),
+      URLQueryItem(name: "align", value: "center"),
+    ]
+    guard let endpoint = components.url else { return nil }
+
+    var request = URLRequest(url: endpoint)
+    request.httpMethod = "GET"
+    request.timeoutInterval = requestTimeout
+    request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+    request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+    do {
+      let (data, response) = try await URLSession.shared.data(for: request)
+      guard let httpResponse = response as? HTTPURLResponse,
+        (200..<300).contains(httpResponse.statusCode),
+        !data.isEmpty,
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+        let html = json["html"] as? String
+      else {
+        return nil
+      }
+
+      let trimmedHTML = html.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !trimmedHTML.isEmpty else { return nil }
+      return embedDocumentHTML(from: trimmedHTML)
+    } catch {
+      return nil
+    }
+  }
+
+  private func embedDocumentHTML(from fragment: String) -> String {
+    """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+        <style>
+          html, body {
+            margin: 0;
+            padding: 0;
+            background: transparent;
+            color-scheme: dark;
+            overflow: hidden;
+          }
+
+          body {
+            display: flex;
+            justify-content: center;
+          }
+
+          .twitter-tweet,
+          blockquote {
+            margin: 0 !important;
+          }
+        </style>
+      </head>
+      <body>
+        \(fragment)
+      </body>
+    </html>
+    """
   }
 }
 

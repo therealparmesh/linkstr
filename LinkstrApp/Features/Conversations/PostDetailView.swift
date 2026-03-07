@@ -8,6 +8,35 @@ struct ReactionSummary: Identifiable, Hashable {
   let includesCurrentUser: Bool
 
   var id: String { emoji }
+
+  var badgeText: String {
+    count > 10 ? "10+" : "\(count)"
+  }
+
+  static func summaries(from reactions: [SessionReactionEntity], myPubkey: String?)
+    -> [ReactionSummary]
+  {
+    guard !reactions.isEmpty else { return [] }
+
+    return
+      Dictionary(grouping: reactions, by: \.emoji)
+      .map { emoji, groupedReactions -> ReactionSummary in
+        ReactionSummary(
+          emoji: emoji,
+          count: groupedReactions.count,
+          includesCurrentUser: groupedReactions.contains { reaction in
+            guard let myPubkey else { return false }
+            return reaction.senderMatches(myPubkey)
+          }
+        )
+      }
+      .sorted {
+        if $0.count == $1.count {
+          return $0.emoji < $1.emoji
+        }
+        return $0.count > $1.count
+      }
+  }
 }
 
 struct ReactionParticipantBreakdown: Identifiable, Hashable {
@@ -100,19 +129,29 @@ struct LinkstrReactionRow: View {
   }
 
   private func readOnlySummaryText(_ summary: ReactionSummary) -> some View {
-    HStack(alignment: .firstTextBaseline, spacing: 2) {
+    ZStack(alignment: .topTrailing) {
       Text(summary.emoji)
-        .font(LinkstrTheme.system(15))
+        .font(LinkstrTheme.system(17))
         .foregroundStyle(LinkstrTheme.textPrimary.opacity(0.95))
 
-      if summary.count > 1 {
-        Text("\(summary.count)")
-          .font(LinkstrTheme.body(10))
-          .foregroundStyle(LinkstrTheme.textSecondary)
-      }
+      Text(summary.badgeText)
+        .font(LinkstrTheme.body(9))
+        .foregroundStyle(LinkstrTheme.textPrimary)
+        .padding(.horizontal, 4)
+        .padding(.vertical, 1)
+        .background(
+          Capsule()
+            .fill(LinkstrTheme.panel)
+        )
+        .overlay(
+          Capsule()
+            .stroke(LinkstrTheme.textSecondary.opacity(0.22), lineWidth: 1)
+        )
+        .offset(x: 8, y: -5)
     }
     .fixedSize(horizontal: true, vertical: false)
-    .padding(.vertical, 1)
+    .padding(.vertical, 2)
+    .padding(.trailing, 10)
   }
 
   private func summaryChip(_ summary: ReactionSummary) -> some View {
@@ -134,7 +173,7 @@ struct LinkstrReactionRow: View {
     HStack(spacing: 6) {
       Text(summary.emoji)
         .font(LinkstrTheme.system(15))
-      Text("\(summary.count)")
+      Text(summary.badgeText)
         .font(LinkstrTheme.body(12))
         .foregroundStyle(LinkstrTheme.textPrimary.opacity(0.95))
     }
@@ -179,7 +218,7 @@ struct LinkstrReactionRow: View {
         .font(LinkstrTheme.system(15))
 
       if let count = summary?.count, count > 0 {
-        Text("\(count)")
+        Text(summary?.badgeText ?? "\(count)")
           .font(LinkstrTheme.body(12))
           .foregroundStyle(LinkstrTheme.textPrimary.opacity(0.95))
       }
@@ -248,6 +287,7 @@ struct LinkstrEmojiPickerSheet: View {
 }
 
 struct PostDetailView: View {
+  @Environment(\.dismiss) private var dismiss
   @EnvironmentObject private var session: AppSession
   @Environment(\.openURL) private var openURL
 
@@ -261,6 +301,8 @@ struct PostDetailView: View {
   private var allReactions: [SessionReactionEntity]
 
   @State private var isPresentingEmojiPicker = false
+  @State private var isPresentingDeleteConfirmation = false
+  @State private var isDeletingPost = false
 
   private var scopedContacts: [ContactEntity] {
     session.scopedContacts(from: contacts)
@@ -283,28 +325,10 @@ struct PostDetailView: View {
   }
 
   private var reactionSummaries: [ReactionSummary] {
-    guard !scopedReactions.isEmpty else { return [] }
-    let grouped = Dictionary(grouping: scopedReactions, by: \.emoji)
-    let myPubkey = session.identityService.pubkeyHex
-
-    return
-      grouped
-      .map { emoji, reactions -> ReactionSummary in
-        ReactionSummary(
-          emoji: emoji,
-          count: reactions.count,
-          includesCurrentUser: reactions.contains { reaction in
-            guard let myPubkey else { return false }
-            return reaction.senderMatches(myPubkey)
-          }
-        )
-      }
-      .sorted {
-        if $0.count == $1.count {
-          return $0.emoji < $1.emoji
-        }
-        return $0.count > $1.count
-      }
+    ReactionSummary.summaries(
+      from: scopedReactions,
+      myPubkey: session.identityService.pubkeyHex
+    )
   }
 
   private var reactionBreakdown: [ReactionParticipantBreakdown] {
@@ -350,8 +374,43 @@ struct PostDetailView: View {
     .toolbar(.visible, for: .navigationBar)
     .toolbarBackground(.hidden, for: .navigationBar)
     .toolbarColorScheme(.dark, for: .navigationBar)
+    .toolbar {
+      if isOutgoing(post) {
+        ToolbarItem(placement: .topBarTrailing) {
+          Button(role: .destructive) {
+            isPresentingDeleteConfirmation = true
+          } label: {
+            Image(systemName: "trash")
+              .linkstrToolbarIconLabel()
+          }
+          .accessibilityLabel("delete post")
+          .tint(LinkstrTheme.destructive)
+          .disabled(isDeletingPost)
+        }
+      }
+    }
     .task {
       session.markRootPostRead(postID: post.rootID)
+    }
+    .alert("delete post", isPresented: $isPresentingDeleteConfirmation) {
+      Button("delete post", role: .destructive) {
+        guard !isDeletingPost else { return }
+        isDeletingPost = true
+        Task {
+          let didDelete = await session.deletePostAwaitingRelay(post)
+          await MainActor.run {
+            isDeletingPost = false
+            if didDelete {
+              dismiss()
+            }
+          }
+        }
+      }
+      Button("cancel", role: .cancel) {}
+    } message: {
+      Text(
+        "this permanently removes the post from your session feed and sends a Nostr deletion request."
+      )
     }
     .sheet(isPresented: $isPresentingEmojiPicker) {
       LinkstrEmojiPickerSheet { emoji in

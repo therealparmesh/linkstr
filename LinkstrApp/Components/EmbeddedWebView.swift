@@ -1,11 +1,25 @@
 import SwiftUI
 import WebKit
 
+enum EmbeddedWebSource: Equatable {
+  case url(URL)
+  case html(document: String, baseURL: URL?)
+
+  var cacheKey: String {
+    switch self {
+    case .url(let url):
+      return "url:\(url.absoluteString)"
+    case .html(let document, let baseURL):
+      return "html:\(baseURL?.absoluteString ?? "nil"):\(document)"
+    }
+  }
+}
+
 struct EmbeddedWebView: UIViewRepresentable {
-  let url: URL
+  let source: EmbeddedWebSource
 
   final class Coordinator: NSObject, WKNavigationDelegate {
-    var loadedURLString: String?
+    var loadedSourceKey: String?
 
     func webView(
       _ webView: WKWebView,
@@ -53,22 +67,27 @@ struct EmbeddedWebView: UIViewRepresentable {
   }
 
   func updateUIView(_ uiView: WKWebView, context: Context) {
-    guard context.coordinator.loadedURLString != url.absoluteString else { return }
-    context.coordinator.loadedURLString = url.absoluteString
+    guard context.coordinator.loadedSourceKey != source.cacheKey else { return }
+    context.coordinator.loadedSourceKey = source.cacheKey
 
-    var request = URLRequest(url: url)
-    request.cachePolicy = .reloadIgnoringLocalCacheData
-    if let host = url.host?.lowercased(),
-      host == "youtube.com"
-        || host.hasSuffix(".youtube.com")
-        || host == "youtube-nocookie.com"
-        || host.hasSuffix(".youtube-nocookie.com")
-    {
-      let appIdentityURL = youtubeWebViewIdentityURL
-      request.setValue(appIdentityURL.absoluteString, forHTTPHeaderField: "Referer")
-      request.setValue(appIdentityURL.absoluteString, forHTTPHeaderField: "Origin")
+    switch source {
+    case .url(let url):
+      var request = URLRequest(url: url)
+      request.cachePolicy = .reloadIgnoringLocalCacheData
+      if let host = url.host?.lowercased(),
+        host == "youtube.com"
+          || host.hasSuffix(".youtube.com")
+          || host == "youtube-nocookie.com"
+          || host.hasSuffix(".youtube-nocookie.com")
+      {
+        let appIdentityURL = youtubeWebViewIdentityURL
+        request.setValue(appIdentityURL.absoluteString, forHTTPHeaderField: "Referer")
+        request.setValue(appIdentityURL.absoluteString, forHTTPHeaderField: "Origin")
+      }
+      uiView.load(request)
+    case .html(let document, let baseURL):
+      uiView.loadHTMLString(document, baseURL: baseURL)
     }
-    uiView.load(request)
   }
 
   private var youtubeWebViewIdentityURL: URL {

@@ -88,6 +88,9 @@ enum URLClassifier {
       if linkType == .facebook {
         return SocialURLHeuristics.isFacebookReelURL(sourceURL) ? 9.0 / 16.0 : 16.0 / 9.0
       }
+      if linkType == .twitter {
+        return 4.0 / 5.0
+      }
       if isShortFormVideoURL(sourceURL) {
         return 9.0 / 16.0
       }
@@ -210,11 +213,11 @@ enum URLClassifier {
 
   private static func twitterEmbedURL(for sourceURL: URL) -> URL? {
     guard SocialURLHeuristics.isTwitterStatusURL(sourceURL) else { return sourceURL }
-    guard let statusID = SocialURLHeuristics.twitterStatusID(from: sourceURL) else {
-      return sourceURL
-    }
+    return twitterEmbedFallbackURL(for: sourceURL) ?? sourceURL
+  }
 
-    return URL(string: "https://x.com/i/status/\(statusID)") ?? sourceURL
+  static func twitterEmbedFallbackURL(for sourceURL: URL) -> URL? {
+    SocialURLHeuristics.twitterCanonicalStatusURL(from: sourceURL)
   }
 
   private static func isShortFormVideoURL(_ sourceURL: URL) -> Bool {

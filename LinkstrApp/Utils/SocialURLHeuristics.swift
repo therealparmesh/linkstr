@@ -142,6 +142,13 @@ enum SocialURLHeuristics {
     return candidate
   }
 
+  static func twitterCanonicalStatusURL(from sourceURL: URL) -> URL? {
+    guard let statusID = twitterStatusID(from: sourceURL) else {
+      return nil
+    }
+    return URL(string: "https://x.com/i/status/\(statusID)")
+  }
+
   static func tikTokVideoID(from sourceURL: URL) -> String? {
     let parts = sourceURL.pathComponents
     if let videoIndex = parts.firstIndex(of: "video"), videoIndex + 1 < parts.count {

@@ -323,6 +323,43 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     return followEvent.id
   }
 
+  func publishEventAwaitingRelayAcceptance(
+    _ event: NostrEvent,
+    timeoutSeconds: TimeInterval = 8
+  ) async throws -> String {
+    guard relayPool != nil else {
+      throw NostrServiceError.relayUnavailable
+    }
+
+    let expectedRelayURLs = connectedRelayURLs()
+    guard !expectedRelayURLs.isEmpty else {
+      throw NostrServiceError.relayUnavailable
+    }
+
+    try await withCheckedThrowingContinuation {
+      (continuation: CheckedContinuation<Void, Error>) in
+      pendingPublishAcks[event.id] = PendingPublishAck(
+        expectedRelayURLs: expectedRelayURLs,
+        failedRelayMessagesByURL: [:],
+        continuation: continuation
+      )
+
+      pendingPublishAckTimeoutTasks[event.id] = Task { @MainActor [weak self] in
+        guard let self else { return }
+        try? await Task.sleep(for: .seconds(max(0.1, timeoutSeconds)))
+        guard !Task.isCancelled else { return }
+        self.finishPendingPublishAck(
+          eventID: event.id,
+          result: .failure(NostrServiceError.publishTimedOut)
+        )
+      }
+
+      relayPool?.publishEvent(event)
+    }
+
+    return event.id
+  }
+
   private func parsePublicKeys(_ pubkeyHexes: [String]) throws -> [PublicKey] {
     var parsedPublicKeys: [PublicKey] = []
     var seen = Set<String>()
@@ -361,7 +398,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     let builder = NostrEvent.Builder<NostrEvent>(kind: linkstrRumorKind)
       .content(content)
 
-    if payload.kind == .reaction {
+    if payload.kind == .reaction || payload.kind == .rootDelete {
       let rootTag = try EventTag(eventId: payload.rootID, marker: .root)
       builder.appendTags(rootTag.tag)
     }

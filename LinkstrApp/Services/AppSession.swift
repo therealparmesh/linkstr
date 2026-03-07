@@ -38,6 +38,14 @@ final class AppSession: ObservableObject {
     let recipientPubkeys: [String]
   }
 
+  private struct RootDeletionDraft {
+    let payload: LinkstrPayload
+    let ownerPubkey: String
+    let senderPubkey: String
+    let recipientPubkeys: [String]
+    let rootID: String
+  }
+
   let identityService: IdentityService
   let nostrService: NostrDMService
   let modelContext: ModelContext
@@ -47,6 +55,8 @@ final class AppSession: ObservableObject {
   private let accountStateStore: AccountStateStore
   private let testHasConnectedRelaysOverride: (() -> Bool)?
   private let testDisableNostrStartupOverride: Bool?
+  private let testFollowListPublishOverride: (([String]) async throws -> String)?
+  private let testRelayEventPublishOverride: ((NostrEvent) async throws -> String)?
   private let testRelaySendOverride: ((LinkstrPayload, [String]) async throws -> String)?
   private let testSkipNostrNetworkStartup: Bool
   private let noEnabledRelaysMessage =
@@ -82,12 +92,16 @@ final class AppSession: ObservableObject {
     modelContext: ModelContext,
     testDisableNostrStartupOverride: Bool? = nil,
     testHasConnectedRelaysOverride: (() -> Bool)? = nil,
+    testFollowListPublishOverride: (([String]) async throws -> String)? = nil,
+    testRelayEventPublishOverride: ((NostrEvent) async throws -> String)? = nil,
     testRelaySendOverride: ((LinkstrPayload, [String]) async throws -> String)? = nil,
     testSkipNostrNetworkStartup: Bool = false
   ) {
     self.modelContext = modelContext
     self.testDisableNostrStartupOverride = testDisableNostrStartupOverride
     self.testHasConnectedRelaysOverride = testHasConnectedRelaysOverride
+    self.testFollowListPublishOverride = testFollowListPublishOverride
+    self.testRelayEventPublishOverride = testRelayEventPublishOverride
     self.testRelaySendOverride = testRelaySendOverride
     self.testSkipNostrNetworkStartup = testSkipNostrNetworkStartup
     self.identityService = IdentityService()
@@ -547,10 +561,7 @@ final class AppSession: ObservableObject {
 
   func logout(clearLocalData: Bool) {
     let ownerPubkey = identityService.pubkeyHex
-    relayPersistenceFlushTask?.cancel()
-    relayPersistenceFlushTask = nil
-    pendingRelayPersistenceByURL.removeAll()
-    nostrService.stop()
+    resetRuntimeSessionState()
 
     do {
       try identityService.clearIdentity()
@@ -558,24 +569,62 @@ final class AppSession: ObservableObject {
       composeError = error.localizedDescription
       return
     }
-    refreshIdentityState()
-    pendingMetadataStorageIDs.removeAll()
-    pendingMetadataStorageHead = 0
-    enqueuedMetadataStorageIDs.removeAll()
-    isProcessingMetadataQueue = false
-    relayRuntimeStatusByURL.removeAll()
-    pendingSessionNavigationID = nil
-    resetFollowListStateInMemory()
+    handleIdentityCleared()
 
     if let ownerPubkey, clearLocalData {
-      clearCachedVideos(ownerPubkey: ownerPubkey)
-      clearMessageCache(ownerPubkey: ownerPubkey)
-      clearAllContacts(ownerPubkey: ownerPubkey)
-      try? LocalDataCrypto.shared.clearKey(ownerPubkey: ownerPubkey)
-      clearPersistedFollowListState(ownerPubkey: ownerPubkey)
+      clearLocalAccountData(ownerPubkey: ownerPubkey)
     }
 
     composeError = nil
+  }
+
+  @discardableResult
+  func deleteAccountAwaitingRelay(
+    timeoutSeconds: TimeInterval = 12,
+    pollIntervalSeconds: TimeInterval = 0.35
+  ) async -> Bool {
+    guard let keypair = identityService.keypair, let ownerPubkey = identityService.pubkeyHex else {
+      composeError = "you're signed out. sign in to manage this account."
+      return false
+    }
+
+    if shouldDisableNostrStartupForCurrentProcess() == false {
+      guard
+        await awaitRelayReadyForSend(
+          timeoutSeconds: timeoutSeconds,
+          pollIntervalSeconds: pollIntervalSeconds
+        )
+      else {
+        return false
+      }
+      startNostrIfPossible()
+
+      do {
+        _ = try await publishFollowListAwaitingRelayAcceptance(followedPubkeyHexes: [])
+        _ = try await publishEventAwaitingRelayAcceptance(
+          makeVanishEvent(
+            relayURLs: try relayStore.fetchRelays().filter(\.isEnabled).map(\.url),
+            signedBy: keypair
+          )
+        )
+      } catch {
+        report(error: error)
+        return false
+      }
+    }
+
+    resetRuntimeSessionState()
+
+    do {
+      try identityService.clearIdentity()
+    } catch {
+      composeError = error.localizedDescription
+      return false
+    }
+    handleIdentityCleared()
+    clearLocalAccountData(ownerPubkey: ownerPubkey)
+    composeError = nil
+    return true
   }
 
   private func refreshIdentityState() {
@@ -585,6 +634,32 @@ final class AppSession: ObservableObject {
       return
     }
     loadPersistedFollowListState(ownerPubkey: ownerPubkey)
+  }
+
+  private func resetRuntimeSessionState() {
+    relayPersistenceFlushTask?.cancel()
+    relayPersistenceFlushTask = nil
+    pendingRelayPersistenceByURL.removeAll()
+    nostrService.stop()
+    pendingMetadataStorageIDs.removeAll()
+    pendingMetadataStorageHead = 0
+    enqueuedMetadataStorageIDs.removeAll()
+    isProcessingMetadataQueue = false
+    relayRuntimeStatusByURL.removeAll()
+    pendingSessionNavigationID = nil
+  }
+
+  private func handleIdentityCleared() {
+    refreshIdentityState()
+    resetFollowListStateInMemory()
+  }
+
+  private func clearLocalAccountData(ownerPubkey: String) {
+    clearCachedVideos(ownerPubkey: ownerPubkey)
+    clearMessageCache(ownerPubkey: ownerPubkey)
+    clearAllContacts(ownerPubkey: ownerPubkey)
+    try? LocalDataCrypto.shared.clearKey(ownerPubkey: ownerPubkey)
+    clearPersistedFollowListState(ownerPubkey: ownerPubkey)
   }
 
   func startNostrIfPossible(forceRestart: Bool = false) {
@@ -928,6 +1003,68 @@ final class AppSession: ObservableObject {
     }
   }
 
+  @discardableResult
+  func deletePostAwaitingRelay(
+    _ post: SessionMessageEntity,
+    timeoutSeconds: TimeInterval = 12,
+    pollIntervalSeconds: TimeInterval = 0.35
+  ) async -> Bool {
+    guard let draft = makeRootDeletionDraft(post: post) else {
+      return false
+    }
+
+    if shouldDisableNostrStartupForCurrentProcess() {
+      do {
+        try persistRootDeletion(draft, eventID: makeLocalEventID())
+        composeError = nil
+        return true
+      } catch {
+        report(error: error)
+        return false
+      }
+    }
+
+    guard
+      await awaitRelayReadyForSend(
+        timeoutSeconds: timeoutSeconds,
+        pollIntervalSeconds: pollIntervalSeconds
+      )
+    else {
+      return false
+    }
+    startNostrIfPossible()
+
+    guard let keypair = identityService.keypair else {
+      composeError = "you're signed out. sign in to manage this post."
+      return false
+    }
+
+    do {
+      let deletionRequestEventID = try await publishEventAwaitingRelayAcceptance(
+        makeRootPostDeletionEvent(rootID: draft.rootID, signedBy: keypair)
+      )
+
+      let deletionWatermarkEventID: String
+      do {
+        deletionWatermarkEventID = try await sendPayloadAwaitingRelayAcceptance(
+          payload: draft.payload,
+          recipientPubkeyHexes: draft.recipientPubkeys
+        )
+      } catch {
+        try persistRootDeletion(draft, eventID: deletionRequestEventID)
+        composeError = "post deleted, but other members may keep seeing it until sync catches up."
+        return true
+      }
+
+      try persistRootDeletion(draft, eventID: deletionWatermarkEventID)
+      composeError = nil
+      return true
+    } catch {
+      report(error: error)
+      return false
+    }
+  }
+
   private func createPostAwaitingRelayDelivery(
     url: String,
     note: String?,
@@ -1000,6 +1137,47 @@ final class AppSession: ObservableObject {
       ownerPubkey: ownerPubkey,
       senderPubkey: keypair.publicKey.hex,
       recipientPubkeys: recipientPubkeys
+    )
+  }
+
+  private func makeRootDeletionDraft(post: SessionMessageEntity) -> RootDeletionDraft? {
+    guard post.kind == .root else {
+      composeError = "only root posts can be deleted."
+      return nil
+    }
+    guard let keypair = identityService.keypair, let ownerPubkey = identityService.pubkeyHex else {
+      composeError = "you're signed out. sign in to manage this post."
+      return nil
+    }
+    guard post.senderMatches(keypair.publicKey.hex) else {
+      composeError = "you can only delete posts you sent."
+      return nil
+    }
+
+    guard
+      let recipientPubkeys = resolveDeletionRecipients(
+        sessionID: post.conversationID,
+        ownerPubkey: ownerPubkey,
+        senderPubkey: keypair.publicKey.hex
+      )
+    else {
+      return nil
+    }
+
+    let timestamp = Int64(Date.now.timeIntervalSince1970)
+    return RootDeletionDraft(
+      payload: LinkstrPayload(
+        conversationID: post.conversationID,
+        rootID: post.rootID,
+        kind: .rootDelete,
+        url: nil,
+        note: nil,
+        timestamp: timestamp
+      ),
+      ownerPubkey: ownerPubkey,
+      senderPubkey: keypair.publicKey.hex,
+      recipientPubkeys: recipientPubkeys,
+      rootID: post.rootID
     )
   }
 
@@ -1098,6 +1276,35 @@ final class AppSession: ObservableObject {
     )
   }
 
+  private func persistRootDeletion(_ draft: RootDeletionDraft, eventID: String) throws {
+    try messageStore.applyRootDeletion(
+      ownerPubkey: draft.ownerPubkey,
+      sessionID: draft.payload.conversationID,
+      rootID: draft.rootID,
+      deletedByPubkey: draft.senderPubkey,
+      updatedAt: Date(timeIntervalSince1970: TimeInterval(draft.payload.timestamp)),
+      eventID: eventID
+    )
+  }
+
+  private func publishFollowListAwaitingRelayAcceptance(followedPubkeyHexes: [String]) async throws
+    -> String
+  {
+    if let testFollowListPublishOverride {
+      return try await testFollowListPublishOverride(followedPubkeyHexes)
+    }
+    return try await nostrService.publishFollowListAwaitingRelayAcceptance(
+      followedPubkeyHexes: followedPubkeyHexes
+    )
+  }
+
+  private func publishEventAwaitingRelayAcceptance(_ event: NostrEvent) async throws -> String {
+    if let testRelayEventPublishOverride {
+      return try await testRelayEventPublishOverride(event)
+    }
+    return try await nostrService.publishEventAwaitingRelayAcceptance(event)
+  }
+
   private func sendPayloadAwaitingRelayAcceptance(
     payload: LinkstrPayload,
     recipientPubkeyHexes: [String]
@@ -1180,6 +1387,29 @@ final class AppSession: ObservableObject {
     }
   }
 
+  private func resolveDeletionRecipients(
+    sessionID: String,
+    ownerPubkey: String,
+    senderPubkey: String
+  ) -> [String]? {
+    do {
+      let knownMemberPubkeys = try messageStore.members(
+        sessionID: sessionID,
+        ownerPubkey: ownerPubkey,
+        activeOnly: false
+      ).map(\.memberPubkey)
+      let recipientPubkeys = dedupedValidPubkeys(knownMemberPubkeys + [senderPubkey])
+      guard recipientPubkeys.contains(senderPubkey) else {
+        composeError = "this post is no longer associated with a valid session membership set."
+        return nil
+      }
+      return recipientPubkeys
+    } catch {
+      composeError = error.localizedDescription
+      return nil
+    }
+  }
+
   private func dedupedValidPubkeys(_ pubkeyHexes: [String]) -> [String] {
     var deduped: [String] = []
     var seen = Set<String>()
@@ -1197,6 +1427,51 @@ final class AppSession: ObservableObject {
 
   private func mergedPubkeys(_ first: [String], _ second: [String]) -> [String] {
     dedupedValidPubkeys(first + second)
+  }
+
+  private func makeRootPostDeletionEvent(rootID: String, signedBy keypair: Keypair) throws
+    -> NostrEvent
+  {
+    let normalizedRootID = rootID.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !normalizedRootID.isEmpty else {
+      throw LinkstrPayloadError.invalidRootID
+    }
+
+    return try NostrEvent.Builder<NostrEvent>(kind: .deletion)
+      .content("linkstr post deletion request")
+      .appendTags(try customTag(name: "e", value: normalizedRootID))
+      .appendTags(try customTag(name: "k", value: String(EventKind.unknown(44_001).rawValue)))
+      .build(signedBy: keypair)
+  }
+
+  private func makeVanishEvent(relayURLs: [String], signedBy keypair: Keypair) throws -> NostrEvent
+  {
+    let normalizedRelayURLs =
+      Array(
+        Set(
+          relayURLs.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        )
+      )
+      .sorted()
+
+    let relayTags: [Tag]
+    if normalizedRelayURLs.isEmpty {
+      relayTags = try [customTag(name: "relay", value: "ALL_RELAYS")]
+    } else {
+      relayTags = try normalizedRelayURLs.map { try customTag(name: "relay", value: $0) }
+    }
+
+    return try NostrEvent.Builder<NostrEvent>(kind: .unknown(62))
+      .content("linkstr account deletion request")
+      .appendTags(contentsOf: relayTags)
+      .build(signedBy: keypair)
+  }
+
+  private func customTag(name: String, value: String) throws -> Tag {
+    let rawTag = [name, value]
+    let data = try JSONEncoder().encode(rawTag)
+    return try JSONDecoder().decode(Tag.self, from: data)
   }
 
   private func existingSessionName(for sessionID: String, ownerPubkey: String) -> String {
@@ -1261,7 +1536,7 @@ final class AppSession: ObservableObject {
       startNostrIfPossible()
 
       do {
-        _ = try await nostrService.publishFollowListAwaitingRelayAcceptance(
+        _ = try await publishFollowListAwaitingRelayAcceptance(
           followedPubkeyHexes: nextFollowedPubkeys
         )
       } catch {
@@ -1349,7 +1624,7 @@ final class AppSession: ObservableObject {
       startNostrIfPossible()
 
       do {
-        _ = try await nostrService.publishFollowListAwaitingRelayAcceptance(
+        _ = try await publishFollowListAwaitingRelayAcceptance(
           followedPubkeyHexes: nextFollowedPubkeys
         )
       } catch {
@@ -1540,6 +1815,8 @@ final class AppSession: ObservableObject {
       persistIncomingReaction(incoming)
     case .root:
       persistIncomingRootPost(incoming)
+    case .rootDelete:
+      persistIncomingRootDeletion(incoming)
     }
   }
 
@@ -1654,7 +1931,7 @@ final class AppSession: ObservableObject {
 
     do {
       guard
-        try messageStore.hasRootPost(
+        let rootPost = try messageStore.rootPost(
           ownerPubkey: ownerPubkey,
           sessionID: sessionID,
           rootID: postID
@@ -1672,9 +1949,48 @@ final class AppSession: ObservableObject {
         updatedAt: incoming.createdAt,
         eventID: incoming.eventID
       )
+      if isActive {
+        notifyForIncomingReaction(
+          eventID: incoming.eventID,
+          conversationID: sessionID,
+          senderPubkey: incoming.senderPubkey,
+          emoji: emoji,
+          rootPost: rootPost
+        )
+      }
     } catch {
       report(error: error)
       return
+    }
+  }
+
+  private func persistIncomingRootDeletion(_ incoming: ReceivedDirectMessage) {
+    guard let ownerPubkey = identityService.pubkeyHex else { return }
+
+    let sessionID = incoming.payload.conversationID.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !sessionID.isEmpty else { return }
+    let rootID = incoming.payload.rootID.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !rootID.isEmpty else { return }
+
+    do {
+      if let existingRoot = try messageStore.rootPost(
+        ownerPubkey: ownerPubkey,
+        sessionID: sessionID,
+        rootID: rootID
+      ), existingRoot.senderMatches(incoming.senderPubkey) == false {
+        return
+      }
+
+      try messageStore.applyRootDeletion(
+        ownerPubkey: ownerPubkey,
+        sessionID: sessionID,
+        rootID: rootID,
+        deletedByPubkey: incoming.senderPubkey,
+        updatedAt: incoming.createdAt,
+        eventID: incoming.eventID
+      )
+    } catch {
+      report(error: error)
     }
   }
 
@@ -1711,6 +2027,19 @@ final class AppSession: ObservableObject {
     }
     let payloadRootID = incoming.payload.rootID.trimmingCharacters(in: .whitespacesAndNewlines)
     if !payloadRootID.isEmpty, payloadRootID != incoming.eventID {
+      return
+    }
+    do {
+      if try messageStore.hasRootDeletion(
+        ownerPubkey: ownerPubkey,
+        sessionID: sessionID,
+        rootID: incoming.eventID,
+        deletedByPubkey: incoming.senderPubkey
+      ) {
+        return
+      }
+    } catch {
+      report(error: error)
       return
     }
     guard let payloadURL = incoming.payload.url,
@@ -1851,6 +2180,43 @@ final class AppSession: ObservableObject {
       eventID: message.eventID,
       conversationID: message.conversationID
     )
+  }
+
+  private func notifyForIncomingReaction(
+    eventID: String,
+    conversationID: String,
+    senderPubkey: String,
+    emoji: String,
+    rootPost: SessionMessageEntity
+  ) {
+    guard let myPubkey = identityService.pubkeyHex, senderPubkey != myPubkey else {
+      return
+    }
+
+    let contacts = (try? contactStore.fetchContacts(ownerPubkey: myPubkey)) ?? []
+    let senderName = contactName(for: senderPubkey, contacts: contacts)
+    LocalNotificationService.shared.postIncomingReactionNotification(
+      senderName: senderName,
+      emoji: emoji,
+      postPreview: notificationPreview(for: rootPost),
+      eventID: eventID,
+      conversationID: conversationID
+    )
+  }
+
+  private func notificationPreview(for message: SessionMessageEntity) -> String? {
+    let title = message.metadataTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    if !title.isEmpty {
+      return title
+    }
+
+    let note = message.note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    if !note.isEmpty {
+      return note
+    }
+
+    let url = message.url?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return url.isEmpty ? nil : url
   }
 
   private func hydrateMissingMetadata() {

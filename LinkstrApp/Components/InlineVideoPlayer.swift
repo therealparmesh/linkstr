@@ -94,7 +94,9 @@ struct AdaptiveVideoPlaybackView: View {
   let persistLocalMedia: ((URL, PlayableMedia) -> Void)?
 
   @State private var canonicalSourceURL: URL?
-  @State private var preferredEmbedURL: URL?
+  @State private var preferredEmbedSource: EmbeddedWebSource?
+  @State private var resolvedMediaStrategy: URLClassifier.MediaStrategy?
+  @State private var isResolvingPresentation = false
   @State private var extractionState: ExtractionState?
   @State private var cachedLocalMedia: PlayableMedia?
   @State private var localCacheTask: Task<Void, Never>?
@@ -126,11 +128,29 @@ struct AdaptiveVideoPlaybackView: View {
         localCacheTask?.cancel()
         localCacheTask = nil
         cachedLocalMedia = nil
-        preferredEmbedURL = nil
+        preferredEmbedSource = nil
+        resolvedMediaStrategy = nil
         let canonical = await URLCanonicalizationService.shared.canonicalPlaybackURL(for: sourceURL)
         canonicalSourceURL = canonical
-        preferredEmbedURL = await URLCanonicalizationService.shared.preferredEmbedURL(
-          for: canonical)
+        isResolvingPresentation = SocialURLHeuristics.isTwitterStatusURL(canonical)
+        if isResolvingPresentation {
+          let twitterPresentation =
+            await TwitterStatusResolutionService.shared.resolvedPresentation(for: canonical)
+          resolvedMediaStrategy = twitterPresentation?.strategy ?? .link
+          if let document = twitterPresentation?.embedHTMLDocument {
+            preferredEmbedSource = .html(
+              document: document,
+              baseURL: URL(string: "https://publish.twitter.com")
+            )
+          }
+        }
+        if preferredEmbedSource == nil,
+          let preferredEmbedURL = await URLCanonicalizationService.shared.preferredEmbedURL(
+            for: canonical)
+        {
+          preferredEmbedSource = .url(preferredEmbedURL)
+        }
+        isResolvingPresentation = false
         extractionState = nil
         extractionFallbackReason = nil
         localPlaybackMode = .localPreferred
@@ -202,36 +222,48 @@ struct AdaptiveVideoPlaybackView: View {
 
   @ViewBuilder
   private var content: some View {
-    switch effectiveMediaStrategy {
-    case .extractionPreferred(let embedURL):
-      let resolvedEmbedURL = resolvedOrFallbackEmbedURL(embedURL)
-      if localPlaybackMode == .embedPreferred {
-        embedPlaybackBlock(embedURL: resolvedEmbedURL, allowsTryLocalPlayback: true)
-      } else {
-        extractionPlaybackBlock(embedURL: resolvedEmbedURL)
-      }
-    case .embedOnly(let embedURL):
-      embedPlaybackBlock(
-        embedURL: resolvedOrFallbackEmbedURL(embedURL), allowsTryLocalPlayback: false)
-    case .link:
-      if let openSourceAction {
-        Button {
-          openSourceAction()
-        } label: {
-          Text("open in safari")
-            .frame(maxWidth: .infinity)
+    if isResolvingPresentation {
+      mediaSurface {
+        VStack(spacing: 8) {
+          ProgressView()
+          Text("loading post...")
+            .font(LinkstrTheme.body(12))
+            .foregroundStyle(LinkstrTheme.textSecondary)
         }
-        .frame(maxWidth: .infinity)
-        .buttonStyle(.borderedProminent)
-        .tint(LinkstrTheme.neonCyan)
-      } else {
-        EmptyView()
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+      }
+    } else {
+      switch effectiveMediaStrategy {
+      case .extractionPreferred(let embedURL):
+        let resolvedEmbedSource = resolvedOrFallbackEmbedSource(embedURL)
+        if localPlaybackMode == .embedPreferred {
+          embedPlaybackBlock(embedSource: resolvedEmbedSource, allowsTryLocalPlayback: true)
+        } else {
+          extractionPlaybackBlock(embedSource: resolvedEmbedSource)
+        }
+      case .embedOnly(let embedURL):
+        embedPlaybackBlock(
+          embedSource: resolvedOrFallbackEmbedSource(embedURL), allowsTryLocalPlayback: false)
+      case .link:
+        if let openSourceAction {
+          Button {
+            openSourceAction()
+          } label: {
+            Text("open in safari")
+              .frame(maxWidth: .infinity)
+          }
+          .frame(maxWidth: .infinity)
+          .buttonStyle(.borderedProminent)
+          .tint(LinkstrTheme.neonCyan)
+        } else {
+          EmptyView()
+        }
       }
     }
   }
 
   @ViewBuilder
-  private func extractionPlaybackBlock(embedURL: URL) -> some View {
+  private func extractionPlaybackBlock(embedSource: EmbeddedWebSource) -> some View {
     switch extractionState {
     case .ready(let media):
       let exportFileURL = exportableLocalMediaURL(for: cachedLocalMedia ?? media)
@@ -244,7 +276,7 @@ struct AdaptiveVideoPlaybackView: View {
       .frame(maxWidth: .infinity, alignment: .leading)
 
     case .cannotExtract:
-      embedPlaybackBlock(embedURL: embedURL, allowsTryLocalPlayback: true)
+      embedPlaybackBlock(embedSource: embedSource, allowsTryLocalPlayback: true)
 
     case nil:
       mediaSurface {
@@ -259,10 +291,13 @@ struct AdaptiveVideoPlaybackView: View {
     }
   }
 
-  private func embedPlaybackBlock(embedURL: URL, allowsTryLocalPlayback: Bool) -> some View {
+  private func embedPlaybackBlock(
+    embedSource: EmbeddedWebSource,
+    allowsTryLocalPlayback: Bool
+  ) -> some View {
     VStack(alignment: .leading, spacing: 8) {
       mediaSurface {
-        EmbeddedWebView(url: embedURL)
+        EmbeddedWebView(source: embedSource)
       }
 
       if let extractionFallbackReason {
@@ -364,6 +399,7 @@ struct AdaptiveVideoPlaybackView: View {
   }
 
   private func prepareMediaIfNeeded() async {
+    guard !isResolvingPresentation else { return }
     guard effectiveMediaStrategy.allowsLocalPlaybackToggle else { return }
     guard localPlaybackMode == .localPreferred else { return }
 
@@ -423,20 +459,20 @@ struct AdaptiveVideoPlaybackView: View {
     canonicalSourceURL ?? sourceURL
   }
 
-  private func resolvedOrFallbackEmbedURL(_ fallback: URL) -> URL {
-    if let preferredEmbedURL {
-      return preferredEmbedURL
+  private func resolvedOrFallbackEmbedSource(_ fallback: URL) -> EmbeddedWebSource {
+    if let preferredEmbedSource {
+      return preferredEmbedSource
     }
 
     if URLClassifier.classify(effectiveSourceURL) == .rumble {
-      return effectiveSourceURL
+      return .url(effectiveSourceURL)
     }
 
-    return fallback
+    return .url(fallback)
   }
 
   private var effectiveMediaStrategy: URLClassifier.MediaStrategy {
-    URLClassifier.mediaStrategy(for: effectiveSourceURL)
+    resolvedMediaStrategy ?? URLClassifier.mediaStrategy(for: effectiveSourceURL)
   }
 
   private var effectiveMediaAspectRatio: CGFloat {
