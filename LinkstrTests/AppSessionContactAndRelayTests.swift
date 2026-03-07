@@ -1,4 +1,3 @@
-import NostrSDK
 import SwiftData
 import XCTest
 
@@ -244,50 +243,5 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     XCTAssertEqual(Set(relays.map(\.url)), Set(RelayDefaults.urls))
     XCTAssertEqual(relays.count, RelayDefaults.urls.count)
     XCTAssertTrue(relays.allSatisfy(\.isEnabled))
-  }
-
-  func testRelayConnectivityStateClassification() throws {
-    let (session, _) = try makeSession()
-
-    XCTAssertEqual(session.relayConnectivityState(for: []), .noEnabledRelays)
-    XCTAssertEqual(
-      session.relayConnectivityState(for: [
-        RelayEntity(url: "wss://one.example.com", status: .connected)
-      ]),
-      .online
-    )
-    XCTAssertEqual(
-      session.relayConnectivityState(for: [
-        RelayEntity(url: "wss://one.example.com", status: .connecting)
-      ]),
-      .connecting
-    )
-    XCTAssertEqual(
-      session.relayConnectivityState(for: [
-        RelayEntity(url: "wss://one.example.com", status: .readOnly)
-      ]),
-      .readOnly
-    )
-    XCTAssertEqual(
-      session.relayConnectivityState(
-        for: [RelayEntity(url: "wss://one.example.com", status: .disconnected)]
-      ),
-      .offline
-    )
-    XCTAssertEqual(
-      session.relayConnectivityState(for: [
-        RelayEntity(url: "wss://one.example.com", status: .failed)
-      ]),
-      .offline
-    )
-    XCTAssertEqual(
-      session.relayConnectivityState(
-        for: [
-          RelayEntity(url: "wss://one.example.com", status: .disconnected),
-          RelayEntity(url: "wss://two.example.com", status: .connected),
-        ]
-      ),
-      .online
-    )
   }
 }

@@ -73,18 +73,8 @@ final class LinkstrPayloadTests: XCTestCase {
     XCTAssertNil(LinkstrURLValidator.normalizedWebURL(from: ""))
   }
 
-  func testRootPayloadValidationAcceptsRealProviderVideoLinks() {
-    let urls = [
-      "https://www.tiktok.com/@boogiebug0/video/7596114833477537054?is_from_webapp=1",
-      "https://www.instagram.com/reel/DUSWiOIDivu/",
-      "https://www.facebook.com/reel/213286701716863",
-      "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-      "https://rumble.com/v8tc4h9-zelensky-has-rolled-the-world-in-less-than-2-minutes.html",
-      "https://x.com/jack/status/20",
-      "https://twitter.com/nyjets/status/924685391524798464/video/1",
-    ]
-
-    for url in urls {
+  func testRootPayloadValidationAcceptsRepresentativeProviderURLs() {
+    for url in MediaURLFixtures.validRootPayloadURLs {
       let payload = LinkstrPayload(
         conversationID: "c1",
         rootID: "r1",

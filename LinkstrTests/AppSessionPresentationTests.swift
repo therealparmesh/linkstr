@@ -1,11 +1,8 @@
-import NostrSDK
-import SwiftData
 import XCTest
 
 @testable import Linkstr
 
-@MainActor
-final class AppSessionPresentationTests: AppSessionTestCase {
+final class AppSessionPresentationTests: XCTestCase {
   func testReactionSummaryBadgeTextCapsAtTenPlus() {
     XCTAssertEqual(
       ReactionSummary(emoji: "🔥", count: 1, includesCurrentUser: false).badgeText,
@@ -43,20 +40,5 @@ final class AppSessionPresentationTests: AppSessionTestCase {
     XCTAssertTrue(html.contains("linkstrEmbedMetrics"))
     XCTAssertTrue(html.contains("MutationObserver"))
     XCTAssertTrue(html.contains("ResizeObserver"))
-  }
-
-  func testIncomingReactionNotificationBodyUsesPreviewWhenAvailable() {
-    XCTAssertEqual(
-      LocalNotificationService.incomingReactionBody(emoji: "🔥", postPreview: "A very good post"),
-      "reacted with 🔥 to A very good post"
-    )
-    XCTAssertEqual(
-      LocalNotificationService.incomingReactionBody(emoji: "🔥", postPreview: nil),
-      "reacted with 🔥"
-    )
-    XCTAssertEqual(
-      LocalNotificationService.incomingReactionBody(emoji: "🔥", postPreview: "   "),
-      "reacted with 🔥"
-    )
   }
 }

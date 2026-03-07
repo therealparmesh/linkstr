@@ -150,7 +150,7 @@ final class AppSessionMutationTests: AppSessionTestCase {
     XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
   }
 
-  func testCreateSessionPostPersistsOutgoingRootMessage() async throws {
+  func testCreateSessionPostPersistsLocalRootMessageWithoutRelayTransportMetadata() async throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
     let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
@@ -179,6 +179,8 @@ final class AppSessionMutationTests: AppSessionTestCase {
     XCTAssertNotEqual(message.encryptedNote, "hello")
     XCTAssertNotNil(message.readAt)
     XCTAssertFalse(message.eventID.isEmpty)
+    XCTAssertEqual(message.rootID, message.eventID)
+    XCTAssertTrue(message.publishedTransportEventIDs.isEmpty)
     XCTAssertNil(session.composeError)
   }
 
