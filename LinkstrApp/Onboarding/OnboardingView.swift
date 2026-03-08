@@ -18,9 +18,11 @@ struct OnboardingView: View {
             Text("welcome to linkstr.")
               .font(LinkstrTheme.title(36))
               .foregroundStyle(LinkstrTheme.textPrimary)
-            Text("share videos and links privately with people who don’t use social media.")
-              .font(LinkstrTheme.body(14))
-              .foregroundStyle(LinkstrTheme.textSecondary)
+            Text(
+              "share, organize, and download links and social media videos privately, solo or in groups, with in-app playback that skips clunky mobile sites and app-store redirects."
+            )
+            .font(LinkstrTheme.body(14))
+            .foregroundStyle(LinkstrTheme.textSecondary)
 
             VStack(alignment: .leading, spacing: formRowSpacing) {
               LinkstrSectionHeader(title: "sign in")
