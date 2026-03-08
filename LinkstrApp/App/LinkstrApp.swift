@@ -73,10 +73,19 @@ struct LinkstrAppMain: App {
         .environmentObject(session)
         .environmentObject(deepLinkHandler)
         .onAppear {
-          session.boot()
+          Task {
+            await session.boot()
+          }
         }
         .onOpenURL { url in
           deepLinkHandler.handle(url: url)
+        }
+        .onReceive(
+          NotificationCenter.default.publisher(
+            for: UIApplication.protectedDataDidBecomeAvailableNotification
+          )
+        ) { _ in
+          session.handleProtectedDataDidBecomeAvailable()
         }
         .onChange(of: scenePhase) { _, newValue in
           switch newValue {

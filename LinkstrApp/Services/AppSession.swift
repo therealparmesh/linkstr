@@ -2,6 +2,10 @@ import Foundation
 import NostrSDK
 import SwiftData
 
+#if canImport(UIKit)
+  import UIKit
+#endif
+
 @MainActor
 final class AppSession: ObservableObject {
   enum RelayConnectivityState: Equatable {
@@ -50,6 +54,10 @@ final class AppSession: ObservableObject {
   struct TestingOverrides {
     var disableNostrStartup: Bool?
     var hasConnectedRelays: (() -> Bool)?
+    var loadIdentity: ((IdentityService) -> IdentityService.LoadResult)?
+    var identityRetryDelayNanoseconds: UInt64?
+    var skipDefaultRelaySetup = false
+    var skipPersistedFollowListStateLoad = false
     var publishFollowList: (([String]) async throws -> String)?
     var publishRelayEvent: ((NostrEvent) async throws -> String)?
     var sendPayload: ((LinkstrPayload, [String]) async throws -> SentPayloadReceipt)?
@@ -87,9 +95,16 @@ final class AppSession: ObservableObject {
   private var hasObservedHealthyRelayInCurrentForeground = false
   private let relayDisconnectGraceInterval: TimeInterval = 1.25
   private let foregroundRelayRestartCooldown: TimeInterval = 8
+  private let identityRetryDelayNanoseconds: UInt64 = 250_000_000
+  private let bootIdentityRetryAttempts = 2
+  private let protectedDataUnavailableBootIdentityRetryAttempts = 6
+  private let activeIdentityRetryAttempts = 2
+  private let protectedDataIdentityRetryAttempts = 4
   private var lastForegroundRelayRestartAt: Date?
   private var latestAppliedFollowListCreatedAt: Date?
   private var latestAppliedFollowListEventID: String?
+  private var isBooting = false
+  private var isRetryingIdentityLoad = false
 
   @Published var composeError: String?
   @Published var pendingSessionNavigationID: String?
@@ -111,15 +126,22 @@ final class AppSession: ObservableObject {
     self.accountStateStore = AccountStateStore(modelContext: modelContext)
   }
 
-  func boot() {
+  func boot() async {
+    guard !isBooting, !didFinishBoot else { return }
+    isBooting = true
     didFinishBoot = false
     bootStatusMessage = "loading account…"
-    defer { didFinishBoot = true }
+    defer {
+      didFinishBoot = true
+      isBooting = false
+    }
 
-    identityService.loadIdentity()
-    refreshIdentityState()
+    await retryIdentityLoadIfNeeded(
+      maxAttempts: bootIdentityRetryAttemptCount,
+      retryDelayNanoseconds: configuredIdentityRetryDelayNanoseconds
+    )
     LocalNotificationService.shared.configure()
-    if !isEnvironmentFlagEnabled("LINKSTR_SKIP_NOTIFICATION_PROMPT") {
+    if !isRunningTests && !isEnvironmentFlagEnabled("LINKSTR_SKIP_NOTIFICATION_PROMPT") {
       LocalNotificationService.shared.requestAuthorizationIfNeeded()
     }
 
@@ -134,8 +156,12 @@ final class AppSession: ObservableObject {
     do {
       bootStatusMessage = "preparing local data…"
       bootStatusMessage = "connecting relays…"
-      try relayStore.ensureDefaultRelays()
-      pruneRuntimeRelayStatusCache()
+      if testingOverrides.skipDefaultRelaySetup {
+        relayRuntimeStatusByURL.removeAll()
+      } else {
+        try relayStore.ensureDefaultRelays()
+        pruneRuntimeRelayStatusCache()
+      }
     } catch {
       composeError = error.localizedDescription
     }
@@ -148,7 +174,14 @@ final class AppSession: ObservableObject {
     isForeground = true
     hasObservedHealthyRelayInCurrentForeground = false
     lastForegroundRelayRestartAt = nil
-    startNostrIfPossible(forceRestart: true)
+    guard didFinishBoot else { return }
+    Task { @MainActor in
+      await retryIdentityLoadIfNeeded(
+        maxAttempts: activeIdentityRetryAttempts,
+        retryDelayNanoseconds: configuredIdentityRetryDelayNanoseconds
+      )
+      startNostrIfPossible(forceRestart: true)
+    }
   }
 
   func handleAppDidLeaveForeground() {
@@ -156,6 +189,17 @@ final class AppSession: ObservableObject {
     hasObservedHealthyRelayInCurrentForeground = false
     lastForegroundRelayRestartAt = nil
     flushRelayPersistenceNow()
+  }
+
+  func handleProtectedDataDidBecomeAvailable() {
+    guard didFinishBoot else { return }
+    Task { @MainActor in
+      await retryIdentityLoadIfNeeded(
+        maxAttempts: protectedDataIdentityRetryAttempts,
+        retryDelayNanoseconds: configuredIdentityRetryDelayNanoseconds
+      )
+      startNostrIfPossible(forceRestart: true)
+    }
   }
 
   private func report(error: Error) {
@@ -285,6 +329,62 @@ final class AppSession: ObservableObject {
       status: status,
       message: normalizedMessage
     )
+  }
+
+  private var bootIdentityRetryAttemptCount: Int {
+    isProtectedDataCurrentlyAvailable
+      ? bootIdentityRetryAttempts : protectedDataUnavailableBootIdentityRetryAttempts
+  }
+
+  private var configuredIdentityRetryDelayNanoseconds: UInt64 {
+    testingOverrides.identityRetryDelayNanoseconds ?? identityRetryDelayNanoseconds
+  }
+
+  private var isRunningTests: Bool {
+    ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+  }
+
+  private var isProtectedDataCurrentlyAvailable: Bool {
+    #if canImport(UIKit)
+      UIApplication.shared.isProtectedDataAvailable
+    #else
+      true
+    #endif
+  }
+
+  private func loadIdentityForCurrentProcess() -> IdentityService.LoadResult {
+    if let loadIdentityOverride = testingOverrides.loadIdentity {
+      return loadIdentityOverride(identityService)
+    }
+    return identityService.loadIdentity()
+  }
+
+  private func retryIdentityLoadIfNeeded(
+    maxAttempts: Int,
+    retryDelayNanoseconds: UInt64
+  ) async {
+    guard hasIdentity == false else { return }
+    guard !isRetryingIdentityLoad else { return }
+
+    isRetryingIdentityLoad = true
+    defer { isRetryingIdentityLoad = false }
+
+    let attemptCount = max(1, maxAttempts)
+    for attempt in 1...attemptCount {
+      let loadResult = loadIdentityForCurrentProcess()
+      refreshIdentityState()
+      guard hasIdentity == false else { return }
+      guard attempt < attemptCount else { return }
+
+      switch loadResult {
+      case .loaded:
+        return
+      case .missing, .failed:
+        break
+      }
+
+      try? await Task.sleep(nanoseconds: retryDelayNanoseconds)
+    }
   }
 
   private func normalizedRelayStatusMessage(_ message: String?) -> String? {
@@ -612,6 +712,10 @@ final class AppSession: ObservableObject {
   private func refreshIdentityState() {
     hasIdentity = identityService.keypair != nil
     guard let ownerPubkey = identityService.pubkeyHex else {
+      resetFollowListStateInMemory()
+      return
+    }
+    guard !testingOverrides.skipPersistedFollowListStateLoad else {
       resetFollowListStateInMemory()
       return
     }

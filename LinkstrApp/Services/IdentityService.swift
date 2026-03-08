@@ -3,6 +3,12 @@ import NostrSDK
 
 @MainActor
 final class IdentityService: ObservableObject {
+  enum LoadResult {
+    case loaded
+    case missing
+    case failed
+  }
+
   @Published private(set) var keypair: Keypair?
 
   private let keychain = KeychainStore.shared
@@ -16,12 +22,24 @@ final class IdentityService: ObservableObject {
     keypair?.publicKey.hex
   }
 
-  func loadIdentity() {
+  @discardableResult
+  func loadIdentity() -> LoadResult {
     do {
-      guard let nsec = try keychain.get(keychainKey) else { return }
-      keypair = Keypair(nsec: nsec)
+      guard let nsec = try keychain.get(keychainKey) else {
+        keypair = nil
+        return .missing
+      }
+      guard let keypair = Keypair(nsec: nsec) else {
+        self.keypair = nil
+        NSLog("Failed loading identity: stored account key is invalid.")
+        return .failed
+      }
+      self.keypair = keypair
+      return .loaded
     } catch {
+      keypair = nil
       NSLog("Failed loading identity: \(error.localizedDescription)")
+      return .failed
     }
   }
 
@@ -52,7 +70,6 @@ final class IdentityService: ObservableObject {
     try keychain.delete(keychainKey)
     keypair = nil
   }
-
 }
 
 enum IdentityError: Error, LocalizedError {

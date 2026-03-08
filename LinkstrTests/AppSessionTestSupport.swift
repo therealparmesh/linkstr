@@ -89,6 +89,10 @@ class AppSessionTestCase: XCTestCase {
   func makeSession(
     disableNostrStartup: Bool? = nil,
     hasConnectedRelays: (() -> Bool)? = nil,
+    loadIdentity: ((IdentityService) -> IdentityService.LoadResult)? = nil,
+    identityRetryDelayNanoseconds: UInt64? = nil,
+    skipDefaultRelaySetup: Bool = false,
+    skipPersistedFollowListStateLoad: Bool = false,
     publishFollowList: (([String]) async throws -> String)? = nil,
     publishRelayEvent: ((NostrEvent) async throws -> String)? = nil,
     sendPayload: ((LinkstrPayload, [String]) async throws -> SentPayloadReceipt)? = nil,
@@ -97,6 +101,10 @@ class AppSessionTestCase: XCTestCase {
     var testingOverrides = AppSession.TestingOverrides()
     testingOverrides.disableNostrStartup = disableNostrStartup
     testingOverrides.hasConnectedRelays = hasConnectedRelays
+    testingOverrides.loadIdentity = loadIdentity
+    testingOverrides.identityRetryDelayNanoseconds = identityRetryDelayNanoseconds
+    testingOverrides.skipDefaultRelaySetup = skipDefaultRelaySetup
+    testingOverrides.skipPersistedFollowListStateLoad = skipPersistedFollowListStateLoad
     testingOverrides.publishFollowList = publishFollowList
     testingOverrides.publishRelayEvent = publishRelayEvent
     testingOverrides.sendPayload = sendPayload

@@ -28,8 +28,10 @@
   - `connecting relays…`
   - `starting session…`
 - Boot loads identity from keychain and configures local notifications.
+- Boot briefly retries identity load before falling back to onboarding, to tolerate transient keychain/protected-data unavailability on launch.
 - Boot ensures default relays exist if the local relay list is empty.
 - Boot starts relay runtime when identity is available.
+- Foreground re-entry and protected-data availability events retry identity load when no account is currently active in memory.
 - If no identity exists, onboarding is shown.
 - If identity exists, the main app shell is shown.
 - The app uses a Tokyo Night color scheme across all surfaces.

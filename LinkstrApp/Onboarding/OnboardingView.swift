@@ -17,7 +17,7 @@ struct OnboardingView: View {
           VStack(alignment: .leading, spacing: 18) {
             Text("welcome to linkstr.")
               .font(LinkstrTheme.title(36))
-              .foregroundStyle(LinkstrTheme.textPrimary)
+              .foregroundStyle(LinkstrTheme.neonAmber)
             Text(
               "share, organize, and download links and social media videos privately, solo or in groups, with in-app playback that skips clunky mobile sites and app-store redirects."
             )

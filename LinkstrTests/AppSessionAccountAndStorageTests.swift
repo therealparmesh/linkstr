@@ -193,6 +193,93 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     XCTAssertEqual(try fetchContacts(in: container.mainContext).count, 1)
     XCTAssertEqual(try fetchMessages(in: container.mainContext).count, 1)
   }
+
+  func testBootRetriesIdentityLoadBeforeShowingOnboarding() async throws {
+    let keypair = try TestKeyMaterialFactory.makeKeypair()
+    var loadAttempts = 0
+    let (session, _) = try makeSession(
+      disableNostrStartup: true,
+      loadIdentity: { identityService in
+        loadAttempts += 1
+        if loadAttempts == 1 {
+          return .missing
+        }
+        try? identityService.importNsec(keypair.privateKey.nsec)
+        return .loaded
+      },
+      identityRetryDelayNanoseconds: 0,
+      skipDefaultRelaySetup: true,
+      skipPersistedFollowListStateLoad: true
+    )
+
+    await session.boot()
+
+    XCTAssertTrue(session.didFinishBoot)
+    XCTAssertTrue(session.hasIdentity)
+    XCTAssertGreaterThanOrEqual(loadAttempts, 2)
+  }
+
+  func testHandleProtectedDataAvailabilityRetriesIdentityLoad() async throws {
+    let keypair = try TestKeyMaterialFactory.makeKeypair()
+    var loadAttempts = 0
+    var shouldLoadIdentity = false
+    let (session, _) = try makeSession(
+      disableNostrStartup: true,
+      loadIdentity: { identityService in
+        defer { loadAttempts += 1 }
+        guard shouldLoadIdentity else {
+          return .missing
+        }
+        try? identityService.importNsec(keypair.privateKey.nsec)
+        return .loaded
+      },
+      identityRetryDelayNanoseconds: 0,
+      skipDefaultRelaySetup: true,
+      skipPersistedFollowListStateLoad: true
+    )
+
+    await session.boot()
+    XCTAssertFalse(session.hasIdentity)
+
+    shouldLoadIdentity = true
+    session.handleProtectedDataDidBecomeAvailable()
+    await Task.yield()
+    await Task.yield()
+
+    XCTAssertTrue(session.hasIdentity)
+    XCTAssertGreaterThanOrEqual(loadAttempts, 2)
+  }
+
+  func testHandleAppDidBecomeActiveRetriesIdentityLoad() async throws {
+    let keypair = try TestKeyMaterialFactory.makeKeypair()
+    var loadAttempts = 0
+    var shouldLoadIdentity = false
+    let (session, _) = try makeSession(
+      disableNostrStartup: true,
+      loadIdentity: { identityService in
+        defer { loadAttempts += 1 }
+        guard shouldLoadIdentity else {
+          return .missing
+        }
+        try? identityService.importNsec(keypair.privateKey.nsec)
+        return .loaded
+      },
+      identityRetryDelayNanoseconds: 0,
+      skipDefaultRelaySetup: true,
+      skipPersistedFollowListStateLoad: true
+    )
+
+    await session.boot()
+    XCTAssertFalse(session.hasIdentity)
+
+    shouldLoadIdentity = true
+    session.handleAppDidBecomeActive()
+    await Task.yield()
+    await Task.yield()
+
+    XCTAssertTrue(session.hasIdentity)
+    XCTAssertGreaterThanOrEqual(loadAttempts, 2)
+  }
   func testLogOutClearLocalDataRemovesStoredThumbnailFiles() throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
