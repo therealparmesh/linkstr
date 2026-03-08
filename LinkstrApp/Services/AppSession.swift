@@ -27,6 +27,11 @@ final class AppSession: ObservableObject {
     let message: String?
   }
 
+  private struct PendingMetadataRefresh {
+    let storageID: String
+    let context: LinkMetadataRefreshContext
+  }
+
   private struct RootPostDraft {
     let payload: LinkstrPayload
     let ownerPubkey: String
@@ -62,10 +67,24 @@ final class AppSession: ObservableObject {
     var publishRelayEvent: ((NostrEvent) async throws -> String)?
     var sendPayload: ((LinkstrPayload, [String]) async throws -> SentPayloadReceipt)?
     var skipNostrNetworkStartup = false
+    var onNostrStart: (() -> Void)?
+    var clearLocalAccountData: ((String) throws -> Void)?
   }
 
   private enum MutationPreparationError: Error {
     case relayBlocked
+  }
+
+  private struct LocalAccountCleanupError: LocalizedError {
+    let failures: [String]
+
+    var errorDescription: String? {
+      guard !failures.isEmpty else { return nil }
+      if failures.count == 1 {
+        return failures[0]
+      }
+      return "local cleanup did not fully complete: \(failures.joined(separator: " "))"
+    }
   }
 
   let identityService: IdentityService
@@ -84,8 +103,8 @@ final class AppSession: ObservableObject {
   private let relaySendTimeoutMessage = "couldn't reconnect to relays in time. try again."
   private var hasShownOfflineToastForCurrentOutage = false
   private var isForeground = false
-  private var pendingMetadataStorageIDs: [String] = []
-  private var pendingMetadataStorageHead = 0
+  private var pendingMetadataRefreshes: [PendingMetadataRefresh] = []
+  private var pendingMetadataRefreshHead = 0
   private var enqueuedMetadataStorageIDs = Set<String>()
   private var isProcessingMetadataQueue = false
   @Published private var relayRuntimeStatusByURL: [String: RelayRuntimeStatus] = [:]
@@ -132,7 +151,6 @@ final class AppSession: ObservableObject {
     didFinishBoot = false
     bootStatusMessage = "loading account…"
     defer {
-      didFinishBoot = true
       isBooting = false
     }
 
@@ -166,22 +184,16 @@ final class AppSession: ObservableObject {
       composeError = error.localizedDescription
     }
     bootStatusMessage = "starting session…"
-    handleAppDidBecomeActive()
+    didFinishBoot = true
+    resetForegroundRelayState()
+    await retryIdentityLoadAndRestartNostr(maxAttempts: activeIdentityRetryAttempts)
     hydrateMissingMetadata()
   }
 
   func handleAppDidBecomeActive() {
-    isForeground = true
-    hasObservedHealthyRelayInCurrentForeground = false
-    lastForegroundRelayRestartAt = nil
+    resetForegroundRelayState()
     guard didFinishBoot else { return }
-    Task { @MainActor in
-      await retryIdentityLoadIfNeeded(
-        maxAttempts: activeIdentityRetryAttempts,
-        retryDelayNanoseconds: configuredIdentityRetryDelayNanoseconds
-      )
-      startNostrIfPossible(forceRestart: true)
-    }
+    scheduleIdentityLoadAndNostrRestart(maxAttempts: activeIdentityRetryAttempts)
   }
 
   func handleAppDidLeaveForeground() {
@@ -193,13 +205,7 @@ final class AppSession: ObservableObject {
 
   func handleProtectedDataDidBecomeAvailable() {
     guard didFinishBoot else { return }
-    Task { @MainActor in
-      await retryIdentityLoadIfNeeded(
-        maxAttempts: protectedDataIdentityRetryAttempts,
-        retryDelayNanoseconds: configuredIdentityRetryDelayNanoseconds
-      )
-      startNostrIfPossible(forceRestart: true)
-    }
+    scheduleIdentityLoadAndNostrRestart(maxAttempts: protectedDataIdentityRetryAttempts)
   }
 
   private func report(error: Error) {
@@ -391,6 +397,26 @@ final class AppSession: ObservableObject {
     guard let message else { return nil }
     let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
     return trimmed.isEmpty ? nil : trimmed
+  }
+
+  private func resetForegroundRelayState() {
+    isForeground = true
+    hasObservedHealthyRelayInCurrentForeground = false
+    lastForegroundRelayRestartAt = nil
+  }
+
+  private func scheduleIdentityLoadAndNostrRestart(maxAttempts: Int) {
+    Task { @MainActor in
+      await retryIdentityLoadAndRestartNostr(maxAttempts: maxAttempts)
+    }
+  }
+
+  private func retryIdentityLoadAndRestartNostr(maxAttempts: Int) async {
+    await retryIdentityLoadIfNeeded(
+      maxAttempts: maxAttempts,
+      retryDelayNanoseconds: configuredIdentityRetryDelayNanoseconds
+    )
+    startNostrIfPossible(forceRestart: true)
   }
 
   private func enqueueRelayPersistence(
@@ -658,7 +684,13 @@ final class AppSession: ObservableObject {
     handleIdentityCleared()
 
     if let ownerPubkey, clearLocalData {
-      clearLocalAccountData(ownerPubkey: ownerPubkey)
+      do {
+        try clearLocalAccountData(ownerPubkey: ownerPubkey)
+      } catch {
+        composeError =
+          "signed out, but some local data could not be removed. \(error.localizedDescription)"
+        return
+      }
     }
 
     composeError = nil
@@ -704,7 +736,13 @@ final class AppSession: ObservableObject {
       return false
     }
     handleIdentityCleared()
-    clearLocalAccountData(ownerPubkey: ownerPubkey)
+    do {
+      try clearLocalAccountData(ownerPubkey: ownerPubkey)
+    } catch {
+      composeError =
+        "account deletion finished, but some local data could not be removed. \(error.localizedDescription)"
+      return false
+    }
     composeError = nil
     return true
   }
@@ -727,8 +765,8 @@ final class AppSession: ObservableObject {
     relayPersistenceFlushTask = nil
     pendingRelayPersistenceByURL.removeAll()
     nostrService.stop()
-    pendingMetadataStorageIDs.removeAll()
-    pendingMetadataStorageHead = 0
+    pendingMetadataRefreshes.removeAll()
+    pendingMetadataRefreshHead = 0
     enqueuedMetadataStorageIDs.removeAll()
     isProcessingMetadataQueue = false
     relayRuntimeStatusByURL.removeAll()
@@ -740,11 +778,41 @@ final class AppSession: ObservableObject {
     resetFollowListStateInMemory()
   }
 
-  private func clearLocalAccountData(ownerPubkey: String) {
-    clearMessageCache(ownerPubkey: ownerPubkey)
-    clearAllContacts(ownerPubkey: ownerPubkey)
-    try? LocalDataCrypto.shared.clearKey(ownerPubkey: ownerPubkey)
-    clearPersistedFollowListState(ownerPubkey: ownerPubkey)
+  private func clearLocalAccountData(ownerPubkey: String) throws {
+    if let clearLocalAccountDataOverride = testingOverrides.clearLocalAccountData {
+      try clearLocalAccountDataOverride(ownerPubkey)
+      return
+    }
+
+    var failures: [String] = []
+
+    do {
+      try messageStore.clearAllSessionData(ownerPubkey: ownerPubkey)
+    } catch {
+      failures.append("couldn't remove local sessions and posts.")
+    }
+
+    do {
+      try contactStore.clearAllContacts(ownerPubkey: ownerPubkey)
+    } catch {
+      failures.append("couldn't remove local contacts.")
+    }
+
+    do {
+      try LocalDataCrypto.shared.clearKey(ownerPubkey: ownerPubkey)
+    } catch {
+      failures.append(error.localizedDescription)
+    }
+
+    do {
+      try accountStateStore.deleteAccountState(ownerPubkey: ownerPubkey)
+    } catch {
+      failures.append("couldn't remove local account state.")
+    }
+
+    if !failures.isEmpty {
+      throw LocalAccountCleanupError(failures: failures)
+    }
   }
 
   func startNostrIfPossible(forceRestart: Bool = false) {
@@ -762,7 +830,7 @@ final class AppSession: ObservableObject {
       pendingRelayPersistenceByURL.removeAll()
       relayPersistenceFlushTask?.cancel()
       relayPersistenceFlushTask = nil
-      nostrService.start(
+      startNostrRuntime(
         keypair: keypair,
         relayURLs: [],
         onIncoming: { _ in },
@@ -777,7 +845,7 @@ final class AppSession: ObservableObject {
       pendingRelayPersistenceByURL.removeAll()
       relayPersistenceFlushTask?.cancel()
       relayPersistenceFlushTask = nil
-      nostrService.start(
+      startNostrRuntime(
         keypair: keypair,
         relayURLs: [],
         onIncoming: { _ in },
@@ -811,7 +879,7 @@ final class AppSession: ObservableObject {
       relayURLs.contains($0.key)
     }
 
-    nostrService.start(
+    startNostrRuntime(
       keypair: keypair,
       relayURLs: relayURLs,
       onIncoming: { [weak self] incoming in
@@ -837,6 +905,23 @@ final class AppSession: ObservableObject {
           self?.persistIncomingFollowList(followList)
         }
       }
+    )
+  }
+
+  private func startNostrRuntime(
+    keypair: Keypair,
+    relayURLs: [String],
+    onIncoming: @escaping (ReceivedDirectMessage) -> Void,
+    onRelayStatus: @escaping (String, RelayHealthStatus, String?) -> Void,
+    onFollowList: ((ReceivedFollowList) -> Void)? = nil
+  ) {
+    testingOverrides.onNostrStart?()
+    nostrService.start(
+      keypair: keypair,
+      relayURLs: relayURLs,
+      onIncoming: onIncoming,
+      onRelayStatus: onRelayStatus,
+      onFollowList: onFollowList
     )
   }
 
@@ -1356,7 +1441,7 @@ final class AppSession: ObservableObject {
       publishedTransportEventIDs: receipt.publishedEventIDs
     )
     try messageStore.insert(message)
-    enqueueMetadataRefresh(for: message)
+    enqueueMetadataRefresh(for: message, in: .backgroundHydration)
   }
 
   private func persistReactionState(_ draft: ReactionDraft, eventID: String) throws {
@@ -1755,15 +1840,6 @@ final class AppSession: ObservableObject {
     }
   }
 
-  private func clearAllContacts(ownerPubkey: String) {
-    do {
-      try contactStore.clearAllContacts(ownerPubkey: ownerPubkey)
-      composeError = nil
-    } catch {
-      report(error: error)
-    }
-  }
-
   func setSessionArchived(sessionID: String, archived: Bool) {
     guard let ownerPubkey = identityService.pubkeyHex else { return }
     do {
@@ -1832,15 +1908,6 @@ final class AppSession: ObservableObject {
     pruneRuntimeRelayStatusCache()
     startNostrIfPossible()
     return true
-  }
-
-  private func clearMessageCache(ownerPubkey: String) {
-    do {
-      try messageStore.clearAllSessionData(ownerPubkey: ownerPubkey)
-      composeError = nil
-    } catch {
-      report(error: error)
-    }
   }
 
   func clearCachedMediaAndPreviews() {
@@ -2106,7 +2173,7 @@ final class AppSession: ObservableObject {
         if existing.appendPublishedTransportEventIDs(transportEventIDs) {
           try modelContext.save()
         }
-        enqueueMetadataRefresh(for: existing)
+        enqueueMetadataRefresh(for: existing, in: .backgroundHydration)
         return
       }
     } catch {
@@ -2203,7 +2270,7 @@ final class AppSession: ObservableObject {
     }
 
     notifyForIncomingMessage(message)
-    enqueueMetadataRefresh(for: message)
+    enqueueMetadataRefresh(for: message, in: .backgroundHydration)
   }
 
   private func inboundMembershipIsActive(
@@ -2325,25 +2392,34 @@ final class AppSession: ObservableObject {
     do {
       let roots = try messageStore.rootMessages(ownerPubkey: ownerPubkey)
       let sortedRoots = roots.sorted { $0.timestamp > $1.timestamp }
-      for message in sortedRoots where needsMetadataRefresh(message) {
-        enqueueMetadataRefresh(for: message)
+      for message in sortedRoots where needsMetadataRefresh(message, in: .backgroundHydration) {
+        enqueueMetadataRefresh(for: message, in: .backgroundHydration)
       }
     } catch {
       report(error: error)
     }
   }
 
-  private func enqueueMetadataRefresh(for message: SessionMessageEntity) {
+  private func enqueueMetadataRefresh(
+    for message: SessionMessageEntity,
+    in context: LinkMetadataRefreshContext
+  ) {
     guard shouldFetchMetadataForCurrentProcess() else { return }
     guard message.kind == .root else { return }
     guard message.url != nil else { return }
-    guard needsMetadataRefresh(message) else { return }
+    guard needsMetadataRefresh(message, in: context) else { return }
 
     let storageID = message.storageID
     guard !enqueuedMetadataStorageIDs.contains(storageID) else { return }
     enqueuedMetadataStorageIDs.insert(storageID)
-    pendingMetadataStorageIDs.append(storageID)
+    pendingMetadataRefreshes.append(
+      PendingMetadataRefresh(storageID: storageID, context: context)
+    )
     processMetadataQueueIfNeeded()
+  }
+
+  func refreshMetadataForVisiblePostIfNeeded(_ message: SessionMessageEntity) {
+    enqueueMetadataRefresh(for: message, in: .visibleSession)
   }
 
   private func processMetadataQueueIfNeeded() {
@@ -2351,30 +2427,35 @@ final class AppSession: ObservableObject {
     isProcessingMetadataQueue = true
 
     Task { @MainActor in
-      while pendingMetadataStorageHead < pendingMetadataStorageIDs.count {
-        let storageID = pendingMetadataStorageIDs[pendingMetadataStorageHead]
-        pendingMetadataStorageHead += 1
+      while pendingMetadataRefreshHead < pendingMetadataRefreshes.count {
+        let request = pendingMetadataRefreshes[pendingMetadataRefreshHead]
+        pendingMetadataRefreshHead += 1
         defer {
-          enqueuedMetadataStorageIDs.remove(storageID)
+          enqueuedMetadataStorageIDs.remove(request.storageID)
         }
 
         do {
-          guard let message = try messageStore.message(storageID: storageID) else { continue }
-          try await refreshMetadata(for: message)
+          guard let message = try messageStore.message(storageID: request.storageID) else {
+            continue
+          }
+          try await refreshMetadata(for: message, in: request.context)
         } catch {
           report(error: error)
         }
       }
 
-      pendingMetadataStorageIDs.removeAll(keepingCapacity: true)
-      pendingMetadataStorageHead = 0
+      pendingMetadataRefreshes.removeAll(keepingCapacity: true)
+      pendingMetadataRefreshHead = 0
       isProcessingMetadataQueue = false
     }
   }
 
-  private func refreshMetadata(for message: SessionMessageEntity) async throws {
+  private func refreshMetadata(
+    for message: SessionMessageEntity,
+    in context: LinkMetadataRefreshContext
+  ) async throws {
     guard let url = message.url else { return }
-    guard needsMetadataRefresh(message) else { return }
+    guard needsMetadataRefresh(message, in: context) else { return }
 
     let preview = await URLMetadataService.shared.fetchPreview(for: url)
     guard let preview else { return }
@@ -2402,10 +2483,14 @@ final class AppSession: ObservableObject {
     try modelContext.save()
   }
 
-  private func needsMetadataRefresh(_ message: SessionMessageEntity) -> Bool {
+  private func needsMetadataRefresh(
+    _ message: SessionMessageEntity,
+    in context: LinkMetadataRefreshContext
+  ) -> Bool {
     guard message.kind == .root else { return false }
     guard message.url != nil else { return false }
     return LinkMetadataRefreshPolicy.needsRefresh(
+      in: context,
       linkType: message.linkType,
       title: message.metadataTitle,
       thumbnailPath: ManagedLocalFileScope.shared.normalizedManagedPath(message.thumbnailURL)

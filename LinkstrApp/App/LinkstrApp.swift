@@ -6,51 +6,11 @@ import UIKit
 struct LinkstrAppMain: App {
   @Environment(\.scenePhase) private var scenePhase
 
-  private let container: ModelContainer
-  @StateObject private var session: AppSession
+  @StateObject private var bootstrap = AppBootstrapState()
   @StateObject private var deepLinkHandler = DeepLinkHandler()
 
   init() {
     Self.configureScrollViewAppearance()
-
-    let schema = Schema([
-      AccountStateEntity.self,
-      ContactEntity.self,
-      RelayEntity.self,
-      SessionEntity.self,
-      SessionMemberEntity.self,
-      SessionMemberIntervalEntity.self,
-      SessionReactionEntity.self,
-      SessionPostDeletionEntity.self,
-      SessionMessageEntity.self,
-    ])
-    let container: ModelContainer
-    do {
-      let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-      container = try ModelContainer(for: schema, configurations: [configuration])
-    } catch {
-      guard Self.shouldAllowInMemoryStoreFallback() else {
-        fatalError("Persistent store unavailable: \(error)")
-      }
-
-      NSLog("Persistent store unavailable, using in-memory fallback for this process: \(error)")
-      do {
-        let fallbackConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
-        container = try ModelContainer(for: schema, configurations: [fallbackConfiguration])
-      } catch {
-        fatalError("Unable to initialize any model container: \(error)")
-      }
-    }
-    self.container = container
-    _session = StateObject(wrappedValue: AppSession(modelContext: container.mainContext))
-  }
-
-  private static func shouldAllowInMemoryStoreFallback() -> Bool {
-    let environment = ProcessInfo.processInfo.environment
-    if environment["XCTestConfigurationFilePath"] != nil {
-      return true
-    }
-    return environment["LINKSTR_ALLOW_IN_MEMORY_STORE_FALLBACK"] == "1"
   }
 
   private static func configureScrollViewAppearance() {
@@ -69,37 +29,258 @@ struct LinkstrAppMain: App {
 
   var body: some Scene {
     WindowGroup {
-      RootView()
-        .environmentObject(session)
-        .environmentObject(deepLinkHandler)
-        .onAppear {
-          Task {
-            await session.boot()
+      switch bootstrap.startupState {
+      case .ready(let readyContext, let recoveryMessage, let isUsingTemporaryStore):
+        Group {
+          if let recoveryMessage, !isUsingTemporaryStore {
+            LinkstrStorageRecoveryView(
+              title: "local storage unavailable",
+              message: recoveryMessage,
+              primaryActionTitle: "continue temporarily",
+              onPrimaryAction: {
+                bootstrap.continueWithTemporaryStore()
+              },
+              secondaryActionTitle: "retry startup",
+              onSecondaryAction: {
+                bootstrap.reload()
+              }
+            )
+          } else {
+            RootView()
+              .environmentObject(readyContext.session)
+              .environmentObject(deepLinkHandler)
+              .onAppear {
+                Task {
+                  await readyContext.session.boot()
+                }
+              }
+              .onOpenURL { url in
+                deepLinkHandler.handle(url: url)
+              }
+              .onReceive(
+                NotificationCenter.default.publisher(
+                  for: UIApplication.protectedDataDidBecomeAvailableNotification
+                )
+              ) { _ in
+                readyContext.session.handleProtectedDataDidBecomeAvailable()
+              }
+              .onChange(of: scenePhase) { _, newValue in
+                switch newValue {
+                case .active:
+                  readyContext.session.handleAppDidBecomeActive()
+                case .background:
+                  readyContext.session.handleAppDidLeaveForeground()
+                case .inactive:
+                  break
+                @unknown default:
+                  break
+                }
+              }
           }
         }
-        .onOpenURL { url in
-          deepLinkHandler.handle(url: url)
+        .modelContainer(readyContext.container)
+      case .fatal(let fatalStartupMessage):
+        LinkstrStorageRecoveryView(
+          title: "startup failed",
+          message: fatalStartupMessage,
+          primaryActionTitle: "retry startup",
+          onPrimaryAction: {
+            bootstrap.reload()
+          },
+          secondaryActionTitle: nil,
+          onSecondaryAction: nil
+        )
+      case .loading:
+        ZStack {
+          LinkstrBackgroundView()
+          ProgressView()
+            .tint(LinkstrTheme.neonCyan)
         }
-        .onReceive(
-          NotificationCenter.default.publisher(
-            for: UIApplication.protectedDataDidBecomeAvailableNotification
-          )
-        ) { _ in
-          session.handleProtectedDataDidBecomeAvailable()
-        }
-        .onChange(of: scenePhase) { _, newValue in
-          switch newValue {
-          case .active:
-            session.handleAppDidBecomeActive()
-          case .background:
-            session.handleAppDidLeaveForeground()
-          case .inactive:
-            break
-          @unknown default:
-            break
-          }
-        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+      }
     }
-    .modelContainer(container)
+  }
+}
+
+@MainActor
+final class AppBootstrapState: ObservableObject {
+  typealias ContainerFactory = (_ schema: Schema, _ isStoredInMemoryOnly: Bool) throws ->
+    ModelContainer
+  typealias SessionFactory = @MainActor (_ modelContext: ModelContext) -> AppSession
+
+  struct ReadyContext {
+    let container: ModelContainer
+    let session: AppSession
+  }
+
+  enum StartupState {
+    case loading
+    case ready(ReadyContext, recoveryMessage: String?, isUsingTemporaryStore: Bool)
+    case fatal(String)
+  }
+
+  private let makeContainer: ContainerFactory
+  private let makeSession: SessionFactory
+
+  @Published private(set) var startupState: StartupState = .loading
+
+  init(
+    makeContainer: @escaping ContainerFactory = AppBootstrapState.defaultContainerFactory,
+    makeSession: @escaping SessionFactory = { AppSession(modelContext: $0) }
+  ) {
+    self.makeContainer = makeContainer
+    self.makeSession = makeSession
+    reload()
+  }
+
+  func reload() {
+    let schema = LinkstrAppBootstrapConfiguration.schema
+    startupState = .loading
+
+    do {
+      let container = try makeContainer(schema, false)
+      let readyContext = ReadyContext(
+        container: container,
+        session: makeSession(container.mainContext)
+      )
+      startupState = .ready(readyContext, recoveryMessage: nil, isUsingTemporaryStore: false)
+    } catch {
+      NSLog("Persistent store unavailable, attempting in-memory recovery: \(error)")
+
+      do {
+        let container = try makeContainer(schema, true)
+        let readyContext = ReadyContext(
+          container: container,
+          session: makeSession(container.mainContext)
+        )
+        startupState = .ready(
+          readyContext,
+          recoveryMessage: Self.recoveryMessage(for: error),
+          isUsingTemporaryStore: false
+        )
+      } catch let fallbackError {
+        startupState = .fatal(
+          Self.fatalStartupMessage(
+            persistentStoreError: error,
+            fallbackError: fallbackError
+          )
+        )
+      }
+    }
+  }
+
+  func continueWithTemporaryStore() {
+    guard case .ready(let readyContext, let recoveryMessage, _) = startupState else { return }
+    startupState = .ready(
+      readyContext,
+      recoveryMessage: recoveryMessage,
+      isUsingTemporaryStore: true
+    )
+  }
+
+  nonisolated private static func defaultContainerFactory(
+    schema: Schema,
+    isStoredInMemoryOnly: Bool
+  ) throws -> ModelContainer {
+    let configuration = ModelConfiguration(
+      schema: schema,
+      isStoredInMemoryOnly: isStoredInMemoryOnly
+    )
+    return try ModelContainer(for: schema, configurations: [configuration])
+  }
+
+  private static func recoveryMessage(for error: Error) -> String {
+    let description = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+    if description.isEmpty {
+      return
+        "linkstr couldn't open its local storage on this device. you can retry startup or continue in a temporary in-memory mode. temporary changes won't persist after the app closes."
+    }
+
+    return
+      "linkstr couldn't open its local storage on this device. you can retry startup or continue in a temporary in-memory mode. temporary changes won't persist after the app closes.\n\nstorage error: \(description)"
+  }
+
+  private static func fatalStartupMessage(
+    persistentStoreError: Error,
+    fallbackError: Error
+  ) -> String {
+    let persistentDescription = persistentStoreError.localizedDescription.trimmingCharacters(
+      in: .whitespacesAndNewlines
+    )
+    let fallbackDescription = fallbackError.localizedDescription.trimmingCharacters(
+      in: .whitespacesAndNewlines
+    )
+
+    return
+      "linkstr couldn't start because both persistent and temporary local storage failed to initialize.\n\npersistent store error: \(persistentDescription)\n\ntemporary store error: \(fallbackDescription)"
+  }
+}
+
+enum LinkstrAppBootstrapConfiguration {
+  static let schema = Schema([
+    AccountStateEntity.self,
+    ContactEntity.self,
+    RelayEntity.self,
+    SessionEntity.self,
+    SessionMemberEntity.self,
+    SessionMemberIntervalEntity.self,
+    SessionReactionEntity.self,
+    SessionPostDeletionEntity.self,
+    SessionMessageEntity.self,
+  ])
+}
+
+struct LinkstrStorageRecoveryView: View {
+  let title: String
+  let message: String
+  let primaryActionTitle: String
+  let onPrimaryAction: () -> Void
+  let secondaryActionTitle: String?
+  let onSecondaryAction: (() -> Void)?
+
+  var body: some View {
+    ZStack {
+      LinkstrBackgroundView()
+
+      VStack(alignment: .leading, spacing: 18) {
+        HStack(spacing: 12) {
+          Image(systemName: "externaldrive.badge.exclamationmark")
+            .font(LinkstrTheme.system(24, weight: .semibold))
+            .foregroundStyle(LinkstrTheme.neonAmber)
+
+          Text(title)
+            .font(LinkstrTheme.title(24))
+            .foregroundStyle(LinkstrTheme.textPrimary)
+        }
+
+        Text(message)
+          .font(LinkstrTheme.body(14))
+          .foregroundStyle(LinkstrTheme.textSecondary)
+          .fixedSize(horizontal: false, vertical: true)
+
+        VStack(spacing: 10) {
+          Button(action: onPrimaryAction) {
+            Text(primaryActionTitle)
+              .frame(maxWidth: .infinity)
+          }
+          .buttonStyle(.borderedProminent)
+          .tint(LinkstrTheme.neonCyan)
+
+          if let secondaryActionTitle, let onSecondaryAction {
+            Button(action: onSecondaryAction) {
+              Text(secondaryActionTitle)
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .tint(LinkstrTheme.neonAmber)
+          }
+        }
+      }
+      .padding(18)
+      .frame(maxWidth: 520, alignment: .leading)
+      .linkstrNeonCard()
+      .padding(.horizontal, 16)
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 }

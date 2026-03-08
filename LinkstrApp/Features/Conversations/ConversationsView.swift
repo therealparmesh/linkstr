@@ -1,6 +1,7 @@
 import NostrSDK
 import SwiftData
 import SwiftUI
+import UIKit
 
 private struct SessionSummary: Identifiable {
   let id: String
@@ -368,6 +369,9 @@ struct SessionPostsView: View {
               )
             }
             .buttonStyle(.plain)
+            .onAppear {
+              session.refreshMetadataForVisiblePostIfNeeded(row.post)
+            }
           }
         }
       }
@@ -557,27 +561,24 @@ private struct PostCardView: View {
 
   @ViewBuilder
   private var thumbnailView: some View {
-    if let thumbnailURL = ManagedLocalFileScope.shared.managedFileURL(fromPath: post.thumbnailURL) {
-      AsyncImage(
-        url: thumbnailURL,
-        transaction: Transaction(animation: .easeInOut(duration: 0.12))
-      ) { phase in
-        switch phase {
-        case .empty, .failure:
-          thumbnailPlaceholder
-        case .success(let image):
-          image
-            .resizable()
-            .scaledToFill()
-        @unknown default:
-          thumbnailPlaceholder
-        }
-      }
-      .frame(width: 52, height: 52)
-      .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    if let thumbnailImage = resolvedThumbnailImage {
+      Image(uiImage: thumbnailImage)
+        .resizable()
+        .scaledToFill()
+        .frame(width: 52, height: 52)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     } else {
       thumbnailPlaceholder
     }
+  }
+
+  private var resolvedThumbnailImage: UIImage? {
+    guard
+      let thumbnailURL = ManagedLocalFileScope.shared.managedFileURL(fromPath: post.thumbnailURL)
+    else {
+      return nil
+    }
+    return UIImage(contentsOfFile: thumbnailURL.path)
   }
 
   private var thumbnailPlaceholder: some View {

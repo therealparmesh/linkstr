@@ -32,6 +32,8 @@
 - Boot ensures default relays exist if the local relay list is empty.
 - Boot starts relay runtime when identity is available.
 - Foreground re-entry and protected-data availability events retry identity load when no account is currently active in memory.
+- If persistent local storage cannot be opened, the app shows a recovery screen instead of crashing.
+- Storage recovery allows retrying startup or continuing in a temporary in-memory mode for that launch only.
 - If no identity exists, onboarding is shown.
 - If identity exists, the main app shell is shown.
 - The app uses a Tokyo Night color scheme across all surfaces.
@@ -296,7 +298,8 @@
   - Two action buttons split width evenly with spacing.
 - Metadata hydration fetches title/thumbnail asynchronously for root posts.
 - X/Twitter status previews prefer the Twitter-specific status metadata path for author/title and media thumbnails before falling back to generic `LinkPresentation` metadata.
-- On boot, existing root posts are re-queued for metadata hydration when stale/missing.
+- On boot, existing root posts are re-queued for metadata hydration when titles are missing, local thumbnail files are missing, or X/Twitter posts are missing thumbnails.
+- Session post rows lazily retry missing social thumbnails only as those rows appear on screen.
 - Missing local thumbnail files are treated as stale and re-fetched.
 - Settings > Storage can clear hydrated previews and cached media for the current account without deleting posts.
 
@@ -343,6 +346,7 @@
 - Account scoping is enforced in storage and query paths to prevent cross-account bleed.
 - `Log Out (Keep Local Data)` preserves persisted local entities so the same account can log back in later.
 - `Log Out and Clear Local Data` removes the signed-in account’s persisted entities and cached media references.
+- If account-scoped local cleanup cannot fully complete, the app surfaces an error instead of reporting a clean success.
 - Sensitive content fields are encrypted at rest with per-owner local keys (aliases, session/member identity values, URLs/notes, metadata, and creator keys).
 - Operational identifiers and timestamps remain plaintext in local storage for indexing/querying.
 - Identity keys remain in keychain.

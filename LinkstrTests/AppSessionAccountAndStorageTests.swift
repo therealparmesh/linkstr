@@ -219,6 +219,24 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     XCTAssertGreaterThanOrEqual(loadAttempts, 2)
   }
 
+  func testBootStartsNostrWithoutWaitingForSecondForegroundEvent() async throws {
+    var nostrStartCount = 0
+    let (session, _) = try makeSession(
+      disableNostrStartup: true,
+      skipDefaultRelaySetup: true,
+      skipPersistedFollowListStateLoad: true,
+      onNostrStart: {
+        nostrStartCount += 1
+      }
+    )
+    try session.identityService.createNewIdentity()
+
+    await session.boot()
+
+    XCTAssertTrue(session.didFinishBoot)
+    XCTAssertEqual(nostrStartCount, 1)
+  }
+
   func testHandleProtectedDataAvailabilityRetriesIdentityLoad() async throws {
     let keypair = try TestKeyMaterialFactory.makeKeypair()
     var loadAttempts = 0
@@ -280,6 +298,126 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     XCTAssertTrue(session.hasIdentity)
     XCTAssertGreaterThanOrEqual(loadAttempts, 2)
   }
+
+  func testLogOutClearLocalDataSurfacesCleanupFailure() throws {
+    let (session, _) = try makeSession(
+      clearLocalAccountData: { _ in
+        throw KeychainStoreError.deleteFailed(errSecNotAvailable)
+      }
+    )
+    try session.identityService.createNewIdentity()
+
+    session.logOut(clearLocalData: true)
+
+    XCTAssertNil(session.identityService.keypair)
+    XCTAssertEqual(
+      session.composeError,
+      "signed out, but some local data could not be removed. couldn't remove account keys from this device."
+    )
+  }
+
+  func testDeleteAccountAwaitingRelaySurfacesCleanupFailureAfterIdentityClears() async throws {
+    let (session, _) = try makeSession(
+      clearLocalAccountData: { _ in
+        throw KeychainStoreError.deleteFailed(errSecNotAvailable)
+      }
+    )
+    try session.identityService.createNewIdentity()
+
+    let didDelete = await session.deleteAccountAwaitingRelay()
+
+    XCTAssertFalse(didDelete)
+    XCTAssertNil(session.identityService.keypair)
+    XCTAssertEqual(
+      session.composeError,
+      "account deletion finished, but some local data could not be removed. couldn't remove account keys from this device."
+    )
+  }
+
+  func testAppBootstrapFallsBackToRecoveryModeWhenPersistentStoreUnavailable() throws {
+    var storeAttempts: [Bool] = []
+    let persistentError = NSError(
+      domain: "AppBootstrapStateTests",
+      code: 1,
+      userInfo: [NSLocalizedDescriptionKey: "persistent store unavailable"]
+    )
+
+    let bootstrap = AppBootstrapState(
+      makeContainer: { schema, isStoredInMemoryOnly in
+        storeAttempts.append(isStoredInMemoryOnly)
+        if isStoredInMemoryOnly == false {
+          throw persistentError
+        }
+
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        return try ModelContainer(for: schema, configurations: [configuration])
+      }
+    )
+
+    XCTAssertEqual(storeAttempts, [false, true])
+    switch bootstrap.startupState {
+    case .ready(_, let recoveryMessage, let isUsingTemporaryStore):
+      XCTAssertEqual(
+        recoveryMessage,
+        """
+        linkstr couldn't open its local storage on this device. you can retry startup or continue in a temporary in-memory mode. temporary changes won't persist after the app closes.
+
+        storage error: persistent store unavailable
+        """
+      )
+      XCTAssertFalse(isUsingTemporaryStore)
+    case .loading, .fatal:
+      XCTFail("expected recovery-ready startup state")
+    }
+
+    bootstrap.continueWithTemporaryStore()
+
+    switch bootstrap.startupState {
+    case .ready(_, _, let isUsingTemporaryStore):
+      XCTAssertTrue(isUsingTemporaryStore)
+    case .loading, .fatal:
+      XCTFail("expected temporary-store startup state")
+    }
+  }
+
+  func testAppBootstrapShowsFatalStartupMessageWhenAllStoreInitializationFails() {
+    let persistentError = NSError(
+      domain: "AppBootstrapStateTests",
+      code: 1,
+      userInfo: [NSLocalizedDescriptionKey: "persistent store unavailable"]
+    )
+    let fallbackError = NSError(
+      domain: "AppBootstrapStateTests",
+      code: 2,
+      userInfo: [NSLocalizedDescriptionKey: "temporary store unavailable"]
+    )
+
+    let bootstrap = AppBootstrapState(
+      makeContainer: { _, isStoredInMemoryOnly in
+        if isStoredInMemoryOnly {
+          throw fallbackError
+        }
+        throw persistentError
+      }
+    )
+
+    switch bootstrap.startupState {
+    case .fatal(let message):
+      XCTAssertEqual(
+        message,
+        """
+        linkstr couldn't start because both persistent and temporary local storage failed to initialize.
+
+        persistent store error: persistent store unavailable
+
+        temporary store error: temporary store unavailable
+        """
+      )
+    case .loading, .ready:
+      XCTFail("expected fatal startup state")
+    }
+  }
+
   func testLogOutClearLocalDataRemovesStoredThumbnailFiles() throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
