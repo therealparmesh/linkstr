@@ -1,5 +1,7 @@
 # app store connect copy
 
+copy/paste-ready fields for app store connect.
+
 ## name
 
 linkstr: share media

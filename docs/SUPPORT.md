@@ -1,5 +1,7 @@
 # linkstr support
 
+last updated: march 8, 2026
+
 ## getting started
 
 ### create account
@@ -44,6 +46,7 @@ supported platforms: tiktok, instagram, facebook, youtube, twitter/x, rumble, an
 - tap "save to photos" to save videos you have rights to save
 - tap "save to files" to export to files app
 - open in safari with browser button
+- delete your own post by opening it and long-pressing the post card
 
 ### react to posts
 
@@ -54,7 +57,7 @@ supported platforms: tiktok, instagram, facebook, youtube, twitter/x, rumble, an
 ### manage sessions
 
 - archive: long-press session → "archive"
-- view archived: tap archive icon (top right)
+- view archived: tap archive icon on the left side of the sessions header
 - add/remove members: open session → tap member count → manage
 - only session creators can modify members
 
@@ -71,7 +74,7 @@ settings → relays
 ## faq
 
 **what is nostr?**
-decentralized protocol for social communication. no central server—messages distributed across relays. your nostr identity works across any nostr-compatible app.
+decentralized protocol for social communication. there is no central server, and messages are distributed across relays. your nostr identity works across any nostr-compatible app.
 
 **is my data private?**
 yes. all session content is end-to-end encrypted. only session members can read messages. your private key never leaves your device.
@@ -80,8 +83,8 @@ yes. all session content is end-to-end encrypted. only session members can read 
 yes. your nsec works with any nostr app. find it in settings → identity.
 
 **what happens if i log out?**
-"log out (keep local data)": messages remain on device, reappear when you log back in with same account.
-"log out and clear local data": permanently deletes all local data for this account.
+- "log out (keep local data)": messages remain on device and reappear when you log back in with the same account
+- "log out and clear local data": permanently deletes all local data for this account
 
 **why can't i send messages?**
 check: internet connection, at least one relay connected (settings → relays), you are a member of the session.
@@ -101,7 +104,7 @@ you are responsible for respecting content creators' rights and platform terms w
 ## privacy & data
 
 **what data does linkstr collect?**
-none. linkstr does not collect, store, or transmit any personal data. all data remains on your device and syncs only through device iCloud keychain (optional) and nostr relays you connect to (encrypted messages only).
+none. linkstr does not collect or store data on developer-controlled servers. your account keys can sync through iCloud keychain if you enable it, and encrypted session payloads travel through the nostr relays you choose.
 
 **what permissions does linkstr need?**
 
@@ -143,7 +146,7 @@ none. linkstr does not collect, store, or transmit any personal data. all data r
 3. alternatively paste npub manually
 
 **messages not syncing across devices**
-linkstr stores data locally on each device. to use same account on multiple devices:
+linkstr stores posts, reactions, contacts, and caches locally on each device. to use the same account on multiple devices:
 
 1. export nsec from settings on first device
 2. import same nsec on second device

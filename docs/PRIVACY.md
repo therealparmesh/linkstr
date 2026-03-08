@@ -1,8 +1,10 @@
 # privacy policy
 
+last updated: march 8, 2026
+
 ## overview
 
-linkstr does not collect or retain personal data on developer-controlled servers.
+linkstr does not run developer-controlled servers. your account keys and app data stay on your device, and encrypted session payloads move only through the nostr relays and content providers needed to use the app.
 
 ## data collection
 
@@ -70,8 +72,8 @@ if you enable iCloud keychain on your device:
 when you share links to third-party platforms (tiktok, instagram, facebook, youtube, twitter, rumble):
 
 - the app may download publicly accessible media from these platforms
+- those platforms may still receive standard network metadata such as your ip address and user agent when content is requested
 - you are subject to those platforms' terms of service and privacy policies
-- the app does not share your identity or personal information with these platforms
 - downloaded media is stored locally on your device only
 
 ## user responsibility
