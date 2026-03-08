@@ -384,21 +384,6 @@ struct PostDetailView: View {
     .toolbar(.visible, for: .navigationBar)
     .toolbarBackground(.hidden, for: .navigationBar)
     .toolbarColorScheme(.dark, for: .navigationBar)
-    .toolbar {
-      if isOutgoing(post) {
-        ToolbarItem(placement: .topBarTrailing) {
-          Button(role: .destructive) {
-            isPresentingDeleteConfirmation = true
-          } label: {
-            Image(systemName: "trash")
-              .linkstrToolbarIconLabel()
-          }
-          .accessibilityLabel("delete post")
-          .tint(LinkstrTheme.destructive)
-          .disabled(isDeletingPost)
-        }
-      }
-    }
     .task {
       session.markRootPostRead(postID: post.rootID)
     }
@@ -431,6 +416,29 @@ struct PostDetailView: View {
   }
 
   private var postCard: some View {
+    Group {
+      if isOutgoing(post) {
+        postCardContent
+          .contextMenu {
+            Button(role: .destructive) {
+              guard !isDeletingPost else { return }
+              isPresentingDeleteConfirmation = true
+            } label: {
+              Label("delete post", systemImage: "trash")
+            }
+          }
+          .accessibilityHint("Long press for post actions.")
+          .accessibilityAction(named: "Delete post") {
+            guard !isDeletingPost else { return }
+            isPresentingDeleteConfirmation = true
+          }
+      } else {
+        postCardContent
+      }
+    }
+  }
+
+  private var postCardContent: some View {
     VStack(alignment: .leading, spacing: 10) {
       HStack {
         Text("sent by \(postSenderLabel)")
@@ -469,21 +477,25 @@ struct PostDetailView: View {
           .textSelection(.enabled)
       }
 
-      if let note = post.note, !note.isEmpty {
-        Text(note)
-          .font(LinkstrTheme.body(13))
-          .foregroundStyle(LinkstrTheme.textPrimary.opacity(0.94))
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(.horizontal, 10)
-          .padding(.vertical, 8)
-          .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-              .fill(LinkstrTheme.panelSoft)
-          )
-          .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-              .stroke(LinkstrTheme.textSecondary.opacity(0.18), lineWidth: 1)
-          )
+      if let noteText {
+        HStack(alignment: .top, spacing: 10) {
+          Capsule(style: .continuous)
+            .fill(LinkstrTheme.neonAmber.opacity(0.9))
+            .frame(width: 3)
+
+          VStack(alignment: .leading, spacing: 4) {
+            Text("note")
+              .font(LinkstrTheme.title(11))
+              .foregroundStyle(LinkstrTheme.neonAmber)
+
+            Text(noteText)
+              .font(LinkstrTheme.body(13))
+              .foregroundStyle(LinkstrTheme.textPrimary.opacity(0.94))
+              .fixedSize(horizontal: false, vertical: true)
+          }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.leading, 2)
       }
 
       mediaBlock
@@ -528,6 +540,7 @@ struct PostDetailView: View {
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(.horizontal, 2)
+    .contentShape(Rectangle())
   }
 
   @ViewBuilder
@@ -579,5 +592,11 @@ struct PostDetailView: View {
   private func isOutgoing(_ message: SessionMessageEntity) -> Bool {
     guard let myPubkey = session.identityService.pubkeyHex else { return false }
     return message.senderPubkey == myPubkey
+  }
+
+  private var noteText: String? {
+    guard let note = post.note else { return nil }
+    let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
   }
 }

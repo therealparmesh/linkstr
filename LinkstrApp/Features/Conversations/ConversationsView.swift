@@ -307,6 +307,25 @@ struct SessionPostsView: View {
       .sorted { $0.timestamp > $1.timestamp }
   }
 
+  private var postRows: [PostListRow] {
+    var previousSenderPubkey: String?
+    return posts.enumerated().map { index, post in
+      let nextSenderPubkey =
+        index < posts.count - 1 ? posts[index + 1].senderPubkey : nil
+      let row = PostListRow(
+        post: post,
+        senderLabel: senderLabel(for: post),
+        isOutgoing: isOutgoing(post),
+        showsSenderHeader: previousSenderPubkey != post.senderPubkey,
+        isFollowedBySameSender: nextSenderPubkey == post.senderPubkey,
+        hasUnreadPost: hasUnreadIncomingRootPost(post),
+        reactionSummaries: reactionSummariesByPostID[post.rootID] ?? []
+      )
+      previousSenderPubkey = post.senderPubkey
+      return row
+    }
+  }
+
   private var reactionSummariesByPostID: [String: [ReactionSummary]] {
     let reactionsByPostID = Dictionary(grouping: scopedReactions, by: \.postID)
     let myPubkey = session.identityService.pubkeyHex
@@ -325,7 +344,7 @@ struct SessionPostsView: View {
 
   var body: some View {
     ScrollView {
-      LazyVStack(alignment: .leading, spacing: 12) {
+      LazyVStack(alignment: .leading, spacing: 0) {
         if posts.isEmpty {
           ContentUnavailableView(
             "no posts yet",
@@ -334,25 +353,18 @@ struct SessionPostsView: View {
           )
           .padding(.top, 24)
         } else {
-          HStack {
-            Text("posts")
-              .linkstrPrimarySectionTitleTextStyle()
-            Spacer()
-          }
-          .padding(.horizontal, 2)
-
-          ForEach(posts) { post in
-            let summaries = reactionSummariesByPostID[post.rootID] ?? []
-
+          ForEach(postRows) { row in
             NavigationLink {
-              PostDetailView(post: post, sessionName: sessionEntity.name)
+              PostDetailView(post: row.post, sessionName: sessionEntity.name)
             } label: {
-              PostCardView(
-                post: post,
-                senderLabel: senderLabel(for: post),
-                isOutgoing: isOutgoing(post),
-                hasUnreadPost: hasUnreadIncomingRootPost(post),
-                reactionSummaries: summaries
+              PostListRowView(
+                post: row.post,
+                senderLabel: row.senderLabel,
+                isOutgoing: row.isOutgoing,
+                showsSenderHeader: row.showsSenderHeader,
+                isFollowedBySameSender: row.isFollowedBySameSender,
+                hasUnreadPost: row.hasUnreadPost,
+                reactionSummaries: row.reactionSummaries
               )
             }
             .buttonStyle(.plain)
@@ -425,10 +437,59 @@ struct SessionPostsView: View {
   }
 }
 
-private struct PostCardView: View {
+private struct PostListRow: Identifiable {
   let post: SessionMessageEntity
   let senderLabel: String
   let isOutgoing: Bool
+  let showsSenderHeader: Bool
+  let isFollowedBySameSender: Bool
+  let hasUnreadPost: Bool
+  let reactionSummaries: [ReactionSummary]
+
+  var id: String { post.rootID }
+}
+
+private struct PostListRowView: View {
+  let post: SessionMessageEntity
+  let senderLabel: String
+  let isOutgoing: Bool
+  let showsSenderHeader: Bool
+  let isFollowedBySameSender: Bool
+  let hasUnreadPost: Bool
+  let reactionSummaries: [ReactionSummary]
+
+  private var senderHeaderText: String {
+    isOutgoing ? "you" : senderLabel
+  }
+
+  private var bottomSpacing: CGFloat {
+    isFollowedBySameSender ? 4 : 8
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      if showsSenderHeader {
+        Text(senderHeaderText)
+          .font(LinkstrTheme.title(12))
+          .foregroundStyle(LinkstrTheme.textSecondary)
+          .lineLimit(1)
+          .padding(.horizontal, 4)
+      }
+
+      PostCardView(
+        post: post,
+        hasUnreadPost: hasUnreadPost,
+        reactionSummaries: reactionSummaries
+      )
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(.bottom, bottomSpacing)
+    .accessibilityCustomContent(LocalizedStringKey("sender"), senderHeaderText)
+  }
+}
+
+private struct PostCardView: View {
+  let post: SessionMessageEntity
   let hasUnreadPost: Bool
   let reactionSummaries: [ReactionSummary]
 
@@ -437,11 +498,6 @@ private struct PostCardView: View {
       thumbnailView
 
       VStack(alignment: .leading, spacing: 8) {
-        Text(isOutgoing ? "sent by you" : "sent by \(senderLabel)")
-          .font(LinkstrTheme.body(11))
-          .foregroundStyle(LinkstrTheme.textSecondary)
-          .lineLimit(1)
-
         Text(primaryText)
           .font(LinkstrTheme.title(15))
           .foregroundStyle(LinkstrTheme.textPrimary)

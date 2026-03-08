@@ -313,12 +313,6 @@ struct SettingsView: View {
           .tint(LinkstrTheme.destructive)
 
           VStack(alignment: .leading, spacing: 8) {
-            Text(
-              "delete account sends a nostr vanish request to your enabled relays, clears this account's local data, and signs you out."
-            )
-            .font(LinkstrTheme.body(12))
-            .foregroundStyle(LinkstrTheme.textSecondary)
-
             Button(role: .destructive) {
               isPresentingDeleteAccountConfirm = true
             } label: {
@@ -331,6 +325,12 @@ struct SettingsView: View {
             .buttonStyle(.bordered)
             .tint(LinkstrTheme.destructive)
             .disabled(isDeletingAccount)
+
+            Text(
+              "delete account sends a nostr vanish request to your enabled relays, clears this account's local data, and signs you out."
+            )
+            .font(LinkstrTheme.body(12))
+            .foregroundStyle(LinkstrTheme.textSecondary)
           }
           .padding(.top, 6)
         } else {
