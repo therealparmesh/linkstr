@@ -18,7 +18,7 @@ your account is stored in device keychain and optionally syncs via iCloud.
 
 ### add contacts
 
-1. settings → contacts → `+`
+1. contacts tab → `+`
 2. enter nostr public key (npub) or scan QR code
 3. optionally add alias
 
@@ -77,7 +77,7 @@ decentralized protocol for social communication. no central server—messages di
 yes. all session content is end-to-end encrypted. only session members can read messages. your private key never leaves your device.
 
 **can i use my nostr account in other apps?**
-yes. your nsec works with any nostr app. find it in settings → account.
+yes. your nsec works with any nostr app. find it in settings → identity.
 
 **what happens if i log out?**
 "log out (keep local data)": messages remain on device, reappear when you log back in with same account.
@@ -142,7 +142,7 @@ linkstr stores data locally on each device. to use same account on multiple devi
 2. import same nsec on second device
 3. both devices must connect to relays to sync new messages
 
-note: historical messages may not sync automatically—only new messages distribute via relays.
+note: historical messages depend on relay retention and what each device has already received locally. new messages sync when both devices reconnect to relays.
 
 ## contact
 

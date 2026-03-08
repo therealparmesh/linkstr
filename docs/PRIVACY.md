@@ -81,7 +81,7 @@ you are responsible for:
 - respecting intellectual property rights when downloading and sharing content
 - complying with applicable laws and third-party platform terms of service
 - managing your nostr private key (nsec) securely
-- understanding that deleted sessions remain on local device unless explicitly cleared
+- understanding that archived sessions remain on local device unless explicitly cleared through account cleanup
 
 ## children's privacy
 
@@ -105,6 +105,7 @@ linkstr does not knowingly collect information from children under 13. the app d
 you have the right to:
 
 - delete all local data using "log out and clear local data"
+- delete your account using the in-app delete-account flow
 - export your account key (nsec) and use it in other nostr-compatible apps
 - control which relays you connect to
 - disable icloud sync in ios settings

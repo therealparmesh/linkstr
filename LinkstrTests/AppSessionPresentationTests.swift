@@ -105,57 +105,71 @@ final class AppSessionPresentationTests: XCTestCase {
     )
   }
 
-  func testLinkMetadataRefreshPolicyRefreshesWhenTitleIsMissing() {
-    XCTAssertTrue(
-      LinkMetadataRefreshPolicy.needsRefresh(
-        linkType: .generic,
-        title: "   ",
-        thumbnailPath: "/tmp/thumb.png",
-        fileExists: { _ in true }
-      )
-    )
-  }
+  func testLinkMetadataRefreshPolicyCases() {
+    struct TestCase {
+      let title: String
+      let linkType: LinkType
+      let metadataTitle: String?
+      let thumbnailPath: String?
+      let fileExists: (String) -> Bool
+      let expectedNeedsRefresh: Bool
+    }
 
-  func testLinkMetadataRefreshPolicyRefreshesTwitterWhenThumbnailIsMissing() {
-    XCTAssertTrue(
-      LinkMetadataRefreshPolicy.needsRefresh(
+    let cases: [TestCase] = [
+      TestCase(
+        title: "missing title refreshes",
+        linkType: .generic,
+        metadataTitle: "   ",
+        thumbnailPath: "/tmp/thumb.png",
+        fileExists: { _ in true },
+        expectedNeedsRefresh: true
+      ),
+      TestCase(
+        title: "twitter missing thumbnail refreshes",
         linkType: .twitter,
-        title: "frankie (@FrankieIsLost)",
-        thumbnailPath: nil
-      )
-    )
-  }
-
-  func testLinkMetadataRefreshPolicyDoesNotRefreshGenericWhenThumbnailIsMissing() {
-    XCTAssertFalse(
-      LinkMetadataRefreshPolicy.needsRefresh(
+        metadataTitle: "frankie (@FrankieIsLost)",
+        thumbnailPath: nil,
+        fileExists: { _ in false },
+        expectedNeedsRefresh: true
+      ),
+      TestCase(
+        title: "generic missing thumbnail does not refresh",
         linkType: .generic,
-        title: "Example title",
-        thumbnailPath: nil
-      )
-    )
-  }
-
-  func testLinkMetadataRefreshPolicyRefreshesWhenStoredThumbnailFileIsMissing() {
-    XCTAssertTrue(
-      LinkMetadataRefreshPolicy.needsRefresh(
+        metadataTitle: "Example title",
+        thumbnailPath: nil,
+        fileExists: { _ in false },
+        expectedNeedsRefresh: false
+      ),
+      TestCase(
+        title: "missing thumbnail file refreshes",
         linkType: .generic,
-        title: "Example title",
+        metadataTitle: "Example title",
         thumbnailPath: "/tmp/thumb.png",
-        fileExists: { _ in false }
-      )
-    )
-  }
-
-  func testLinkMetadataRefreshPolicySkipsRefreshWhenTitleAndThumbnailArePresent() {
-    XCTAssertFalse(
-      LinkMetadataRefreshPolicy.needsRefresh(
+        fileExists: { _ in false },
+        expectedNeedsRefresh: true
+      ),
+      TestCase(
+        title: "title and thumbnail present skips refresh",
         linkType: .twitter,
-        title: "AlphaFox (@alphafox)",
+        metadataTitle: "AlphaFox (@alphafox)",
         thumbnailPath: "/tmp/thumb.png",
-        fileExists: { _ in true }
+        fileExists: { _ in true },
+        expectedNeedsRefresh: false
+      ),
+    ]
+
+    for testCase in cases {
+      XCTAssertEqual(
+        LinkMetadataRefreshPolicy.needsRefresh(
+          linkType: testCase.linkType,
+          title: testCase.metadataTitle,
+          thumbnailPath: testCase.thumbnailPath,
+          fileExists: testCase.fileExists
+        ),
+        testCase.expectedNeedsRefresh,
+        testCase.title
       )
-    )
+    }
   }
 
   private func jsonObject(from raw: String) throws -> [String: Any] {
