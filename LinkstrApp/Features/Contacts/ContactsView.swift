@@ -8,6 +8,9 @@ struct ContactsView: View {
   @Query(sort: [SortDescriptor(\ContactEntity.createdAt)])
   private var contacts: [ContactEntity]
 
+  @State private var pendingUnfollowContact: ContactEntity?
+  @State private var isUnfollowingContact = false
+
   private var scopedContacts: [ContactEntity] {
     OwnerScopedCollections.contacts(contacts, ownerPubkey: session.identityService.pubkeyHex)
   }
@@ -18,6 +21,14 @@ struct ContactsView: View {
       content
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    .alert("unfollow contact", isPresented: isPresentingUnfollowConfirmation) {
+      Button("cancel", role: .cancel) {}
+      Button(isUnfollowingContact ? "unfollowing…" : "unfollow", role: .destructive) {
+        unfollowPendingContact()
+      }
+    } message: {
+      Text(unfollowConfirmationMessage)
+    }
   }
 
   @ViewBuilder
@@ -33,17 +44,60 @@ struct ContactsView: View {
         LazyVStack(spacing: 0) {
           ForEach(scopedContacts) { contact in
             NavigationLink {
-              ContactDetailView(contact: contact)
+              EditContactView(contact: contact)
             } label: {
               ContactRowView(contact: contact)
             }
             .buttonStyle(.plain)
+            .contextMenu {
+              Button(role: .destructive) {
+                pendingUnfollowContact = contact
+              } label: {
+                Label("unfollow contact", systemImage: "person.crop.circle.badge.minus")
+              }
+            }
+            .accessibilityAction(named: Text("unfollow contact")) {
+              pendingUnfollowContact = contact
+            }
           }
         }
         .padding(.horizontal, 12)
         .padding(.top, 6)
       }
       .linkstrTabBarContentInset()
+    }
+  }
+
+  private var isPresentingUnfollowConfirmation: Binding<Bool> {
+    Binding(
+      get: { pendingUnfollowContact != nil },
+      set: { isPresented in
+        if !isPresented {
+          pendingUnfollowContact = nil
+        }
+      }
+    )
+  }
+
+  private var unfollowConfirmationMessage: String {
+    guard let pendingUnfollowContact else {
+      return "this publishes an updated contact list to relays and removes this contact locally."
+    }
+
+    return
+      "this publishes an updated contact list to relays and removes \(pendingUnfollowContact.displayName) locally."
+  }
+
+  private func unfollowPendingContact() {
+    guard !isUnfollowingContact, let pendingUnfollowContact else { return }
+
+    isUnfollowingContact = true
+    Task { @MainActor in
+      let didRemove = await session.unfollowContact(pendingUnfollowContact)
+      isUnfollowingContact = false
+      if didRemove {
+        self.pendingUnfollowContact = nil
+      }
     }
   }
 }
@@ -79,16 +133,13 @@ private struct ContactRowView: View {
   }
 }
 
-private struct ContactDetailView: View {
+private struct EditContactView: View {
   @Environment(\.dismiss) private var dismiss
   @EnvironmentObject private var session: AppSession
 
   let contact: ContactEntity
 
   @State private var alias: String
-  @State private var isSaving = false
-  @State private var isRemoving = false
-  @State private var isPresentingDeleteConfirmation = false
 
   init(contact: ContactEntity) {
     self.contact = contact
@@ -124,27 +175,13 @@ private struct ContactDetailView: View {
               RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(LinkstrTheme.panelSoft)
             )
-
-          Button(role: .destructive) {
-            isPresentingDeleteConfirmation = true
-          } label: {
-            Label(
-              isRemoving ? "removing contact…" : "remove contact",
-              systemImage: "person.crop.circle.badge.minus"
-            )
-            .frame(maxWidth: .infinity)
-          }
-          .buttonStyle(.borderedProminent)
-          .tint(LinkstrTheme.destructive)
-          .disabled(isSaving || isRemoving)
-          .padding(.top, 6)
         }
         .padding(.horizontal, 12)
         .padding(.top, 12)
       }
       .linkstrTabBarContentInset()
     }
-    .navigationTitle("contact")
+    .navigationTitle("edit contact")
     .navigationBarTitleDisplayMode(.inline)
     .navigationBarBackButtonHidden(true)
     .toolbar(.visible, for: .navigationBar)
@@ -152,50 +189,47 @@ private struct ContactDetailView: View {
     .toolbarColorScheme(.dark, for: .navigationBar)
     .toolbar {
       ToolbarItem(placement: .topBarLeading) {
-        Button("cancel") {
+        Button {
           dismiss()
+        } label: {
+          Image(systemName: "xmark")
+            .linkstrToolbarIconLabel()
         }
+        .accessibilityLabel("cancel")
         .tint(LinkstrTheme.textSecondary)
-        .disabled(isSaving || isRemoving)
       }
       ToolbarItem(placement: .topBarTrailing) {
-        Button(isSaving ? "saving…" : "save") {
+        Button {
           saveAlias()
+        } label: {
+          Image(systemName: "checkmark")
+            .linkstrToolbarIconLabel()
         }
+        .accessibilityLabel("save contact")
         .tint(LinkstrTheme.neonCyan)
-        .disabled(isSaving || isRemoving)
+        .disabled(canSaveAlias == false)
       }
-    }
-    .alert("remove this contact?", isPresented: $isPresentingDeleteConfirmation) {
-      Button("cancel", role: .cancel) {}
-      Button("remove", role: .destructive) {
-        unfollow()
-      }
-    } message: {
-      Text("this publishes an updated contact list to relays and removes this contact locally.")
     }
   }
 
   private func saveAlias() {
-    guard !isSaving else { return }
-    isSaving = true
+    guard canSaveAlias else { return }
     let didSave = session.updateContactAlias(contact, alias: alias)
-    isSaving = false
     if didSave {
       dismiss()
     }
   }
 
-  private func unfollow() {
-    guard !isRemoving else { return }
-    isRemoving = true
-    Task { @MainActor in
-      let didRemove = await session.removeContact(contact)
-      isRemoving = false
-      if didRemove {
-        dismiss()
-      }
-    }
+  private var canSaveAlias: Bool {
+    normalizedAlias != persistedAlias
+  }
+
+  private var normalizedAlias: String {
+    alias.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  private var persistedAlias: String {
+    contact.localAlias?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
   }
 }
 

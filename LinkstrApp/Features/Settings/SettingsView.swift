@@ -19,6 +19,7 @@ struct SettingsView: View {
   @State private var isPresentingDeleteAccountConfirm = false
   @State private var isPresentingDeleteAccountFinalConfirm = false
   @State private var isDeletingAccount = false
+  private let identityActionSpacing: CGFloat = 6
 
   var body: some View {
     ZStack {
@@ -56,15 +57,15 @@ struct SettingsView: View {
     .linkstrTabBarContentInset()
     .alert("log out", isPresented: $isPresentingLogoutOptions) {
       Button("log out (keep local data)") {
-        session.logout(clearLocalData: false)
+        session.logOut(clearLocalData: false)
       }
       Button("log out and clear local data", role: .destructive) {
-        session.logout(clearLocalData: true)
+        session.logOut(clearLocalData: true)
       }
       Button("cancel", role: .cancel) {}
     } message: {
       Text(
-        "choose whether to keep this account's local contacts/messages on this device or remove them before signing out."
+        "choose whether to keep this account's local contacts/messages on this device or remove them before logging out."
       )
     }
     .alert("delete account", isPresented: $isPresentingDeleteAccountConfirm) {
@@ -74,7 +75,7 @@ struct SettingsView: View {
       Button("cancel", role: .cancel) {}
     } message: {
       Text(
-        "this requests relay-side account deletion on your active nostr relays, clears this account's local data on this device, and signs you out."
+        "this requests relay-side account deletion on your active nostr relays, clears this account's local data on this device, and logs you out."
       )
     }
     .alert("are you absolutely sure?", isPresented: $isPresentingDeleteAccountFinalConfirm) {
@@ -243,19 +244,7 @@ struct SettingsView: View {
   private var identitySection: some View {
     DisclosureGroup(isExpanded: $isIdentityExpanded) {
       VStack(alignment: .leading, spacing: 10) {
-        if let npub = session.identityService.npub {
-          LinkstrSectionHeader(title: "contact key (npub)")
-          Text(npub)
-            .font(LinkstrTheme.body(12))
-            .foregroundStyle(LinkstrTheme.textSecondary)
-            .textSelection(.enabled)
-            .padding(10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-              RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(LinkstrTheme.panelSoft)
-            )
-
+        if session.identityService.keypair != nil {
           HStack(spacing: 8) {
             Button {
               if isNsecVisible {
@@ -311,6 +300,7 @@ struct SettingsView: View {
           }
           .buttonStyle(.borderedProminent)
           .tint(LinkstrTheme.destructive)
+          .padding(.top, identityActionSpacing)
 
           VStack(alignment: .leading, spacing: 8) {
             Button(role: .destructive) {
@@ -327,12 +317,12 @@ struct SettingsView: View {
             .disabled(isDeletingAccount)
 
             Text(
-              "delete account sends a nostr vanish request to your enabled relays, clears this account's local data, and signs you out."
+              "delete account sends a nostr vanish request to your enabled relays, clears this account's local data, and logs you out."
             )
             .font(LinkstrTheme.body(12))
             .foregroundStyle(LinkstrTheme.textSecondary)
           }
-          .padding(.top, 6)
+          .padding(.top, identityActionSpacing)
         } else {
           Text("no account found. sign in with a secret key (nsec) or create one.")
             .font(LinkstrTheme.body(12))

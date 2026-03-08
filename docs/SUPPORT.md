@@ -24,6 +24,8 @@ your account is stored in device keychain and optionally syncs via iCloud.
 2. enter nostr public key (npub) or scan QR code
 3. optionally add alias
 
+tap a contact row to edit its alias. long-press a contact row to unfollow.
+
 ### share your account
 
 1. share tab
@@ -83,6 +85,7 @@ yes. all session content is end-to-end encrypted. only session members can read 
 yes. your nsec works with any nostr app. find it in settings → identity.
 
 **what happens if i log out?**
+
 - "log out (keep local data)": messages remain on device and reappear when you log back in with the same account
 - "log out and clear local data": permanently deletes all local data for this account
 
@@ -91,6 +94,9 @@ check: internet connection, at least one relay connected (settings → relays), 
 
 **can i delete a session?**
 sessions can be archived but not deleted. archived sessions don't appear in main list but data remains on device.
+
+**can i remove a contact?**
+yes. long-press the contact row and choose "unfollow contact." this publishes your updated follow list to relays and removes the contact locally.
 
 **can i save videos?**
 yes, for content you have rights to save:

@@ -47,7 +47,7 @@ final class KeychainStore {
       return
     }
 
-    // Fallback keeps login available when synchronizable keychain is unavailable on device.
+    // Fallback keeps sign-in available when synchronizable keychain is unavailable on device.
     let localStatus = add(data, for: key, synchronizable: false)
     if localStatus == errSecSuccess {
       clearFallback(for: key)

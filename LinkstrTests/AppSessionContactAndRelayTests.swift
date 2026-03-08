@@ -63,7 +63,7 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     XCTAssertEqual(alice.displayName, alice.npub)
   }
 
-  func testRemoveContactUpdatesLocalFollowSet() async throws {
+  func testUnfollowContactUpdatesLocalFollowSet() async throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
     let firstNPub = try TestKeyMaterialFactory.makeNPub()
@@ -80,13 +80,80 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
       contactsBeforeDelete.first { $0.npub == firstNPub }
     )
 
-    let didRemove = await session.removeContact(firstContact)
+    let didRemove = await session.unfollowContact(firstContact)
     XCTAssertTrue(didRemove)
 
     let contactsAfterDelete = try fetchContacts(in: container.mainContext)
     XCTAssertEqual(contactsAfterDelete.count, 1)
     XCTAssertFalse(contactsAfterDelete.contains(where: { $0.npub == firstNPub }))
     XCTAssertTrue(contactsAfterDelete.contains(where: { $0.npub == secondNPub }))
+  }
+
+  func testUnfollowContactPublishesUpdatedFollowListBeforeLocalRemoval() async throws {
+    var publishedFollowLists: [[String]] = []
+    let (session, container) = try makeSession(
+      disableNostrStartup: false,
+      hasConnectedRelays: { true },
+      publishFollowList: { followedPubkeys in
+        publishedFollowLists.append(followedPubkeys)
+        return "follow-list-remove-contact"
+      }
+    )
+    try session.identityService.createNewIdentity()
+    let firstNPub = try TestKeyMaterialFactory.makeNPub()
+    let secondNPub = try TestKeyMaterialFactory.makeNPub()
+
+    let didAddFirst = await session.addContact(npub: firstNPub, alias: "First")
+    XCTAssertTrue(didAddFirst)
+    let didAddSecond = await session.addContact(npub: secondNPub, alias: "Second")
+    XCTAssertTrue(didAddSecond)
+
+    let contactsBeforeDelete = try fetchContacts(in: container.mainContext)
+    let firstContact = try XCTUnwrap(contactsBeforeDelete.first { $0.npub == firstNPub })
+    let secondContact = try XCTUnwrap(contactsBeforeDelete.first { $0.npub == secondNPub })
+
+    let didRemove = await session.unfollowContact(
+      firstContact,
+      timeoutSeconds: 0.05,
+      pollIntervalSeconds: 0.01
+    )
+
+    XCTAssertTrue(didRemove)
+    XCTAssertEqual(publishedFollowLists.last, [secondContact.targetPubkey])
+
+    let contactsAfterDelete = try fetchContacts(in: container.mainContext)
+    XCTAssertEqual(contactsAfterDelete.map(\.targetPubkey), [secondContact.targetPubkey])
+  }
+
+  func testUnfollowContactKeepsLocalDataWhenFollowListPublishFails() async throws {
+    var publishCount = 0
+    let (session, container) = try makeSession(
+      disableNostrStartup: false,
+      hasConnectedRelays: { true },
+      publishFollowList: { _ in
+        publishCount += 1
+        if publishCount > 1 {
+          throw NostrServiceError.publishRejected("blocked: policy")
+        }
+        return "follow-list-add-contact"
+      }
+    )
+    try session.identityService.createNewIdentity()
+    let npub = try TestKeyMaterialFactory.makeNPub()
+
+    let didAdd = await session.addContact(npub: npub, alias: "Alice")
+    XCTAssertTrue(didAdd)
+
+    let contact = try XCTUnwrap(fetchContacts(in: container.mainContext).first)
+    let didRemove = await session.unfollowContact(
+      contact,
+      timeoutSeconds: 0.05,
+      pollIntervalSeconds: 0.01
+    )
+
+    XCTAssertFalse(didRemove)
+    XCTAssertEqual(session.composeError, "blocked: policy")
+    XCTAssertEqual(try fetchContacts(in: container.mainContext).count, 1)
   }
 
   func testSetSessionArchivedAffectsSessionMessages() throws {

@@ -545,7 +545,7 @@ final class AppSession: ObservableObject {
     }
   }
 
-  func logout(clearLocalData: Bool) {
+  func logOut(clearLocalData: Bool) {
     let ownerPubkey = identityService.pubkeyHex
     resetRuntimeSessionState()
 
@@ -1596,7 +1596,7 @@ final class AppSession: ObservableObject {
   }
 
   @discardableResult
-  func removeContact(
+  func unfollowContact(
     _ contact: ContactEntity,
     timeoutSeconds: TimeInterval = 12,
     pollIntervalSeconds: TimeInterval = 0.35

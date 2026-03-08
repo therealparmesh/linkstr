@@ -6,7 +6,7 @@ import XCTest
 
 @MainActor
 final class AppSessionAccountAndStorageTests: AppSessionTestCase {
-  func testLogoutClearLocalDataRemovesContactsAndMessages() async throws {
+  func testLogOutClearLocalDataRemovesContactsAndMessages() async throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
     let npub = try TestKeyMaterialFactory.makeNPub()
@@ -26,7 +26,7 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     try container.mainContext.save()
     XCTAssertEqual(try fetchAccountStates(in: container.mainContext).count, 1)
 
-    session.logout(clearLocalData: true)
+    session.logOut(clearLocalData: true)
 
     XCTAssertNil(session.identityService.keypair)
     XCTAssertTrue(try fetchContacts(in: container.mainContext).isEmpty)
@@ -34,7 +34,7 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     XCTAssertTrue(try fetchAccountStates(in: container.mainContext).isEmpty)
   }
 
-  func testLogoutWithoutClearingLocalDataKeepsContactsAndMessages() async throws {
+  func testLogOutWithoutClearingLocalDataKeepsContactsAndMessages() async throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
     let npub = try TestKeyMaterialFactory.makeNPub()
@@ -53,7 +53,7 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     container.mainContext.insert(message)
     try container.mainContext.save()
 
-    session.logout(clearLocalData: false)
+    session.logOut(clearLocalData: false)
 
     XCTAssertNil(session.identityService.keypair)
     XCTAssertEqual(try fetchContacts(in: container.mainContext).count, 1)
@@ -193,7 +193,7 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     XCTAssertEqual(try fetchContacts(in: container.mainContext).count, 1)
     XCTAssertEqual(try fetchMessages(in: container.mainContext).count, 1)
   }
-  func testLogoutClearLocalDataRemovesStoredThumbnailFiles() throws {
+  func testLogOutClearLocalDataRemovesStoredThumbnailFiles() throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
     let ownerPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
@@ -216,12 +216,12 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
 
     XCTAssertTrue(FileManager.default.fileExists(atPath: thumbnailURL.path))
 
-    session.logout(clearLocalData: true)
+    session.logOut(clearLocalData: true)
 
     XCTAssertFalse(FileManager.default.fileExists(atPath: thumbnailURL.path))
   }
 
-  func testLogoutClearLocalDataDoesNotRemoveUnmanagedThumbnailFiles() throws {
+  func testLogOutClearLocalDataDoesNotRemoveUnmanagedThumbnailFiles() throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
     let ownerPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
@@ -246,7 +246,7 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     container.mainContext.insert(message)
     try container.mainContext.save()
 
-    session.logout(clearLocalData: true)
+    session.logOut(clearLocalData: true)
 
     XCTAssertTrue(FileManager.default.fileExists(atPath: thumbnailURL.path))
   }
@@ -296,7 +296,7 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     XCTAssertTrue(didAddFirst)
 
     let secondKeypair = try TestKeyMaterialFactory.makeKeypair()
-    session.logout(clearLocalData: false)
+    session.logOut(clearLocalData: false)
     session.importNsec(secondKeypair.privateKey.nsec)
     let secondOwner = try XCTUnwrap(session.identityService.pubkeyHex)
     XCTAssertNotEqual(firstOwner, secondOwner)
@@ -327,7 +327,7 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     try container.mainContext.save()
 
     let secondKeypair = try TestKeyMaterialFactory.makeKeypair()
-    session.logout(clearLocalData: false)
+    session.logOut(clearLocalData: false)
     session.importNsec(secondKeypair.privateKey.nsec)
     let secondOwner = try XCTUnwrap(session.identityService.pubkeyHex)
     XCTAssertNotEqual(firstOwner, secondOwner)

@@ -21,23 +21,27 @@ linkstr is a private place to save, organize, and share links and social videos,
 keep everything in one session instead of scattered across texts, dms, and apps. open supported social links in-app, download eligible media for offline access, and avoid broken mobile pages and app-store redirects.
 
 private by design
+
 - solo or group sessions for friends, family, or projects
 - no phone number or email required
 - no ads, analytics, or tracking SDKs
 
 watch, save, and organize
+
 - in-app playback for supported social video links
 - download eligible media for offline access
 - save to photos or files
 - open the original source anytime
 
 built on nostr
+
 - decentralized relay network
 - end-to-end encrypted session payloads
 - create, import, or export your nostr identity
 - your relays, your keys, your data
 
 supported links
+
 - tiktok, instagram, facebook, youtube, x/twitter, rumble
 - plus generic web links
 

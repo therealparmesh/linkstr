@@ -40,7 +40,7 @@
 
 - Users can create a new account (new keypair) or import an existing `nsec`.
 - The active identity is keychain-backed.
-- Settings and Share expose current `npub`.
+- Share exposes current `npub`.
 - Settings sections are collapsed by default and expand on demand.
 - `nsec` is hidden by default and only revealed on explicit action.
 - Revealed `nsec` is cleared again when the Settings identity view disappears or the app moves inactive/background.
@@ -305,7 +305,7 @@
 - Incoming follow-list events from the signed-in author reconcile local contacts (newer timestamp wins; equal timestamp uses lexicographic event-ID tie-break).
 - Follow-list recency watermarks are persisted per account so app restart does not allow stale follow-list rollback.
 - Aliases are private per-account device data and are never published to relays.
-- Contact management supports add/remove and alias edit.
+- Contact management supports add, long-press unfollow, and alias edit.
 - Add-contact input supports manual entry, paste, and QR scan.
 - Contact-key helper controls render directly below the field in the same compact control row pattern used by post compose.
 - Duplicate contacts are blocked per account scope.
@@ -339,7 +339,7 @@
 - Settings storage actions can purge cached media plus hydrated preview titles/thumbnails for the signed-in account and let previews rebuild lazily.
 - Local entities are owner-scoped by pubkey.
 - Account scoping is enforced in storage and query paths to prevent cross-account bleed.
-- `Log Out (Keep Local Data)` preserves persisted local entities for later re-login.
+- `Log Out (Keep Local Data)` preserves persisted local entities so the same account can log back in later.
 - `Log Out and Clear Local Data` removes the signed-in account’s persisted entities and cached media references.
 - Sensitive content fields are encrypted at rest with per-owner local keys (aliases, session/member identity values, URLs/notes, metadata, and creator keys).
 - Operational identifiers and timestamps remain plaintext in local storage for indexing/querying.
