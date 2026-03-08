@@ -251,6 +251,42 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     XCTAssertTrue(FileManager.default.fileExists(atPath: thumbnailURL.path))
   }
 
+  func testClearCachedMediaAndPreviewsRemovesManagedFilesAndClearsHydratedMetadata() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let ownerPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+
+    let thumbnailURL = makeManagedThumbnailURL()
+    let cachedMediaURL = makeManagedVideoURL()
+    try Data("thumbnail".utf8).write(to: thumbnailURL, options: .atomic)
+    try Data("media".utf8).write(to: cachedMediaURL, options: .atomic)
+
+    let message = makeMessage(
+      eventID: "message-clear-preview-cache",
+      conversationID: "conversation-clear-preview-cache",
+      rootID: "message-clear-preview-cache",
+      kind: .root,
+      senderPubkey: "peer",
+      receiverPubkey: ownerPubkey,
+      ownerPubkey: ownerPubkey
+    )
+    try message.setMetadata(title: "Title", thumbnailURL: thumbnailURL.path)
+    message.cachedMediaPath = cachedMediaURL.path
+    message.cachedMediaSourceURL = "https://example.com/video.mp4"
+    container.mainContext.insert(message)
+    try container.mainContext.save()
+
+    session.clearCachedMediaAndPreviews()
+
+    let stored = try XCTUnwrap(try fetchMessages(in: container.mainContext).first)
+    XCTAssertNil(stored.metadataTitle)
+    XCTAssertNil(stored.thumbnailURL)
+    XCTAssertNil(stored.cachedMediaPath)
+    XCTAssertNil(stored.cachedMediaSourceURL)
+    XCTAssertFalse(FileManager.default.fileExists(atPath: thumbnailURL.path))
+    XCTAssertFalse(FileManager.default.fileExists(atPath: cachedMediaURL.path))
+  }
+
   func testContactDuplicationIsScopedPerAccount() async throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()

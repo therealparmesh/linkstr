@@ -295,6 +295,7 @@
 - X/Twitter status previews prefer the Twitter-specific status metadata path for author/title and media thumbnails before falling back to generic `LinkPresentation` metadata.
 - On boot, existing root posts are re-queued for metadata hydration when stale/missing.
 - Missing local thumbnail files are treated as stale and re-fetched.
+- Settings > Storage can clear hydrated previews and cached media for the current account without deleting posts.
 
 ### Contacts
 
@@ -334,6 +335,7 @@
   - Sessions, member snapshots, membership intervals, root posts, post deletion watermarks, reactions, read state, and archive state.
   - Cached media references and metadata hydration state.
 - Managed thumbnails and cached video files live under app-owned directories, and cleanup only removes files from those managed paths.
+- Settings storage actions can purge cached media plus hydrated preview titles/thumbnails for the signed-in account and let previews rebuild lazily.
 - Local entities are owner-scoped by pubkey.
 - Account scoping is enforced in storage and query paths to prevent cross-account bleed.
 - `Log Out (Keep Local Data)` preserves persisted local entities for later re-login.

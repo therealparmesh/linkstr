@@ -523,19 +523,34 @@ final class SessionMessageStore {
     removeManagedFiles(at: storedFileURLs)
   }
 
-  func clearCachedVideos(ownerPubkey: String) throws {
+  func clearCachedMediaAndPreviews(ownerPubkey: String) throws {
     let descriptor = FetchDescriptor<SessionMessageEntity>(
       predicate: #Predicate { $0.ownerPubkey == ownerPubkey }
     )
     let messages = try modelContext.fetch(descriptor)
 
     var didChange = false
-    for message in messages where message.cachedMediaPath != nil {
-      if let fileURL = ManagedLocalFileScope.shared.managedFileURL(
+    for message in messages {
+      if let thumbnailURL = ManagedLocalFileScope.shared.managedFileURL(
+        fromPath: message.thumbnailURL)
+      {
+        try? FileManager.default.removeItem(at: thumbnailURL)
+      }
+      if let cachedMediaURL = ManagedLocalFileScope.shared.managedFileURL(
         fromPath: message.cachedMediaPath)
       {
-        try? FileManager.default.removeItem(at: fileURL)
+        try? FileManager.default.removeItem(at: cachedMediaURL)
       }
+
+      let hadPreview =
+        message.metadataTitle != nil
+        || message.thumbnailURL != nil
+      let hadCachedMedia =
+        message.cachedMediaPath != nil
+        || message.cachedMediaSourceURL != nil
+      guard hadPreview || hadCachedMedia else { continue }
+
+      try message.setMetadata(title: nil, thumbnailURL: nil)
       message.cachedMediaPath = nil
       message.cachedMediaSourceURL = nil
       didChange = true

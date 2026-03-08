@@ -144,7 +144,53 @@ struct LinkstrCenteredEmptyStateView: View {
   }
 }
 
-struct LinkstrPeerAvatar: View {
+enum LinkstrAvatarStyleResolver {
+  private static let sessionPalette: [Color] = [
+    Color(red: 0.48, green: 0.64, blue: 0.97),
+    Color(red: 0.73, green: 0.60, blue: 0.97),
+    Color(red: 0.88, green: 0.69, blue: 0.41),
+    Color(red: 0.62, green: 0.81, blue: 0.42),
+    Color(red: 0.38, green: 0.78, blue: 0.72),
+    Color(red: 0.91, green: 0.51, blue: 0.66),
+  ]
+
+  static func contactInitials(for name: String) -> String {
+    let parts =
+      name
+      .split(whereSeparator: \.isWhitespace)
+      .filter { $0.contains(where: \.isLetter) || $0.contains(where: \.isNumber) }
+
+    guard let firstPart = parts.first else { return "?" }
+    if parts.count == 1 {
+      let singleWordInitials = String(firstPart.prefix(2))
+      return singleWordInitials.isEmpty ? "?" : singleWordInitials.uppercased()
+    }
+
+    let lastPart = parts[parts.count - 1]
+    let combined = String(firstPart.prefix(1)) + String(lastPart.prefix(1))
+    return combined.isEmpty ? "?" : combined.uppercased()
+  }
+
+  static func sessionColor(for seed: String) -> Color {
+    sessionPalette[sessionColorIndex(for: seed)]
+  }
+
+  static func sessionColorIndex(for seed: String) -> Int {
+    guard sessionPalette.isEmpty == false else { return 0 }
+    return Int(stableHash(for: seed) % UInt64(sessionPalette.count))
+  }
+
+  private static func stableHash(for seed: String) -> UInt64 {
+    var hash: UInt64 = 14_695_981_039_346_656_037
+    for scalar in seed.unicodeScalars {
+      hash ^= UInt64(scalar.value)
+      hash &*= 1_099_511_628_211
+    }
+    return hash
+  }
+}
+
+struct LinkstrContactAvatar: View {
   let name: String
   var size: CGFloat = 42
 
@@ -153,16 +199,25 @@ struct LinkstrPeerAvatar: View {
       .fill(LinkstrTheme.neonCyan.opacity(0.9))
       .frame(width: size, height: size)
       .overlay {
-        Text(initials(for: name))
+        Text(LinkstrAvatarStyleResolver.contactInitials(for: name))
           .font(LinkstrTheme.title(max(12, size * 0.38)))
           .foregroundStyle(Color.white)
       }
   }
+}
 
-  private func initials(for name: String) -> String {
-    let parts = name.split(separator: " ").prefix(2)
-    let text = parts.compactMap { $0.first }.map(String.init).joined()
-    return text.isEmpty ? "?" : text.uppercased()
+struct LinkstrSessionAvatar: View {
+  let seed: String
+  var size: CGFloat = 42
+
+  var body: some View {
+    Circle()
+      .fill(LinkstrAvatarStyleResolver.sessionColor(for: seed))
+      .frame(width: size, height: size)
+      .overlay {
+        Circle()
+          .stroke(Color.white.opacity(0.16), lineWidth: 1)
+      }
   }
 }
 

@@ -53,7 +53,7 @@ private struct ContactRowView: View {
 
   var body: some View {
     HStack(spacing: 12) {
-      LinkstrPeerAvatar(name: contact.displayName)
+      LinkstrContactAvatar(name: contact.displayName)
 
       VStack(alignment: .leading, spacing: 3) {
         Text(contact.displayName)

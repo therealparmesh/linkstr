@@ -127,7 +127,14 @@ none. linkstr does not collect, store, or transmit any personal data. all data r
 
 1. check internet connection
 2. try switching "try local playback" ↔ "try embed playback"
-3. use "open in safari"
+3. settings → storage → "clear cached media and previews"
+4. use "open in safari"
+
+**link preview looks stale or wrong**
+
+1. settings → storage → "clear cached media and previews"
+2. return to sessions/posts and let the app rebuild previews
+3. if the provider still serves bad metadata, use "open in safari"
 
 **can't scan qr codes**
 

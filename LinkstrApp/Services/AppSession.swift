@@ -637,7 +637,6 @@ final class AppSession: ObservableObject {
   }
 
   private func clearLocalAccountData(ownerPubkey: String) {
-    clearCachedVideos(ownerPubkey: ownerPubkey)
     clearMessageCache(ownerPubkey: ownerPubkey)
     clearAllContacts(ownerPubkey: ownerPubkey)
     try? LocalDataCrypto.shared.clearKey(ownerPubkey: ownerPubkey)
@@ -1740,18 +1739,19 @@ final class AppSession: ObservableObject {
     }
   }
 
-  func clearCachedVideos() {
+  func clearCachedMediaAndPreviews() {
     guard let ownerPubkey = identityService.pubkeyHex else {
       composeError = "you're signed out. sign in to manage local storage."
       return
     }
-    clearCachedVideos(ownerPubkey: ownerPubkey)
+    clearCachedMediaAndPreviews(ownerPubkey: ownerPubkey)
   }
 
-  private func clearCachedVideos(ownerPubkey: String) {
+  private func clearCachedMediaAndPreviews(ownerPubkey: String) {
     do {
-      try messageStore.clearCachedVideos(ownerPubkey: ownerPubkey)
+      try messageStore.clearCachedMediaAndPreviews(ownerPubkey: ownerPubkey)
       composeError = nil
+      hydrateMissingMetadata()
     } catch {
       report(error: error)
     }

@@ -216,15 +216,22 @@ struct SettingsView: View {
 
   private var storageSection: some View {
     DisclosureGroup(isExpanded: $isStorageExpanded) {
-      VStack(spacing: 10) {
+      VStack(alignment: .leading, spacing: 10) {
         Button(role: .destructive) {
-          session.clearCachedVideos()
+          session.clearCachedMediaAndPreviews()
         } label: {
-          Text("clear cached videos")
+          Text("clear cached media and previews")
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(.borderedProminent)
         .tint(LinkstrTheme.destructive)
+
+        Text(
+          "removes downloaded videos plus hydrated link titles/thumbnails for this account. posts stay intact and previews can rebuild later."
+        )
+        .font(LinkstrTheme.body(12))
+        .foregroundStyle(LinkstrTheme.textSecondary)
+        .fixedSize(horizontal: false, vertical: true)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       .padding(.top, 8)

@@ -172,6 +172,34 @@ final class AppSessionPresentationTests: XCTestCase {
     }
   }
 
+  func testContactAvatarInitialsPreferFirstAndLastWords() {
+    XCTAssertEqual(
+      LinkstrAvatarStyleResolver.contactInitials(for: "John Ronald Reuel Tolkien"),
+      "JT"
+    )
+    XCTAssertEqual(
+      LinkstrAvatarStyleResolver.contactInitials(for: "Ada Lovelace"),
+      "AL"
+    )
+    XCTAssertEqual(
+      LinkstrAvatarStyleResolver.contactInitials(for: "Madonna"),
+      "MA"
+    )
+    XCTAssertEqual(
+      LinkstrAvatarStyleResolver.contactInitials(for: "   "),
+      "?"
+    )
+  }
+
+  func testSessionAvatarColorIndexIsStableForSeed() {
+    let first = LinkstrAvatarStyleResolver.sessionColorIndex(for: "session-seed")
+    let second = LinkstrAvatarStyleResolver.sessionColorIndex(for: "session-seed")
+
+    XCTAssertEqual(first, second)
+    XCTAssertGreaterThanOrEqual(first, 0)
+    XCTAssertLessThan(first, 6)
+  }
+
   private func jsonObject(from raw: String) throws -> [String: Any] {
     let data = try XCTUnwrap(raw.data(using: .utf8))
     return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])

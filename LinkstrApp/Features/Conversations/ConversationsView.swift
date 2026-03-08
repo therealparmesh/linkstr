@@ -209,7 +209,7 @@ private struct SessionRowView: View {
 
   var body: some View {
     HStack(spacing: 12) {
-      LinkstrPeerAvatar(name: summary.session.name)
+      LinkstrSessionAvatar(seed: summary.session.sessionID)
 
       VStack(alignment: .leading, spacing: 3) {
         HStack(alignment: .firstTextBaseline) {
@@ -599,7 +599,7 @@ struct NewSessionSheet: View {
                     toggle(contact.npub)
                   } label: {
                     HStack(spacing: 10) {
-                      LinkstrPeerAvatar(name: contact.displayName, size: 30)
+                      LinkstrContactAvatar(name: contact.displayName, size: 30)
                       VStack(alignment: .leading, spacing: 2) {
                         Text(contact.displayName)
                           .font(LinkstrTheme.body(14))
@@ -763,7 +763,7 @@ private struct SessionMembersSheet: View {
               VStack(spacing: 0) {
                 ForEach(visibleCurrentMembers, id: \.self) { memberHex in
                   HStack(spacing: 10) {
-                    LinkstrPeerAvatar(name: memberDisplayName(for: memberHex), size: 28)
+                    LinkstrContactAvatar(name: memberDisplayName(for: memberHex), size: 28)
                     VStack(alignment: .leading, spacing: 2) {
                       Text(memberDisplayName(for: memberHex))
                         .font(LinkstrTheme.body(14))
@@ -824,7 +824,7 @@ private struct SessionMembersSheet: View {
                       }
                     } label: {
                       HStack(spacing: 10) {
-                        LinkstrPeerAvatar(name: contact.displayName, size: 28)
+                        LinkstrContactAvatar(name: contact.displayName, size: 28)
                         VStack(alignment: .leading, spacing: 2) {
                           Text(contact.displayName)
                             .font(LinkstrTheme.body(14))
