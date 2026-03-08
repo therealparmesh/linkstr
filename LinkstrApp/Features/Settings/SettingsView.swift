@@ -352,6 +352,7 @@ struct SettingsView: View {
       Image(systemName: systemImage)
         .font(LinkstrTheme.system(13, weight: .semibold))
         .foregroundStyle(LinkstrTheme.textPrimary)
+        .frame(width: 18, height: 18, alignment: .center)
 
       Text(title)
         .linkstrPrimarySectionTitleTextStyle()
