@@ -86,7 +86,6 @@ struct MainTabView: View {
         }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-    .navigationTitle("linkstr")
     .navigationBarTitleDisplayMode(.inline)
     .navigationDestination(item: $selectedSessionTarget) { target in
       if let targetSession = scopedSessions.first(where: { $0.sessionID == target.id }) {
@@ -100,6 +99,11 @@ struct MainTabView: View {
       }
     }
     .toolbar {
+      ToolbarItem(placement: .principal) {
+        Text("linkstr")
+          .font(LinkstrTheme.title(18))
+          .foregroundStyle(LinkstrTheme.neonAmber)
+      }
       ToolbarItem(placement: .topBarLeading) {
         leadingToolbarAccessory
       }
