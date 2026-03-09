@@ -31,7 +31,10 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
 
     let didAddDuplicate = await session.addContact(npub: "  \(npub)  ", alias: "Alice 2")
     XCTAssertFalse(didAddDuplicate)
-    XCTAssertEqual(session.composeError, "this contact is already in your list.")
+    XCTAssertEqual(
+      session.composeError,
+      "this contact is already in your list. edit the existing contact if you want to change the alias."
+    )
 
     let didAddInvalid = await session.addContact(npub: "not-an-npub", alias: "Bob")
     XCTAssertFalse(didAddInvalid)
@@ -40,6 +43,7 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     let contacts = try fetchContacts(in: container.mainContext)
     XCTAssertEqual(contacts.count, 1)
     XCTAssertEqual(contacts.first?.npub, npub)
+    XCTAssertEqual(contacts.first?.localAlias, "Alice")
   }
 
   func testUpdateContactAliasCanSetAndClearAlias() async throws {

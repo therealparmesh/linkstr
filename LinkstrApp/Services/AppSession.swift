@@ -1723,7 +1723,8 @@ final class AppSession: ObservableObject {
     do {
       targetPubkey = try contactStore.normalizeFollowTarget(npub)
       if contactStore.hasContact(ownerPubkey: ownerPubkey, withTargetPubkey: targetPubkey) {
-        composeError = "this contact is already in your list."
+        composeError =
+          "this contact is already in your list. edit the existing contact if you want to change the alias."
         return false
       }
     } catch {

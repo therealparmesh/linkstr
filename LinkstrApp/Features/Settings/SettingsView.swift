@@ -80,7 +80,7 @@ struct SettingsView: View {
       Button("cancel", role: .cancel) {}
     } message: {
       Text(
-        "this requests relay-side account deletion on your active nostr relays, clears this account's local data on this device, and logs you out. if you keep the secret key, it can still be used again."
+        "this requests relay-side account deletion on your active nostr relays, clears this account's local data on this device, and logs you out. if you keep the secret key, it can still be used to sign in again."
       )
     }
     .alert("are you absolutely sure?", isPresented: $isPresentingDeleteAccountFinalConfirm) {
@@ -342,7 +342,7 @@ struct SettingsView: View {
             .disabled(isDeletingAccount)
 
             Text(
-              "delete account sends a nostr vanish request to your enabled relays, clears this account's local data, and logs you out. if you keep the secret key, it can still sign in again."
+              "delete account sends a nostr vanish request to your enabled relays, clears this account's local data, and logs you out. if you keep the secret key, it can still be used to sign in again."
             )
             .font(LinkstrTheme.body(12))
             .foregroundStyle(LinkstrTheme.textSecondary)

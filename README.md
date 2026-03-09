@@ -318,7 +318,7 @@
 - Contact management supports add, long-press unfollow, and alias edit.
 - Add-contact input supports manual entry, paste, and QR scan.
 - Contact-key helper controls render directly below the field in the same compact control row pattern used by post compose.
-- Duplicate contacts are blocked per account scope.
+- Duplicate contacts are blocked per account scope; adding the same contact again does not overwrite the stored alias.
 
 ### Share tab
 

@@ -95,6 +95,12 @@ yes. your nsec works with any nostr app. find it in settings → identity.
 - linkstr sends a nostr vanish request to your enabled relays, clears local data on this device, and logs you out
 - if you keep the nsec, it still works and can sign in again later
 
+**what if i add the same contact again?**
+
+- linkstr blocks duplicate contacts
+- adding the same contact again does not overwrite the existing alias
+- edit the existing contact if you want to rename it
+
 **why can't i send messages?**
 check: internet connection, at least one relay connected (settings → relays), you are a member of the session.
 
@@ -102,7 +108,7 @@ check: internet connection, at least one relay connected (settings → relays), 
 sessions can be archived but not deleted. archived sessions don't appear in main list but data remains on device.
 
 **can i remove a contact?**
-yes. long-press the contact row and choose "unfollow contact." this publishes your updated follow list to relays and removes the contact locally.
+yes. long-press the contact row and choose "unfollow contact." this publishes your updated follow list to relays, which is effectively a nostr unfollow, and removes the contact locally.
 
 **can i save videos?**
 yes, for content you have rights to save:

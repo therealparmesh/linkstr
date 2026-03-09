@@ -81,11 +81,12 @@ struct ContactsView: View {
 
   private var unfollowConfirmationMessage: String {
     guard let pendingUnfollowContact else {
-      return "this publishes an updated contact list to relays and removes this contact locally."
+      return
+        "this publishes an updated follow list to relays, effectively unfollows this contact, and removes it locally."
     }
 
     return
-      "this publishes an updated contact list to relays and removes \(pendingUnfollowContact.displayName) locally."
+      "this publishes an updated follow list to relays, effectively unfollows \(pendingUnfollowContact.displayName), and removes it locally."
   }
 
   private func unfollowPendingContact() {
