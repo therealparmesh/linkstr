@@ -97,9 +97,9 @@ yes. your nsec works with any nostr app. find it in settings → identity.
 
 **what if i add the same contact again?**
 
-- linkstr blocks duplicate contacts
-- adding the same contact again does not overwrite the existing alias
-- edit the existing contact if you want to rename it
+- linkstr keeps one contact per key
+- adding the same contact again updates the saved alias for that contact
+- this does not publish a new follow-list event because the followed account did not change
 
 **why can't i send messages?**
 check: internet connection, at least one relay connected (settings → relays), you are a member of the session.

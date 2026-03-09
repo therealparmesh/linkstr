@@ -21,7 +21,7 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     XCTAssertNotEqual(contacts.first?.encryptedAlias, "Alice")
   }
 
-  func testAddContactRejectsDuplicateAndInvalidNPub() async throws {
+  func testAddContactOverwritesExistingAliasAndRejectsInvalidNPub() async throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
     let npub = try TestKeyMaterialFactory.makeNPub()
@@ -30,11 +30,8 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     XCTAssertTrue(didAdd)
 
     let didAddDuplicate = await session.addContact(npub: "  \(npub)  ", alias: "Alice 2")
-    XCTAssertFalse(didAddDuplicate)
-    XCTAssertEqual(
-      session.composeError,
-      "this contact is already in your list. edit the existing contact if you want to change the alias."
-    )
+    XCTAssertTrue(didAddDuplicate)
+    XCTAssertNil(session.composeError)
 
     let didAddInvalid = await session.addContact(npub: "not-an-npub", alias: "Bob")
     XCTAssertFalse(didAddInvalid)
@@ -43,7 +40,33 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     let contacts = try fetchContacts(in: container.mainContext)
     XCTAssertEqual(contacts.count, 1)
     XCTAssertEqual(contacts.first?.npub, npub)
-    XCTAssertEqual(contacts.first?.localAlias, "Alice")
+    XCTAssertEqual(contacts.first?.localAlias, "Alice 2")
+  }
+
+  func testAddContactOverwriteDoesNotRepublishFollowList() async throws {
+    var publishedFollowLists: [[String]] = []
+    let (session, container) = try makeSession(
+      disableNostrStartup: false,
+      hasConnectedRelays: { true },
+      publishFollowList: { followedPubkeys in
+        publishedFollowLists.append(followedPubkeys)
+        return "follow-list-add-contact"
+      }
+    )
+    try session.identityService.createNewIdentity()
+    let npub = try TestKeyMaterialFactory.makeNPub()
+
+    let didAdd = await session.addContact(npub: npub, alias: "Alice")
+    XCTAssertTrue(didAdd)
+
+    let didOverwrite = await session.addContact(npub: npub, alias: "Alice 2")
+    XCTAssertTrue(didOverwrite)
+
+    let contacts = try fetchContacts(in: container.mainContext)
+    XCTAssertEqual(contacts.count, 1)
+    XCTAssertEqual(contacts.first?.localAlias, "Alice 2")
+    XCTAssertEqual(publishedFollowLists.count, 1)
+    XCTAssertEqual(publishedFollowLists.first, [contacts[0].targetPubkey])
   }
 
   func testUpdateContactAliasCanSetAndClearAlias() async throws {

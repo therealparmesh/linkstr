@@ -1722,17 +1722,26 @@ final class AppSession: ObservableObject {
     let targetPubkey: String
     do {
       targetPubkey = try contactStore.normalizeFollowTarget(npub)
-      if contactStore.hasContact(ownerPubkey: ownerPubkey, withTargetPubkey: targetPubkey) {
-        composeError =
-          "this contact is already in your list. edit the existing contact if you want to change the alias."
-        return false
-      }
     } catch {
       report(error: error)
       return false
     }
 
     let normalizedAlias = contactStore.normalizeAlias(alias)
+    if contactStore.hasContact(ownerPubkey: ownerPubkey, withTargetPubkey: targetPubkey) {
+      do {
+        try contactStore.updateAlias(
+          ownerPubkey: ownerPubkey,
+          targetPubkey: targetPubkey,
+          alias: normalizedAlias
+        )
+        composeError = nil
+        return true
+      } catch {
+        report(error: error)
+        return false
+      }
+    }
 
     let nextFollowedPubkeys: [String]
     do {
