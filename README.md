@@ -241,6 +241,7 @@
   - Local playback uses the system video player with full controls.
   - Extracted media can be saved to Photos or Files.
   - Works offline once cached.
+  - Downloaded video cache auto-trims with a least-recently-used policy once device-local video cache exceeds about 1 GB.
 - Embed loads the provider's web player in an inline web view.
   - Requires network connectivity.
   - Subject to provider playback restrictions and UX.
@@ -302,6 +303,7 @@
 - Session post rows lazily retry missing social thumbnails only as those rows appear on screen.
 - Missing local thumbnail files are treated as stale and re-fetched.
 - Settings > Storage can clear hydrated previews and cached media for the current account without deleting posts.
+- Settings > Storage shows current device video-cache usage and an estimate of how much local storage the signed-in account can clear.
 
 ### Contacts
 
@@ -341,6 +343,8 @@
   - Sessions, member snapshots, membership intervals, root posts, post deletion watermarks, reactions, read state, and archive state.
   - Cached media references and metadata hydration state.
 - Managed thumbnails and cached video files live under app-owned directories, and cleanup only removes files from those managed paths.
+- Cached video files live under `Library/Caches` and are treated as disposable device cache.
+- The app enforces a least-recently-used video cache cap of about 1 GB for downloaded local playback media.
 - Settings storage actions can purge cached media plus hydrated preview titles/thumbnails for the signed-in account and let previews rebuild lazily.
 - Local entities are owner-scoped by pubkey.
 - Account scoping is enforced in storage and query paths to prevent cross-account bleed.

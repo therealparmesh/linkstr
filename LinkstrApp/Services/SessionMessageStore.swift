@@ -560,6 +560,33 @@ final class SessionMessageStore {
     }
   }
 
+  func managedStorageUsage(ownerPubkey: String) throws -> ManagedStorageUsage {
+    let descriptor = FetchDescriptor<SessionMessageEntity>(
+      predicate: #Predicate { $0.ownerPubkey == ownerPubkey }
+    )
+    let messages = try modelContext.fetch(descriptor)
+
+    let previewURLs = Set(
+      messages.compactMap { message in
+        ManagedLocalFileScope.shared.managedFileURL(fromPath: message.thumbnailURL)
+      }
+    )
+    let cachedMediaURLs = Set(
+      messages.compactMap { message in
+        ManagedLocalFileScope.shared.managedFileURL(fromPath: message.cachedMediaPath)
+      }
+    )
+
+    return ManagedStorageUsage(
+      previewBytes: previewURLs.reduce(into: Int64(0)) { total, fileURL in
+        total += LocalFileMetrics.allocatedSize(at: fileURL)
+      },
+      cachedMediaBytes: cachedMediaURLs.reduce(into: Int64(0)) { total, fileURL in
+        total += LocalFileMetrics.allocatedSize(at: fileURL)
+      }
+    )
+  }
+
   private func normalizedPubkeys(_ candidates: [String]) -> [String] {
     NostrValueNormalizer.dedupedNormalizedPubkeyHexes(candidates)
   }

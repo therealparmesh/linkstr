@@ -56,6 +56,17 @@ final class AppSession: ObservableObject {
     let publishedTransportEventIDs: [String]
   }
 
+  struct StorageUsageSummary: Equatable {
+    let deviceVideoCacheBytes: Int64
+    let deviceVideoCacheLimitBytes: Int64
+    let currentAccountPreviewBytes: Int64
+    let currentAccountCachedMediaBytes: Int64
+
+    var currentAccountTotalBytes: Int64 {
+      currentAccountPreviewBytes + currentAccountCachedMediaBytes
+    }
+  }
+
   struct TestingOverrides {
     var disableNostrStartup: Bool?
     var hasConnectedRelays: (() -> Bool)?
@@ -1926,6 +1937,24 @@ final class AppSession: ObservableObject {
     } catch {
       report(error: error)
     }
+  }
+
+  func storageUsageSummary() async -> StorageUsageSummary {
+    let currentAccountUsage: ManagedStorageUsage
+    if let ownerPubkey = identityService.pubkeyHex {
+      currentAccountUsage =
+        (try? messageStore.managedStorageUsage(ownerPubkey: ownerPubkey)) ?? .zero
+    } else {
+      currentAccountUsage = .zero
+    }
+
+    let deviceUsage = await VideoCacheService.shared.currentUsage()
+    return StorageUsageSummary(
+      deviceVideoCacheBytes: deviceUsage.videoBytes,
+      deviceVideoCacheLimitBytes: deviceUsage.videoCacheLimitBytes,
+      currentAccountPreviewBytes: currentAccountUsage.previewBytes,
+      currentAccountCachedMediaBytes: currentAccountUsage.cachedMediaBytes
+    )
   }
 
   private func persistIncomingFollowList(_ incoming: ReceivedFollowList) {

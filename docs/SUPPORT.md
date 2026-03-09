@@ -1,6 +1,6 @@
 # linkstr support
 
-last updated: march 8, 2026
+last updated: march 9, 2026
 
 ## getting started
 
@@ -124,6 +124,8 @@ none. linkstr does not collect or store data on developer-controlled servers. yo
 - messages & sessions: local device storage only
 - media cache: local device storage only
 
+downloaded video cache is device-local, auto-trims with least-recently-used eviction at about 1 gb, and can also be cleared from settings → storage. that screen also shows current video-cache usage and an estimate of how much local storage the signed-in account can clear.
+
 ## troubleshooting
 
 **app won't connect to relays**
@@ -136,8 +138,9 @@ none. linkstr does not collect or store data on developer-controlled servers. yo
 
 1. check internet connection
 2. try switching "try local playback" ↔ "try embed playback"
-3. settings → storage → "clear cached media and previews"
-4. use "open in safari"
+3. if a previously downloaded local copy was auto-trimmed, try "try local playback" again to re-download it
+4. settings → storage → "clear cached media and previews"
+5. use "open in safari"
 
 **link preview looks stale or wrong**
 

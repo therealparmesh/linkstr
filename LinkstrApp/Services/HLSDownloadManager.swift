@@ -18,6 +18,7 @@ final class HLSDownloadManager: NSObject {
   func download(assetURL: URL, headers: [String: String]) async throws -> URL {
     let destinationURL = ManagedLocalFileScope.shared.cachedHLSPackageURL(for: assetURL)
     if FileManager.default.fileExists(atPath: destinationURL.path) {
+      await VideoCacheService.shared.registerCachedMedia(at: destinationURL)
       return destinationURL
     }
 
@@ -58,7 +59,10 @@ extension HLSDownloadManager: AVAssetDownloadDelegate {
         try? FileManager.default.removeItem(at: destinationURL)
       }
       try FileManager.default.moveItem(at: location, to: destinationURL)
-      continuation.resume(returning: destinationURL)
+      Task {
+        await VideoCacheService.shared.registerCachedMedia(at: destinationURL)
+        continuation.resume(returning: destinationURL)
+      }
     } catch {
       continuation.resume(throwing: error)
     }

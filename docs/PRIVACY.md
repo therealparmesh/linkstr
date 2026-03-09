@@ -1,6 +1,6 @@
 # privacy policy
 
-last updated: march 8, 2026
+last updated: march 9, 2026
 
 ## overview
 
@@ -26,6 +26,8 @@ stored only on your device:
 - **sessions**: session names and member lists you create
 - **messages**: links, notes, and reactions you send and receive
 - **media cache**: videos and thumbnails downloaded for offline viewing
+
+downloaded videos are stored as device-local cache. linkstr automatically trims older cached video files with least-recently-used eviction once local video cache reaches about 1 gb.
 
 this data is encrypted at rest using device-local encryption keys and never leaves your device except as described below.
 
@@ -92,6 +94,7 @@ linkstr does not knowingly collect information from children under 13. the app d
 ## data retention
 
 - **local data**: remains on device until you delete app or use "log out and clear local data"
+- **media cache**: downloaded video cache may be evicted automatically by linkstr's cache cap or by ios storage pressure
 - **relay data**: controlled by individual nostr relay operators; linkstr has no control over relay data retention
 - **icloud sync**: controlled by icloud settings and apple's retention policies
 

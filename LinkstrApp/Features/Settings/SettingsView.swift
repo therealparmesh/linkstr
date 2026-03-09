@@ -19,6 +19,8 @@ struct SettingsView: View {
   @State private var isPresentingDeleteAccountConfirm = false
   @State private var isPresentingDeleteAccountFinalConfirm = false
   @State private var isDeletingAccount = false
+  @State private var storageUsageSummary: AppSession.StorageUsageSummary?
+  @State private var isRefreshingStorageUsage = false
   private let identityActionSpacing: CGFloat = 6
 
   var body: some View {
@@ -30,6 +32,11 @@ struct SettingsView: View {
     .onChange(of: scenePhase) { _, newValue in
       switch newValue {
       case .active:
+        if isStorageExpanded {
+          Task {
+            await refreshStorageUsage()
+          }
+        }
         break
       case .inactive, .background:
         hideSensitiveIdentityContent()
@@ -218,8 +225,29 @@ struct SettingsView: View {
   private var storageSection: some View {
     DisclosureGroup(isExpanded: $isStorageExpanded) {
       VStack(alignment: .leading, spacing: 10) {
+        if isRefreshingStorageUsage && storageUsageSummary == nil {
+          Text("measuring local storage...")
+            .font(LinkstrTheme.body(12))
+            .foregroundStyle(LinkstrTheme.textSecondary)
+        } else if let storageUsageSummary {
+          VStack(alignment: .leading, spacing: 4) {
+            Text(
+              "downloaded media on this device: \(formattedByteCount(storageUsageSummary.deviceVideoCacheBytes)) / \(formattedByteCount(storageUsageSummary.deviceVideoCacheLimitBytes)) auto-trim cap"
+            )
+            Text(
+              "clearing this account frees about \(formattedByteCount(storageUsageSummary.currentAccountTotalBytes))"
+            )
+          }
+          .font(LinkstrTheme.body(12))
+          .foregroundStyle(LinkstrTheme.textSecondary)
+          .fixedSize(horizontal: false, vertical: true)
+        }
+
         Button(role: .destructive) {
           session.clearCachedMediaAndPreviews()
+          Task {
+            await refreshStorageUsage()
+          }
         } label: {
           Text("clear cached media and previews")
             .frame(maxWidth: .infinity)
@@ -236,6 +264,10 @@ struct SettingsView: View {
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       .padding(.top, 8)
+      .task(id: isStorageExpanded) {
+        guard isStorageExpanded else { return }
+        await refreshStorageUsage()
+      }
     } label: {
       sectionLabel("storage", systemImage: "externaldrive")
     }
@@ -394,6 +426,17 @@ struct SettingsView: View {
   private func normalizedInlineMessage(_ message: String?) -> String {
     guard let message else { return "" }
     return message.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  private func formattedByteCount(_ bytes: Int64) -> String {
+    ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+  }
+
+  @MainActor
+  private func refreshStorageUsage() async {
+    isRefreshingStorageUsage = true
+    storageUsageSummary = await session.storageUsageSummary()
+    isRefreshingStorageUsage = false
   }
 
   private func hideSensitiveIdentityContent() {

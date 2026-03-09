@@ -473,6 +473,11 @@ struct AdaptiveVideoPlaybackView: View {
     let playbackSourceURL = effectiveSourceURL
 
     if let cached = resolveCachedLocalMedia?(playbackSourceURL) {
+      if cached.isLocalFile {
+        Task {
+          await VideoCacheService.shared.touchCachedMedia(at: cached.playbackURL)
+        }
+      }
       cachedLocalMedia = cached
       extractionState = .ready(cached)
       extractionFallbackReason = nil
@@ -493,6 +498,9 @@ struct AdaptiveVideoPlaybackView: View {
     case .ready(let media):
       extractionFallbackReason = nil
       if media.isLocalFile {
+        Task {
+          await VideoCacheService.shared.touchCachedMedia(at: media.playbackURL)
+        }
         cachedLocalMedia = media
         persistLocalMedia?(playbackSourceURL, media)
       } else {

@@ -512,6 +512,113 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     XCTAssertFalse(FileManager.default.fileExists(atPath: cachedMediaURL.path))
   }
 
+  func testStorageUsageSummaryReportsCurrentAccountManagedUsage() async throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let ownerPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+
+    let thumbnailData = Data("thumbnail".utf8)
+    let mediaData = Data("cached-video".utf8)
+    let thumbnailURL = makeManagedThumbnailURL()
+    let cachedMediaURL = makeManagedVideoURL()
+    defer {
+      try? FileManager.default.removeItem(at: thumbnailURL)
+      try? FileManager.default.removeItem(at: cachedMediaURL)
+    }
+
+    try thumbnailData.write(to: thumbnailURL, options: .atomic)
+    try mediaData.write(to: cachedMediaURL, options: .atomic)
+
+    let message = makeMessage(
+      eventID: "message-storage-usage",
+      conversationID: "conversation-storage-usage",
+      rootID: "message-storage-usage",
+      kind: .root,
+      senderPubkey: "peer",
+      receiverPubkey: ownerPubkey,
+      ownerPubkey: ownerPubkey
+    )
+    try message.setMetadata(title: "Title", thumbnailURL: thumbnailURL.path)
+    message.cachedMediaPath = cachedMediaURL.path
+    message.cachedMediaSourceURL = "https://example.com/video.mp4"
+    container.mainContext.insert(message)
+    try container.mainContext.save()
+
+    let summary = await session.storageUsageSummary()
+
+    XCTAssertEqual(summary.currentAccountPreviewBytes, Int64(thumbnailData.count))
+    XCTAssertEqual(summary.currentAccountCachedMediaBytes, Int64(mediaData.count))
+    XCTAssertGreaterThanOrEqual(summary.deviceVideoCacheBytes, Int64(mediaData.count))
+    XCTAssertEqual(summary.deviceVideoCacheLimitBytes, VideoCacheService.defaultMaxVideoCacheBytes)
+  }
+
+  func testVideoCacheServiceCurrentUsageCountsVideoAndThumbnailBytes() async throws {
+    let rootDirectory = makeTemporaryCacheDirectory()
+    defer { try? FileManager.default.removeItem(at: rootDirectory) }
+
+    let thumbnailDirectory = rootDirectory.appendingPathComponent("thumbnails", isDirectory: true)
+    let videoDirectory = rootDirectory.appendingPathComponent("videos", isDirectory: true)
+    try FileManager.default.createDirectory(
+      at: thumbnailDirectory, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: videoDirectory, withIntermediateDirectories: true)
+
+    let thumbnailData = Data("thumb".utf8)
+    let videoData = Data("video-file".utf8)
+    let thumbnailURL = thumbnailDirectory.appendingPathComponent("one.png")
+    let videoURL = videoDirectory.appendingPathComponent("one.mp4")
+    try thumbnailData.write(to: thumbnailURL, options: .atomic)
+    try videoData.write(to: videoURL, options: .atomic)
+
+    let service = VideoCacheService(
+      thumbnailDirectory: thumbnailDirectory,
+      videoDirectory: videoDirectory,
+      maxVideoCacheBytes: 64
+    )
+
+    let usage = await service.currentUsage()
+
+    XCTAssertEqual(usage.thumbnailBytes, Int64(thumbnailData.count))
+    XCTAssertEqual(usage.videoBytes, Int64(videoData.count))
+    XCTAssertEqual(usage.videoCacheLimitBytes, 64)
+  }
+
+  func testVideoCacheServiceRegisterEvictsLeastRecentlyUsedVideosWhenOverLimit() async throws {
+    let rootDirectory = makeTemporaryCacheDirectory()
+    defer { try? FileManager.default.removeItem(at: rootDirectory) }
+
+    let thumbnailDirectory = rootDirectory.appendingPathComponent("thumbnails", isDirectory: true)
+    let videoDirectory = rootDirectory.appendingPathComponent("videos", isDirectory: true)
+    try FileManager.default.createDirectory(
+      at: thumbnailDirectory, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: videoDirectory, withIntermediateDirectories: true)
+
+    let oldestURL = videoDirectory.appendingPathComponent("oldest.mp4")
+    let newerURL = videoDirectory.appendingPathComponent("newer.mp4")
+    let newestURL = videoDirectory.appendingPathComponent("newest.mp4")
+
+    try Data("1111".utf8).write(to: oldestURL, options: .atomic)
+    try Data("2222".utf8).write(to: newerURL, options: .atomic)
+    try Data("3333".utf8).write(to: newestURL, options: .atomic)
+
+    LocalFileMetrics.touch(oldestURL, date: Date(timeIntervalSince1970: 10))
+    LocalFileMetrics.touch(newerURL, date: Date(timeIntervalSince1970: 20))
+    LocalFileMetrics.touch(newestURL, date: Date(timeIntervalSince1970: 30))
+
+    let service = VideoCacheService(
+      thumbnailDirectory: thumbnailDirectory,
+      videoDirectory: videoDirectory,
+      maxVideoCacheBytes: 8
+    )
+
+    await service.registerCachedMedia(at: newestURL)
+    let usage = await service.currentUsage()
+
+    XCTAssertFalse(FileManager.default.fileExists(atPath: oldestURL.path))
+    XCTAssertTrue(FileManager.default.fileExists(atPath: newerURL.path))
+    XCTAssertTrue(FileManager.default.fileExists(atPath: newestURL.path))
+    XCTAssertEqual(usage.videoBytes, 8)
+  }
+
   func testContactDuplicationIsScopedPerAccount() async throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
@@ -574,4 +681,12 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     XCTAssertEqual(Set(messages.map(\.ownerPubkey)).count, 2)
     XCTAssertEqual(Set(messages.map(\.storageID)).count, 2)
   }
+}
+
+private func makeTemporaryCacheDirectory() -> URL {
+  let directory =
+    URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+    .appendingPathComponent("linkstr-cache-tests-\(UUID().uuidString)", isDirectory: true)
+  try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+  return directory
 }
