@@ -2,14 +2,6 @@
 
 copy/paste-ready fields for app store connect.
 
-## name
-
-linkstr: share media
-
-## subtitle
-
-private link organizer
-
 ## promotional text
 
 share, organize, and download links and social media videos privately, solo or in groups, with in-app playback that skips clunky mobile sites and app-store redirects.
