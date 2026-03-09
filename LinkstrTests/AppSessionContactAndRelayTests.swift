@@ -1,3 +1,4 @@
+import NostrSDK
 import SwiftData
 import XCTest
 
@@ -88,6 +89,286 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     XCTAssertTrue(didClearAlias)
     XCTAssertNil(alice.localAlias)
     XCTAssertEqual(alice.displayName, alice.npub)
+  }
+
+  func testIncomingProfileMetadataBecomesFallbackDisplayNameUntilAliased() async throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let npub = try TestKeyMaterialFactory.makeNPub()
+
+    let didAdd = await session.addContact(npub: npub, alias: "")
+    XCTAssertTrue(didAdd)
+
+    let initialContact = try XCTUnwrap(fetchContacts(in: container.mainContext).first)
+    session.ingestProfileMetadataForTesting(
+      try makeIncomingProfileMetadata(
+        eventID: "profile-alice",
+        authorPubkey: initialContact.targetPubkey,
+        createdAt: Date(timeIntervalSince1970: 120),
+        chosenName: "Alice From Nostr"
+      )
+    )
+
+    let initialIdentity = session.resolvedIdentity(for: initialContact)
+    XCTAssertEqual(initialIdentity.displayName, "Alice From Nostr")
+    XCTAssertEqual(initialIdentity.chosenName, "Alice From Nostr")
+    XCTAssertNil(initialIdentity.aliasedChosenName)
+
+    let didUpdateAlias = session.updateContactAlias(initialContact, alias: "Alice Local")
+    XCTAssertTrue(didUpdateAlias)
+    let resolvedIdentity = session.resolvedIdentity(for: initialContact)
+    XCTAssertEqual(resolvedIdentity.displayName, "Alice Local")
+    XCTAssertEqual(resolvedIdentity.aliasedChosenName, "Alice From Nostr")
+  }
+
+  func testIncomingProfileMetadataIgnoresOlderReplaceableEvent() async throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let npub = try TestKeyMaterialFactory.makeNPub()
+
+    let didAdd = await session.addContact(npub: npub, alias: "")
+    XCTAssertTrue(didAdd)
+
+    let contact = try XCTUnwrap(fetchContacts(in: container.mainContext).first)
+    session.ingestProfileMetadataForTesting(
+      try makeIncomingProfileMetadata(
+        eventID: "profile-new",
+        authorPubkey: contact.targetPubkey,
+        createdAt: Date(timeIntervalSince1970: 200),
+        chosenName: "New Name"
+      )
+    )
+    session.ingestProfileMetadataForTesting(
+      try makeIncomingProfileMetadata(
+        eventID: "profile-old",
+        authorPubkey: contact.targetPubkey,
+        createdAt: Date(timeIntervalSince1970: 100),
+        chosenName: "Old Name"
+      )
+    )
+
+    let identity = session.resolvedIdentity(for: contact)
+    XCTAssertEqual(identity.displayName, "New Name")
+    XCTAssertEqual(identity.chosenName, "New Name")
+  }
+
+  func testIncomingProfileMetadataCachesNamesForNonContacts() async throws {
+    let (session, _) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let participantPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+
+    session.ingestProfileMetadataForTesting(
+      try makeIncomingProfileMetadata(
+        eventID: "profile-non-contact",
+        authorPubkey: participantPubkey,
+        createdAt: Date(timeIntervalSince1970: 220),
+        chosenName: "Session Peer"
+      )
+    )
+
+    XCTAssertEqual(session.remoteProfilesByPubkey.count, 1)
+    XCTAssertEqual(session.remoteProfilesByPubkey[participantPubkey]?.chosenName, "Session Peer")
+    XCTAssertEqual(session.displayName(for: participantPubkey, contacts: []), "Session Peer")
+  }
+
+  func testAddContactAppliesCachedKnownProfileMetadataImmediately() async throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let keypair = try TestKeyMaterialFactory.makeKeypair()
+
+    session.ingestProfileMetadataForTesting(
+      try makeIncomingProfileMetadata(
+        eventID: "profile-before-follow",
+        authorPubkey: keypair.publicKey.hex,
+        createdAt: Date(timeIntervalSince1970: 240),
+        chosenName: "Known Before Follow"
+      )
+    )
+
+    let didAdd = await session.addContact(npub: keypair.publicKey.npub, alias: "")
+    XCTAssertTrue(didAdd)
+
+    let contact = try XCTUnwrap(fetchContacts(in: container.mainContext).first)
+    let identity = session.resolvedIdentity(for: contact)
+    XCTAssertEqual(identity.chosenName, "Known Before Follow")
+    XCTAssertEqual(identity.displayName, "Known Before Follow")
+  }
+
+  func testRequestRemoteProfilesIfNeededCoalescesImmediateDuplicateRequests() async throws {
+    var requestedPubkeyBatches: [[String]] = []
+    let (session, _) = try makeSession(
+      requestProfileMetadata: { requestedPubkeys in
+        requestedPubkeyBatches.append(requestedPubkeys.sorted())
+      }
+    )
+    try session.identityService.createNewIdentity()
+    let firstPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let secondPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+
+    session.requestRemoteProfilesIfNeeded(pubkeyHexes: [firstPubkey, secondPubkey, firstPubkey])
+    session.requestRemoteProfilesIfNeeded(pubkeyHexes: [firstPubkey, secondPubkey])
+
+    XCTAssertEqual(requestedPubkeyBatches.count, 1)
+    let requestedPubkeys = try XCTUnwrap(requestedPubkeyBatches.first)
+    XCTAssertEqual(requestedPubkeys, [firstPubkey, secondPubkey].sorted())
+  }
+
+  func testUpdateOwnProfileNamePublishesMergedMetadataContentAndPersistsState() async throws {
+    var publishedEvent: NostrEvent?
+    let (session, container) = try makeSession(
+      disableNostrStartup: false,
+      hasConnectedRelays: { true },
+      publishRelayEvent: { event in
+        publishedEvent = event
+        return event.id
+      }
+    )
+    try session.identityService.createNewIdentity()
+    let ownerPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+
+    let existingContent =
+      #"{"about":"still here","display_name":"Old Name","name":"Old Name","picture":"https://example.com/picture.png"}"#
+    session.ingestProfileMetadataForTesting(
+      try makeIncomingProfileMetadata(
+        eventID: "profile-self-old",
+        authorPubkey: ownerPubkey,
+        createdAt: Date(timeIntervalSince1970: 150),
+        chosenName: "Old Name",
+        rawContent: existingContent
+      )
+    )
+
+    let didSave = await session.updateOwnProfileName(
+      "New Name",
+      timeoutSeconds: 0.05,
+      pollIntervalSeconds: 0.01
+    )
+
+    XCTAssertTrue(didSave)
+    XCTAssertEqual(session.currentProfileName, "New Name")
+    XCTAssertEqual(publishedEvent?.kind, .metadata)
+
+    let publishedContentData = try XCTUnwrap(publishedEvent?.content.data(using: .utf8))
+    let publishedContent = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: publishedContentData) as? [String: String]
+    )
+    XCTAssertEqual(publishedContent["name"], "New Name")
+    XCTAssertEqual(publishedContent["display_name"], "New Name")
+    XCTAssertEqual(publishedContent["about"], "still here")
+    XCTAssertEqual(publishedContent["picture"], "https://example.com/picture.png")
+
+    let accountState = try XCTUnwrap(fetchAccountStates(in: container.mainContext).first)
+    XCTAssertEqual(accountState.nostrProfileName, "New Name")
+    XCTAssertEqual(accountState.profileMetadataContent, publishedEvent?.content)
+  }
+
+  func testUpdateOwnProfileNameNormalizesWhitespaceBeforePersisting() async throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+
+    let didSave = await session.updateOwnProfileName(
+      "  Alice \n\t Bob \u{0007}  ",
+      timeoutSeconds: 0.05,
+      pollIntervalSeconds: 0.01
+    )
+
+    XCTAssertTrue(didSave)
+    XCTAssertEqual(session.currentProfileName, "Alice Bob")
+
+    let accountState = try XCTUnwrap(fetchAccountStates(in: container.mainContext).first)
+    let publishedContentData = try XCTUnwrap(
+      accountState.profileMetadataContent?.data(using: .utf8))
+    let publishedContent = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: publishedContentData) as? [String: String]
+    )
+    XCTAssertEqual(publishedContent["name"], "Alice Bob")
+    XCTAssertEqual(publishedContent["display_name"], "Alice Bob")
+  }
+
+  func testUpdateOwnProfileNameRejectsOverlongNames() async throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let invalidName = String(repeating: "a", count: NostrProfileMetadata.maxChosenNameLength + 1)
+
+    let didSave = await session.updateOwnProfileName(invalidName)
+
+    XCTAssertFalse(didSave)
+    XCTAssertEqual(
+      session.profileNameErrorMessage,
+      "profile name must be \(NostrProfileMetadata.maxChosenNameLength) characters or fewer."
+    )
+    XCTAssertNil(session.currentProfileName)
+    XCTAssertTrue(try fetchAccountStates(in: container.mainContext).isEmpty)
+  }
+
+  func testBootRestoresPersistedOwnProfileNameState() async throws {
+    let (session, container) = try makeSession(
+      disableNostrStartup: false,
+      hasConnectedRelays: { true },
+      publishRelayEvent: { event in event.id }
+    )
+    try session.identityService.createNewIdentity()
+
+    let didSave = await session.updateOwnProfileName(
+      "Restored Name",
+      timeoutSeconds: 0.05,
+      pollIntervalSeconds: 0.01
+    )
+    XCTAssertTrue(didSave)
+
+    var restoredOverrides = AppSession.TestingOverrides()
+    restoredOverrides.skipDefaultRelaySetup = true
+    restoredOverrides.skipNostrNetworkStartup = true
+    let restoredSession = AppSession(
+      modelContext: container.mainContext,
+      testingOverrides: restoredOverrides
+    )
+
+    await restoredSession.boot()
+
+    XCTAssertEqual(restoredSession.currentProfileName, "Restored Name")
+    XCTAssertNil(restoredSession.profileNameErrorMessage)
+  }
+
+  func testBootDoesNotRestoreRemoteProfileDirectoryAcrossSessions() async throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let participantPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+
+    session.ingestProfileMetadataForTesting(
+      try makeIncomingProfileMetadata(
+        eventID: "profile-restored-non-contact",
+        authorPubkey: participantPubkey,
+        createdAt: Date(timeIntervalSince1970: 260),
+        chosenName: "Restored Session Peer"
+      )
+    )
+
+    var restoredOverrides = AppSession.TestingOverrides()
+    restoredOverrides.skipDefaultRelaySetup = true
+    restoredOverrides.skipNostrNetworkStartup = true
+    let restoredSession = AppSession(
+      modelContext: container.mainContext,
+      testingOverrides: restoredOverrides
+    )
+
+    await restoredSession.boot()
+
+    let restoredIdentity = restoredSession.resolvedIdentity(for: participantPubkey, contacts: [])
+    XCTAssertEqual(restoredIdentity.displayName, restoredIdentity.npub)
+  }
+
+  func testResolvedIdentityHidesDuplicateNPubLineWhenNoNameExists() throws {
+    let pubkeyHex = try TestKeyMaterialFactory.makePubkeyHex()
+
+    let identity = LinkstrResolvedIdentity(
+      localAlias: nil,
+      chosenName: nil,
+      pubkeyHex: pubkeyHex
+    )
+
+    XCTAssertEqual(identity.displayName, identity.npub)
+    XCTAssertFalse(identity.showsNPubLine)
   }
 
   func testUnfollowContactUpdatesLocalFollowSet() async throws {

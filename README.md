@@ -44,8 +44,9 @@
 
 - Users can create a new account (new keypair) or import an existing `nsec`.
 - New account creation pauses on a backup step that reveals the generated `nsec`, offers copy, and explains that it is the account password and remains available later in Settings.
+- New account creation can optionally publish a Nostr profile name before leaving onboarding.
 - The active identity is keychain-backed.
-- Share exposes current `npub`.
+- Share exposes current `npub` and allows editing the account's published Nostr profile name.
 - Settings sections are collapsed by default and expand on demand.
 - `nsec` is hidden by default and only revealed on explicit action.
 - Revealed `nsec` is cleared again when the Settings identity view disappears or the app moves inactive/background.
@@ -104,7 +105,7 @@
 - Members can be removed from active membership.
 - Only the session creator can add or remove members.
 - Non-creator membership mutations are ignored on ingest.
-- If a member no longer matches a local contact, UI falls back to `npub` (or truncated hex).
+- Member identity resolves as local alias, then remote Nostr profile name, then `npub`.
 - Outbound membership snapshots authored by this client always include the local sender key.
 
 ### Posts (root links)
@@ -315,16 +316,21 @@
 - Incoming follow-list events from the signed-in author reconcile local contacts (newer timestamp wins; equal timestamp uses lexicographic event-ID tie-break).
 - Follow-list recency watermarks are persisted per account so app restart does not allow stale follow-list rollback.
 - Aliases are private per-account device data and are never published to relays.
+- Remote Nostr profile names are fetched lazily by pubkey and are used only when no local alias exists.
+- When both exist, contact UI shows the local alias as primary and the published Nostr name as secondary.
 - Contact management supports add, long-press unfollow, and alias edit.
 - Add-contact input supports manual entry, paste, and QR scan.
+- Add-contact input previews the resolved identity for a valid contact key and lazily looks up the published Nostr name.
 - Contact-key helper controls render directly below the field in the same compact control row pattern used by post compose.
 - Re-adding the same contact updates the saved alias for that contact; it does not create a duplicate or republish the follow list.
 
 ### Share tab
 
 - Share tab exposes current account `npub`.
+- Share tab lets the user publish, update, or clear an optional Nostr profile name.
 - Share tab provides:
   - QR code.
+  - Current profile name above the QR code when one is set.
   - A centered scan helper caption below the QR code.
   - Raw key text.
   - Copy action.

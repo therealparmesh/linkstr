@@ -24,14 +24,17 @@
 		24629555B44DBF5E0273B1B6 /* LinkstrApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C63481E39A2827C9A3361C9 /* LinkstrApp.swift */; };
 		249F87E4B931CC1061713BD7 /* InlineVideoPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03426C3B013C8B741D6BAB1B /* InlineVideoPlayer.swift */; };
 		2B15250FD913F0FDACA3E00F /* RelayEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE9431738F7A0B23E194B322 /* RelayEntity.swift */; };
+		305C2DF0444F783FD47302F0 /* LinkstrContactIdentityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C27A474464877E3EFDAC1D9 /* LinkstrContactIdentityView.swift */; };
 		34EF08A77BADBE991154C0EB /* AppSessionAccountAndStorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46C2687B69CF9A8238CF06A6 /* AppSessionAccountAndStorageTests.swift */; };
 		35C9A661E0E6156EE9A9FEDC /* WebNavigationGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF3118AC7E65BC5A3D7BAB7D /* WebNavigationGuard.swift */; };
 		3F892D4841964CC9869C4C08 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48461487DA5B98A7445D503F /* SettingsView.swift */; };
 		401F645DC5E055DAB60CA01D /* IdentityServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FED3B5DF5A048969C4C2153 /* IdentityServiceTests.swift */; };
 		44CF9CF4B0623913AB1F02F2 /* LinkstrErrorToast.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71EA6AFE00388F8A47E323AB /* LinkstrErrorToast.swift */; };
 		4720DE0540BECD7B8B8DDEB8 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F601E426AE9DF9219162BF8C /* Assets.xcassets */; };
+		4A75994C59D83B30F4152BD3 /* NostrProfileMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 554F594CDF599B92E9E94AD8 /* NostrProfileMetadata.swift */; };
 		4C79A2979A0DFEA234B6508B /* NostrValueNormalizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E064911EDA6734E79BDC8088 /* NostrValueNormalizerTests.swift */; };
 		4E932574708D92416993921A /* NostrValueNormalizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19BF0E7FDB72323DCF36B9FB /* NostrValueNormalizer.swift */; };
+		4F8BC2898E0B4D46A5B4C201 /* LinkstrResolvedIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A6D4BD13DF44A43A4A963A8 /* LinkstrResolvedIdentity.swift */; };
 		560E3776F9CCB013F913BCD5 /* PublishAckTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14AE0A0482D110854870B7B4 /* PublishAckTracker.swift */; };
 		5C081B12920542652F7743FA /* URLClassifierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DF2BD42808FC977F554891B /* URLClassifierTests.swift */; };
 		5F537D896C188FD991549A9B /* LocalNotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6ED18846C164D6CF5E1A03D6 /* LocalNotificationService.swift */; };
@@ -112,6 +115,7 @@
 		37C24617515D81FAA072295F /* AppSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSession.swift; sourceTree = "<group>"; };
 		3971459CEEDC3065DA8EAB78 /* AppSessionPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSessionPresentationTests.swift; sourceTree = "<group>"; };
 		39D7D989D5ED872319476C71 /* SocialVideoExtractionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialVideoExtractionService.swift; sourceTree = "<group>"; };
+		3C27A474464877E3EFDAC1D9 /* LinkstrContactIdentityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkstrContactIdentityView.swift; sourceTree = "<group>"; };
 		3C63481E39A2827C9A3361C9 /* LinkstrApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkstrApp.swift; sourceTree = "<group>"; };
 		3DF2BD42808FC977F554891B /* URLClassifierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = URLClassifierTests.swift; sourceTree = "<group>"; };
 		46C2687B69CF9A8238CF06A6 /* AppSessionAccountAndStorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSessionAccountAndStorageTests.swift; sourceTree = "<group>"; };
@@ -123,11 +127,13 @@
 		5203B23AAB0DDCE6CFEA9FDD /* ManagedLocalFileScope.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedLocalFileScope.swift; sourceTree = "<group>"; };
 		520A1C73A4134BAD043097AB /* NewPostSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewPostSheet.swift; sourceTree = "<group>"; };
 		541E647AA1EC6F43C524E818 /* ContactKeyParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactKeyParser.swift; sourceTree = "<group>"; };
+		554F594CDF599B92E9E94AD8 /* NostrProfileMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NostrProfileMetadata.swift; sourceTree = "<group>"; };
 		572F5BEA562DB0F3E6DB2188 /* ContactEntity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactEntity.swift; sourceTree = "<group>"; };
 		5B94E88691277DCC6F6DE7E3 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		625540CCCEBE62ADD237D4C4 /* LinkstrDeepLinkPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkstrDeepLinkPayload.swift; sourceTree = "<group>"; };
 		6674045F6FA738EEC6059105 /* AppSessionContactAndRelayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSessionContactAndRelayTests.swift; sourceTree = "<group>"; };
 		68350273DCA0FBB994BE216F /* URLClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = URLClassifier.swift; sourceTree = "<group>"; };
+		6A6D4BD13DF44A43A4A963A8 /* LinkstrResolvedIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkstrResolvedIdentity.swift; sourceTree = "<group>"; };
 		6ED18846C164D6CF5E1A03D6 /* LocalNotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalNotificationService.swift; sourceTree = "<group>"; };
 		6EE663FE430C958339CB80F1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		7062F43FAE1972AB3EC5D121 /* IdentityService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentityService.swift; sourceTree = "<group>"; };
@@ -213,6 +219,8 @@
 				541E647AA1EC6F43C524E818 /* ContactKeyParser.swift */,
 				8C14B65A3FC6EC731BBAA10B /* DateLabelFormatter.swift */,
 				338EDAA43F42292E8BCA9349 /* KeychainStore.swift */,
+				6A6D4BD13DF44A43A4A963A8 /* LinkstrResolvedIdentity.swift */,
+				554F594CDF599B92E9E94AD8 /* NostrProfileMetadata.swift */,
 				19BF0E7FDB72323DCF36B9FB /* NostrValueNormalizer.swift */,
 				E09896B9D5F3DE60A4AC6AFE /* OwnerScopedCollections.swift */,
 				47638848BBE7A7042DEA8161 /* QRCodeGenerator.swift */,
@@ -254,6 +262,7 @@
 			isa = PBXGroup;
 			children = (
 				B09547E4A4B6A981A7FF4FD0 /* ContactsView.swift */,
+				3C27A474464877E3EFDAC1D9 /* LinkstrContactIdentityView.swift */,
 			);
 			path = Contacts;
 			sourceTree = "<group>";
@@ -508,6 +517,7 @@
 				114A9CC19804FF785F2DC976 /* KeychainStore.swift in Sources */,
 				D4A473A3317F94F6604A6E20 /* LinkType.swift in Sources */,
 				24629555B44DBF5E0273B1B6 /* LinkstrApp.swift in Sources */,
+				305C2DF0444F783FD47302F0 /* LinkstrContactIdentityView.swift in Sources */,
 				938970AFBB34DA8F985E727B /* LinkstrDeepLinkCodec.swift in Sources */,
 				1082085B9DC4220811F39FE6 /* LinkstrDeepLinkPayload.swift in Sources */,
 				44CF9CF4B0623913AB1F02F2 /* LinkstrErrorToast.swift in Sources */,
@@ -520,9 +530,11 @@
 				6235D750A6492015E3191242 /* MediaAudioSessionController.swift in Sources */,
 				110617B94A972E6B8EE939C0 /* NewPostSheet.swift in Sources */,
 				703AB880A3B1547E90E1A1D1 /* NostrDMService.swift in Sources */,
+				4A75994C59D83B30F4152BD3 /* NostrProfileMetadata.swift in Sources */,
 				4E932574708D92416993921A /* NostrValueNormalizer.swift in Sources */,
 				AD4F22E0BD89248923FABA9A /* OnboardingView.swift in Sources */,
 				66E8E7A7F7B80A78628A367F /* OwnerScopedCollections.swift in Sources */,
+				4F8BC2898E0B4D46A5B4C201 /* LinkstrResolvedIdentity.swift in Sources */,
 				AEFA77E7FD38763F0EE68754 /* PostDetailView.swift in Sources */,
 				560E3776F9CCB013F913BCD5 /* PublishAckTracker.swift in Sources */,
 				9F7DFE59B6B0B570CDE2C8A7 /* QRCodeGenerator.swift in Sources */,

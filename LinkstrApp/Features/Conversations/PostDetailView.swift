@@ -331,7 +331,7 @@ struct PostDetailView: View {
     if isOutgoing(post) {
       return "you"
     }
-    return ContactStore.contactName(for: post.senderPubkey, contacts: scopedContacts)
+    return session.displayName(for: post.senderPubkey, contacts: scopedContacts)
   }
 
   private var reactionSummaries: [ReactionSummary] {
@@ -349,7 +349,7 @@ struct PostDetailView: View {
       if let myPubkey, reaction.senderMatches(myPubkey) {
         return "you"
       }
-      return ContactStore.contactName(for: reaction.senderPubkey, contacts: scopedContacts)
+      return session.displayName(for: reaction.senderPubkey, contacts: scopedContacts)
     }
 
     return
@@ -368,6 +368,17 @@ struct PostDetailView: View {
       }
   }
 
+  private var profileLookupPubkeys: [String] {
+    var pubkeys = scopedContacts.map(\.targetPubkey)
+    pubkeys.append(post.senderPubkey)
+    pubkeys.append(contentsOf: scopedReactions.map(\.senderPubkey))
+    return NostrValueNormalizer.dedupedNormalizedPubkeyHexes(pubkeys)
+  }
+
+  private var profileLookupRequestID: String {
+    profileLookupPubkeys.sorted().joined(separator: ",")
+  }
+
   var body: some View {
     ScrollView {
       LazyVStack(spacing: 10) {
@@ -378,6 +389,9 @@ struct PostDetailView: View {
       .padding(.bottom, 12)
     }
     .linkstrTabBarContentInset()
+    .task(id: profileLookupRequestID) {
+      session.requestRemoteProfilesIfNeeded(pubkeyHexes: profileLookupPubkeys)
+    }
     .background(LinkstrBackgroundView())
     .navigationTitle(sessionName)
     .navigationBarTitleDisplayMode(.inline)

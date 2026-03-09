@@ -4,11 +4,11 @@ copy/paste-ready fields for app store connect.
 
 ## promotional text
 
-share, organize, and download links and social media videos privately, solo or in groups, with in-app playback that skips clunky mobile sites and app-store redirects.
+save, organize, and share links and social media videos privately, solo or in groups, with in-app playback that skips clunky mobile sites and app-store redirects.
 
 ## description
 
-linkstr is a private place to save, organize, and share links and social videos, solo or in groups.
+linkstr is a private place to save, organize, and share links and social media videos, solo or in groups.
 
 keep everything in one session instead of scattered across texts, dms, and apps. open supported social links in-app, download eligible media for offline access, and avoid broken mobile pages and app-store redirects.
 

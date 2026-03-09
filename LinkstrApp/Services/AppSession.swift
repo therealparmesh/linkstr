@@ -68,6 +68,7 @@ final class AppSession: ObservableObject {
     var sendPayload: ((LinkstrPayload, [String]) async throws -> SentPayloadReceipt)?
     var skipNostrNetworkStartup = false
     var onNostrStart: (() -> Void)?
+    var requestProfileMetadata: (([String]) -> Void)?
     var clearLocalAccountData: ((String) throws -> Void)?
     var onIncomingPostNotification: ((String) -> Void)?
     var onIncomingReactionNotification: ((String) -> Void)?
@@ -113,6 +114,7 @@ final class AppSession: ObservableObject {
   private var pendingRelayPersistenceByURL: [String: PendingRelayPersistenceState] = [:]
   private var relayPersistenceFlushTask: Task<Void, Never>?
   private let relayPersistenceDebounceNanoseconds: UInt64 = 250_000_000
+  private let remoteProfileLookupRetryNanoseconds: UInt64 = 3_000_000_000
   private var hasObservedHealthyRelayInCurrentForeground = false
   private let relayDisconnectGraceInterval: TimeInterval = 1.25
   private let foregroundRelayRestartCooldown: TimeInterval = 8
@@ -124,6 +126,10 @@ final class AppSession: ObservableObject {
   private var lastForegroundRelayRestartAt: Date?
   private var latestAppliedFollowListCreatedAt: Date?
   private var latestAppliedFollowListEventID: String?
+  private var latestAppliedProfileMetadataCreatedAt: Date?
+  private var latestAppliedProfileMetadataEventID: String?
+  private var currentProfileMetadataContent: String?
+  private var inFlightRemoteProfilePubkeys = Set<String>()
   private var isBooting = false
   private var isRetryingIdentityLoad = false
 
@@ -133,6 +139,9 @@ final class AppSession: ObservableObject {
   @Published private(set) var didFinishBoot = false
   @Published private(set) var bootStatusMessage = "loading account…"
   @Published private(set) var pendingCreatedAccountNsec: String?
+  @Published private(set) var currentProfileName: String?
+  @Published private(set) var remoteProfilesByPubkey: [String: KnownProfileSnapshot] = [:]
+  @Published private(set) var profileNameErrorMessage: String?
 
   var shouldShowOnboarding: Bool {
     !hasIdentity || pendingCreatedAccountNsec != nil
@@ -293,6 +302,49 @@ final class AppSession: ObservableObject {
   func canManageMembers(for session: SessionEntity) -> Bool {
     guard let myPubkey = identityService.pubkeyHex else { return false }
     return session.createdByPubkey == myPubkey
+  }
+
+  func clearProfileNameError() {
+    profileNameErrorMessage = nil
+  }
+
+  func resolvedIdentity(for contact: ContactEntity) -> LinkstrResolvedIdentity {
+    LinkstrResolvedIdentity(
+      localAlias: contact.localAlias,
+      chosenName: preferredChosenName(for: contact),
+      pubkeyHex: contact.targetPubkey
+    )
+  }
+
+  func resolvedIdentity(for pubkeyHex: String, contacts: [ContactEntity]) -> LinkstrResolvedIdentity
+  {
+    let normalizedPubkey = NostrValueNormalizer.normalizedPubkeyHex(pubkeyHex) ?? pubkeyHex
+    if let contact = contacts.first(where: { $0.targetPubkey == normalizedPubkey }) {
+      return resolvedIdentity(for: contact)
+    }
+    return LinkstrResolvedIdentity(
+      localAlias: nil,
+      chosenName: remoteProfilesByPubkey[normalizedPubkey]?.chosenName,
+      pubkeyHex: normalizedPubkey
+    )
+  }
+
+  func displayName(for pubkeyHex: String, contacts: [ContactEntity]) -> String {
+    resolvedIdentity(for: pubkeyHex, contacts: contacts).displayName
+  }
+
+  func searchableNames(for contact: ContactEntity) -> [String] {
+    var names: [String] = []
+    if let localAlias = contact.localAlias {
+      names.append(localAlias)
+    }
+    if let chosenName = preferredChosenName(for: contact),
+      names.contains(where: { $0.localizedCaseInsensitiveCompare(chosenName) == .orderedSame })
+        == false
+    {
+      names.append(chosenName)
+    }
+    return names
   }
 
   private func effectiveRelayStatus(for relay: RelayEntity) -> RelayHealthStatus {
@@ -643,7 +695,6 @@ final class AppSession: ObservableObject {
     else {
       throw MutationPreparationError.relayBlocked
     }
-    startNostrIfPossible()
   }
 
   private func shouldFetchMetadataForCurrentProcess() -> Bool {
@@ -662,6 +713,7 @@ final class AppSession: ObservableObject {
       try identityService.createNewIdentity()
       pendingCreatedAccountNsec = try identityService.revealNsec()
       refreshIdentityState()
+      profileNameErrorMessage = nil
       composeError = nil
       startNostrIfPossible()
     } catch {
@@ -672,6 +724,33 @@ final class AppSession: ObservableObject {
 
   func completePendingAccountCreation() {
     pendingCreatedAccountNsec = nil
+    profileNameErrorMessage = nil
+  }
+
+  @discardableResult
+  func completePendingAccountCreation(
+    profileName: String?,
+    timeoutSeconds: TimeInterval = 12,
+    pollIntervalSeconds: TimeInterval = 0.35
+  ) async -> Bool {
+    let normalizedProfileName = NostrProfileMetadata.normalizedChosenName(profileName)
+    guard normalizedProfileName != nil else {
+      completePendingAccountCreation()
+      return true
+    }
+
+    guard
+      await updateOwnProfileName(
+        normalizedProfileName,
+        timeoutSeconds: timeoutSeconds,
+        pollIntervalSeconds: pollIntervalSeconds
+      )
+    else {
+      return false
+    }
+
+    completePendingAccountCreation()
+    return true
   }
 
   func importNsec(_ nsec: String) {
@@ -679,10 +758,84 @@ final class AppSession: ObservableObject {
       try identityService.importNsec(nsec)
       pendingCreatedAccountNsec = nil
       refreshIdentityState()
+      profileNameErrorMessage = nil
       composeError = nil
       startNostrIfPossible()
     } catch {
       composeError = error.localizedDescription
+    }
+  }
+
+  @discardableResult
+  func updateOwnProfileName(
+    _ profileName: String?,
+    timeoutSeconds: TimeInterval = 12,
+    pollIntervalSeconds: TimeInterval = 0.35
+  ) async -> Bool {
+    guard let keypair = identityService.keypair, let ownerPubkey = identityService.pubkeyHex else {
+      let message = "you're signed out. sign in to manage your profile."
+      profileNameErrorMessage = message
+      composeError = message
+      return false
+    }
+
+    let normalizedProfileName: String?
+    do {
+      normalizedProfileName = try NostrProfileMetadata.validatedOwnChosenName(profileName)
+    } catch {
+      profileNameErrorMessage = error.localizedDescription
+      composeError = error.localizedDescription
+      return false
+    }
+
+    let metadataContent: String
+    do {
+      metadataContent = try NostrProfileMetadata.mergedContent(
+        existingContent: currentProfileMetadataContent,
+        chosenName: normalizedProfileName
+      )
+    } catch {
+      profileNameErrorMessage = error.localizedDescription
+      report(error: error)
+      return false
+    }
+
+    let metadataEvent: NostrEvent
+    do {
+      metadataEvent = try NostrEvent.Builder<NostrEvent>(kind: .metadata)
+        .content(metadataContent)
+        .build(signedBy: keypair)
+    } catch {
+      profileNameErrorMessage = error.localizedDescription
+      report(error: error)
+      return false
+    }
+
+    do {
+      try await prepareRelayMutationIfNeeded(
+        timeoutSeconds: timeoutSeconds,
+        pollIntervalSeconds: pollIntervalSeconds
+      )
+      if isRelayPublicationEnabledForCurrentProcess() {
+        _ = try await publishEventAwaitingRelayAcceptance(metadataEvent)
+      }
+      persistOwnProfileMetadataState(
+        ownerPubkey: ownerPubkey,
+        chosenName: normalizedProfileName,
+        content: metadataContent,
+        createdAt: metadataEvent.createdDate,
+        eventID: metadataEvent.id
+      )
+      profileNameErrorMessage = nil
+      composeError = nil
+      return true
+    } catch MutationPreparationError.relayBlocked {
+      profileNameErrorMessage = composeError
+      return false
+    } catch {
+      profileNameErrorMessage = error.localizedDescription
+      report(error: error)
+      return false
     }
   }
 
@@ -766,13 +919,19 @@ final class AppSession: ObservableObject {
     hasIdentity = identityService.keypair != nil
     guard let ownerPubkey = identityService.pubkeyHex else {
       resetFollowListStateInMemory()
+      resetRemoteProfileStateInMemory()
+      resetProfileMetadataStateInMemory()
       return
     }
-    guard !testingOverrides.skipPersistedFollowListStateLoad else {
+    if testingOverrides.skipPersistedFollowListStateLoad {
       resetFollowListStateInMemory()
+      resetRemoteProfileStateInMemory()
+      resetProfileMetadataStateInMemory()
       return
     }
     loadPersistedFollowListState(ownerPubkey: ownerPubkey)
+    resetRemoteProfileStateInMemory()
+    loadPersistedProfileMetadataState(ownerPubkey: ownerPubkey)
   }
 
   private func resetRuntimeSessionState() {
@@ -792,6 +951,9 @@ final class AppSession: ObservableObject {
   private func handleIdentityCleared() {
     refreshIdentityState()
     resetFollowListStateInMemory()
+    resetRemoteProfileStateInMemory()
+    resetProfileMetadataStateInMemory()
+    profileNameErrorMessage = nil
   }
 
   private func clearLocalAccountData(ownerPubkey: String) throws {
@@ -920,6 +1082,11 @@ final class AppSession: ObservableObject {
         Task { @MainActor in
           self?.persistIncomingFollowList(followList)
         }
+      },
+      onProfileMetadata: { [weak self] profileMetadata in
+        Task { @MainActor in
+          self?.persistIncomingProfileMetadata(profileMetadata)
+        }
       }
     )
   }
@@ -929,7 +1096,8 @@ final class AppSession: ObservableObject {
     relayURLs: [String],
     onIncoming: @escaping (ReceivedDirectMessage) -> Void,
     onRelayStatus: @escaping (String, RelayHealthStatus, String?) -> Void,
-    onFollowList: ((ReceivedFollowList) -> Void)? = nil
+    onFollowList: ((ReceivedFollowList) -> Void)? = nil,
+    onProfileMetadata: ((ReceivedProfileMetadata) -> Void)? = nil
   ) {
     testingOverrides.onNostrStart?()
     nostrService.start(
@@ -937,7 +1105,8 @@ final class AppSession: ObservableObject {
       relayURLs: relayURLs,
       onIncoming: onIncoming,
       onRelayStatus: onRelayStatus,
-      onFollowList: onFollowList
+      onFollowList: onFollowList,
+      onProfileMetadata: onProfileMetadata
     )
   }
 
@@ -1008,7 +1177,7 @@ final class AppSession: ObservableObject {
         createdByPubkey: keypair.publicKey.hex,
         updatedAt: updatedAt
       )
-      try messageStore.applyMemberSnapshot(
+      try applySessionMembershipSnapshot(
         ownerPubkey: ownerPubkey,
         sessionID: sessionID,
         memberPubkeys: members,
@@ -1096,7 +1265,7 @@ final class AppSession: ObservableObject {
         updatedAt: updatedAt,
         isArchived: session.isArchived
       )
-      try messageStore.applyMemberSnapshot(
+      try applySessionMembershipSnapshot(
         ownerPubkey: ownerPubkey,
         sessionID: session.sessionID,
         memberPubkeys: members,
@@ -1696,15 +1865,46 @@ final class AppSession: ObservableObject {
     followedPubkeys: [String],
     aliasMutation: (() throws -> Void)? = nil
   ) throws {
+    try applyFollowListState(
+      ownerPubkey: ownerPubkey,
+      followedPubkeys: followedPubkeys,
+      createdAt: Date.now,
+      eventID: nil,
+      aliasMutation: aliasMutation
+    )
+  }
+
+  private func applyFollowListState(
+    ownerPubkey: String,
+    followedPubkeys: [String],
+    createdAt: Date,
+    eventID: String?,
+    aliasMutation: (() throws -> Void)? = nil
+  ) throws {
     try contactStore.replaceFollowedPubkeys(
       ownerPubkey: ownerPubkey,
       pubkeyHexes: followedPubkeys
     )
     try aliasMutation?()
-    let appliedAt = Date.now
-    latestAppliedFollowListCreatedAt = appliedAt
-    latestAppliedFollowListEventID = nil
-    persistFollowListState(ownerPubkey: ownerPubkey, createdAt: appliedAt, eventID: nil)
+    latestAppliedFollowListCreatedAt = createdAt
+    latestAppliedFollowListEventID = eventID
+    persistFollowListState(ownerPubkey: ownerPubkey, createdAt: createdAt, eventID: eventID)
+  }
+
+  private func applySessionMembershipSnapshot(
+    ownerPubkey: String,
+    sessionID: String,
+    memberPubkeys: [String],
+    updatedAt: Date,
+    eventID: String
+  ) throws {
+    try messageStore.applyMemberSnapshot(
+      ownerPubkey: ownerPubkey,
+      sessionID: sessionID,
+      memberPubkeys: memberPubkeys,
+      updatedAt: updatedAt,
+      eventID: eventID
+    )
   }
 
   @discardableResult
@@ -1969,31 +2169,61 @@ final class AppSession: ObservableObject {
   private func persistIncomingFollowList(_ incoming: ReceivedFollowList) {
     guard let ownerPubkey = identityService.pubkeyHex else { return }
     guard incoming.authorPubkey == ownerPubkey else { return }
+    let normalizedEventID = NostrValueNormalizer.normalizedEventID(incoming.eventID)
 
     if !NostrValueNormalizer.shouldApplyStateUpdate(
       currentUpdatedAt: latestAppliedFollowListCreatedAt,
       currentEventID: latestAppliedFollowListEventID,
       incomingUpdatedAt: incoming.createdAt,
-      incomingEventID: incoming.eventID
+      incomingEventID: normalizedEventID
     ) {
       return
     }
 
     do {
-      try contactStore.replaceFollowedPubkeys(
+      try applyFollowListState(
         ownerPubkey: ownerPubkey,
-        pubkeyHexes: incoming.followedPubkeys
-      )
-      latestAppliedFollowListCreatedAt = incoming.createdAt
-      latestAppliedFollowListEventID = NostrValueNormalizer.normalizedEventID(incoming.eventID)
-      persistFollowListState(
-        ownerPubkey: ownerPubkey,
+        followedPubkeys: incoming.followedPubkeys,
         createdAt: incoming.createdAt,
-        eventID: latestAppliedFollowListEventID
+        eventID: normalizedEventID
       )
     } catch {
       report(error: error)
     }
+  }
+
+  private func persistIncomingProfileMetadata(_ incoming: ReceivedProfileMetadata) {
+    guard let ownerPubkey = identityService.pubkeyHex else { return }
+    let normalizedEventID = NostrValueNormalizer.normalizedEventID(incoming.eventID)
+
+    if incoming.authorPubkey == ownerPubkey {
+      guard
+        NostrValueNormalizer.shouldApplyStateUpdate(
+          currentUpdatedAt: latestAppliedProfileMetadataCreatedAt,
+          currentEventID: latestAppliedProfileMetadataEventID,
+          incomingUpdatedAt: incoming.createdAt,
+          incomingEventID: normalizedEventID
+        )
+      else {
+        return
+      }
+
+      persistOwnProfileMetadataState(
+        ownerPubkey: ownerPubkey,
+        chosenName: incoming.chosenName,
+        content: incoming.rawContent,
+        createdAt: incoming.createdAt,
+        eventID: normalizedEventID
+      )
+      return
+    }
+
+    updateRemoteProfileSnapshot(
+      pubkeyHex: incoming.authorPubkey,
+      chosenName: incoming.chosenName,
+      createdAt: incoming.createdAt,
+      eventID: normalizedEventID
+    )
   }
 
   #if DEBUG
@@ -2003,6 +2233,10 @@ final class AppSession: ObservableObject {
 
     func ingestFollowListForTesting(_ incoming: ReceivedFollowList) {
       persistIncomingFollowList(incoming)
+    }
+
+    func ingestProfileMetadataForTesting(_ incoming: ReceivedProfileMetadata) {
+      persistIncomingProfileMetadata(incoming)
     }
   #endif
 
@@ -2057,7 +2291,7 @@ final class AppSession: ObservableObject {
         updatedAt: incoming.createdAt,
         isArchived: existing?.isArchived
       )
-      try messageStore.applyMemberSnapshot(
+      try applySessionMembershipSnapshot(
         ownerPubkey: ownerPubkey,
         sessionID: sessionID,
         memberPubkeys: members,
@@ -2097,7 +2331,7 @@ final class AppSession: ObservableObject {
         updatedAt: incoming.createdAt,
         isArchived: existing.isArchived
       )
-      try messageStore.applyMemberSnapshot(
+      try applySessionMembershipSnapshot(
         ownerPubkey: ownerPubkey,
         sessionID: sessionID,
         memberPubkeys: members,
@@ -2382,7 +2616,7 @@ final class AppSession: ObservableObject {
     }
 
     let contacts = (try? contactStore.fetchContacts(ownerPubkey: myPubkey)) ?? []
-    let senderName = ContactStore.contactName(for: message.senderPubkey, contacts: contacts)
+    let senderName = displayName(for: message.senderPubkey, contacts: contacts)
     LocalNotificationService.shared.postIncomingPostNotification(
       senderName: senderName,
       url: message.url,
@@ -2408,7 +2642,7 @@ final class AppSession: ObservableObject {
     }
 
     let contacts = (try? contactStore.fetchContacts(ownerPubkey: myPubkey)) ?? []
-    let senderName = ContactStore.contactName(for: senderPubkey, contacts: contacts)
+    let senderName = displayName(for: senderPubkey, contacts: contacts)
     LocalNotificationService.shared.postIncomingReactionNotification(
       senderName: senderName,
       emoji: emoji,
@@ -2550,6 +2784,18 @@ final class AppSession: ObservableObject {
     latestAppliedFollowListEventID = nil
   }
 
+  private func resetRemoteProfileStateInMemory() {
+    remoteProfilesByPubkey = [:]
+    inFlightRemoteProfilePubkeys.removeAll()
+  }
+
+  private func resetProfileMetadataStateInMemory() {
+    latestAppliedProfileMetadataCreatedAt = nil
+    latestAppliedProfileMetadataEventID = nil
+    currentProfileMetadataContent = nil
+    currentProfileName = nil
+  }
+
   private func loadPersistedFollowListState(ownerPubkey: String) {
     do {
       let watermark = try accountStateStore.followListWatermark(ownerPubkey: ownerPubkey)
@@ -2557,6 +2803,20 @@ final class AppSession: ObservableObject {
       latestAppliedFollowListEventID = NostrValueNormalizer.normalizedEventID(watermark.eventID)
     } catch {
       resetFollowListStateInMemory()
+    }
+  }
+
+  private func loadPersistedProfileMetadataState(ownerPubkey: String) {
+    do {
+      let profileMetadata = try accountStateStore.profileMetadata(ownerPubkey: ownerPubkey)
+      currentProfileName = NostrProfileMetadata.normalizedChosenName(profileMetadata.chosenName)
+      currentProfileMetadataContent = profileMetadata.content
+      latestAppliedProfileMetadataCreatedAt = profileMetadata.createdAt
+      latestAppliedProfileMetadataEventID = NostrValueNormalizer.normalizedEventID(
+        profileMetadata.eventID
+      )
+    } catch {
+      resetProfileMetadataStateInMemory()
     }
   }
 
@@ -2572,11 +2832,90 @@ final class AppSession: ObservableObject {
     }
   }
 
-  private func clearPersistedFollowListState(ownerPubkey: String) {
+  private func persistOwnProfileMetadataState(
+    ownerPubkey: String,
+    chosenName: String?,
+    content: String?,
+    createdAt: Date,
+    eventID: String?
+  ) {
+    let normalizedChosenName = NostrProfileMetadata.normalizedChosenName(chosenName)
+    let normalizedEventID = NostrValueNormalizer.normalizedEventID(eventID)
+    currentProfileName = normalizedChosenName
+    currentProfileMetadataContent = content?.trimmingCharacters(in: .whitespacesAndNewlines)
+    latestAppliedProfileMetadataCreatedAt = createdAt
+    latestAppliedProfileMetadataEventID = normalizedEventID
+
     do {
-      try accountStateStore.deleteAccountState(ownerPubkey: ownerPubkey)
+      try accountStateStore.setProfileMetadata(
+        ownerPubkey: ownerPubkey,
+        chosenName: normalizedChosenName,
+        content: currentProfileMetadataContent,
+        createdAt: createdAt,
+        eventID: normalizedEventID
+      )
     } catch {
       report(error: error)
+    }
+  }
+
+  private func preferredChosenName(for contact: ContactEntity) -> String? {
+    let normalizedPubkey =
+      NostrValueNormalizer.normalizedPubkeyHex(contact.targetPubkey) ?? contact.targetPubkey
+    return remoteProfilesByPubkey[normalizedPubkey]?.chosenName
+  }
+
+  private func updateRemoteProfileSnapshot(
+    pubkeyHex: String,
+    chosenName: String?,
+    createdAt: Date,
+    eventID: String?
+  ) {
+    let normalizedPubkey = NostrValueNormalizer.normalizedPubkeyHex(pubkeyHex) ?? pubkeyHex
+    let normalizedEventID = NostrValueNormalizer.normalizedEventID(eventID)
+    if let existing = remoteProfilesByPubkey[normalizedPubkey],
+      !NostrValueNormalizer.shouldApplyStateUpdate(
+        currentUpdatedAt: existing.updatedAt,
+        currentEventID: existing.eventID,
+        incomingUpdatedAt: createdAt,
+        incomingEventID: normalizedEventID
+      )
+    {
+      return
+    }
+    remoteProfilesByPubkey[normalizedPubkey] = KnownProfileSnapshot(
+      chosenName: NostrProfileMetadata.normalizedChosenName(chosenName),
+      updatedAt: createdAt,
+      eventID: normalizedEventID
+    )
+  }
+
+  func requestRemoteProfilesIfNeeded(pubkeyHexes: [String]) {
+    let missingPubkeys = NostrValueNormalizer.dedupedNormalizedPubkeyHexes(pubkeyHexes).filter {
+      remoteProfilesByPubkey[$0] == nil && inFlightRemoteProfilePubkeys.contains($0) == false
+    }
+    guard !missingPubkeys.isEmpty else { return }
+
+    if let requestProfileMetadata = testingOverrides.requestProfileMetadata {
+      markRemoteProfilesInFlight(missingPubkeys)
+      requestProfileMetadata(missingPubkeys)
+      return
+    }
+
+    guard shouldFetchMetadataForCurrentProcess() else { return }
+    guard nostrService.requestProfileMetadata(pubkeyHexes: missingPubkeys) else { return }
+    markRemoteProfilesInFlight(missingPubkeys)
+  }
+
+  private func markRemoteProfilesInFlight(_ pubkeyHexes: [String]) {
+    let normalizedPubkeys = NostrValueNormalizer.dedupedNormalizedPubkeyHexes(pubkeyHexes)
+    guard !normalizedPubkeys.isEmpty else { return }
+    inFlightRemoteProfilePubkeys.formUnion(normalizedPubkeys)
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      try? await Task.sleep(nanoseconds: self.remoteProfileLookupRetryNanoseconds)
+      guard !Task.isCancelled else { return }
+      self.inFlightRemoteProfilePubkeys.subtract(normalizedPubkeys)
     }
   }
 

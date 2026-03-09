@@ -12,7 +12,23 @@ struct ContactsView: View {
   @State private var isUnfollowingContact = false
 
   private var scopedContacts: [ContactEntity] {
-    OwnerScopedCollections.contacts(contacts, ownerPubkey: session.identityService.pubkeyHex)
+    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
+    return
+      contacts
+      .filter { $0.ownerPubkey == ownerPubkey }
+      .sorted {
+        session.resolvedIdentity(for: $0).displayName.localizedCaseInsensitiveCompare(
+          session.resolvedIdentity(for: $1).displayName
+        ) == .orderedAscending
+      }
+  }
+
+  private var profileLookupPubkeys: [String] {
+    scopedContacts.map(\.targetPubkey)
+  }
+
+  private var profileLookupRequestID: String {
+    profileLookupPubkeys.sorted().joined(separator: ",")
   }
 
   var body: some View {
@@ -28,6 +44,9 @@ struct ContactsView: View {
       }
     } message: {
       Text(unfollowConfirmationMessage)
+    }
+    .task(id: profileLookupRequestID) {
+      session.requestRemoteProfilesIfNeeded(pubkeyHexes: profileLookupPubkeys)
     }
   }
 
@@ -86,7 +105,7 @@ struct ContactsView: View {
     }
 
     return
-      "this publishes an updated follow list to relays, effectively unfollows \(pendingUnfollowContact.displayName), and removes it locally."
+      "this publishes an updated follow list to relays, effectively unfollows \(session.resolvedIdentity(for: pendingUnfollowContact).displayName), and removes it locally."
   }
 
   private func unfollowPendingContact() {
@@ -104,23 +123,16 @@ struct ContactsView: View {
 }
 
 private struct ContactRowView: View {
+  @EnvironmentObject private var session: AppSession
   let contact: ContactEntity
 
   var body: some View {
+    let identity = session.resolvedIdentity(for: contact)
     HStack(spacing: 12) {
-      LinkstrContactAvatar(name: contact.displayName)
+      LinkstrContactAvatar(name: identity.displayName)
 
-      VStack(alignment: .leading, spacing: 3) {
-        Text(contact.displayName)
-          .font(LinkstrTheme.title(16))
-          .foregroundStyle(LinkstrTheme.textPrimary)
-          .lineLimit(1)
-        Text(contact.npub)
-          .font(LinkstrTheme.body(13))
-          .foregroundStyle(LinkstrTheme.textSecondary)
-          .lineLimit(1)
-      }
-      .frame(maxWidth: .infinity, alignment: .leading)
+      LinkstrContactIdentityView(identity: identity, spacing: 3)
+        .frame(maxWidth: .infinity, alignment: .leading)
 
       Image(systemName: "chevron.right")
         .font(LinkstrTheme.system(12, weight: .semibold))
@@ -148,6 +160,7 @@ private struct EditContactView: View {
   }
 
   var body: some View {
+    let identity = session.resolvedIdentity(for: contact)
     ZStack {
       LinkstrBackgroundView()
       ScrollView {
@@ -162,6 +175,29 @@ private struct EditContactView: View {
               RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(LinkstrTheme.panelSoft)
             )
+
+          if let nostrChosenName = identity.chosenName {
+            LinkstrSectionHeader(title: "nostr name")
+            Text(nostrChosenName)
+              .font(LinkstrTheme.body(13))
+              .foregroundStyle(
+                contact.localAlias == nil
+                  ? LinkstrTheme.textPrimary : LinkstrTheme.neonPink.opacity(0.82)
+              )
+              .lineLimit(2)
+              .textSelection(.enabled)
+              .padding(.horizontal, 12)
+              .padding(.vertical, 10)
+              .frame(
+                maxWidth: .infinity,
+                minHeight: LinkstrTheme.inputControlMinHeight,
+                alignment: .leading
+              )
+              .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                  .fill(LinkstrTheme.panelSoft)
+              )
+          }
 
           LinkstrSectionHeader(title: "contact key (npub)")
           Text(contact.npub)
@@ -286,6 +322,35 @@ struct AddContactSheet: View {
             )
           }
 
+          if let previewIdentity {
+            VStack(alignment: .leading, spacing: 8) {
+              LinkstrSectionHeader(title: "preview")
+              HStack(spacing: 12) {
+                LinkstrContactAvatar(name: previewIdentity.displayName)
+                LinkstrContactIdentityView(
+                  identity: previewIdentity,
+                  primaryFont: LinkstrTheme.body(14),
+                  secondaryFont: LinkstrTheme.body(11),
+                  npubFont: LinkstrTheme.body(11),
+                  lineLimit: 2
+                )
+                .frame(maxWidth: .infinity, alignment: .leading)
+              }
+              .padding(.horizontal, 12)
+              .padding(.vertical, 10)
+              .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                  .fill(LinkstrTheme.panelSoft)
+              )
+
+              if previewIdentity.chosenName == nil && normalizedAliasPreview == nil {
+                Text("looking up published Nostr name…")
+                  .font(LinkstrTheme.body(12))
+                  .foregroundStyle(LinkstrTheme.textSecondary)
+              }
+            }
+          }
+
           TextField("alias (optional)", text: $alias)
             .textInputAutocapitalization(.words)
             .padding(.horizontal, 12)
@@ -306,6 +371,10 @@ struct AddContactSheet: View {
           Spacer()
         }
         .padding(14)
+      }
+      .task(id: previewLookupRequestID) {
+        guard let previewPubkeyHex else { return }
+        session.requestRemoteProfilesIfNeeded(pubkeyHexes: [previewPubkeyHex])
       }
       .navigationTitle("add contact")
       .toolbarBackground(.hidden, for: .navigationBar)
@@ -357,6 +426,30 @@ struct AddContactSheet: View {
   private var normalizedScannerErrorMessage: String {
     guard let scannerErrorMessage else { return "" }
     return scannerErrorMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  private var normalizedAliasPreview: String? {
+    let trimmed = alias.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
+  }
+
+  private var previewPubkeyHex: String? {
+    let candidate = ContactKeyParser.extractNPub(from: npub) ?? npub
+    return NostrValueNormalizer.normalizedPubkeyHex(fromAnyPublicKeyString: candidate)
+  }
+
+  private var previewLookupRequestID: String {
+    previewPubkeyHex ?? ""
+  }
+
+  private var previewIdentity: LinkstrResolvedIdentity? {
+    guard let previewPubkeyHex else { return nil }
+    let resolvedIdentity = session.resolvedIdentity(for: previewPubkeyHex, contacts: [])
+    return LinkstrResolvedIdentity(
+      localAlias: normalizedAliasPreview,
+      chosenName: resolvedIdentity.chosenName,
+      pubkeyHex: previewPubkeyHex
+    )
   }
 }
 

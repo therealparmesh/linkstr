@@ -28,6 +28,14 @@ struct ReceivedFollowList {
   let createdAt: Date
 }
 
+struct ReceivedProfileMetadata {
+  let eventID: String
+  let authorPubkey: String
+  let chosenName: String?
+  let rawContent: String
+  let createdAt: Date
+}
+
 @MainActor
 final class NostrDMService: NSObject, ObservableObject, EventCreating {
   private enum BackfillSubscriptionKind: String {
@@ -66,6 +74,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
   private var keypair: Keypair?
   private var onIncoming: ((ReceivedDirectMessage) -> Void)?
   private var onFollowList: ((ReceivedFollowList) -> Void)?
+  private var onProfileMetadata: ((ReceivedProfileMetadata) -> Void)?
   private var onRelayStatus: ((String, RelayHealthStatus, String?) -> Void)?
   private var configuredRelayURLs = Set<String>()
 
@@ -75,6 +84,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
   private let backfillPageSize = 500
   private let processedEventIDLimit = 10_000
   private let reconnectDelayNanoseconds: UInt64 = 2_000_000_000
+  private let profileLookupTimeoutNanoseconds: UInt64 = 3_000_000_000
   private var activeBackfillStates: [String: BackfillState] = [:]
   private var completedBackfillKinds = Set<BackfillSubscriptionKind>()
   private var followListFilter: Filter?
@@ -90,7 +100,10 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     }
   }
 
-  func isConfigured(for keypair: Keypair, relayURLs: [String]) -> Bool {
+  func isConfigured(
+    for keypair: Keypair,
+    relayURLs: [String]
+  ) -> Bool {
     guard shouldMaintainConnection, relayPool != nil else { return false }
     guard self.keypair?.publicKey.hex == keypair.publicKey.hex else { return false }
     return configuredRelayURLs == Set(relayURLs)
@@ -101,12 +114,14 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     relayURLs: [String],
     onIncoming: @escaping (ReceivedDirectMessage) -> Void,
     onRelayStatus: @escaping (String, RelayHealthStatus, String?) -> Void,
-    onFollowList: ((ReceivedFollowList) -> Void)? = nil
+    onFollowList: ((ReceivedFollowList) -> Void)? = nil,
+    onProfileMetadata: ((ReceivedProfileMetadata) -> Void)? = nil
   ) {
     if isConfigured(for: keypair, relayURLs: relayURLs) {
       self.onIncoming = onIncoming
       self.onRelayStatus = onRelayStatus
       self.onFollowList = onFollowList
+      self.onProfileMetadata = onProfileMetadata
       relayPool?.connect()
       return
     }
@@ -118,6 +133,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     self.onIncoming = onIncoming
     self.onRelayStatus = onRelayStatus
     self.onFollowList = onFollowList
+    self.onProfileMetadata = onProfileMetadata
     configuredRelayURLs = Set(relayURLs)
     activeBackfillStates = [:]
     completedBackfillKinds = []
@@ -215,6 +231,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     }
     onIncoming = nil
     onFollowList = nil
+    onProfileMetadata = nil
     onRelayStatus = nil
     keypair = nil
     configuredRelayURLs.removeAll()
@@ -297,6 +314,33 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     )
 
     return event.id
+  }
+
+  @discardableResult
+  func requestProfileMetadata(pubkeyHexes: [String]) -> Bool {
+    guard let relayPool else { return false }
+    let normalizedPubkeys = NostrValueNormalizer.dedupedNormalizedPubkeyHexes(pubkeyHexes)
+    guard !normalizedPubkeys.isEmpty else { return false }
+    let expectedRelayURLs = connectedRelayURLs()
+    guard !expectedRelayURLs.isEmpty else { return false }
+    guard
+      let filter = Filter(
+        authors: normalizedPubkeys,
+        kinds: [EventKind.metadata.rawValue]
+      )
+    else {
+      return false
+    }
+
+    let subscriptionID = "linkstr-profile-lookup-\(UUID().uuidString.lowercased())"
+    _ = relayPool.subscribe(with: filter, subscriptionId: subscriptionID)
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      try? await Task.sleep(nanoseconds: self.profileLookupTimeoutNanoseconds)
+      guard !Task.isCancelled else { return }
+      self.relayPool?.closeSubscription(with: subscriptionID)
+    }
+    return true
   }
 
   private func parsePublicKeys(_ pubkeyHexes: [String]) throws -> [PublicKey] {
@@ -654,6 +698,21 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
       return
     }
 
+    if event.kind == .metadata {
+      guard let metadataEvent = event as? MetadataEvent else { return }
+      guard rememberProcessedEventIDIfNeeded(metadataEvent.id) else { return }
+      onProfileMetadata?(
+        ReceivedProfileMetadata(
+          eventID: metadataEvent.id,
+          authorPubkey: metadataEvent.pubkey,
+          chosenName: NostrProfileMetadata.chosenName(from: metadataEvent),
+          rawContent: metadataEvent.content,
+          createdAt: metadataEvent.createdDate
+        )
+      )
+      return
+    }
+
     guard event.kind == .giftWrap else { return }
 
     if var backfill = activeBackfillStates[relayEvent.subscriptionId] {
@@ -796,10 +855,14 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     okMessage: String?
   ) {
     if let eoseSubscriptionID {
-      handleBackfillEOSE(relayURL: relayURL, subscriptionID: eoseSubscriptionID)
+      if activeBackfillStates[eoseSubscriptionID] != nil {
+        handleBackfillEOSE(relayURL: relayURL, subscriptionID: eoseSubscriptionID)
+      }
     }
     if let closedSubscriptionID {
-      completeBackfillPage(subscriptionID: closedSubscriptionID)
+      if activeBackfillStates[closedSubscriptionID] != nil {
+        completeBackfillPage(subscriptionID: closedSubscriptionID)
+      }
     }
     if let readOnlyMessage {
       onRelayStatus?(relayURL, .readOnly, readOnlyMessage)

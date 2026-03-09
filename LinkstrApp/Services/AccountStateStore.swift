@@ -29,6 +29,53 @@ final class AccountStateStore {
     try modelContext.save()
   }
 
+  func profileMetadata(ownerPubkey: String) throws -> (
+    chosenName: String?,
+    content: String?,
+    createdAt: Date?,
+    eventID: String?
+  ) {
+    guard let state = try accountState(ownerPubkey: ownerPubkey) else {
+      return (nil, nil, nil, nil)
+    }
+    return (
+      state.nostrProfileName,
+      state.profileMetadataContent,
+      state.profileMetadataUpdatedAt,
+      NostrValueNormalizer.normalizedEventID(state.profileMetadataEventID)
+    )
+  }
+
+  func setProfileMetadata(
+    ownerPubkey: String,
+    chosenName: String?,
+    content: String?,
+    createdAt: Date,
+    eventID: String?
+  ) throws {
+    let state = try ensureAccountState(ownerPubkey: ownerPubkey)
+    let normalizedName = NostrProfileMetadata.normalizedChosenName(chosenName)
+    let normalizedContent = content?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let normalizedEventID = NostrValueNormalizer.normalizedEventID(eventID)
+
+    if state.nostrProfileName == normalizedName,
+      state.profileMetadataContent
+        == (normalizedContent?.isEmpty == true ? nil : normalizedContent),
+      state.profileMetadataUpdatedAt == createdAt,
+      state.profileMetadataEventID == normalizedEventID
+    {
+      return
+    }
+
+    state.setProfileMetadata(
+      chosenName: normalizedName,
+      content: normalizedContent,
+      createdAt: createdAt,
+      eventID: normalizedEventID
+    )
+    try modelContext.save()
+  }
+
   func deleteAccountState(ownerPubkey: String) throws {
     guard let state = try accountState(ownerPubkey: ownerPubkey) else { return }
     modelContext.delete(state)

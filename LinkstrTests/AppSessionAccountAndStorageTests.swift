@@ -256,6 +256,31 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     XCTAssertEqual(nostrStartCount, 1)
   }
 
+  func testCreateAccountAfterBootStartsNostr() async throws {
+    var nostrStartCount = 0
+    let (session, _) = try makeSession(
+      disableNostrStartup: true,
+      skipDefaultRelaySetup: true,
+      skipPersistedFollowListStateLoad: true,
+      onNostrStart: {
+        nostrStartCount += 1
+      }
+    )
+
+    await session.boot()
+
+    XCTAssertTrue(session.didFinishBoot)
+    XCTAssertEqual(nostrStartCount, 0)
+
+    session.createAccount()
+    for _ in 0..<10 where nostrStartCount == 0 {
+      await Task.yield()
+    }
+
+    XCTAssertTrue(session.hasIdentity)
+    XCTAssertEqual(nostrStartCount, 1)
+  }
+
   func testHandleProtectedDataAvailabilityRetriesIdentityLoad() async throws {
     let keypair = try TestKeyMaterialFactory.makeKeypair()
     var loadAttempts = 0

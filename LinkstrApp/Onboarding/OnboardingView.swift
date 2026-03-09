@@ -7,6 +7,8 @@ import SwiftUI
 struct OnboardingView: View {
   @EnvironmentObject private var session: AppSession
   @State private var secretKey = ""
+  @State private var createdProfileName = ""
+  @State private var isSavingCreatedProfileName = false
   private let formRowSpacing: CGFloat = 12
 
   var body: some View {
@@ -31,6 +33,9 @@ struct OnboardingView: View {
       .toolbarColorScheme(.dark, for: .navigationBar)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    .onChange(of: createdProfileName) { _, _ in
+      session.clearProfileNameError()
+    }
   }
 
   private var header: some View {
@@ -133,14 +138,39 @@ struct OnboardingView: View {
       .buttonStyle(.borderedProminent)
       .tint(LinkstrTheme.neonAmber)
 
+      LinkstrSectionHeader(title: "profile name (optional)")
+      Text(
+        "set the name other Nostr clients can show for this account. leave it blank to skip and edit it later in share."
+      )
+      .font(LinkstrTheme.body(13))
+      .foregroundStyle(LinkstrTheme.textSecondary)
+
+      TextField("name others see", text: $createdProfileName)
+        .textInputAutocapitalization(.words)
+        .autocorrectionDisabled(true)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(minHeight: LinkstrTheme.inputControlMinHeight)
+        .background(
+          RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(LinkstrTheme.panelSoft)
+        )
+
+      if let profileNameErrorMessage = session.profileNameErrorMessage {
+        Text(profileNameErrorMessage)
+          .font(LinkstrTheme.body(12))
+          .foregroundStyle(LinkstrTheme.destructive.opacity(0.92))
+      }
+
       Button {
-        session.completePendingAccountCreation()
+        completePendingAccountCreation()
       } label: {
-        Label("continue", systemImage: "arrow.right.circle.fill")
+        Label(createdAccountContinueButtonTitle, systemImage: "arrow.right.circle.fill")
           .frame(maxWidth: .infinity)
       }
       .buttonStyle(.borderedProminent)
       .tint(LinkstrTheme.neonCyan)
+      .disabled(isSavingCreatedProfileName)
     }
     .padding(.top, 6)
   }
@@ -151,5 +181,39 @@ struct OnboardingView: View {
         secretKey = clipboardText.trimmingCharacters(in: .whitespacesAndNewlines)
       }
     #endif
+  }
+
+  private var normalizedCreatedProfileName: String? {
+    NostrProfileMetadata.normalizedChosenName(createdProfileName)
+  }
+
+  private var createdAccountContinueButtonTitle: String {
+    if isSavingCreatedProfileName {
+      return "saving profile name…"
+    }
+    if normalizedCreatedProfileName == nil {
+      return "continue"
+    }
+    return "save name and continue"
+  }
+
+  private func completePendingAccountCreation() {
+    guard !isSavingCreatedProfileName else { return }
+    session.clearProfileNameError()
+    guard normalizedCreatedProfileName != nil else {
+      session.completePendingAccountCreation()
+      return
+    }
+
+    isSavingCreatedProfileName = true
+    Task { @MainActor in
+      let didComplete = await session.completePendingAccountCreation(
+        profileName: createdProfileName
+      )
+      isSavingCreatedProfileName = false
+      if didComplete {
+        createdProfileName = ""
+      }
+    }
   }
 }

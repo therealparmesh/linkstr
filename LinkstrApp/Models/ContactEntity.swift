@@ -23,7 +23,12 @@ final class ContactEntity {
     localAlias ?? npub
   }
 
-  init(ownerPubkey: String, targetPubkey: String, alias: String? = nil, createdAt: Date = .now)
+  init(
+    ownerPubkey: String,
+    targetPubkey: String,
+    alias: String? = nil,
+    createdAt: Date = .now
+  )
     throws
   {
     self.ownerPubkey = ownerPubkey

@@ -286,6 +286,11 @@ struct SessionPostsView: View {
 
   private var scopedContacts: [ContactEntity] {
     OwnerScopedCollections.contacts(allContacts, ownerPubkey: session.identityService.pubkeyHex)
+      .sorted {
+        session.resolvedIdentity(for: $0).displayName.localizedCaseInsensitiveCompare(
+          session.resolvedIdentity(for: $1).displayName
+        ) == .orderedAscending
+      }
   }
 
   private var scopedMembers: [SessionMemberEntity] {
@@ -341,6 +346,18 @@ struct SessionPostsView: View {
     }
 
     return summariesByPostID
+  }
+
+  private var profileLookupPubkeys: [String] {
+    var pubkeys = scopedContacts.map(\.targetPubkey)
+    pubkeys.append(contentsOf: scopedMembers.map(\.memberPubkey))
+    pubkeys.append(contentsOf: posts.map(\.senderPubkey))
+    pubkeys.append(contentsOf: scopedReactions.map(\.senderPubkey))
+    return NostrValueNormalizer.dedupedNormalizedPubkeyHexes(pubkeys)
+  }
+
+  private var profileLookupRequestID: String {
+    profileLookupPubkeys.sorted().joined(separator: ",")
   }
 
   var body: some View {
@@ -421,6 +438,9 @@ struct SessionPostsView: View {
       )
       .environmentObject(session)
     }
+    .task(id: profileLookupRequestID) {
+      session.requestRemoteProfilesIfNeeded(pubkeyHexes: profileLookupPubkeys)
+    }
   }
 
   private func isOutgoing(_ message: SessionMessageEntity) -> Bool {
@@ -432,7 +452,7 @@ struct SessionPostsView: View {
     if isOutgoing(message) {
       return "you"
     }
-    return ContactStore.contactName(for: message.senderPubkey, contacts: scopedContacts)
+    return session.displayName(for: message.senderPubkey, contacts: scopedContacts)
   }
 
   private func hasUnreadIncomingRootPost(_ post: SessionMessageEntity) -> Bool {
@@ -608,6 +628,14 @@ struct NewSessionSheet: View {
     !sessionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
   }
 
+  private var profileLookupPubkeys: [String] {
+    contacts.map(\.targetPubkey)
+  }
+
+  private var profileLookupRequestID: String {
+    profileLookupPubkeys.sorted().joined(separator: ",")
+  }
+
   var body: some View {
     NavigationStack {
       ZStack {
@@ -652,20 +680,18 @@ struct NewSessionSheet: View {
             } else {
               VStack(spacing: 0) {
                 ForEach(filteredContacts) { contact in
+                  let identity = session.resolvedIdentity(for: contact)
                   Button {
                     toggle(contact.npub)
                   } label: {
                     HStack(spacing: 10) {
-                      LinkstrContactAvatar(name: contact.displayName, size: 30)
-                      VStack(alignment: .leading, spacing: 2) {
-                        Text(contact.displayName)
-                          .font(LinkstrTheme.body(14))
-                          .foregroundStyle(LinkstrTheme.textPrimary)
-                        Text(contact.npub)
-                          .font(LinkstrTheme.body(11))
-                          .foregroundStyle(LinkstrTheme.textSecondary)
-                          .lineLimit(1)
-                      }
+                      LinkstrContactAvatar(name: identity.displayName, size: 30)
+                      LinkstrContactIdentityView(
+                        identity: identity,
+                        primaryFont: LinkstrTheme.body(14),
+                        secondaryFont: LinkstrTheme.body(11),
+                        npubFont: LinkstrTheme.body(11)
+                      )
 
                       Spacer()
 
@@ -738,6 +764,9 @@ struct NewSessionSheet: View {
             .overlay(LinkstrTheme.textSecondary.opacity(0.18))
         }
       }
+      .task(id: profileLookupRequestID) {
+        session.requestRemoteProfilesIfNeeded(pubkeyHexes: profileLookupPubkeys)
+      }
     }
   }
 
@@ -745,8 +774,9 @@ struct NewSessionSheet: View {
     RecipientSearchLogic.filteredContacts(
       contacts,
       query: query,
-      displayName: \.displayName,
-      npub: \.npub
+      displayName: { session.resolvedIdentity(for: $0).displayName },
+      npub: \.npub,
+      additionalNames: { session.searchableNames(for: $0) }
     )
   }
 
@@ -819,23 +849,37 @@ private struct SessionMembersSheet: View {
             } else {
               VStack(spacing: 0) {
                 ForEach(visibleCurrentMembers, id: \.self) { memberHex in
+                  let identity = memberIdentity(for: memberHex)
                   HStack(spacing: 10) {
-                    LinkstrContactAvatar(name: memberDisplayName(for: memberHex), size: 28)
-                    VStack(alignment: .leading, spacing: 2) {
-                      Text(memberDisplayName(for: memberHex))
-                        .font(LinkstrTheme.body(14))
-                        .foregroundStyle(LinkstrTheme.textPrimary)
-                      Text(memberIdentityLabel(for: memberHex))
-                        .font(LinkstrTheme.body(11))
-                        .foregroundStyle(LinkstrTheme.textSecondary)
-                        .lineLimit(1)
+                    LinkstrContactAvatar(
+                      name: identity?.displayName ?? "you",
+                      size: 28
+                    )
+                    if let identity {
+                      LinkstrContactIdentityView(
+                        identity: identity,
+                        primaryFont: LinkstrTheme.body(14),
+                        secondaryFont: LinkstrTheme.body(11),
+                        npubFont: LinkstrTheme.body(11)
+                      )
+                    } else {
+                      VStack(alignment: .leading, spacing: 2) {
+                        Text("you")
+                          .font(LinkstrTheme.body(14))
+                          .foregroundStyle(LinkstrTheme.textPrimary)
+                      }
                     }
                     Spacer()
                     if canManageMembers {
-                      Button("remove", role: .destructive) {
+                      Button(role: .destructive) {
                         includedMemberHexes.remove(memberHex)
+                      } label: {
+                        Image(systemName: "minus.circle.fill")
+                          .font(LinkstrTheme.system(17, weight: .semibold))
+                          .foregroundStyle(LinkstrTheme.destructive)
+                          .frame(width: 28, height: 28, alignment: .center)
                       }
-                      .font(LinkstrTheme.body(12))
+                      .accessibilityLabel("remove \(identity?.displayName ?? "member")")
                     }
                   }
                   .padding(.vertical, 8)
@@ -872,6 +916,7 @@ private struct SessionMembersSheet: View {
               } else {
                 VStack(spacing: 0) {
                   ForEach(filteredContacts) { contact in
+                    let identity = session.resolvedIdentity(for: contact)
                     let contactHex = contact.targetPubkey
                     Button {
                       if includedMemberHexes.contains(contactHex) {
@@ -881,16 +926,13 @@ private struct SessionMembersSheet: View {
                       }
                     } label: {
                       HStack(spacing: 10) {
-                        LinkstrContactAvatar(name: contact.displayName, size: 28)
-                        VStack(alignment: .leading, spacing: 2) {
-                          Text(contact.displayName)
-                            .font(LinkstrTheme.body(14))
-                            .foregroundStyle(LinkstrTheme.textPrimary)
-                          Text(contact.npub)
-                            .font(LinkstrTheme.body(11))
-                            .foregroundStyle(LinkstrTheme.textSecondary)
-                            .lineLimit(1)
-                        }
+                        LinkstrContactAvatar(name: identity.displayName, size: 28)
+                        LinkstrContactIdentityView(
+                          identity: identity,
+                          primaryFont: LinkstrTheme.body(14),
+                          secondaryFont: LinkstrTheme.body(11),
+                          npubFont: LinkstrTheme.body(11)
+                        )
 
                         Spacer()
 
@@ -946,6 +988,9 @@ private struct SessionMembersSheet: View {
           }
         }
       }
+      .task(id: profileLookupRequestID) {
+        session.requestRemoteProfilesIfNeeded(pubkeyHexes: profileLookupPubkeys)
+      }
     }
   }
 
@@ -957,39 +1002,36 @@ private struct SessionMembersSheet: View {
         guard let myPubkey else { return true }
         return memberHex != myPubkey
       }
-      .sorted()
+      .sorted {
+        session.displayName(for: $0, contacts: contacts).localizedCaseInsensitiveCompare(
+          session.displayName(for: $1, contacts: contacts)
+        ) == .orderedAscending
+      }
   }
 
   private var filteredContacts: [ContactEntity] {
     RecipientSearchLogic.filteredContacts(
       contacts,
       query: query,
-      displayName: \.displayName,
-      npub: \.npub
+      displayName: { session.resolvedIdentity(for: $0).displayName },
+      npub: \.npub,
+      additionalNames: { session.searchableNames(for: $0) }
     )
   }
 
-  private func memberDisplayName(for pubkeyHex: String) -> String {
-    if pubkeyHex == session.identityService.pubkeyHex {
-      return "you"
-    }
-    if let contact = contacts.first(where: { $0.targetPubkey == pubkeyHex }) {
-      let trimmed = contact.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-      if !trimmed.isEmpty {
-        return trimmed
-      }
-    }
-    if let npub = PublicKey(hex: pubkeyHex)?.npub {
-      return npub
-    }
-    return String(pubkeyHex.prefix(12))
+  private var profileLookupPubkeys: [String] {
+    var pubkeys = contacts.map(\.targetPubkey)
+    pubkeys.append(contentsOf: visibleCurrentMembers)
+    return NostrValueNormalizer.dedupedNormalizedPubkeyHexes(pubkeys)
   }
 
-  private func memberIdentityLabel(for pubkeyHex: String) -> String {
-    if let npub = PublicKey(hex: pubkeyHex)?.npub {
-      return npub
-    }
-    return pubkeyHex
+  private var profileLookupRequestID: String {
+    profileLookupPubkeys.sorted().joined(separator: ",")
+  }
+
+  private func memberIdentity(for pubkeyHex: String) -> LinkstrResolvedIdentity? {
+    guard pubkeyHex != session.identityService.pubkeyHex else { return nil }
+    return session.resolvedIdentity(for: pubkeyHex, contacts: contacts)
   }
 
   private func saveMembers() {

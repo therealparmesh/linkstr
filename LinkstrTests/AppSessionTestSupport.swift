@@ -98,6 +98,7 @@ class AppSessionTestCase: XCTestCase {
     sendPayload: ((LinkstrPayload, [String]) async throws -> SentPayloadReceipt)? = nil,
     skipNostrNetworkStartup: Bool = true,
     onNostrStart: (() -> Void)? = nil,
+    requestProfileMetadata: (([String]) -> Void)? = nil,
     clearLocalAccountData: ((String) throws -> Void)? = nil,
     onIncomingPostNotification: ((String) -> Void)? = nil,
     onIncomingReactionNotification: ((String) -> Void)? = nil
@@ -114,6 +115,7 @@ class AppSessionTestCase: XCTestCase {
     testingOverrides.sendPayload = sendPayload
     testingOverrides.skipNostrNetworkStartup = skipNostrNetworkStartup
     testingOverrides.onNostrStart = onNostrStart
+    testingOverrides.requestProfileMetadata = requestProfileMetadata
     testingOverrides.clearLocalAccountData = clearLocalAccountData
     testingOverrides.onIncomingPostNotification = onIncomingPostNotification
     testingOverrides.onIncomingReactionNotification = onIncomingReactionNotification
@@ -181,6 +183,32 @@ class AppSessionTestCase: XCTestCase {
       payload: payload,
       createdAt: createdAt,
       source: source
+    )
+  }
+
+  func makeIncomingProfileMetadata(
+    eventID: String,
+    authorPubkey: String,
+    createdAt: Date,
+    chosenName: String?,
+    rawContent: String? = nil
+  ) throws -> ReceivedProfileMetadata {
+    let resolvedContent: String
+    if let rawContent {
+      resolvedContent = rawContent
+    } else {
+      resolvedContent = try NostrProfileMetadata.mergedContent(
+        existingContent: nil,
+        chosenName: chosenName
+      )
+    }
+
+    return ReceivedProfileMetadata(
+      eventID: eventID,
+      authorPubkey: authorPubkey,
+      chosenName: chosenName,
+      rawContent: resolvedContent,
+      createdAt: createdAt
     )
   }
 

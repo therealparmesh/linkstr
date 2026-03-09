@@ -422,7 +422,7 @@ struct SettingsView: View {
   }
 
   private func formattedByteCount(_ bytes: Int64) -> String {
-    ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file).lowercased()
   }
 
   @MainActor
