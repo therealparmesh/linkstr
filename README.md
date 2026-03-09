@@ -43,6 +43,7 @@
 ### Identity and account lifecycle
 
 - Users can create a new account (new keypair) or import an existing `nsec`.
+- New account creation pauses on a backup step that reveals the generated `nsec`, offers copy, and explains that it is the account password and remains available later in Settings.
 - The active identity is keychain-backed.
 - Share exposes current `npub`.
 - Settings sections are collapsed by default and expand on demand.
@@ -63,6 +64,7 @@
 - When relays are available, `Delete Account` also:
   - Publishes an empty follow list (`kind:3`) before local deletion.
   - Publishes a Nostr `Request to Vanish` (`kind:62`) to enabled relays.
+- `Delete Account` does not invalidate the `nsec`; keeping that key still allows sign-in again later.
 - `Delete Account` is send-gated like other relay-backed mutations and does not proceed while relay confirmation is unavailable.
 
 ### Sessions
@@ -227,8 +229,9 @@
   - Inbound active emoji reactions.
 - Reaction deactivations do not trigger notifications.
 - Self-echoed events do not trigger notifications.
+- Historical relay restore/backfill does not trigger catch-up notifications.
 - Foreground presentation remains enabled (`banner`, `list`, `sound`).
-- Background delivery is best-effort only; when the app is suspended and sockets are not active, incoming events are surfaced on next reconnect/foreground.
+- Background delivery is best-effort only; when the app is suspended and sockets are not active, content can restore on next reconnect/foreground without replaying local notifications for old events.
 
 ### Media and link behavior
 
@@ -303,7 +306,7 @@
 - Session post rows lazily retry missing social thumbnails only as those rows appear on screen.
 - Missing local thumbnail files are treated as stale and re-fetched.
 - Settings > Storage can clear hydrated previews and cached media for the current account without deleting posts.
-- Settings > Storage shows current device video-cache usage and an estimate of how much local storage the signed-in account can clear.
+- Settings > Storage shows an estimate of how much local storage the signed-in account can clear.
 
 ### Contacts
 
@@ -363,6 +366,7 @@
 - SwiftData participates in iOS backup/restore according to device backup mode.
 - If encrypted local data restores without matching key material, encrypted fields are unreadable.
 - Reliable long-term portability still depends on preserving `nsec`.
+- A Nostr vanish/delete request is relay-side only; the key itself remains usable until you discard it.
 
 ### Known non-goals
 

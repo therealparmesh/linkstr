@@ -19,7 +19,7 @@ struct SettingsView: View {
   @State private var isPresentingDeleteAccountConfirm = false
   @State private var isPresentingDeleteAccountFinalConfirm = false
   @State private var isDeletingAccount = false
-  @State private var storageUsageSummary: AppSession.StorageUsageSummary?
+  @State private var clearableStorageBytes: Int64?
   @State private var isRefreshingStorageUsage = false
   private let identityActionSpacing: CGFloat = 6
 
@@ -33,9 +33,7 @@ struct SettingsView: View {
       switch newValue {
       case .active:
         if isStorageExpanded {
-          Task {
-            await refreshStorageUsage()
-          }
+          refreshStorageUsage()
         }
         break
       case .inactive, .background:
@@ -82,7 +80,7 @@ struct SettingsView: View {
       Button("cancel", role: .cancel) {}
     } message: {
       Text(
-        "this requests relay-side account deletion on your active nostr relays, clears this account's local data on this device, and logs you out."
+        "this requests relay-side account deletion on your active nostr relays, clears this account's local data on this device, and logs you out. if you keep the secret key, it can still be used again."
       )
     }
     .alert("are you absolutely sure?", isPresented: $isPresentingDeleteAccountFinalConfirm) {
@@ -225,17 +223,14 @@ struct SettingsView: View {
   private var storageSection: some View {
     DisclosureGroup(isExpanded: $isStorageExpanded) {
       VStack(alignment: .leading, spacing: 10) {
-        if isRefreshingStorageUsage && storageUsageSummary == nil {
+        if isRefreshingStorageUsage && clearableStorageBytes == nil {
           Text("measuring local storage...")
             .font(LinkstrTheme.body(12))
             .foregroundStyle(LinkstrTheme.textSecondary)
-        } else if let storageUsageSummary {
+        } else if let clearableStorageBytes {
           VStack(alignment: .leading, spacing: 4) {
             Text(
-              "downloaded media on this device: \(formattedByteCount(storageUsageSummary.deviceVideoCacheBytes)) / \(formattedByteCount(storageUsageSummary.deviceVideoCacheLimitBytes)) auto-trim cap"
-            )
-            Text(
-              "clearing this account frees about \(formattedByteCount(storageUsageSummary.currentAccountTotalBytes))"
+              "this will save ~\(formattedByteCount(clearableStorageBytes))."
             )
           }
           .font(LinkstrTheme.body(12))
@@ -245,9 +240,7 @@ struct SettingsView: View {
 
         Button(role: .destructive) {
           session.clearCachedMediaAndPreviews()
-          Task {
-            await refreshStorageUsage()
-          }
+          refreshStorageUsage()
         } label: {
           Text("clear cached media and previews")
             .frame(maxWidth: .infinity)
@@ -266,7 +259,7 @@ struct SettingsView: View {
       .padding(.top, 8)
       .task(id: isStorageExpanded) {
         guard isStorageExpanded else { return }
-        await refreshStorageUsage()
+        refreshStorageUsage()
       }
     } label: {
       sectionLabel("storage", systemImage: "externaldrive")
@@ -349,7 +342,7 @@ struct SettingsView: View {
             .disabled(isDeletingAccount)
 
             Text(
-              "delete account sends a nostr vanish request to your enabled relays, clears this account's local data, and logs you out."
+              "delete account sends a nostr vanish request to your enabled relays, clears this account's local data, and logs you out. if you keep the secret key, it can still sign in again."
             )
             .font(LinkstrTheme.body(12))
             .foregroundStyle(LinkstrTheme.textSecondary)
@@ -433,9 +426,9 @@ struct SettingsView: View {
   }
 
   @MainActor
-  private func refreshStorageUsage() async {
+  private func refreshStorageUsage() {
     isRefreshingStorageUsage = true
-    storageUsageSummary = await session.storageUsageSummary()
+    clearableStorageBytes = session.clearableStorageBytes()
     isRefreshingStorageUsage = false
   }
 

@@ -97,6 +97,7 @@ linkstr does not knowingly collect information from children under 13. the app d
 - **media cache**: downloaded video cache may be evicted automatically by linkstr's cache cap or by ios storage pressure
 - **relay data**: controlled by individual nostr relay operators; linkstr has no control over relay data retention
 - **icloud sync**: controlled by icloud settings and apple's retention policies
+- **account deletion**: linkstr can ask enabled relays to delete account data, but your nsec remains valid unless you discard it yourself
 
 ## data security
 

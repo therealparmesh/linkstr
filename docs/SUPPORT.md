@@ -6,8 +6,9 @@ last updated: march 9, 2026
 
 ### create account
 
-- tap "create new account" for a new nostr identity
-- or "import existing account" if you have an nsec
+- tap "create account" for a new nostr identity
+- copy and store the shown nsec when linkstr reveals it
+- or sign in with an existing nsec if you already have one
 
 your account is stored in device keychain and optionally syncs via iCloud.
 
@@ -89,6 +90,11 @@ yes. your nsec works with any nostr app. find it in settings → identity.
 - "log out (keep local data)": messages remain on device and reappear when you log back in with the same account
 - "log out and clear local data": permanently deletes all local data for this account
 
+**what happens if i delete my account?**
+
+- linkstr sends a nostr vanish request to your enabled relays, clears local data on this device, and logs you out
+- if you keep the nsec, it still works and can sign in again later
+
 **why can't i send messages?**
 check: internet connection, at least one relay connected (settings → relays), you are a member of the session.
 
@@ -124,7 +130,7 @@ none. linkstr does not collect or store data on developer-controlled servers. yo
 - messages & sessions: local device storage only
 - media cache: local device storage only
 
-downloaded video cache is device-local, auto-trims with least-recently-used eviction at about 1 gb, and can also be cleared from settings → storage. that screen also shows current video-cache usage and an estimate of how much local storage the signed-in account can clear.
+downloaded video cache is device-local, auto-trims with least-recently-used eviction at about 1 gb, and can also be cleared from settings → storage. that screen shows an estimate of how much local storage the signed-in account can clear.
 
 ## troubleshooting
 
@@ -162,6 +168,7 @@ linkstr stores posts, reactions, contacts, and caches locally on each device. to
 3. both devices must connect to relays to sync new messages
 
 note: historical messages depend on relay retention and what each device has already received locally. new messages sync when both devices reconnect to relays.
+historical restore after a fresh sign-in does not replay old local notifications.
 
 ## contact
 

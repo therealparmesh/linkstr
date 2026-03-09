@@ -60,6 +60,25 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     XCTAssertEqual(try fetchMessages(in: container.mainContext).count, 1)
   }
 
+  func testCreateAccountRequiresBackupAcknowledgementBeforeLeavingOnboarding() throws {
+    let (session, container) = try makeSession()
+    _ = container
+
+    session.createAccount()
+
+    XCTAssertTrue(session.hasIdentity)
+    XCTAssertTrue(session.shouldShowOnboarding)
+    XCTAssertEqual(
+      session.pendingCreatedAccountNsec,
+      try session.identityService.revealNsec()
+    )
+
+    session.completePendingAccountCreation()
+
+    XCTAssertFalse(session.shouldShowOnboarding)
+    XCTAssertNil(session.pendingCreatedAccountNsec)
+  }
+
   func testDeleteAccountClearsLocalDataAndIdentityWhenNostrNetworkIsDisabled() async throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
@@ -512,7 +531,7 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     XCTAssertFalse(FileManager.default.fileExists(atPath: cachedMediaURL.path))
   }
 
-  func testStorageUsageSummaryReportsCurrentAccountManagedUsage() async throws {
+  func testClearableStorageBytesReportsCurrentAccountManagedUsage() async throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
     let ownerPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
@@ -544,12 +563,9 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     container.mainContext.insert(message)
     try container.mainContext.save()
 
-    let summary = await session.storageUsageSummary()
+    let clearableStorageBytes = session.clearableStorageBytes()
 
-    XCTAssertEqual(summary.currentAccountPreviewBytes, Int64(thumbnailData.count))
-    XCTAssertEqual(summary.currentAccountCachedMediaBytes, Int64(mediaData.count))
-    XCTAssertGreaterThanOrEqual(summary.deviceVideoCacheBytes, Int64(mediaData.count))
-    XCTAssertEqual(summary.deviceVideoCacheLimitBytes, VideoCacheService.defaultMaxVideoCacheBytes)
+    XCTAssertEqual(clearableStorageBytes, Int64(thumbnailData.count + mediaData.count))
   }
 
   func testVideoCacheServiceCurrentUsageCountsVideoAndThumbnailBytes() async throws {

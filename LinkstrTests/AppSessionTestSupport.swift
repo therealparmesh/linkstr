@@ -98,7 +98,9 @@ class AppSessionTestCase: XCTestCase {
     sendPayload: ((LinkstrPayload, [String]) async throws -> SentPayloadReceipt)? = nil,
     skipNostrNetworkStartup: Bool = true,
     onNostrStart: (() -> Void)? = nil,
-    clearLocalAccountData: ((String) throws -> Void)? = nil
+    clearLocalAccountData: ((String) throws -> Void)? = nil,
+    onIncomingPostNotification: ((String) -> Void)? = nil,
+    onIncomingReactionNotification: ((String) -> Void)? = nil
   ) throws -> (AppSession, ModelContainer) {
     var testingOverrides = AppSession.TestingOverrides()
     testingOverrides.disableNostrStartup = disableNostrStartup
@@ -113,6 +115,8 @@ class AppSessionTestCase: XCTestCase {
     testingOverrides.skipNostrNetworkStartup = skipNostrNetworkStartup
     testingOverrides.onNostrStart = onNostrStart
     testingOverrides.clearLocalAccountData = clearLocalAccountData
+    testingOverrides.onIncomingPostNotification = onIncomingPostNotification
+    testingOverrides.onIncomingReactionNotification = onIncomingReactionNotification
     return try makeSession(testingOverrides: testingOverrides)
   }
 

@@ -56,17 +56,6 @@ final class AppSession: ObservableObject {
     let publishedTransportEventIDs: [String]
   }
 
-  struct StorageUsageSummary: Equatable {
-    let deviceVideoCacheBytes: Int64
-    let deviceVideoCacheLimitBytes: Int64
-    let currentAccountPreviewBytes: Int64
-    let currentAccountCachedMediaBytes: Int64
-
-    var currentAccountTotalBytes: Int64 {
-      currentAccountPreviewBytes + currentAccountCachedMediaBytes
-    }
-  }
-
   struct TestingOverrides {
     var disableNostrStartup: Bool?
     var hasConnectedRelays: (() -> Bool)?
@@ -80,6 +69,8 @@ final class AppSession: ObservableObject {
     var skipNostrNetworkStartup = false
     var onNostrStart: (() -> Void)?
     var clearLocalAccountData: ((String) throws -> Void)?
+    var onIncomingPostNotification: ((String) -> Void)?
+    var onIncomingReactionNotification: ((String) -> Void)?
   }
 
   private enum MutationPreparationError: Error {
@@ -141,6 +132,11 @@ final class AppSession: ObservableObject {
   @Published private(set) var hasIdentity = false
   @Published private(set) var didFinishBoot = false
   @Published private(set) var bootStatusMessage = "loading account…"
+  @Published private(set) var pendingCreatedAccountNsec: String?
+
+  var shouldShowOnboarding: Bool {
+    !hasIdentity || pendingCreatedAccountNsec != nil
+  }
 
   init(
     modelContext: ModelContext,
@@ -656,24 +652,32 @@ final class AppSession: ObservableObject {
     return isEnvironmentFlagEnabled("LINKSTR_ENABLE_METADATA_IN_TESTS")
   }
 
-  func ensureIdentity() {
-    if identityService.keypair == nil {
-      do {
-        try identityService.createNewIdentity()
-        refreshIdentityState()
-        composeError = nil
-        startNostrIfPossible()
-      } catch {
-        composeError = error.localizedDescription
-      }
-    } else {
+  func createAccount() {
+    guard identityService.keypair == nil else {
       refreshIdentityState()
+      return
     }
+
+    do {
+      try identityService.createNewIdentity()
+      pendingCreatedAccountNsec = try identityService.revealNsec()
+      refreshIdentityState()
+      composeError = nil
+      startNostrIfPossible()
+    } catch {
+      pendingCreatedAccountNsec = nil
+      composeError = error.localizedDescription
+    }
+  }
+
+  func completePendingAccountCreation() {
+    pendingCreatedAccountNsec = nil
   }
 
   func importNsec(_ nsec: String) {
     do {
       try identityService.importNsec(nsec)
+      pendingCreatedAccountNsec = nil
       refreshIdentityState()
       composeError = nil
       startNostrIfPossible()
@@ -782,6 +786,7 @@ final class AppSession: ObservableObject {
     isProcessingMetadataQueue = false
     relayRuntimeStatusByURL.removeAll()
     pendingSessionNavigationID = nil
+    pendingCreatedAccountNsec = nil
   }
 
   private func handleIdentityCleared() {
@@ -1939,7 +1944,7 @@ final class AppSession: ObservableObject {
     }
   }
 
-  func storageUsageSummary() async -> StorageUsageSummary {
+  func clearableStorageBytes() -> Int64 {
     let currentAccountUsage: ManagedStorageUsage
     if let ownerPubkey = identityService.pubkeyHex {
       currentAccountUsage =
@@ -1948,13 +1953,7 @@ final class AppSession: ObservableObject {
       currentAccountUsage = .zero
     }
 
-    let deviceUsage = await VideoCacheService.shared.currentUsage()
-    return StorageUsageSummary(
-      deviceVideoCacheBytes: deviceUsage.videoBytes,
-      deviceVideoCacheLimitBytes: deviceUsage.videoCacheLimitBytes,
-      currentAccountPreviewBytes: currentAccountUsage.previewBytes,
-      currentAccountCachedMediaBytes: currentAccountUsage.cachedMediaBytes
-    )
+    return currentAccountUsage.previewBytes + currentAccountUsage.cachedMediaBytes
   }
 
   private func persistIncomingFollowList(_ incoming: ReceivedFollowList) {
@@ -2141,7 +2140,7 @@ final class AppSession: ObservableObject {
         updatedAt: incoming.createdAt,
         eventID: incoming.eventID
       )
-      if isActive {
+      if isActive, incoming.source == .live {
         notifyForIncomingReaction(
           eventID: incoming.eventID,
           conversationID: sessionID,
@@ -2298,7 +2297,9 @@ final class AppSession: ObservableObject {
       return
     }
 
-    notifyForIncomingMessage(message)
+    if incoming.source == .live {
+      notifyForIncomingMessage(message)
+    }
     enqueueMetadataRefresh(for: message, in: .backgroundHydration)
   }
 
@@ -2365,6 +2366,10 @@ final class AppSession: ObservableObject {
     guard let myPubkey = identityService.pubkeyHex, message.senderPubkey != myPubkey else {
       return
     }
+    if let onIncomingPostNotification = testingOverrides.onIncomingPostNotification {
+      onIncomingPostNotification(message.eventID)
+      return
+    }
 
     let contacts = (try? contactStore.fetchContacts(ownerPubkey: myPubkey)) ?? []
     let senderName = ContactStore.contactName(for: message.senderPubkey, contacts: contacts)
@@ -2385,6 +2390,10 @@ final class AppSession: ObservableObject {
     rootPost: SessionMessageEntity
   ) {
     guard let myPubkey = identityService.pubkeyHex, senderPubkey != myPubkey else {
+      return
+    }
+    if let onIncomingReactionNotification = testingOverrides.onIncomingReactionNotification {
+      onIncomingReactionNotification(eventID)
       return
     }
 

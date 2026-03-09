@@ -12,7 +12,7 @@ struct RootView: View {
       Group {
         if !session.didFinishBoot {
           LinkstrBootLoadingView(statusMessage: session.bootStatusMessage)
-        } else if !session.hasIdentity {
+        } else if session.shouldShowOnboarding {
           OnboardingView()
         } else {
           NavigationStack {
