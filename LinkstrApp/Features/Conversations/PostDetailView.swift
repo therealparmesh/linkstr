@@ -188,13 +188,13 @@ struct LinkstrReactionRow: View {
     .padding(.vertical, 6)
     .background(
       Capsule()
-        .fill(summary.includesCurrentUser ? LinkstrTheme.panelSoft : LinkstrTheme.panel)
+        .fill(summary.includesCurrentUser ? LinkstrTheme.panelElevated : LinkstrTheme.panel)
     )
     .overlay(
       Capsule()
         .stroke(
           summary.includesCurrentUser
-            ? LinkstrTheme.neonCyan.opacity(0.45) : LinkstrTheme.textSecondary.opacity(0.2),
+            ? LinkstrTheme.accent.opacity(0.45) : LinkstrTheme.textSecondary.opacity(0.2),
           lineWidth: 1
         )
     )
@@ -234,13 +234,14 @@ struct LinkstrReactionRow: View {
     .padding(.vertical, 6)
     .background(
       Capsule()
-        .fill(summary?.includesCurrentUser == true ? LinkstrTheme.panelSoft : LinkstrTheme.panel)
+        .fill(
+          summary?.includesCurrentUser == true ? LinkstrTheme.panelElevated : LinkstrTheme.panel)
     )
     .overlay(
       Capsule()
         .stroke(
           summary?.includesCurrentUser == true
-            ? LinkstrTheme.neonCyan.opacity(0.45) : LinkstrTheme.textSecondary.opacity(0.2),
+            ? LinkstrTheme.accent.opacity(0.45) : LinkstrTheme.textSecondary.opacity(0.2),
           lineWidth: 1
         )
     )
@@ -279,8 +280,7 @@ struct LinkstrEmojiPickerSheet: View {
       }
       .navigationTitle("add reaction")
       .navigationBarTitleDisplayMode(.inline)
-      .toolbarBackground(.hidden, for: .navigationBar)
-      .toolbarColorScheme(.dark, for: .navigationBar)
+      .linkstrBarChrome()
       .searchable(text: $query, prompt: "search emoji")
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
@@ -322,13 +322,6 @@ struct PostDetailView: View {
         && $0.postID == post.rootID
         && $0.isActive
     }
-  }
-
-  private var postSenderLabel: String {
-    if isOutgoing(post) {
-      return "you"
-    }
-    return session.displayName(for: post.senderPubkey, contacts: scopedContacts)
   }
 
   private var reactionSummaries: [ReactionSummary] {
@@ -378,12 +371,12 @@ struct PostDetailView: View {
 
   var body: some View {
     ScrollView {
-      LazyVStack(spacing: 10) {
+      VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
         postCardContent
       }
-      .padding(.horizontal, 10)
-      .padding(.top, 10)
-      .padding(.bottom, 12)
+      .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+      .padding(.top, LinkstrTheme.screenTopPadding)
+      .padding(.bottom, LinkstrTheme.screenBottomPadding)
     }
     .linkstrTabBarContentInset()
     .task(id: profileLookupRequestID) {
@@ -392,9 +385,7 @@ struct PostDetailView: View {
     .background(LinkstrBackgroundView())
     .navigationTitle(sessionName)
     .navigationBarTitleDisplayMode(.inline)
-    .toolbar(.visible, for: .navigationBar)
-    .toolbarBackground(.hidden, for: .navigationBar)
-    .toolbarColorScheme(.dark, for: .navigationBar)
+    .linkstrBarChrome()
     .task {
       session.markRootPostRead(postID: post.rootID)
     }
@@ -407,22 +398,18 @@ struct PostDetailView: View {
   }
 
   private var postCardContent: some View {
-    VStack(alignment: .leading, spacing: 10) {
-      HStack {
-        Text("sent by \(postSenderLabel)")
-          .font(LinkstrTheme.body(11))
-          .foregroundStyle(LinkstrTheme.textSecondary)
-
-        Spacer()
+    VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
+      HStack(spacing: 12) {
+        Spacer(minLength: 0)
 
         Text(post.timestamp.linkstrMessageTimestampLabel)
-          .font(LinkstrTheme.body(12))
-          .foregroundStyle(LinkstrTheme.textSecondary)
+          .font(LinkstrTheme.body(11, weight: .medium))
+          .foregroundStyle(LinkstrTheme.textTertiary)
       }
 
       if let title = post.metadataTitle, !title.isEmpty {
         Text(title)
-          .font(LinkstrTheme.title(18))
+          .font(LinkstrTheme.title(22, weight: .bold))
           .foregroundStyle(LinkstrTheme.textPrimary)
       }
 
@@ -436,19 +423,19 @@ struct PostDetailView: View {
       }
 
       if let noteText {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: 12) {
           Capsule(style: .continuous)
-            .fill(LinkstrTheme.neonAmber.opacity(0.9))
-            .frame(width: 3)
+            .fill(LinkstrTheme.accent)
+            .frame(width: 4)
 
-          VStack(alignment: .leading, spacing: 4) {
+          VStack(alignment: .leading, spacing: LinkstrTheme.metaSpacing) {
             Text("note")
-              .font(LinkstrTheme.title(11))
-              .foregroundStyle(LinkstrTheme.neonAmber)
+              .font(LinkstrTheme.body(11, weight: .semibold))
+              .foregroundStyle(LinkstrTheme.accent)
 
             Text(noteText)
               .font(LinkstrTheme.body(13))
-              .foregroundStyle(LinkstrTheme.textPrimary.opacity(0.94))
+              .foregroundStyle(LinkstrTheme.textSecondary)
               .fixedSize(horizontal: false, vertical: true)
           }
         }
@@ -470,34 +457,32 @@ struct PostDetailView: View {
       )
 
       if !reactionBreakdown.isEmpty {
-        Divider()
-          .overlay(LinkstrTheme.textSecondary.opacity(0.18))
-          .padding(.top, 2)
-          .padding(.bottom, 1)
-
         VStack(alignment: .leading, spacing: 8) {
-          LinkstrSectionHeader(title: "who reacted")
+          Text("who reacted")
+            .font(LinkstrTheme.body(11, weight: .medium))
+            .foregroundStyle(LinkstrTheme.textSecondary)
 
-          ForEach(reactionBreakdown) { entry in
-            HStack(alignment: .center, spacing: 6) {
-              Text("\(entry.displayName):")
-                .font(LinkstrTheme.body(12))
-                .foregroundStyle(LinkstrTheme.textSecondary)
+          VStack(alignment: .leading, spacing: 10) {
+            ForEach(reactionBreakdown) { entry in
+              HStack(alignment: .center, spacing: 8) {
+                Text(entry.displayName)
+                  .font(LinkstrTheme.body(13, weight: .medium))
+                  .foregroundStyle(LinkstrTheme.textSecondary)
 
-              Text(entry.emojis.joined(separator: " "))
-                .font(LinkstrTheme.system(15))
-                .foregroundStyle(LinkstrTheme.textPrimary)
+                Text(entry.emojis.joined(separator: " "))
+                  .font(LinkstrTheme.system(16))
+                  .foregroundStyle(LinkstrTheme.textPrimary)
 
-              Spacer(minLength: 0)
+                Spacer(minLength: 0)
+              }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 2)
           }
         }
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
-    .padding(.horizontal, 2)
+    .padding(.horizontal, LinkstrTheme.fieldHorizontalPadding)
+    .padding(.vertical, 14)
     .contentShape(Rectangle())
   }
 
@@ -545,11 +530,6 @@ struct PostDetailView: View {
     Task { @MainActor in
       _ = await session.toggleReactionAwaitingRelay(emoji: emoji, post: post)
     }
-  }
-
-  private func isOutgoing(_ message: SessionMessageEntity) -> Bool {
-    guard let myPubkey = session.identityService.pubkeyHex else { return false }
-    return message.senderPubkey == myPubkey
   }
 
   private var noteText: String? {

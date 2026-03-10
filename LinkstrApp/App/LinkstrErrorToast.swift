@@ -4,27 +4,25 @@ struct LinkstrErrorToast: View {
   let message: String
 
   var body: some View {
-    HStack(spacing: 10) {
-      Image(systemName: "exclamationmark.triangle.fill")
-        .font(LinkstrTheme.system(14, weight: .semibold))
-        .foregroundStyle(LinkstrTheme.neonAmber)
+    HStack(alignment: .top, spacing: 10) {
+      Image(systemName: "exclamationmark.circle.fill")
+        .font(LinkstrTheme.system(15, weight: .semibold))
+        .foregroundStyle(LinkstrTheme.amber)
+        .padding(.top, 1)
 
       Text(message)
-        .font(LinkstrTheme.body(13))
+        .font(LinkstrTheme.body(14))
         .foregroundStyle(LinkstrTheme.textPrimary)
-        .lineLimit(2)
+        .lineLimit(3)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
-    .padding(.horizontal, 12)
-    .padding(.vertical, 10)
-    .background(
-      RoundedRectangle(cornerRadius: 14, style: .continuous)
-        .fill(LinkstrTheme.panel.opacity(0.96))
-    )
-    .overlay(
-      RoundedRectangle(cornerRadius: 14, style: .continuous)
-        .stroke(LinkstrTheme.destructive.opacity(0.35), lineWidth: 1)
-    )
-    .shadow(color: .black.opacity(0.28), radius: 8, y: 2)
+    .padding(.horizontal, LinkstrTheme.fieldHorizontalPadding)
+    .padding(.vertical, LinkstrTheme.fieldVerticalPadding)
+    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+    .overlay {
+      RoundedRectangle(cornerRadius: 18, style: .continuous)
+        .stroke(LinkstrTheme.separator, lineWidth: 1)
+    }
+    .shadow(color: .black.opacity(0.18), radius: 18, y: 8)
   }
 }

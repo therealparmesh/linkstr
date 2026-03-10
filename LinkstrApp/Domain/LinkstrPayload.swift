@@ -136,7 +136,7 @@ enum LinkstrPayloadError: Error, LocalizedError {
     case .invalidSessionID:
       return "invalid session identifier."
     case .invalidRootURL:
-      return "post requires a valid url."
+      return "post requires a valid link."
     case .invalidSessionName:
       return "session requires a name."
     case .invalidMembers:
@@ -146,7 +146,7 @@ enum LinkstrPayloadError: Error, LocalizedError {
     case .invalidReactionEmoji:
       return "reaction requires an emoji."
     case .invalidReactionState:
-      return "reaction requires an active/inactive state."
+      return "reaction requires an active or inactive state."
     }
   }
 }

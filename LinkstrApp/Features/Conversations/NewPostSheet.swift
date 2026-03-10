@@ -21,19 +21,15 @@ struct NewPostSheet: View {
       ZStack {
         LinkstrBackgroundView()
         ScrollView {
-          VStack(alignment: .leading, spacing: 12) {
-            Text(sessionEntity.name)
-              .font(LinkstrTheme.body(15))
-              .foregroundStyle(LinkstrTheme.textPrimary)
-              .frame(maxWidth: .infinity, alignment: .leading)
-              .padding(12)
-              .frame(minHeight: LinkstrTheme.inputControlMinHeight)
-              .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                  .fill(LinkstrTheme.panelSoft)
-              )
+          VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
+            LinkstrInsetSection(title: "session") {
+              Text(sessionEntity.name)
+                .font(LinkstrTheme.body(15, weight: .medium))
+                .foregroundStyle(LinkstrTheme.textPrimary)
+                .linkstrInputField()
+            }
 
-            VStack(alignment: .leading, spacing: 8) {
+            LinkstrInsetSection(title: "link") {
               TextField("https://...", text: $url)
                 .font(LinkstrTheme.body(14))
                 .textInputAutocapitalization(.never)
@@ -41,14 +37,8 @@ struct NewPostSheet: View {
                 .autocorrectionDisabled(true)
                 .disabled(isSending)
                 .focused($isURLFieldFocused)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
                 .lineLimit(1)
-                .frame(minHeight: LinkstrTheme.inputControlMinHeight)
-                .background(
-                  RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(LinkstrTheme.panelSoft)
-                )
+                .linkstrInputField()
 
               LinkstrInputAssistRow(
                 showClear: !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -66,14 +56,14 @@ struct NewPostSheet: View {
                 .accessibilityHidden(urlValidationHint == nil)
             }
 
-            VStack(alignment: .leading, spacing: 8) {
+            LinkstrInsetSection(title: "note") {
               ZStack(alignment: .topLeading) {
                 if note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                  Text("optional context for this session")
+                  Text("note")
                     .font(LinkstrTheme.body(14))
                     .foregroundStyle(LinkstrTheme.textSecondary)
-                    .padding(.top, 12)
-                    .padding(.leading, 12)
+                    .padding(.top, LinkstrTheme.fieldVerticalPadding)
+                    .padding(.leading, LinkstrTheme.fieldHorizontalPadding)
                     .allowsHitTesting(false)
                 }
 
@@ -85,22 +75,17 @@ struct NewPostSheet: View {
                   .padding(4)
                   .disabled(isSending)
               }
-              .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                  .fill(LinkstrTheme.panelSoft)
-              )
+              .linkstrFieldChrome()
             }
           }
         }
-        .padding(.horizontal, 12)
-        .padding(.top, 14)
-        .padding(.bottom, 120)
+        .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+        .padding(.top, LinkstrTheme.screenTopPadding)
+        .padding(.bottom, LinkstrTheme.sheetBottomPadding)
       }
       .navigationTitle("new post")
       .navigationBarTitleDisplayMode(.inline)
-      .toolbar(.visible, for: .navigationBar)
-      .toolbarBackground(.hidden, for: .navigationBar)
-      .toolbarColorScheme(.dark, for: .navigationBar)
+      .linkstrBarChrome()
       .toolbar {
         ToolbarItem(placement: .topBarLeading) {
           Button {
@@ -116,12 +101,12 @@ struct NewPostSheet: View {
       }
       .safeAreaInset(edge: .bottom, spacing: 0) {
         LinkstrSheetActionFooter(
-          title: isSending ? "sending…" : "send post",
+          title: isSending ? "sending..." : "send post",
           systemImage: "paperplane.fill",
           isDisabled: !canSend,
           message: isSending
-            ? "waiting for relay reconnect before sending…"
-            : "valid link required. note is optional.",
+            ? "waiting for relay reconnect before sending..."
+            : (urlValidationHint ?? ""),
           action: sendPost
         )
       }
@@ -146,7 +131,7 @@ struct NewPostSheet: View {
   private var urlValidationHint: String? {
     let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return nil }
-    return normalizedURL == nil ? "enter a valid http(s) url." : nil
+    return normalizedURL == nil ? "enter a valid link." : nil
   }
 
   private func sendPost() {
@@ -175,50 +160,5 @@ struct NewPostSheet: View {
         url = clipboardText.trimmingCharacters(in: .whitespacesAndNewlines)
       }
     #endif
-  }
-}
-
-struct LinkstrInputAssistRow: View {
-  let showClear: Bool
-  var showScan = true
-  var isDisabled = false
-  let onPaste: () -> Void
-  var onScan: (() -> Void)? = nil
-  let onClear: () -> Void
-
-  var body: some View {
-    HStack(spacing: 8) {
-      assistButton("paste", systemImage: "doc.on.clipboard", action: onPaste)
-      if showScan, let onScan {
-        assistButton("scan", systemImage: "qrcode.viewfinder", action: onScan)
-      }
-      if showClear {
-        assistButton(
-          "clear",
-          systemImage: "xmark.circle",
-          tint: LinkstrTheme.destructive.opacity(0.9),
-          action: onClear
-        )
-      }
-    }
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .disabled(isDisabled)
-    .opacity(isDisabled ? 0.65 : 1)
-    .controlSize(.small)
-  }
-
-  private func assistButton(
-    _ title: String,
-    systemImage: String,
-    tint: Color = LinkstrTheme.textPrimary,
-    action: @escaping () -> Void
-  ) -> some View {
-    Button(action: action) {
-      Label(title, systemImage: systemImage)
-        .font(LinkstrTheme.body(12))
-        .foregroundStyle(tint)
-    }
-    .buttonStyle(.bordered)
-    .tint(LinkstrTheme.textSecondary)
   }
 }

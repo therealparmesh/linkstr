@@ -6,39 +6,40 @@ last updated: march 10, 2026
 
 ### create account
 
-- tap "create account" for a new nostr identity
-- copy and store the shown nsec when linkstr reveals it
-- or sign in with an existing nsec if you already have one
+- tap "create account" for a new account
+- copy and store the shown secret key (nsec). it works like your account password
+- optionally add a profile name others can see
+- or sign in with an existing secret key (nsec) if you already have one
 
-your account is stored in device keychain and optionally syncs via iCloud.
+your account stays in the device keychain and can sync through iCloud keychain if you enable it.
 
 ### create session
 
-1. sessions tab → `+`
+1. sessions tab → top-right compose button
 2. enter session name
 3. add contacts (optional)
 4. tap the bottom "create session" button
 
 ### add contacts
 
-1. contacts tab → `+`
-2. enter nostr public key (npub) or scan QR code
+1. contacts tab → top-right add-contact button
+2. enter public key (npub) or scan qr code
 3. optionally add alias
 4. tap the bottom "add contact" button once the key is valid
 
 tap a contact row to edit its alias. long-press a contact row to unfollow.
 
-### share your account
+### use the you tab
 
-1. share tab
-2. show QR code or tap "copy" for npub
-3. share via messages, email, etc.
+1. you tab
+2. use the profile card, qr code, or "copy public key"
+3. share it over messages, email, or any other app.
 
 profile name changes apply from the keyboard return key or the save button, and both dismiss the keyboard.
 
 ### post links
 
-1. open session → `+`
+1. open session → top-right compose button
 2. paste link
 3. add optional note
 4. tap the bottom "send post" button
@@ -66,39 +67,39 @@ supported platforms: tiktok, instagram, facebook, youtube, twitter/x, rumble, an
 - archive: long-press session → "archive"
 - delete your post: long-press your post row → "delete post"
 - view archived: tap archive icon on the left side of the sessions header
-- add/remove members: open session → tap member count → manage
+- add/remove members: open session → tap the members button in the top-right corner
 - only session creators can modify members
 
 ### relay settings
 
-settings → relays
+settings tab → relays section
 
 - default relays provided automatically
-- add custom relays with `+` (wss:// urls)
+- add custom relays with the relay URL field and "add relay"
 - toggle relays on/off
-- swipe left to remove
+- use the "remove" button to delete a relay
 - reset to defaults if needed
 
 ## faq
 
 **what is nostr?**
-decentralized protocol for social communication. there is no central server, and messages are distributed across relays. your nostr identity works across any nostr-compatible app.
+decentralized protocol for social communication. there is no central server, and encrypted session payloads move across relays. your nostr identity works across any nostr-compatible app.
 
 **is my data private?**
-yes. all session content is end-to-end encrypted. only session members can read messages. your private key never leaves your device.
+yes. all session content is end-to-end encrypted. only session members can read posts and reactions. your secret key (nsec) never leaves your device.
 
 **can i use my nostr account in other apps?**
-yes. your nsec works with any nostr app. find it in settings → identity.
+yes. your secret key (nsec) works with any nostr app. find it in settings → identity.
 
 **what happens if i log out?**
 
-- "log out (keep local data)": messages remain on device and reappear when you log back in with the same account
+- "log out (keep local data)": local sessions, posts, and contacts stay on device and reappear when you sign in again with the same account
 - "log out and clear local data": permanently deletes all local data for this account
 
 **what happens if i delete my account?**
 
 - linkstr sends a nostr vanish request to your enabled relays, clears local data on this device, and logs you out
-- if you keep the nsec, it still works and can sign in again later
+- if you keep the secret key (nsec), it still works and can sign in again later
 
 **what if i add the same contact again?**
 
@@ -106,8 +107,8 @@ yes. your nsec works with any nostr app. find it in settings → identity.
 - adding the same contact again updates the saved alias for that contact
 - this does not publish a new follow-list event because the followed account did not change
 
-**why can't i send messages?**
-check: internet connection, at least one relay connected (settings → relays), you are a member of the session.
+**why can't i send posts?**
+check: internet connection, at least one relay connected (settings tab → relays section), you are a member of the session.
 
 **can i delete a session?**
 sessions can be archived but not deleted. archived sessions don't appear in main list but data remains on device.
@@ -131,24 +132,24 @@ none. linkstr does not collect or store data on developer-controlled servers. yo
 
 **what permissions does linkstr need?**
 
-- camera: scan contact QR codes
+- camera: scan contact qr codes
 - photos (add only): save videos to photos library
 - network: connect to nostr relays and download media
 
 **where is my data stored?**
 
 - account keys: device keychain (optionally iCloud synced)
-- messages & sessions: local device storage only
+- sessions, posts, and reactions: local device storage only
 - media cache: local device storage only
 
-downloaded video cache is device-local, auto-trims with least-recently-used eviction at about 1 gb, and can also be cleared from settings → storage. that screen shows an estimate of how much local storage the signed-in account can clear.
+downloaded video cache is device-local, auto-trims with least-recently-used eviction at about 1 gb, and can also be cleared from settings tab → storage section. that screen shows an estimate of how much local storage the signed-in account can clear.
 
 ## troubleshooting
 
 **app won't connect to relays**
 
 1. check internet connection
-2. settings → relays → "reset default relays"
+2. settings tab → relays section → "reset defaults"
 3. force-quit and reopen app
 
 **videos won't play**
@@ -156,12 +157,12 @@ downloaded video cache is device-local, auto-trims with least-recently-used evic
 1. check internet connection
 2. try switching "try local playback" ↔ "try embed playback"
 3. if a previously downloaded local copy was auto-trimmed, try "try local playback" again to re-download it
-4. settings → storage → "clear cached media and previews"
+4. settings tab → storage section → "clear cached media and previews"
 5. use "open in browser"
 
 **link preview looks stale or wrong**
 
-1. settings → storage → "clear cached media and previews"
+1. settings tab → storage section → "clear cached media and previews"
 2. return to sessions/posts and let the app rebuild previews
 3. if the provider still serves bad metadata, use "open in browser"
 
@@ -169,16 +170,16 @@ downloaded video cache is device-local, auto-trims with least-recently-used evic
 
 1. check camera permission in settings → privacy & security → camera
 2. ensure good lighting
-3. alternatively paste npub manually
+3. alternatively paste public key (npub) manually
 
-**messages not syncing across devices**
+**posts not syncing across devices**
 linkstr stores posts, reactions, contacts, and caches locally on each device. to use the same account on multiple devices:
 
-1. export nsec from settings on first device
-2. import same nsec on second device
-3. both devices must connect to relays to sync new messages
+1. export secret key (nsec) from settings on first device
+2. import the same secret key (nsec) on second device
+3. both devices must connect to relays to sync new posts and reactions
 
-note: historical messages depend on relay retention and what each device has already received locally. new messages sync when both devices reconnect to relays.
+note: historical posts depend on relay retention and what each device has already received locally. new posts sync when both devices reconnect to relays.
 historical restore after a fresh sign-in does not replay old local notifications.
 
 ## contact

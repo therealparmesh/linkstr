@@ -12,9 +12,6 @@ struct SettingsView: View {
   @State private var relayURL = ""
   @State private var revealedNsec = ""
   @State private var isNsecVisible = false
-  @State private var isRelaysExpanded = false
-  @State private var isStorageExpanded = false
-  @State private var isIdentityExpanded = false
   @State private var isPresentingLogoutOptions = false
   @State private var isPresentingDeleteAccountConfirm = false
   @State private var isPresentingDeleteAccountFinalConfirm = false
@@ -28,22 +25,18 @@ struct SettingsView: View {
       content
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    .onAppear(perform: refreshStorageUsage)
     .onChange(of: scenePhase) { _, newValue in
       switch newValue {
       case .active:
-        if isStorageExpanded {
-          refreshStorageUsage()
-        }
-        break
+        refreshStorageUsage()
       case .inactive, .background:
         hideSensitiveIdentityContent()
       @unknown default:
         hideSensitiveIdentityContent()
       }
     }
-    .onDisappear {
-      hideSensitiveIdentityContent()
-    }
+    .onDisappear(perform: hideSensitiveIdentityContent)
   }
 
   private var content: some View {
@@ -54,9 +47,9 @@ struct SettingsView: View {
         identitySection
       }
       .frame(maxWidth: .infinity, alignment: .leading)
-      .padding(.horizontal, 12)
-      .padding(.top, 14)
-      .padding(.bottom, 28)
+      .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+      .padding(.top, LinkstrTheme.screenTopPadding)
+      .padding(.bottom, LinkstrTheme.screenBottomPadding)
     }
     .linkstrTabBarContentInset()
     .alert("log out", isPresented: $isPresentingLogoutOptions) {
@@ -69,7 +62,7 @@ struct SettingsView: View {
       Button("cancel", role: .cancel) {}
     } message: {
       Text(
-        "choose whether to keep this account's local contacts/messages on this device or remove them before logging out."
+        "choose whether to keep this account's local sessions, posts, and contacts on this device or remove them before logging out."
       )
     }
     .alert("delete account", isPresented: $isPresentingDeleteAccountConfirm) {
@@ -79,7 +72,7 @@ struct SettingsView: View {
       Button("cancel", role: .cancel) {}
     } message: {
       Text(
-        "this requests relay-side account deletion on your active nostr relays, clears this account's local data on this device, and logs you out. if you keep the secret key, it can still be used to sign in again."
+        "this asks your active relays to delete this account, clears this account's local data on this device, and logs you out. if you keep the secret key, you can still sign in again."
       )
     }
     .alert("are you absolutely sure?", isPresented: $isPresentingDeleteAccountFinalConfirm) {
@@ -99,290 +92,231 @@ struct SettingsView: View {
       Button("cancel", role: .cancel) {}
     } message: {
       Text(
-        "this removes contacts, sessions, reactions, cached media, and local encryption keys for this account after the relay deletion request succeeds."
+        "this removes contacts, sessions, posts, reactions, cached media, and local encryption keys for this account after the relay deletion request succeeds."
       )
     }
   }
 
   private var relaysSection: some View {
-    DisclosureGroup(isExpanded: $isRelaysExpanded) {
-      VStack(spacing: 0) {
-        ForEach(Array(sortedRelays.enumerated()), id: \.element.id) { index, relay in
-          VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top, spacing: 8) {
-              Text(relay.url)
-                .font(LinkstrTheme.body(13))
-                .foregroundStyle(LinkstrTheme.textPrimary)
-                .lineLimit(2)
-              Spacer(minLength: 8)
-              Circle()
-                .fill(statusDotColor(for: relay))
-                .frame(width: 10, height: 10)
-                .padding(.top, 4)
-            }
-
-            let relayErrorText = normalizedInlineMessage(session.relayErrorMessage(for: relay))
-            Text(relayErrorText.isEmpty ? " " : relayErrorText)
-              .font(LinkstrTheme.body(12))
-              .foregroundStyle(LinkstrTheme.textSecondary)
-              .fixedSize(horizontal: false, vertical: true)
-              .frame(maxWidth: .infinity, minHeight: 30, alignment: .topLeading)
-              .opacity(relayErrorText.isEmpty ? 0 : 1)
-              .accessibilityHidden(relayErrorText.isEmpty)
-
-            HStack(spacing: 10) {
-              Toggle(
-                "",
-                isOn: Binding(
-                  get: {
-                    relay.isEnabled
-                  },
-                  set: { _ in
-                    session.toggleRelay(relay)
-                  })
-              )
-              .labelsHidden()
-              .tint(LinkstrTheme.neonCyan)
-              .accessibilityLabel(relay.isEnabled ? "disable relay" : "enable relay")
-
-              Spacer()
-
-              Button(role: .destructive) {
-                session.removeRelay(relay)
-              } label: {
-                Label("remove", systemImage: "trash")
-                  .font(LinkstrTheme.body(13))
-              }
-              .buttonStyle(.bordered)
-              .tint(LinkstrTheme.destructive)
-            }
-            .padding(.trailing, 4)
+    LinkstrInsetSection(
+      title: "relays",
+      accessory: "\(connectedRelayCount)/\(relays.count)",
+      footer:
+        "enable at least one writable relay to create sessions, send posts, or publish account changes."
+    ) {
+      if sortedRelays.isEmpty {
+        Text("no relays configured yet.")
+          .font(LinkstrTheme.body(13))
+          .foregroundStyle(LinkstrTheme.textSecondary)
+      } else {
+        VStack(spacing: 0) {
+          ForEach(Array(sortedRelays.enumerated()), id: \.element.id) { index, relay in
+            relayRow(relay)
 
             if index < sortedRelays.count - 1 {
-              Divider()
-                .overlay(LinkstrTheme.textSecondary.opacity(0.24))
-                .padding(.top, 4)
+              LinkstrListRowDivider(leadingInset: 0)
             }
           }
-          .padding(.horizontal, 2)
-          .padding(.vertical, 10)
         }
-
-        VStack(alignment: .leading, spacing: 10) {
-          Divider()
-            .overlay(LinkstrTheme.textSecondary.opacity(0.3))
-            .padding(.bottom, 10)
-
-          TextField("wss://relay.example.com", text: $relayURL)
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled(true)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .lineLimit(1)
-            .frame(minHeight: LinkstrTheme.inputControlMinHeight)
-            .background(
-              RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(LinkstrTheme.panelSoft)
-            )
-
-          Button {
-            if session.addRelay(url: relayURL) {
-              relayURL = ""
-            }
-          } label: {
-            Text("add relay")
-              .frame(maxWidth: .infinity)
-          }
-          .buttonStyle(.borderedProminent)
-          .tint(LinkstrTheme.neonCyan)
-
-          Button {
-            session.resetDefaultRelays()
-          } label: {
-            Text("reset default relays")
-              .frame(maxWidth: .infinity)
-          }
-          .buttonStyle(.bordered)
-          .tint(LinkstrTheme.textSecondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.top, 8)
       }
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .padding(.top, 8)
-    } label: {
-      sectionLabel(
-        "relays",
-        systemImage: "antenna.radiowaves.left.and.right",
-        badge: "\(connectedRelayCount)/\(relays.count)"
-      )
-    }
-  }
 
-  private var storageSection: some View {
-    DisclosureGroup(isExpanded: $isStorageExpanded) {
-      VStack(alignment: .leading, spacing: 10) {
-        if isRefreshingStorageUsage && clearableStorageBytes == nil {
-          Text("measuring local storage...")
-            .font(LinkstrTheme.body(12))
-            .foregroundStyle(LinkstrTheme.textSecondary)
-        } else if let clearableStorageBytes {
-          VStack(alignment: .leading, spacing: 4) {
-            Text(
-              "this will save ~\(formattedByteCount(clearableStorageBytes))."
-            )
+      TextField("wss://relay.example.com", text: $relayURL)
+        .font(LinkstrTheme.body(15))
+        .textInputAutocapitalization(.never)
+        .autocorrectionDisabled(true)
+        .lineLimit(1)
+        .linkstrInputField()
+
+      HStack(spacing: LinkstrTheme.buttonRowSpacing) {
+        Button {
+          if session.addRelay(url: relayURL) {
+            relayURL = ""
           }
-          .font(LinkstrTheme.body(12))
-          .foregroundStyle(LinkstrTheme.textSecondary)
-          .fixedSize(horizontal: false, vertical: true)
-        }
-
-        Button(role: .destructive) {
-          session.clearCachedMediaAndPreviews()
-          refreshStorageUsage()
         } label: {
-          Text("clear cached media and previews")
+          Text("add relay")
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(.borderedProminent)
-        .tint(LinkstrTheme.destructive)
+        .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
+        .tint(LinkstrTheme.accent)
 
-        Text(
-          "removes downloaded videos plus hydrated link titles/thumbnails for this account. posts stay intact and previews can rebuild later."
+        Button {
+          session.resetDefaultRelays()
+        } label: {
+          Text("reset defaults")
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
+        .tint(LinkstrTheme.textSecondary)
+      }
+    }
+  }
+
+  private func relayRow(_ relay: RelayEntity) -> some View {
+    VStack(alignment: .leading, spacing: LinkstrTheme.buttonRowSpacing) {
+      HStack(alignment: .top, spacing: LinkstrTheme.buttonRowSpacing) {
+        Circle()
+          .fill(statusDotColor(for: relay))
+          .frame(width: 10, height: 10)
+          .padding(.top, 4)
+
+        VStack(alignment: .leading, spacing: LinkstrTheme.metaSpacing) {
+          Text(relay.url)
+            .font(LinkstrTheme.body(14, weight: .medium))
+            .foregroundStyle(LinkstrTheme.textPrimary)
+            .lineLimit(2)
+
+          let relayErrorText =
+            session.relayErrorMessage(for: relay)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            ?? ""
+          if !relayErrorText.isEmpty {
+            Text(relayErrorText)
+              .font(LinkstrTheme.body(12))
+              .foregroundStyle(LinkstrTheme.textSecondary)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+        }
+
+        Spacer(minLength: 8)
+      }
+
+      HStack(alignment: .center, spacing: LinkstrTheme.rowSpacing) {
+        Toggle(
+          "",
+          isOn: Binding(
+            get: { relay.isEnabled },
+            set: { _ in session.toggleRelay(relay) }
+          )
         )
-        .font(LinkstrTheme.body(12))
+        .labelsHidden()
+        .toggleStyle(.switch)
+        .tint(LinkstrTheme.accent)
+        .scaleEffect(0.82)
+        .accessibilityLabel(relay.isEnabled ? "disable relay" : "enable relay")
+
+        Spacer()
+
+        Button {
+          session.removeRelay(relay)
+        } label: {
+          Label("remove", systemImage: "trash")
+            .font(LinkstrTheme.body(12, weight: .medium))
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(LinkstrTheme.destructive)
+      }
+    }
+    .padding(.vertical, LinkstrTheme.listRowVerticalPadding)
+  }
+
+  private var storageSection: some View {
+    LinkstrInsetSection(
+      title: "storage",
+      footer:
+        "downloaded videos and hydrated previews are device-local only and can be rebuilt later if needed."
+    ) {
+      if isRefreshingStorageUsage && clearableStorageBytes == nil {
+        Text("measuring local storage...")
+          .font(LinkstrTheme.body(12))
+          .foregroundStyle(LinkstrTheme.textSecondary)
+      } else if let clearableStorageBytes {
+        Text(
+          "this will save about \(ByteCountFormatter.string(fromByteCount: clearableStorageBytes, countStyle: .file).lowercased())."
+        )
+        .font(LinkstrTheme.body(13))
         .foregroundStyle(LinkstrTheme.textSecondary)
-        .fixedSize(horizontal: false, vertical: true)
       }
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .padding(.top, 8)
-      .task(id: isStorageExpanded) {
-        guard isStorageExpanded else { return }
+
+      Button(role: .destructive) {
+        session.clearCachedMediaAndPreviews()
         refreshStorageUsage()
+      } label: {
+        Text("clear cached media and previews")
+          .frame(maxWidth: .infinity)
       }
-    } label: {
-      sectionLabel("storage", systemImage: "externaldrive")
+      .buttonStyle(.borderedProminent)
+      .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
+      .tint(LinkstrTheme.destructive)
     }
   }
 
   private var identitySection: some View {
-    DisclosureGroup(isExpanded: $isIdentityExpanded) {
-      VStack(alignment: .leading, spacing: 10) {
-        if session.identityService.keypair != nil {
-          HStack(spacing: 8) {
-            Button {
-              if isNsecVisible {
-                hideSensitiveIdentityContent()
-              } else {
-                revealedNsec = (try? session.identityService.revealNsec()) ?? ""
-                isNsecVisible = true
-              }
-            } label: {
-              Label(
-                isNsecVisible ? "hide secret key (nsec)" : "reveal secret key (nsec)",
-                systemImage: "key.fill"
-              )
-              .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            .tint(LinkstrTheme.textSecondary)
-
+    LinkstrInsetSection(title: "identity") {
+      if session.identityService.keypair != nil {
+        HStack(spacing: LinkstrTheme.buttonRowSpacing) {
+          Button {
             if isNsecVisible {
-              Button {
-                guard !revealedNsec.isEmpty else { return }
-                UIPasteboard.general.string = revealedNsec
-              } label: {
-                Label("copy secret key (nsec)", systemImage: "doc.on.doc")
-                  .frame(maxWidth: .infinity)
-              }
-              .buttonStyle(.bordered)
-              .tint(LinkstrTheme.neonAmber)
-              .disabled(revealedNsec.isEmpty)
+              hideSensitiveIdentityContent()
+            } else {
+              revealedNsec = (try? session.identityService.revealNsec()) ?? ""
+              isNsecVisible = true
             }
+          } label: {
+            Label(
+              isNsecVisible ? "hide secret key" : "reveal secret key",
+              systemImage: "key.fill"
+            )
+            .frame(maxWidth: .infinity)
           }
+          .buttonStyle(.bordered)
+          .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
+          .tint(LinkstrTheme.textSecondary)
 
           if isNsecVisible {
-            LinkstrSectionHeader(title: "secret key (nsec)")
-            Text(revealedNsec.isEmpty ? "unable to reveal secret key (nsec)." : revealedNsec)
-              .font(LinkstrTheme.body(12))
-              .foregroundStyle(LinkstrTheme.textSecondary)
-              .textSelection(.enabled)
-              .privacySensitive()
-              .padding(10)
-              .frame(maxWidth: .infinity, alignment: .leading)
-              .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                  .fill(LinkstrTheme.panelSoft)
-              )
-          }
-
-          Button(role: .destructive) {
-            isPresentingLogoutOptions = true
-          } label: {
-            Label("log out", systemImage: "rectangle.portrait.and.arrow.right")
-              .frame(maxWidth: .infinity)
-          }
-          .buttonStyle(.borderedProminent)
-          .tint(LinkstrTheme.destructive)
-          .padding(.top, 6)
-
-          VStack(alignment: .leading, spacing: 8) {
-            Button(role: .destructive) {
-              isPresentingDeleteAccountConfirm = true
+            Button {
+              guard !revealedNsec.isEmpty else { return }
+              UIPasteboard.general.string = revealedNsec
             } label: {
-              Label(
-                isDeletingAccount ? "deleting account..." : "delete account",
-                systemImage: "person.crop.circle.badge.xmark"
-              )
-              .frame(maxWidth: .infinity)
+              Label("copy", systemImage: "doc.on.doc")
+                .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
-            .tint(LinkstrTheme.destructive)
-            .disabled(isDeletingAccount)
-
-            Text(
-              "delete account sends a nostr vanish request to your enabled relays, clears this account's local data, and logs you out. if you keep the secret key, it can still be used to sign in again."
-            )
-            .font(LinkstrTheme.body(12))
-            .foregroundStyle(LinkstrTheme.textSecondary)
+            .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
+            .tint(LinkstrTheme.amber)
+            .disabled(revealedNsec.isEmpty)
           }
-          .padding(.top, 6)
-        } else {
-          Text("no account found. sign in with a secret key (nsec) or create one.")
-            .font(LinkstrTheme.body(12))
-            .foregroundStyle(LinkstrTheme.textSecondary)
         }
-      }
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .padding(.top, 8)
-    } label: {
-      sectionLabel("identity", systemImage: "person.crop.circle")
-    }
-  }
 
-  private func sectionLabel(_ title: String, systemImage: String, badge: String? = nil) -> some View
-  {
-    HStack(spacing: 8) {
-      Image(systemName: systemImage)
-        .font(LinkstrTheme.system(13, weight: .semibold))
-        .foregroundStyle(LinkstrTheme.textPrimary)
-        .frame(width: 18, height: 18, alignment: .center)
+        if isNsecVisible {
+          Text(revealedNsec.isEmpty ? "unable to reveal secret key (nsec)." : revealedNsec)
+            .font(LinkstrTheme.body(13))
+            .foregroundStyle(LinkstrTheme.textSecondary)
+            .textSelection(.enabled)
+            .privacySensitive()
+            .linkstrInputField()
+        }
 
-      Text(title)
-        .linkstrPrimarySectionTitleTextStyle()
+        Button(role: .destructive) {
+          isPresentingLogoutOptions = true
+        } label: {
+          Label("log out", systemImage: "rectangle.portrait.and.arrow.right")
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
+        .tint(LinkstrTheme.destructive)
 
-      Spacer()
-
-      if let badge {
-        Text(badge)
-          .font(LinkstrTheme.body(11))
+        Button(role: .destructive) {
+          isPresentingDeleteAccountConfirm = true
+        } label: {
+          Label(
+            isDeletingAccount ? "deleting account..." : "delete account",
+            systemImage: "person.crop.circle.badge.xmark"
+          )
+          .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
+        .tint(LinkstrTheme.destructive)
+        .disabled(isDeletingAccount)
+      } else {
+        Text("no account found. sign in with a secret key (nsec) or create one.")
+          .font(LinkstrTheme.body(13))
           .foregroundStyle(LinkstrTheme.textSecondary)
-          .padding(.horizontal, 7)
-          .padding(.vertical, 3)
-          .background(LinkstrTheme.panelSoft, in: Capsule())
       }
     }
-    .padding(.horizontal, 2)
   }
 
   private var connectedRelayCount: Int {
@@ -399,11 +333,11 @@ struct SettingsView: View {
     case .connected:
       return LinkstrTheme.statusSuccess
     case .connecting:
-      return LinkstrTheme.neonCyan
+      return LinkstrTheme.accent
     case .failed:
       return LinkstrTheme.destructive
     case .readOnly:
-      return LinkstrTheme.neonAmber
+      return LinkstrTheme.amber
     case .disconnected:
       return LinkstrTheme.textSecondary
     }
@@ -413,15 +347,6 @@ struct SettingsView: View {
     relays.sorted {
       $0.url.localizedCaseInsensitiveCompare($1.url) == .orderedAscending
     }
-  }
-
-  private func normalizedInlineMessage(_ message: String?) -> String {
-    guard let message else { return "" }
-    return message.trimmingCharacters(in: .whitespacesAndNewlines)
-  }
-
-  private func formattedByteCount(_ bytes: Int64) -> String {
-    ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file).lowercased()
   }
 
   @MainActor

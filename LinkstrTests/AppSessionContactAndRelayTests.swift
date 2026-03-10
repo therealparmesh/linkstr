@@ -36,7 +36,7 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
 
     let didAddInvalid = await session.addContact(npub: "not-an-npub", alias: "Bob")
     XCTAssertFalse(didAddInvalid)
-    XCTAssertEqual(session.composeError, "invalid contact key (npub).")
+    XCTAssertEqual(session.composeError, "invalid public key (npub).")
 
     let contacts = try fetchContacts(in: container.mainContext)
     XCTAssertEqual(contacts.count, 1)

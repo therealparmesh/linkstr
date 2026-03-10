@@ -35,14 +35,14 @@ final class SocialVideoExtractionService: NSObject {
 
         // For canonical TikTok post URLs, prefer failing into embed mode over risking a related
         // clip from page-level sniffing.
-        return .cannotExtract("Could not find a usable video stream for this post")
+        return .cannotExtract("could not find a usable video stream for this post.")
       }
     }
 
     if SocialURLHeuristics.isTwitterStatusURL(sourceURL) {
       let summary = await TwitterStatusResolutionService.shared.mediaSummary(for: sourceURL)
       if summary.hasVideo == false {
-        return .cannotExtract("This post does not include a playable video")
+        return .cannotExtract("this post does not include a playable video.")
       }
 
       if let resolved = await resolvePlayableMedia(
@@ -74,7 +74,7 @@ final class SocialVideoExtractionService: NSObject {
       }
     }
 
-    return .cannotExtract("Could not find a usable video stream for this post")
+    return .cannotExtract("could not find a usable video stream for this post.")
   }
 
   func cachePlayableMediaLocally(_ media: PlayableMedia) async -> PlayableMedia? {

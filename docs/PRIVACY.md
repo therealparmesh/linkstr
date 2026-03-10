@@ -1,6 +1,6 @@
 # privacy policy
 
-last updated: march 9, 2026
+last updated: march 10, 2026
 
 ## overview
 
@@ -21,10 +21,10 @@ linkstr does not run developer-controlled servers. your account keys and app dat
 
 stored only on your device:
 
-- **account keys**: nostr cryptographic keys stored in device keychain
+- **account keys**: your secret key (nsec) plus device-local encryption keys stored in keychain
 - **contacts**: contact aliases and public keys you add
 - **sessions**: session names and member lists you create
-- **messages**: links, notes, and reactions you send and receive
+- **posts and reactions**: links, notes, and reactions you send and receive
 - **media cache**: videos and thumbnails downloaded for offline viewing
 
 downloaded videos are stored as device-local cache. linkstr automatically trims older cached video files with least-recently-used eviction once local video cache reaches about 1 gb.
@@ -35,9 +35,9 @@ this data is encrypted at rest using device-local encryption keys and never leav
 
 when you use linkstr, you communicate through the decentralized nostr protocol:
 
-- **encrypted messages**: session messages are end-to-end encrypted and transmitted through nostr relays you connect to
+- **encrypted session payloads**: posts, reactions, and membership updates are end-to-end encrypted and transmitted through nostr relays you connect to
 - **contact list**: your nostr follow list is published to relays as part of the nostr protocol (nip-02)
-- **relay connections**: you choose which nostr relays to connect to; messages are transmitted through these relays
+- **relay connections**: you choose which nostr relays to connect to; encrypted session payloads are transmitted through these relays
 
 nostr relays are third-party servers not controlled by linkstr. each relay operator has their own privacy policy and data retention practices.
 
@@ -45,9 +45,9 @@ nostr relays are third-party servers not controlled by linkstr. each relay opera
 
 if you enable iCloud keychain on your device:
 
-- your account keys may sync across your apple devices via iCloud
-- this is controlled by your ios settings, not by linkstr
-- refer to apple's privacy policy for iCloud data handling
+- your account keys may sync across your Apple devices via iCloud
+- this is controlled by your iOS settings, not by linkstr
+- refer to Apple's privacy policy for iCloud data handling
 
 ## permissions
 
@@ -67,7 +67,7 @@ if you enable iCloud keychain on your device:
 
 - **purpose**: connect to nostr relays and download media
 - **usage**: required for app functionality
-- **data**: encrypted messages sent to relays you configure; media downloaded from urls you share
+- **data**: encrypted session payloads sent to relays you configure; media downloaded from urls you share
 
 ## third-party content
 
@@ -84,7 +84,7 @@ you are responsible for:
 
 - respecting intellectual property rights when downloading and sharing content
 - complying with applicable laws and third-party platform terms of service
-- managing your nostr private key (nsec) securely
+- managing your secret key (nsec) securely
 - understanding that archived sessions remain on local device unless explicitly cleared through account cleanup
 
 ## children's privacy
@@ -101,10 +101,10 @@ linkstr does not knowingly collect information from children under 13. the app d
 
 ## data security
 
-- end-to-end encryption for all session messages
-- private keys stored in ios keychain with whenunlocked accessibility
+- end-to-end encryption for session payloads
+- account keys stored in iOS keychain with whenunlocked accessibility
 - local data encrypted at rest using per-account encryption keys
-- no external servers controlled by linkstr developer
+- no external servers controlled by the linkstr developer
 
 ## your rights
 
@@ -112,9 +112,9 @@ you have the right to:
 
 - delete all local data using "log out and clear local data"
 - delete your account using the in-app delete-account flow
-- export your account key (nsec) and use it in other nostr-compatible apps
+- export your secret key (nsec) and use it in other nostr-compatible apps
 - control which relays you connect to
-- disable icloud sync in ios settings
+- disable iCloud sync in iOS settings
 
 ## changes to privacy policy
 

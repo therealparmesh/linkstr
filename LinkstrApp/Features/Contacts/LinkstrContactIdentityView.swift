@@ -4,11 +4,11 @@ struct LinkstrContactIdentityView: View {
   let identity: LinkstrResolvedIdentity
   var primaryFont: Font = LinkstrTheme.title(16)
   var secondaryFont: Font = LinkstrTheme.body(12)
-  var npubFont: Font = LinkstrTheme.body(13)
+  var npubFont: Font = LinkstrTheme.body(12)
   var primaryColor: Color = LinkstrTheme.textPrimary
-  var aliasedNostrNameColor: Color = LinkstrTheme.neonPink
+  var aliasedNostrNameColor: Color = LinkstrTheme.accentPink
   var npubColor: Color = LinkstrTheme.textSecondary
-  var spacing: CGFloat = 2
+  var spacing: CGFloat = LinkstrTheme.metaSpacing
   var lineLimit: Int = 1
 
   var body: some View {
@@ -21,7 +21,7 @@ struct LinkstrContactIdentityView: View {
       if let aliasedNostrName = identity.aliasedChosenName {
         Text(aliasedNostrName)
           .font(secondaryFont)
-          .foregroundStyle(aliasedNostrNameColor.opacity(0.82))
+          .foregroundStyle(aliasedNostrNameColor.opacity(0.88))
           .lineLimit(lineLimit)
       }
 

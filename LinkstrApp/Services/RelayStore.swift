@@ -215,7 +215,7 @@ private enum ContactStoreError: LocalizedError {
   var errorDescription: String? {
     switch self {
     case .invalidContactKey:
-      return "invalid contact key (npub)."
+      return "invalid public key (npub)."
     case .contactOwnershipMismatch:
       return "this contact belongs to a different account."
     case .contactNotFound:

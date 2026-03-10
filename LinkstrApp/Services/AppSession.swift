@@ -1578,7 +1578,7 @@ final class AppSession: ObservableObject {
       )
     else { return nil }
     guard !recipientPubkeys.isEmpty else {
-      composeError = "session has no members. add members before sending."
+      composeError = "this session has no active members."
       return nil
     }
 
@@ -1826,7 +1826,7 @@ final class AppSession: ObservableObject {
     }
 
     return try NostrEvent.Builder<NostrEvent>(kind: .unknown(62))
-      .content("linkstr account deletion request")
+      .content("account deletion request")
       .appendTags(contentsOf: relayTags)
       .build(signedBy: keypair)
   }

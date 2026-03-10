@@ -11,20 +11,69 @@ struct LinkstrAppMain: App {
 
   init() {
     Self.configureScrollViewAppearance()
+    Self.configureNavigationAppearance()
   }
 
   private static func configureScrollViewAppearance() {
     let scrollViewAppearance = UIScrollView.appearance()
     scrollViewAppearance.backgroundColor = .clear
-    scrollViewAppearance.bounces = false
-    scrollViewAppearance.alwaysBounceVertical = false
+    scrollViewAppearance.bounces = true
+    scrollViewAppearance.alwaysBounceVertical = true
     scrollViewAppearance.alwaysBounceHorizontal = false
 
     let collectionViewAppearance = UICollectionView.appearance()
     collectionViewAppearance.backgroundColor = .clear
-    collectionViewAppearance.bounces = false
-    collectionViewAppearance.alwaysBounceVertical = false
+    collectionViewAppearance.bounces = true
+    collectionViewAppearance.alwaysBounceVertical = true
     collectionViewAppearance.alwaysBounceHorizontal = false
+  }
+
+  private static func configureNavigationAppearance() {
+    let chromeColor = UIColor(red: 0.09, green: 0.10, blue: 0.16, alpha: 0.88)
+    let textColor = UIColor(red: 0.92, green: 0.94, blue: 0.99, alpha: 1)
+    let secondaryColor = UIColor(red: 0.66, green: 0.71, blue: 0.84, alpha: 1)
+    let accentColor = UIColor(red: 0.49, green: 0.67, blue: 0.99, alpha: 1)
+    let separatorColor = UIColor.white.withAlphaComponent(0.06)
+
+    let navigationAppearance = UINavigationBarAppearance()
+    navigationAppearance.configureWithTransparentBackground()
+    navigationAppearance.backgroundEffect = UIBlurEffect(style: .systemThinMaterialDark)
+    navigationAppearance.backgroundColor = chromeColor
+    navigationAppearance.shadowColor = separatorColor
+    navigationAppearance.titleTextAttributes = [.foregroundColor: textColor]
+    navigationAppearance.largeTitleTextAttributes = [.foregroundColor: textColor]
+
+    let navigationBarAppearance = UINavigationBar.appearance()
+    navigationBarAppearance.standardAppearance = navigationAppearance
+    navigationBarAppearance.compactAppearance = navigationAppearance
+    navigationBarAppearance.scrollEdgeAppearance = navigationAppearance
+    navigationBarAppearance.tintColor = accentColor
+
+    let tabBarAppearance = UITabBarAppearance()
+    tabBarAppearance.configureWithTransparentBackground()
+    tabBarAppearance.backgroundEffect = UIBlurEffect(style: .systemThinMaterialDark)
+    tabBarAppearance.backgroundColor = chromeColor
+    tabBarAppearance.shadowColor = separatorColor
+
+    let itemAppearances = [
+      tabBarAppearance.stackedLayoutAppearance,
+      tabBarAppearance.inlineLayoutAppearance,
+      tabBarAppearance.compactInlineLayoutAppearance,
+    ]
+    for itemAppearance in itemAppearances {
+      itemAppearance.normal.iconColor = secondaryColor
+      itemAppearance.normal.titleTextAttributes = [.foregroundColor: secondaryColor]
+      itemAppearance.selected.iconColor = accentColor
+      itemAppearance.selected.titleTextAttributes = [.foregroundColor: accentColor]
+    }
+
+    let tabBar = UITabBar.appearance()
+    tabBar.standardAppearance = tabBarAppearance
+    if #available(iOS 15.0, *) {
+      tabBar.scrollEdgeAppearance = tabBarAppearance
+    }
+    tabBar.tintColor = accentColor
+    tabBar.unselectedItemTintColor = secondaryColor
   }
 
   var body: some Scene {
@@ -94,7 +143,7 @@ struct LinkstrAppMain: App {
         ZStack {
           LinkstrBackgroundView()
           ProgressView()
-            .tint(LinkstrTheme.neonCyan)
+            .tint(LinkstrTheme.accent)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
       }
@@ -242,11 +291,11 @@ struct LinkstrStorageRecoveryView: View {
     ZStack {
       LinkstrBackgroundView()
 
-      VStack(alignment: .leading, spacing: 18) {
-        HStack(spacing: 12) {
+      VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
+        HStack(spacing: LinkstrTheme.rowSpacing) {
           Image(systemName: "externaldrive.badge.exclamationmark")
             .font(LinkstrTheme.system(24, weight: .semibold))
-            .foregroundStyle(LinkstrTheme.neonAmber)
+            .foregroundStyle(LinkstrTheme.amber)
 
           Text(title)
             .font(LinkstrTheme.title(24))
@@ -258,13 +307,14 @@ struct LinkstrStorageRecoveryView: View {
           .foregroundStyle(LinkstrTheme.textSecondary)
           .fixedSize(horizontal: false, vertical: true)
 
-        VStack(spacing: 10) {
+        VStack(spacing: LinkstrTheme.buttonRowSpacing) {
           Button(action: onPrimaryAction) {
             Text(primaryActionTitle)
               .frame(maxWidth: .infinity)
           }
           .buttonStyle(.borderedProminent)
-          .tint(LinkstrTheme.neonCyan)
+          .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
+          .tint(LinkstrTheme.accent)
 
           if let secondaryActionTitle, let onSecondaryAction {
             Button(action: onSecondaryAction) {
@@ -272,14 +322,15 @@ struct LinkstrStorageRecoveryView: View {
                 .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
-            .tint(LinkstrTheme.neonAmber)
+            .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
+            .tint(LinkstrTheme.amber)
           }
         }
       }
-      .padding(18)
+      .padding(LinkstrTheme.panelPadding)
       .frame(maxWidth: 520, alignment: .leading)
-      .linkstrNeonCard()
-      .padding(.horizontal, 16)
+      .linkstrSurfaceCard()
+      .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }

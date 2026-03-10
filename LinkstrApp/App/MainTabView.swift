@@ -11,7 +11,7 @@ struct MainTabView: View {
   private enum AppTab: String, CaseIterable, Identifiable {
     case sessions
     case contacts
-    case share
+    case you
     case settings
 
     var id: String { rawValue }
@@ -20,17 +20,26 @@ struct MainTabView: View {
       switch self {
       case .sessions: return "sessions"
       case .contacts: return "contacts"
-      case .share: return "share"
+      case .you: return "you"
       case .settings: return "settings"
       }
     }
 
     var systemImage: String {
       switch self {
-      case .sessions: return "bubble.left.and.bubble.right"
-      case .contacts: return "person.2"
-      case .share: return "qrcode"
-      case .settings: return "gearshape"
+      case .sessions: return "bubble.left.and.bubble.right.fill"
+      case .contacts: return "person.2.fill"
+      case .you: return "qrcode.viewfinder"
+      case .settings: return "gearshape.fill"
+      }
+    }
+
+    var navigationTitle: String {
+      switch self {
+      case .sessions: return "sessions"
+      case .contacts: return "contacts"
+      case .you: return "you"
+      case .settings: return "settings"
       }
     }
   }
@@ -73,10 +82,10 @@ struct MainTabView: View {
           Label(AppTab.contacts.title, systemImage: AppTab.contacts.systemImage)
         }
 
-      tabContent(.share)
-        .tag(AppTab.share)
+      tabContent(.you)
+        .tag(AppTab.you)
         .tabItem {
-          Label(AppTab.share.title, systemImage: AppTab.share.systemImage)
+          Label(AppTab.you.title, systemImage: AppTab.you.systemImage)
         }
 
       tabContent(.settings)
@@ -86,6 +95,10 @@ struct MainTabView: View {
         }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    .navigationTitle(
+      selectedTab == .sessions && isShowingArchivedSessions
+        ? "archived" : selectedTab.navigationTitle
+    )
     .navigationBarTitleDisplayMode(.inline)
     .navigationDestination(item: $selectedSessionTarget) { target in
       if let targetSession = scopedSessions.first(where: { $0.sessionID == target.id }) {
@@ -99,11 +112,6 @@ struct MainTabView: View {
       }
     }
     .toolbar {
-      ToolbarItem(placement: .principal) {
-        Text("linkstr")
-          .font(LinkstrTheme.title(18))
-          .foregroundStyle(LinkstrTheme.neonAmber)
-      }
       ToolbarItem(placement: .topBarLeading) {
         leadingToolbarAccessory
       }
@@ -111,10 +119,7 @@ struct MainTabView: View {
         trailingToolbarAccessories
       }
     }
-    .toolbarBackground(.hidden, for: .navigationBar)
-    .toolbarBackground(.hidden, for: .tabBar)
-    .toolbarColorScheme(.dark, for: .navigationBar)
-    .toolbarColorScheme(.dark, for: .tabBar)
+    .linkstrBarChrome()
     .onChange(of: selectedTab) { oldValue, newValue in
       if oldValue == .sessions, newValue != .sessions {
         isShowingArchivedSessions = false
@@ -156,11 +161,11 @@ struct MainTabView: View {
         .accessibilityLabel(
           isShowingArchivedSessions ? "show active sessions" : "show archived sessions"
         )
-        .tint(LinkstrTheme.neonCyan)
+        .tint(LinkstrTheme.accent)
       } else {
         EmptyView()
       }
-    case .contacts, .share, .settings:
+    case .contacts, .you, .settings:
       EmptyView()
     }
   }
@@ -172,11 +177,11 @@ struct MainTabView: View {
       Button {
         isPresentingNewSession = true
       } label: {
-        Image(systemName: "plus")
+        Image(systemName: "square.and.pencil")
           .linkstrToolbarIconLabel()
       }
       .accessibilityLabel("new session")
-      .tint(LinkstrTheme.neonCyan)
+      .tint(LinkstrTheme.accent)
 
     case .contacts:
       Button {
@@ -186,9 +191,9 @@ struct MainTabView: View {
           .linkstrToolbarIconLabel()
       }
       .accessibilityLabel("add contact")
-      .tint(LinkstrTheme.neonCyan)
+      .tint(LinkstrTheme.accent)
 
-    case .share, .settings:
+    case .you, .settings:
       EmptyView()
     }
   }
@@ -203,8 +208,8 @@ struct MainTabView: View {
       )
     case .contacts:
       ContactsView()
-    case .share:
-      ShareIdentityView()
+    case .you:
+      YouView()
     case .settings:
       SettingsView()
     }

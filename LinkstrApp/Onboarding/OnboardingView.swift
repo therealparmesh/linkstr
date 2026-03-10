@@ -14,22 +14,25 @@ struct OnboardingView: View {
     NavigationStack {
       ZStack {
         LinkstrBackgroundView()
+
         ScrollView {
-          VStack(alignment: .leading, spacing: 18) {
+          VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
             header
+
             if let pendingCreatedAccountNsec = session.pendingCreatedAccountNsec {
               createdAccountStep(nsec: pendingCreatedAccountNsec)
             } else {
               signInAndCreateStep
             }
           }
-          .padding(16)
-          .padding(.bottom, 32)
+          .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+          .padding(.top, LinkstrTheme.screenTopPadding)
+          .padding(.bottom, LinkstrTheme.screenBottomPadding)
         }
       }
+      .navigationTitle("welcome")
       .navigationBarTitleDisplayMode(.inline)
-      .toolbarBackground(.hidden, for: .navigationBar)
-      .toolbarColorScheme(.dark, for: .navigationBar)
+      .linkstrBarChrome()
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     .onChange(of: createdProfileName) { _, _ in
@@ -38,140 +41,122 @@ struct OnboardingView: View {
   }
 
   private var header: some View {
-    VStack(alignment: .leading, spacing: 18) {
+    VStack(alignment: .leading, spacing: 0) {
       Text("welcome to linkstr.")
-        .font(LinkstrTheme.title(36))
-        .foregroundStyle(LinkstrTheme.neonAmber)
-      Text(
-        "share, organize, and download links and social media videos privately, solo or in groups, with in-app playback that skips clunky mobile sites and app-store redirects."
-      )
-      .font(LinkstrTheme.body(14))
-      .foregroundStyle(LinkstrTheme.textSecondary)
+        .font(LinkstrTheme.title(30, weight: .bold))
+        .foregroundStyle(LinkstrTheme.textPrimary)
     }
   }
 
   private var signInAndCreateStep: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      LinkstrSectionHeader(title: "sign in")
-      TextField("secret key (nsec...)", text: $secretKey)
-        .textInputAutocapitalization(.never)
-        .autocorrectionDisabled(true)
-        .padding(12)
-        .background(
-          RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .fill(LinkstrTheme.panelSoft)
+    VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
+      LinkstrInsetSection(title: "sign in") {
+        TextField("secret key (nsec)", text: $secretKey)
+          .font(LinkstrTheme.body(15))
+          .textInputAutocapitalization(.never)
+          .autocorrectionDisabled(true)
+          .linkstrInputField()
+
+        LinkstrInputAssistRow(
+          showClear: !secretKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+          showScan: false,
+          onPaste: pasteSecretKeyFromClipboard,
+          onClear: { secretKey = "" }
         )
 
-      LinkstrInputAssistRow(
-        showClear: !secretKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-        showScan: false,
-        onPaste: {
-          pasteSecretKeyFromClipboard()
-        },
-        onClear: {
-          secretKey = ""
+        Button {
+          session.importNsec(secretKey)
+        } label: {
+          Label("sign in", systemImage: "arrow.right.circle.fill")
+            .frame(maxWidth: .infinity)
         }
-      )
-
-      Button {
-        session.importNsec(secretKey)
-      } label: {
-        Label("sign in with secret key (nsec)", systemImage: "arrow.right.circle.fill")
-          .frame(maxWidth: .infinity)
+        .buttonStyle(.borderedProminent)
+        .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
+        .tint(LinkstrTheme.accent)
+        .disabled(secretKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
       }
-      .buttonStyle(.borderedProminent)
-      .tint(LinkstrTheme.neonCyan)
-      .disabled(secretKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
-      HStack(spacing: 10) {
+      HStack(spacing: 12) {
         Rectangle()
-          .fill(LinkstrTheme.textSecondary.opacity(0.26))
+          .fill(LinkstrTheme.separator)
           .frame(height: 1)
+
         Text("or")
-          .font(LinkstrTheme.title(13))
-          .foregroundStyle(LinkstrTheme.textSecondary)
+          .font(LinkstrTheme.body(12, weight: .medium))
+          .foregroundStyle(LinkstrTheme.textTertiary)
+
         Rectangle()
-          .fill(LinkstrTheme.textSecondary.opacity(0.26))
+          .fill(LinkstrTheme.separator)
           .frame(height: 1)
       }
-      .padding(.vertical, LinkstrTheme.sectionStackSpacing - 12)
+      .padding(.horizontal, 2)
 
-      LinkstrSectionHeader(title: "create account")
-      Button {
-        session.createAccount()
-      } label: {
-        Label("create account", systemImage: "sparkles")
-          .frame(maxWidth: .infinity)
+      LinkstrInsetSection(title: "create account") {
+        Button {
+          session.createAccount()
+        } label: {
+          Label("create account", systemImage: "plus.circle.fill")
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
+        .tint(LinkstrTheme.panelElevated)
       }
-      .buttonStyle(.bordered)
-      .tint(LinkstrTheme.textSecondary)
     }
-    .padding(.top, 6)
   }
 
   private func createdAccountStep(nsec: String) -> some View {
-    VStack(alignment: .leading, spacing: 12) {
-      LinkstrSectionHeader(title: "save your secret key")
-      Text("this is your password. store it somewhere safe. it's also available later in settings.")
-        .font(LinkstrTheme.body(14))
-        .foregroundStyle(LinkstrTheme.textSecondary)
+    VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
+      LinkstrInsetSection(
+        title: "secret key (nsec)",
+        footer: "save this key. it works like your account password."
+      ) {
+        Text(nsec)
+          .font(LinkstrTheme.body(13))
+          .foregroundStyle(LinkstrTheme.textSecondary)
+          .textSelection(.enabled)
+          .privacySensitive()
+          .linkstrInputField()
 
-      Text(nsec)
-        .font(LinkstrTheme.body(12))
-        .foregroundStyle(LinkstrTheme.textSecondary)
-        .textSelection(.enabled)
-        .privacySensitive()
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-          RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .fill(LinkstrTheme.panelSoft)
-        )
-
-      Button {
-        UIPasteboard.general.string = nsec
-      } label: {
-        Label("copy secret key (nsec)", systemImage: "doc.on.doc")
-          .frame(maxWidth: .infinity)
-      }
-      .buttonStyle(.borderedProminent)
-      .tint(LinkstrTheme.neonAmber)
-
-      LinkstrSectionHeader(title: "profile name (optional)")
-      Text(
-        "set the name other Nostr clients can show for this account. leave it blank to skip and edit it later in share."
-      )
-      .font(LinkstrTheme.body(13))
-      .foregroundStyle(LinkstrTheme.textSecondary)
-
-      TextField("name others see", text: $createdProfileName)
-        .textInputAutocapitalization(.words)
-        .autocorrectionDisabled(true)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .frame(minHeight: LinkstrTheme.inputControlMinHeight)
-        .background(
-          RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .fill(LinkstrTheme.panelSoft)
-        )
-
-      if let profileNameErrorMessage = session.profileNameErrorMessage {
-        Text(profileNameErrorMessage)
-          .font(LinkstrTheme.body(12))
-          .foregroundStyle(LinkstrTheme.destructive.opacity(0.92))
+        Button {
+          UIPasteboard.general.string = nsec
+        } label: {
+          Label("copy key", systemImage: "doc.on.doc")
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
+        .tint(LinkstrTheme.amber)
       }
 
-      Button {
-        completePendingAccountCreation()
-      } label: {
-        Label(createdAccountContinueButtonTitle, systemImage: "arrow.right.circle.fill")
-          .frame(maxWidth: .infinity)
+      LinkstrInsetSection(
+        title: "name",
+        footer: "optional. others can see this name."
+      ) {
+        TextField("name others see", text: $createdProfileName)
+          .font(LinkstrTheme.body(15))
+          .textInputAutocapitalization(.words)
+          .autocorrectionDisabled(true)
+          .linkstrInputField()
+
+        if let profileNameErrorMessage = session.profileNameErrorMessage {
+          Text(profileNameErrorMessage)
+            .font(LinkstrTheme.body(12))
+            .foregroundStyle(LinkstrTheme.destructive.opacity(0.92))
+        }
+
+        Button {
+          completePendingAccountCreation()
+        } label: {
+          Label(createdAccountContinueButtonTitle, systemImage: "checkmark.circle.fill")
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
+        .tint(LinkstrTheme.accent)
+        .disabled(isSavingCreatedProfileName)
       }
-      .buttonStyle(.borderedProminent)
-      .tint(LinkstrTheme.neonCyan)
-      .disabled(isSavingCreatedProfileName)
     }
-    .padding(.top, 6)
   }
 
   private func pasteSecretKeyFromClipboard() {
@@ -188,12 +173,12 @@ struct OnboardingView: View {
 
   private var createdAccountContinueButtonTitle: String {
     if isSavingCreatedProfileName {
-      return "saving profile name…"
+      return "saving name..."
     }
     if normalizedCreatedProfileName == nil {
-      return "continue"
+      return "enter app"
     }
-    return "save name and continue"
+    return "save name and enter app"
   }
 
   private func completePendingAccountCreation() {

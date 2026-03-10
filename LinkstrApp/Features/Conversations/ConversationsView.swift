@@ -13,15 +13,11 @@ private struct SessionSummary: Identifiable {
   let postCount: Int
 }
 
-private struct ConversationsViewState {
-  let scopedSessions: [SessionEntity]
-  let visibleSummaries: [SessionSummary]
-}
-
 struct ConversationsView: View {
   @EnvironmentObject private var session: AppSession
   @Binding var isShowingArchivedSessions: Bool
   let openSession: (String) -> Void
+  @State private var query = ""
 
   @Query(sort: [SortDescriptor(\SessionEntity.updatedAt, order: .reverse)])
   private var allSessions: [SessionEntity]
@@ -29,67 +25,68 @@ struct ConversationsView: View {
   @Query(sort: [SortDescriptor(\SessionMessageEntity.timestamp, order: .reverse)])
   private var allMessages: [SessionMessageEntity]
 
-  private var viewState: ConversationsViewState {
-    let ownerPubkey = session.identityService.pubkeyHex
-    let scopedSessions = OwnerScopedCollections.sessions(allSessions, ownerPubkey: ownerPubkey)
-    let scopedMessages = OwnerScopedCollections.messages(allMessages, ownerPubkey: ownerPubkey)
+  private var scopedSessions: [SessionEntity] {
+    OwnerScopedCollections.sessions(allSessions, ownerPubkey: session.identityService.pubkeyHex)
+  }
+
+  private var visibleSummaries: [SessionSummary] {
+    let scopedMessages = OwnerScopedCollections.messages(
+      allMessages,
+      ownerPubkey: session.identityService.pubkeyHex
+    )
     let summaries = makeSummaries(sessions: scopedSessions, messages: scopedMessages)
-
-    var visibleSummaries: [SessionSummary] = []
-    visibleSummaries.reserveCapacity(summaries.count)
-
-    for summary in summaries {
-      if summary.session.isArchived {
-        if isShowingArchivedSessions {
-          visibleSummaries.append(summary)
-        }
-      } else if !isShowingArchivedSessions {
-        visibleSummaries.append(summary)
-      }
+    let archiveFilteredSummaries = summaries.filter { summary in
+      isShowingArchivedSessions ? summary.session.isArchived : !summary.session.isArchived
     }
 
-    return ConversationsViewState(
-      scopedSessions: scopedSessions,
-      visibleSummaries: visibleSummaries
-    )
+    let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+      .localizedLowercase
+    guard !normalizedQuery.isEmpty else { return archiveFilteredSummaries }
+
+    return archiveFilteredSummaries.filter { summary in
+      summary.session.name.localizedLowercase.contains(normalizedQuery)
+        || summary.latestPreview.localizedLowercase.contains(normalizedQuery)
+        || (summary.latestNote?.localizedLowercase.contains(normalizedQuery) ?? false)
+    }
   }
 
   var body: some View {
-    let state = viewState
-
     ZStack {
       LinkstrBackgroundView()
-      content(using: state)
+      content
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     .scrollContentBackground(.hidden)
   }
 
   @ViewBuilder
-  private func content(using state: ConversationsViewState) -> some View {
-    if state.scopedSessions.isEmpty {
+  private var content: some View {
+    if scopedSessions.isEmpty {
       LinkstrCenteredEmptyStateView(
         title: "no sessions",
         systemImage: "rectangle.stack.badge.plus",
-        description: "create a session to start tracking and discussing links."
+        description: "create a session to save links."
       )
     } else {
       ScrollView {
-        VStack(alignment: .leading, spacing: 10) {
-          if state.visibleSummaries.isEmpty {
-            ContentUnavailableView(
-              isShowingArchivedSessions ? "no archived sessions" : "no active sessions",
-              systemImage: isShowingArchivedSessions ? "archivebox" : "rectangle.stack",
-              description: Text(
-                isShowingArchivedSessions
-                  ? "archive a session to move it here."
-                  : "create a session or view archived sessions."
-              )
+        VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
+          LinkstrSearchField(
+            prompt: isShowingArchivedSessions ? "search archived sessions" : "search sessions",
+            text: $query
+          )
+
+          if visibleSummaries.isEmpty {
+            LinkstrCenteredEmptyStateView(
+              title: isShowingArchivedSessions ? "no archived sessions" : "no sessions found",
+              systemImage: isShowingArchivedSessions ? "archivebox" : "magnifyingglass",
+              description: isShowingArchivedSessions
+                ? "archive a session to move it here."
+                : "try a different search or create a new session."
             )
-            .padding(.top, 12)
+            .frame(maxWidth: .infinity, minHeight: 220)
           } else {
             LazyVStack(spacing: 0) {
-              ForEach(state.visibleSummaries) { summary in
+              ForEach(visibleSummaries) { summary in
                 Button {
                   openSession(summary.session.sessionID)
                 } label: {
@@ -115,8 +112,9 @@ struct ConversationsView: View {
             }
           }
         }
-        .padding(.horizontal, 12)
-        .padding(.top, 6)
+        .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+        .padding(.top, LinkstrTheme.screenTopPadding)
+        .padding(.bottom, LinkstrTheme.screenBottomPadding)
       }
       .linkstrTabBarContentInset()
     }
@@ -209,53 +207,59 @@ private struct SessionRowView: View {
   }
 
   var body: some View {
-    HStack(spacing: 12) {
-      LinkstrSessionAvatar(seed: summary.session.sessionID)
+    HStack(spacing: LinkstrTheme.rowSpacing) {
+      LinkstrSessionAvatar(
+        seed: summary.session.sessionID,
+        label: summary.session.name,
+        size: 50
+      )
 
-      VStack(alignment: .leading, spacing: 3) {
-        HStack(alignment: .firstTextBaseline) {
+      VStack(alignment: .leading, spacing: LinkstrTheme.metaSpacing) {
+        HStack(alignment: .firstTextBaseline, spacing: LinkstrTheme.buttonRowSpacing) {
           Text(summary.session.name)
-            .font(LinkstrTheme.title(16))
+            .font(LinkstrTheme.title(16, weight: .semibold))
             .foregroundStyle(LinkstrTheme.textPrimary)
             .lineLimit(1)
 
           Spacer(minLength: 8)
 
-          Text(summary.latestTimestamp.linkstrListTimestampLabel)
-            .font(LinkstrTheme.body(12))
-            .foregroundStyle(LinkstrTheme.textSecondary)
+          HStack(spacing: 6) {
+            Text(summary.latestTimestamp.linkstrListTimestampLabel)
+              .font(LinkstrTheme.body(11, weight: .medium))
+              .foregroundStyle(LinkstrTheme.textTertiary)
+              .lineLimit(1)
+
+            if summary.postCount > 0 {
+              Text(summary.postCount == 1 ? "1" : "\(summary.postCount)")
+                .font(LinkstrTheme.body(11, weight: .medium))
+                .foregroundStyle(LinkstrTheme.textTertiary)
+            }
+          }
         }
 
-        HStack(spacing: 6) {
+        HStack(alignment: .center, spacing: 8) {
           Text(subtitle)
             .font(LinkstrTheme.body(13))
             .foregroundStyle(LinkstrTheme.textSecondary)
-            .lineLimit(1)
+            .lineLimit(2)
 
-          Text("•")
-            .font(LinkstrTheme.body(11))
-            .foregroundStyle(LinkstrTheme.textSecondary)
+          Spacer(minLength: 6)
 
-          Text(summary.postCount == 1 ? "1 post" : "\(summary.postCount) posts")
-            .font(LinkstrTheme.body(12))
-            .foregroundStyle(LinkstrTheme.textSecondary)
+          if summary.hasUnread {
+            Circle()
+              .fill(LinkstrTheme.accent)
+              .frame(width: 8, height: 8)
+              .accessibilityLabel("unread")
+          }
         }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
-
-      if summary.hasUnread {
-        Circle()
-          .fill(LinkstrTheme.neonAmber)
-          .frame(width: 8, height: 8)
-          .accessibilityLabel("unread")
-      }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .contentShape(Rectangle())
-    .padding(.horizontal, 4)
-    .padding(.vertical, 10)
+    .padding(.vertical, LinkstrTheme.listRowVerticalPadding)
     .overlay(alignment: .bottom) {
-      LinkstrListRowDivider()
+      LinkstrListRowDivider(leadingInset: 62)
     }
   }
 }
@@ -365,32 +369,32 @@ struct SessionPostsView: View {
 
   var body: some View {
     ScrollView {
-      LazyVStack(alignment: .leading, spacing: 0) {
+      VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
         if posts.isEmpty {
-          ContentUnavailableView(
-            "no posts yet",
+          LinkstrCenteredEmptyStateView(
+            title: "no posts yet",
             systemImage: "link.badge.plus",
-            description: Text("share a link in this session.")
+            description: "send a link to this session."
           )
-          .padding(.top, 24)
+          .frame(maxWidth: .infinity, minHeight: 260)
         } else {
-          ForEach(postRows) { row in
-            postRow(row)
+          LazyVStack(alignment: .leading, spacing: 0) {
+            ForEach(postRows) { row in
+              postRow(row)
+            }
           }
         }
       }
-      .padding(.horizontal, 12)
-      .padding(.top, 10)
-      .padding(.bottom, 24)
+      .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+      .padding(.top, LinkstrTheme.screenTopPadding)
+      .padding(.bottom, LinkstrTheme.screenBottomPadding)
     }
     .linkstrTabBarContentInset()
     .scrollContentBackground(.hidden)
     .background(LinkstrBackgroundView())
     .navigationTitle(sessionEntity.name)
     .navigationBarTitleDisplayMode(.inline)
-    .toolbar(.visible, for: .navigationBar)
-    .toolbarBackground(.hidden, for: .navigationBar)
-    .toolbarColorScheme(.dark, for: .navigationBar)
+    .linkstrBarChrome()
     .toolbar {
       ToolbarItemGroup(placement: .topBarTrailing) {
         Button {
@@ -400,16 +404,16 @@ struct SessionPostsView: View {
             .linkstrToolbarIconLabel()
         }
         .accessibilityLabel(canManageMembers ? "manage members" : "members")
-        .tint(LinkstrTheme.neonCyan)
+        .tint(LinkstrTheme.accent)
 
         Button {
           isPresentingNewPost = true
         } label: {
-          Image(systemName: "plus")
+          Image(systemName: "square.and.pencil")
             .linkstrToolbarIconLabel()
         }
         .accessibilityLabel("new post")
-        .tint(LinkstrTheme.neonCyan)
+        .tint(LinkstrTheme.accent)
       }
     }
     .sheet(isPresented: $isPresentingNewPost) {
@@ -444,7 +448,7 @@ struct SessionPostsView: View {
       }
     } message: {
       Text(
-        "this permanently removes the post from your session feed and sends a Nostr deletion request."
+        "this permanently removes the post from your session feed and sends a nostr deletion request."
       )
     }
     .task(id: profileLookupRequestID) {
@@ -483,8 +487,8 @@ struct SessionPostsView: View {
             Label("delete post", systemImage: "trash")
           }
         }
-        .accessibilityHint("Long press for post actions.")
-        .accessibilityAction(named: "Delete post") {
+        .accessibilityHint("long press for post actions.")
+        .accessibilityAction(named: "delete post") {
           guard !isDeletingPost else { return }
           postPendingDelete = row.post
           isPresentingDeleteConfirmation = true
@@ -533,68 +537,70 @@ private struct PostListRowView: View {
   let hasUnreadPost: Bool
   let reactionSummaries: [ReactionSummary]
 
-  private var senderHeaderText: String {
-    isOutgoing ? "you" : senderLabel
-  }
-
   private var bottomSpacing: CGFloat {
-    isFollowedBySameSender ? 4 : 8
+    isFollowedBySameSender ? 6 : 14
   }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
       if showsSenderHeader {
-        Text(senderHeaderText)
-          .font(LinkstrTheme.title(12))
-          .foregroundStyle(LinkstrTheme.textSecondary)
+        Text(senderLabel)
+          .font(LinkstrTheme.body(12, weight: .semibold))
+          .foregroundStyle(
+            isOutgoing
+              ? LinkstrTheme.accent
+              : LinkstrAvatarStyleResolver.sessionColor(for: post.senderPubkey)
+          )
           .lineLimit(1)
-          .padding(.horizontal, 4)
+          .padding(.horizontal, LinkstrTheme.rowSpacing)
       }
 
       PostCardView(
         post: post,
+        isOutgoing: isOutgoing,
         hasUnreadPost: hasUnreadPost,
         reactionSummaries: reactionSummaries
       )
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(.bottom, bottomSpacing)
-    .accessibilityCustomContent(LocalizedStringKey("sender"), senderHeaderText)
+    .accessibilityCustomContent(LocalizedStringKey("sender"), senderLabel)
   }
 }
 
 private struct PostCardView: View {
   let post: SessionMessageEntity
+  let isOutgoing: Bool
   let hasUnreadPost: Bool
   let reactionSummaries: [ReactionSummary]
 
   var body: some View {
-    HStack(alignment: .top, spacing: 10) {
+    HStack(alignment: .top, spacing: LinkstrTheme.rowSpacing) {
       thumbnailView
 
-      VStack(alignment: .leading, spacing: 8) {
+      VStack(alignment: .leading, spacing: LinkstrTheme.compactSpacing) {
         Text(primaryText)
-          .font(LinkstrTheme.title(15))
+          .font(LinkstrTheme.title(15, weight: .semibold))
           .foregroundStyle(LinkstrTheme.textPrimary)
           .lineLimit(2)
 
         if let noteText {
           Text(noteText)
-            .font(LinkstrTheme.body(12))
-            .foregroundStyle(LinkstrTheme.textPrimary.opacity(0.92))
-            .lineLimit(2)
+            .font(LinkstrTheme.body(13))
+            .foregroundStyle(LinkstrTheme.textSecondary)
+            .lineLimit(3)
         }
 
         HStack(alignment: .center, spacing: 6) {
           if hasUnreadPost {
             Circle()
-              .fill(LinkstrTheme.neonAmber)
+              .fill(LinkstrTheme.accent)
               .frame(width: 7, height: 7)
           }
 
           Text(post.timestamp.linkstrListTimestampLabel)
-            .font(LinkstrTheme.body(12))
-            .foregroundStyle(LinkstrTheme.textSecondary)
+            .font(LinkstrTheme.body(12, weight: .medium))
+            .foregroundStyle(LinkstrTheme.textTertiary)
             .lineLimit(1)
         }
 
@@ -610,8 +616,17 @@ private struct PostCardView: View {
       .frame(maxWidth: .infinity, alignment: .leading)
     }
     .frame(maxWidth: .infinity, alignment: .leading)
-    .padding(10)
-    .linkstrNeonCard()
+    .padding(.horizontal, LinkstrTheme.fieldHorizontalPadding)
+    .padding(.vertical, LinkstrTheme.fieldVerticalPadding)
+    .background(
+      RoundedRectangle(cornerRadius: 20, style: .continuous)
+        .fill(isOutgoing ? LinkstrTheme.panelElevated : LinkstrTheme.panel)
+    )
+    .overlay {
+      RoundedRectangle(cornerRadius: 20, style: .continuous)
+        .stroke(
+          isOutgoing ? LinkstrTheme.accent.opacity(0.22) : LinkstrTheme.separator, lineWidth: 1)
+    }
   }
 
   private var primaryText: String {
@@ -636,8 +651,8 @@ private struct PostCardView: View {
       Image(uiImage: thumbnailImage)
         .resizable()
         .scaledToFill()
-        .frame(width: 52, height: 52)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .frame(width: 58, height: 58)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     } else {
       thumbnailPlaceholder
     }
@@ -653,9 +668,9 @@ private struct PostCardView: View {
   }
 
   private var thumbnailPlaceholder: some View {
-    RoundedRectangle(cornerRadius: 10, style: .continuous)
-      .fill(LinkstrTheme.panelSoft)
-      .frame(width: 52, height: 52)
+    RoundedRectangle(cornerRadius: 12, style: .continuous)
+      .fill(LinkstrTheme.panelMuted)
+      .frame(width: 58, height: 58)
       .overlay {
         Image(systemName: "link")
           .font(LinkstrTheme.body(16))
@@ -692,97 +707,75 @@ struct NewSessionSheet: View {
       ZStack {
         LinkstrBackgroundView()
         ScrollView {
-          VStack(alignment: .leading, spacing: 12) {
-            TextField("session name", text: $sessionName)
-              .textInputAutocapitalization(.words)
-              .padding(.horizontal, 12)
-              .padding(.vertical, 10)
-              .frame(minHeight: LinkstrTheme.inputControlMinHeight)
-              .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                  .fill(LinkstrTheme.panelSoft)
-              )
-
-            Text("create solo or add contacts now. you can manage members later.")
-              .font(LinkstrTheme.body(12))
-              .foregroundStyle(LinkstrTheme.textSecondary)
-
-            TextField("search contacts", text: $query)
-              .textInputAutocapitalization(.never)
-              .autocorrectionDisabled(true)
-              .padding(.horizontal, 12)
-              .padding(.vertical, 10)
-              .frame(minHeight: LinkstrTheme.inputControlMinHeight)
-              .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                  .fill(LinkstrTheme.panelSoft)
-              )
-
-            if contacts.isEmpty {
-              Text("no contacts yet. you can still create a solo session.")
-                .font(LinkstrTheme.body(12))
-                .foregroundStyle(LinkstrTheme.textSecondary)
-            } else if filteredContacts.isEmpty {
-              Text("no contacts match.")
-                .font(LinkstrTheme.body(12))
-                .foregroundStyle(LinkstrTheme.textSecondary)
-            } else {
-              VStack(spacing: 0) {
-                ForEach(filteredContacts) { contact in
-                  let identity = session.resolvedIdentity(for: contact)
-                  Button {
-                    toggle(contact.npub)
-                  } label: {
-                    HStack(spacing: 10) {
-                      LinkstrContactAvatar(name: identity.displayName, size: 30)
-                      LinkstrContactIdentityView(
-                        identity: identity,
-                        primaryFont: LinkstrTheme.body(14),
-                        secondaryFont: LinkstrTheme.body(11),
-                        npubFont: LinkstrTheme.body(11)
-                      )
-
-                      Spacer()
-
-                      Image(
-                        systemName: selectedNPubs.contains(contact.npub)
-                          ? "checkmark.circle.fill" : "circle"
-                      )
-                      .foregroundStyle(
-                        selectedNPubs.contains(contact.npub)
-                          ? LinkstrTheme.neonCyan : LinkstrTheme.textSecondary)
-                    }
-                    .padding(.vertical, 9)
-                    .contentShape(Rectangle())
-                  }
-                  .buttonStyle(.plain)
-
-                  Divider()
-                    .overlay(LinkstrTheme.textSecondary.opacity(0.2))
-                }
-              }
-              .padding(.horizontal, 2)
+          VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
+            LinkstrInsetSection(title: "session details") {
+              TextField("session name", text: $sessionName)
+                .font(LinkstrTheme.body(15))
+                .textInputAutocapitalization(.words)
+                .linkstrInputField()
             }
 
-            Text(
-              selectedNPubs.isEmpty
-                ? "creating a solo session" : "\(selectedNPubs.count) member(s) selected"
-            )
-            .font(LinkstrTheme.body(12))
-            .foregroundStyle(LinkstrTheme.textSecondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, 4)
+            LinkstrInsetSection(
+              title: "members",
+              accessory: "\(selectedNPubs.count + 1)"
+            ) {
+              LinkstrSearchField(prompt: "search contacts", text: $query)
+
+              if contacts.isEmpty {
+                Text("no contacts yet. solo still works.")
+                  .font(LinkstrTheme.body(13))
+                  .foregroundStyle(LinkstrTheme.textSecondary)
+              } else if filteredContacts.isEmpty {
+                Text("no contacts match.")
+                  .font(LinkstrTheme.body(13))
+                  .foregroundStyle(LinkstrTheme.textSecondary)
+              } else {
+                VStack(spacing: 0) {
+                  ForEach(filteredContacts) { contact in
+                    let identity = session.resolvedIdentity(for: contact)
+                    Button {
+                      toggle(contact.npub)
+                    } label: {
+                      HStack(spacing: LinkstrTheme.rowSpacing) {
+                        LinkstrContactAvatar(name: identity.displayName, size: 38)
+                        LinkstrContactIdentityView(
+                          identity: identity,
+                          primaryFont: LinkstrTheme.body(14, weight: .medium)
+                        )
+
+                        Spacer()
+
+                        Image(
+                          systemName: selectedNPubs.contains(contact.npub)
+                            ? "checkmark.circle.fill" : "circle"
+                        )
+                        .font(LinkstrTheme.system(19, weight: .semibold))
+                        .foregroundStyle(
+                          selectedNPubs.contains(contact.npub)
+                            ? LinkstrTheme.accent : LinkstrTheme.textTertiary
+                        )
+                      }
+                      .padding(.vertical, LinkstrTheme.listRowVerticalPadding)
+                      .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+
+                    if contact.id != filteredContacts.last?.id {
+                      LinkstrListRowDivider(leadingInset: 50)
+                    }
+                  }
+                }
+              }
+            }
           }
-          .padding(.horizontal, 12)
-          .padding(.top, 14)
-          .padding(.bottom, 120)
+          .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+          .padding(.top, LinkstrTheme.screenTopPadding)
+          .padding(.bottom, LinkstrTheme.sheetBottomPadding)
         }
       }
       .navigationTitle("new session")
       .navigationBarTitleDisplayMode(.inline)
-      .toolbar(.visible, for: .navigationBar)
-      .toolbarBackground(.hidden, for: .navigationBar)
-      .toolbarColorScheme(.dark, for: .navigationBar)
+      .linkstrBarChrome()
       .toolbar {
         ToolbarItem(placement: .topBarLeading) {
           Button {
@@ -798,12 +791,12 @@ struct NewSessionSheet: View {
       }
       .safeAreaInset(edge: .bottom, spacing: 0) {
         LinkstrSheetActionFooter(
-          title: isCreating ? "creating…" : "create session",
+          title: isCreating ? "creating..." : "create session",
           systemImage: "plus.circle.fill",
           isDisabled: isCreating || !canCreateSession,
           message: isCreating
-            ? "waiting for relay reconnect before creating…"
-            : "session name required. members are optional.",
+            ? "waiting for relay reconnect before creating..."
+            : "session name required.",
           action: createSession
         )
       }
@@ -882,138 +875,131 @@ private struct SessionMembersSheet: View {
       ZStack {
         LinkstrBackgroundView()
         ScrollView {
-          VStack(alignment: .leading, spacing: 14) {
-            LinkstrSectionHeader(title: "current members")
-
-            if visibleCurrentMembers.isEmpty {
-              Text("only you are in this session.")
-                .font(LinkstrTheme.body(12))
-                .foregroundStyle(LinkstrTheme.textSecondary)
-            } else {
-              VStack(spacing: 0) {
-                ForEach(visibleCurrentMembers, id: \.self) { memberHex in
-                  let identity = memberIdentity(for: memberHex)
-                  HStack(spacing: 10) {
-                    LinkstrContactAvatar(
-                      name: identity?.displayName ?? "you",
-                      size: 28
-                    )
-                    if let identity {
-                      LinkstrContactIdentityView(
-                        identity: identity,
-                        primaryFont: LinkstrTheme.body(14),
-                        secondaryFont: LinkstrTheme.body(11),
-                        npubFont: LinkstrTheme.body(11)
-                      )
-                    } else {
-                      VStack(alignment: .leading, spacing: 2) {
-                        Text("you")
-                          .font(LinkstrTheme.body(14))
-                          .foregroundStyle(LinkstrTheme.textPrimary)
-                      }
-                    }
-                    Spacer()
-                    if canManageMembers {
-                      Button(role: .destructive) {
-                        includedMemberHexes.remove(memberHex)
-                      } label: {
-                        Image(systemName: "minus.circle.fill")
-                          .font(LinkstrTheme.system(17, weight: .semibold))
-                          .foregroundStyle(LinkstrTheme.destructive)
-                          .frame(width: 28, height: 28, alignment: .center)
-                      }
-                      .accessibilityLabel("remove \(identity?.displayName ?? "member")")
-                    }
-                  }
-                  .padding(.vertical, 8)
-
-                  Divider()
-                    .overlay(LinkstrTheme.textSecondary.opacity(0.2))
-                }
-              }
-              .padding(.horizontal, 2)
-            }
-
-            if canManageMembers {
-              LinkstrSectionHeader(title: "add from contacts")
-
-              TextField("search contacts", text: $query)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled(true)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .frame(minHeight: LinkstrTheme.inputControlMinHeight)
-                .background(
-                  RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(LinkstrTheme.panelSoft)
-                )
-
-              if contacts.isEmpty {
-                Text("no contacts yet.")
-                  .font(LinkstrTheme.body(12))
-                  .foregroundStyle(LinkstrTheme.textSecondary)
-              } else if filteredContacts.isEmpty {
-                Text("no contacts match.")
-                  .font(LinkstrTheme.body(12))
+          VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
+            LinkstrInsetSection(
+              title: "current members",
+              accessory: "\(visibleCurrentMembers.count + 1)"
+            ) {
+              if visibleCurrentMembers.isEmpty {
+                Text("only you are in this session.")
+                  .font(LinkstrTheme.body(13))
                   .foregroundStyle(LinkstrTheme.textSecondary)
               } else {
                 VStack(spacing: 0) {
-                  ForEach(filteredContacts) { contact in
-                    let identity = session.resolvedIdentity(for: contact)
-                    let contactHex = contact.targetPubkey
-                    Button {
-                      if includedMemberHexes.contains(contactHex) {
-                        includedMemberHexes.remove(contactHex)
-                      } else {
-                        includedMemberHexes.insert(contactHex)
-                      }
-                    } label: {
-                      HStack(spacing: 10) {
-                        LinkstrContactAvatar(name: identity.displayName, size: 28)
+                  ForEach(visibleCurrentMembers, id: \.self) { memberHex in
+                    let identity = memberIdentity(for: memberHex)
+                    HStack(spacing: LinkstrTheme.rowSpacing) {
+                      LinkstrContactAvatar(
+                        name: identity?.displayName ?? "you",
+                        size: 38
+                      )
+
+                      if let identity {
                         LinkstrContactIdentityView(
                           identity: identity,
-                          primaryFont: LinkstrTheme.body(14),
-                          secondaryFont: LinkstrTheme.body(11),
-                          npubFont: LinkstrTheme.body(11)
+                          primaryFont: LinkstrTheme.body(14, weight: .medium)
                         )
-
-                        Spacer()
-
-                        Image(
-                          systemName: includedMemberHexes.contains(contactHex)
-                            ? "checkmark.circle.fill" : "circle"
-                        )
-                        .foregroundStyle(
-                          includedMemberHexes.contains(contactHex)
-                            ? LinkstrTheme.neonCyan : LinkstrTheme.textSecondary
-                        )
+                      } else {
+                        Text("you")
+                          .font(LinkstrTheme.body(14, weight: .medium))
+                          .foregroundStyle(LinkstrTheme.textPrimary)
                       }
-                      .padding(.vertical, 8)
-                      .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
 
-                    Divider()
-                      .overlay(LinkstrTheme.textSecondary.opacity(0.2))
+                      Spacer()
+
+                      if canManageMembers {
+                        Button(role: .destructive) {
+                          includedMemberHexes.remove(memberHex)
+                        } label: {
+                          Image(systemName: "minus.circle.fill")
+                            .font(LinkstrTheme.system(18, weight: .semibold))
+                            .foregroundStyle(LinkstrTheme.destructive)
+                            .frame(width: 28, height: 28, alignment: .center)
+                        }
+                        .accessibilityLabel("remove \(identity?.displayName ?? "member")")
+                      }
+                    }
+                    .padding(.vertical, LinkstrTheme.listRowVerticalPadding)
+
+                    if memberHex != visibleCurrentMembers.last {
+                      LinkstrListRowDivider(leadingInset: 50)
+                    }
                   }
                 }
-                .padding(.horizontal, 2)
+              }
+            }
+
+            if canManageMembers {
+              LinkstrInsetSection(title: "add from contacts") {
+                LinkstrSearchField(prompt: "search contacts", text: $query)
+
+                if contacts.isEmpty {
+                  Text("no contacts yet.")
+                    .font(LinkstrTheme.body(13))
+                    .foregroundStyle(LinkstrTheme.textSecondary)
+                } else if filteredContacts.isEmpty {
+                  Text("no contacts match.")
+                    .font(LinkstrTheme.body(13))
+                    .foregroundStyle(LinkstrTheme.textSecondary)
+                } else {
+                  VStack(spacing: 0) {
+                    ForEach(filteredContacts) { contact in
+                      let identity = session.resolvedIdentity(for: contact)
+                      let contactHex = contact.targetPubkey
+                      Button {
+                        if includedMemberHexes.contains(contactHex) {
+                          includedMemberHexes.remove(contactHex)
+                        } else {
+                          includedMemberHexes.insert(contactHex)
+                        }
+                      } label: {
+                        HStack(spacing: LinkstrTheme.rowSpacing) {
+                          LinkstrContactAvatar(name: identity.displayName, size: 38)
+                          LinkstrContactIdentityView(
+                            identity: identity,
+                            primaryFont: LinkstrTheme.body(14, weight: .medium)
+                          )
+
+                          Spacer()
+
+                          Image(
+                            systemName: includedMemberHexes.contains(contactHex)
+                              ? "checkmark.circle.fill" : "circle"
+                          )
+                          .font(LinkstrTheme.system(19, weight: .semibold))
+                          .foregroundStyle(
+                            includedMemberHexes.contains(contactHex)
+                              ? LinkstrTheme.accent : LinkstrTheme.textTertiary
+                          )
+                        }
+                        .padding(.vertical, LinkstrTheme.listRowVerticalPadding)
+                        .contentShape(Rectangle())
+                      }
+                      .buttonStyle(.plain)
+
+                      if contact.id != filteredContacts.last?.id {
+                        LinkstrListRowDivider(leadingInset: 50)
+                      }
+                    }
+                  }
+                }
               }
             } else {
-              Text("only the session creator can add or remove members.")
-                .font(LinkstrTheme.body(12))
-                .foregroundStyle(LinkstrTheme.textSecondary)
+              LinkstrInsetSection(title: "member permissions") {
+                Text("only the session creator can add or remove members.")
+                  .font(LinkstrTheme.body(13))
+                  .foregroundStyle(LinkstrTheme.textSecondary)
+              }
             }
           }
-          .padding(.horizontal, 12)
-          .padding(.top, 14)
-          .padding(.bottom, 24)
+          .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+          .padding(.top, LinkstrTheme.screenTopPadding)
+          .padding(.bottom, LinkstrTheme.screenBottomPadding)
         }
       }
       .navigationTitle("session members")
       .navigationBarTitleDisplayMode(.inline)
-      .toolbarBackground(.hidden, for: .navigationBar)
-      .toolbarColorScheme(.dark, for: .navigationBar)
+      .linkstrBarChrome()
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
           Button(canManageMembers ? "cancel" : "done") {
@@ -1023,11 +1009,11 @@ private struct SessionMembersSheet: View {
         }
         if canManageMembers {
           ToolbarItem(placement: .confirmationAction) {
-            Button(isSaving ? "saving…" : "save") {
+            Button(isSaving ? "saving..." : "save") {
               saveMembers()
             }
             .disabled(isSaving)
-            .tint(LinkstrTheme.neonCyan)
+            .tint(LinkstrTheme.accent)
           }
         }
       }

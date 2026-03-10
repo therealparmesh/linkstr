@@ -25,12 +25,13 @@ struct DeepLinkVideoView: View {
 
   var body: some View {
     ScrollView {
-      VStack(alignment: .leading, spacing: 12) {
+      VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
         videoBlock
-
         sourceInfoBlock
       }
-      .padding(12)
+      .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+      .padding(.top, LinkstrTheme.screenTopPadding)
+      .padding(.bottom, LinkstrTheme.screenBottomPadding)
     }
     .background(LinkstrBackgroundView())
   }
@@ -51,20 +52,23 @@ struct DeepLinkVideoView: View {
         }
         .frame(maxWidth: .infinity)
         .buttonStyle(.borderedProminent)
-        .tint(LinkstrTheme.neonCyan)
+        .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
+        .tint(LinkstrTheme.accent)
       }
     } else {
-      Text("invalid video url")
-        .font(LinkstrTheme.body(12))
-        .foregroundStyle(LinkstrTheme.textSecondary)
+      LinkstrInsetSection(title: "unavailable") {
+        Text("invalid video link")
+          .font(LinkstrTheme.body(13))
+          .foregroundStyle(LinkstrTheme.textSecondary)
+      }
     }
   }
 
   private var sourceInfoBlock: some View {
-    VStack(alignment: .leading, spacing: 8) {
+    VStack(alignment: .leading, spacing: LinkstrTheme.compactSpacing) {
       if let host = normalizedDisplayHost {
         Text(host)
-          .font(LinkstrTheme.body(14))
+          .font(LinkstrTheme.body(14, weight: .semibold))
           .foregroundStyle(LinkstrTheme.textPrimary)
       }
 
@@ -79,12 +83,10 @@ struct DeepLinkVideoView: View {
           .foregroundStyle(LinkstrTheme.textSecondary)
       }
     }
-    .padding(12)
+    .padding(.horizontal, LinkstrTheme.fieldHorizontalPadding)
+    .padding(.vertical, LinkstrTheme.fieldVerticalPadding)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .background(
-      RoundedRectangle(cornerRadius: 12, style: .continuous)
-        .fill(LinkstrTheme.panel.opacity(0.92))
-    )
+    .linkstrSurfaceCard()
   }
 
   private var normalizedDisplayHost: String? {

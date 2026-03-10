@@ -284,7 +284,8 @@ struct AdaptiveVideoPlaybackView: View {
           }
           .frame(maxWidth: .infinity)
           .buttonStyle(.borderedProminent)
-          .tint(LinkstrTheme.neonCyan)
+          .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
+          .tint(LinkstrTheme.accent)
         } else {
           EmptyView()
         }
@@ -461,7 +462,7 @@ struct AdaptiveVideoPlaybackView: View {
           .aspectRatio(effectiveMediaAspectRatio, contentMode: .fit)
       }
     }
-    .background(LinkstrTheme.panelSoft)
+    .background(LinkstrTheme.panelMuted)
     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
   }
 

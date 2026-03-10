@@ -24,8 +24,8 @@ struct RootView: View {
     .overlay(alignment: .top) {
       if let toastMessage {
         LinkstrErrorToast(message: toastMessage)
-          .padding(.top, 8)
-          .padding(.horizontal, 16)
+          .padding(.top, LinkstrTheme.toastTopPadding)
+          .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
           .transition(.move(edge: .top).combined(with: .opacity))
           .onTapGesture {
             withAnimation(.easeOut(duration: 0.18)) {
@@ -36,7 +36,7 @@ struct RootView: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .preferredColorScheme(.dark)
-    .tint(LinkstrTheme.neonCyan)
+    .tint(LinkstrTheme.accent)
     .onChange(of: session.composeError) { _, newValue in
       guard let newValue, !newValue.isEmpty else { return }
       withAnimation(.easeIn(duration: 0.18)) {
@@ -75,20 +75,32 @@ private struct LinkstrBootLoadingView: View {
   let statusMessage: String
 
   var body: some View {
-    VStack(spacing: 14) {
-      Image(systemName: "bolt.horizontal.circle.fill")
-        .font(LinkstrTheme.system(34))
-        .foregroundStyle(LinkstrTheme.neonCyan)
+    VStack(spacing: 18) {
+      Circle()
+        .fill(LinkstrTheme.panelElevated)
+        .frame(width: 72, height: 72)
+        .overlay {
+          Image(systemName: "bolt.horizontal.fill")
+            .font(LinkstrTheme.system(26, weight: .semibold))
+            .foregroundStyle(LinkstrTheme.accent)
+        }
+
+      VStack(spacing: 8) {
+        Text("loading linkstr")
+          .font(LinkstrTheme.title(20))
+          .foregroundStyle(LinkstrTheme.textPrimary)
+
+        Text(statusMessage)
+          .font(LinkstrTheme.body(14))
+          .foregroundStyle(LinkstrTheme.textSecondary)
+          .multilineTextAlignment(.center)
+          .padding(.horizontal, 24)
+      }
 
       ProgressView()
-        .tint(LinkstrTheme.neonCyan)
-
-      Text(statusMessage)
-        .font(LinkstrTheme.body(14))
-        .foregroundStyle(LinkstrTheme.textSecondary)
-        .multilineTextAlignment(.center)
-        .padding(.horizontal, 24)
+        .tint(LinkstrTheme.accent)
     }
+    .padding(.horizontal, 24)
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
   }
 }

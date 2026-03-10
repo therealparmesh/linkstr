@@ -1,6 +1,6 @@
 # linkstr
 
-`linkstr` lets you share, organize, and download links and social media videos privately, solo or in groups, with in-app playback that skips clunky mobile sites and app-store redirects.
+`linkstr` lets you save links in private sessions, share them with people you trust, and open supported video without leaving the app.
 
 ## Product behavior specification
 
@@ -17,7 +17,7 @@
   - Optional metadata hydration (title/thumbnail).
   - Emoji reactions.
 - Text replies are not part of the current product.
-- App data is transported as private Nostr gift-wrap DMs using app payload kind `44001`.
+- App data is transported as private nostr gift-wrap DMs using app payload kind `44001`.
 
 ### Startup and boot
 
@@ -36,37 +36,39 @@
 - Storage recovery allows retrying startup or continuing in a temporary in-memory mode for that launch only.
 - If no identity exists, onboarding is shown.
 - If identity exists, the main app shell is shown.
-- The app uses a Tokyo Night color scheme across all surfaces.
-- Main app shell uses native iOS tab/navigation bars with transparent chrome over the Tokyo Night app background.
+- The app uses a tokyo night color scheme across all surfaces.
+- Main app shell uses native ios tab/navigation bars with visible frosted chrome over the tokyo night app background.
+- Primary screens use inset-grouped surfaces, full-width list rows, and messenger-style spacing inspired by telegram while preserving tokyo night colors.
 - Text sizing is controlled by centralized theme tokens with a slightly larger baseline for chat readability.
 
 ### Identity and account lifecycle
 
-- Users can create a new account (new keypair) or import an existing `nsec`.
-- New account creation pauses on a backup step that reveals the generated `nsec`, offers copy, and explains that it is the account password and remains available later in Settings.
-- New account creation can optionally publish a Nostr profile name before leaving onboarding.
+- Users can create a new account or import an existing secret key (`nsec`).
+- Onboarding presents sign-in and account-creation as separate grouped sections rather than a single stacked neon form.
+- New account creation pauses on a backup step that reveals the generated secret key (`nsec`), offers copy, and explains that it works like the account password for future sign-in.
+- New account creation can optionally set a profile name that others can see before leaving onboarding.
 - The active identity is keychain-backed.
-- Share exposes current `npub` and allows editing the account's published Nostr profile name.
-- Settings sections are collapsed by default and expand on demand.
-- `nsec` is hidden by default and only revealed on explicit action.
-- Revealed `nsec` is cleared again when the Settings identity view disappears or the app moves inactive/background.
-- Settings includes `Delete Account` inside Identity with a two-step destructive confirmation flow.
-- `Log Out (Keep Local Data)` clears active identity only.
-- `Log Out and Clear Local Data` clears identity and deletes account-scoped local data:
-  - Contacts.
-  - Sessions.
-  - Session members.
-  - Session membership intervals.
-  - Session posts.
-  - Reactions.
-  - Cached media references.
-  - Local encryption key material for that owner scope.
-- `Delete Account` clears identity and the same account-scoped local data as `Log Out and Clear Local Data`.
-- When relays are available, `Delete Account` also:
+- The you tab exposes a profile card, qr code, current public key (`npub`), and editing for the account's published nostr profile name.
+- Settings uses always-visible grouped sections for relays, storage, and identity.
+- Secret key (`nsec`) is hidden by default and only revealed on explicit action.
+- Revealed secret key (`nsec`) is cleared again when the settings identity view disappears or the app moves inactive/background.
+- Settings includes `delete account` inside identity with a two-step destructive confirmation flow.
+- `log out (keep local data)` clears active identity only.
+- `log out and clear local data` clears identity and deletes account-scoped local data:
+  - contacts.
+  - sessions.
+  - session members.
+  - session membership intervals.
+  - session posts.
+  - reactions.
+  - cached media references.
+  - local encryption key material for that owner scope.
+- `delete account` clears identity and the same account-scoped local data as `log out and clear local data`.
+- When relays are available, `delete account` also:
   - Publishes an empty follow list (`kind:3`) before local deletion.
-  - Publishes a Nostr `Request to Vanish` (`kind:62`) to enabled relays.
-- `Delete Account` does not invalidate the `nsec`; keeping that key still allows sign-in again later.
-- `Delete Account` is send-gated like other relay-backed mutations and does not proceed while relay confirmation is unavailable.
+  - Publishes a nostr `request to vanish` (`kind:62`) to enabled relays.
+- `delete account` does not invalidate the secret key (`nsec`); keeping that key still allows sign-in again later.
+- `delete account` is send-gated like other relay-backed mutations and does not proceed while relay confirmation is unavailable.
 
 ### Sessions
 
@@ -77,10 +79,11 @@
   - Creator pubkey.
   - Updated timestamp.
   - Archive flag.
-- Users create sessions from the Sessions tab `+` flow.
-- Session creation sheet uses a centered inline title, top-left close icon, and bottom action footer.
+- Users create sessions from the sessions tab compose action in the top-right corner.
+- Session list includes inline search and uses full-width chat-list rows with avatars, timestamps, and unread markers.
+- Session creation uses grouped sections for session details and member selection, plus a persistent bottom action footer.
 - Session creation requires a non-empty name.
-- `Create Session` stays disabled (with disabled styling) until name is non-empty.
+- `create session` stays disabled (with disabled styling) until name is non-empty.
 - Member selection at creation is optional.
 - Session creation can be solo (creator only).
 - After successful session creation, the app navigates directly into that session.
@@ -93,7 +96,7 @@
   - Equal-timestamp snapshot conflicts resolve by lexicographic event-ID tie-break.
 - Sessions can be archived/unarchived from a session-row long-press menu.
 - Session list shows active sessions by default.
-- When archived sessions exist, a header archive toggle icon appears to the left of `+` in the sessions tab.
+- When archived sessions exist, a header archive toggle icon appears to the left of the compose action in the sessions tab.
 - Tapping the archive icon switches between active and archived list mode.
 - Archive mode is visually indicated via the highlighted/filled archive icon state.
 - Switching away from sessions resets the list mode back to active.
@@ -102,31 +105,32 @@
 ### Session members UX
 
 - Session member management is available inside a session.
+- Session detail uses chat-like link cards with grouped consecutive posts and a pinned session summary card at the top.
 - Members can be added only from existing contacts.
 - Members can be removed from active membership.
 - Only the session creator can add or remove members.
 - Non-creator membership mutations are ignored on ingest.
-- Member identity resolves as local alias, then remote Nostr profile name, then `npub`.
+- Member identity resolves as local alias, then remote nostr profile name, then public key (`npub`).
 - Outbound membership snapshots authored by this client always include the local sender key.
 
 ### Posts (root links)
 
 - Posting is session-scoped.
-- Post composer uses a centered inline title, top-left close icon, and bottom action footer.
+- Post composer uses grouped sections for session, link, and note, with a bottom action footer.
 - Compose fields are:
-  - Session context (read-only).
-  - Link (required).
-  - Note (optional).
-- Link field supports `Paste` and `Clear` helpers.
+  - session name (read-only).
+  - link (required).
+  - note (optional).
+- Link field supports `paste` and `clear` helpers.
 - Link helper controls render directly below the field in a compact, consistent control row.
 - Entering the link field pre-fills `https://` when the field is empty.
-- Paste replaces the entire link field value.
+- `paste` replaces the entire link field value.
 - URL input is normalized and must be valid `http`/`https`.
 - Unsupported schemes are rejected.
 - Note text is trimmed and persisted only when non-empty.
-- In post detail, the raw link text supports the standard iOS copy menu via text selection.
+- In post detail, the raw link text supports the standard ios copy menu via text selection.
 - Browser handoff uses the `open in browser` action.
-- In post detail, note text is rendered as an accented note callout for visual separation.
+- In post detail, note text is rendered as an accented note callout for visual separation and media/metadata sit inside grouped detail surfaces.
 - Send behavior is reconnect-and-timeout:
   - Composer remains on-screen while waiting to send.
   - Send waits for a usable relay path (default timeout 12 seconds).
@@ -134,13 +138,13 @@
   - On failure/timeout, composer stays open and error is shown.
 - Posting is blocked when the sender is not an active member of the target session.
 - Posting recipient resolution uses only active session members.
-- Root post identity is the Nostr event ID.
+- Root post identity is the nostr event ID.
 - Inbound root payloads with a non-empty `root_id` that does not match the event ID are ignored.
 - Outgoing root posts persist the relay-visible gift-wrap event IDs that carried that root payload.
 - Session post lists show sender headers above post cards and collapse repeated headers for consecutive posts from the same sender.
 - Session post lists expose delete for posts sent by the signed-in user via a long-press menu on the post row, matching the session-row archive interaction pattern.
-- Post delete publishes a Nostr deletion request (`kind:5`) against the stored gift-wrap event IDs when available, and also sends a Linkstr delete notice to known current and former session members so encrypted session feeds converge on the removal.
-- Older locally stored root posts without recorded gift-wrap IDs skip relay-side `kind:5` publication and still use the Linkstr delete notice plus local tombstoning.
+- Post delete publishes a nostr deletion request (`kind:5`) against the stored gift-wrap event IDs when available, and also sends a linkstr delete notice to known current and former session members so encrypted session feeds converge on the removal.
+- Older locally stored root posts without recorded gift-wrap IDs skip relay-side `kind:5` publication and still use the linkstr delete notice plus local tombstoning.
 - Post delete persists a local deletion watermark so historical backfill cannot resurrect a previously deleted root post.
 
 ### Reactions
@@ -149,7 +153,7 @@
 - Reaction send is blocked when the sender is not an active member of the target session.
 - UX includes:
   - Session post list shows compact read-only reaction summaries (no interactive controls); single reactions show emoji-only and higher counts use bottom-right badges.
-  - Post detail uses interactive Slack-style reaction summary chips.
+  - Post detail uses interactive reaction chips with the current user's selections highlighted.
   - Inline quick toggles for `👍`, `👎`, `👀`.
   - `...` button that opens the full emoji picker sheet.
   - Post detail separates the per-participant breakdown section with a divider.
@@ -176,13 +180,14 @@
 
 ### Relay settings and runtime
 
-- Relay management is in Settings.
+- Relay management is in settings.
 - Users can:
   - Add relay URL (`ws://` or `wss://`, valid host required).
   - Enable/disable relay.
   - Remove relay.
   - Reset default relays.
 - Relay header shows `connected_or_readonly / total`.
+- Relay, storage, and identity controls remain visible without disclosure-group expansion.
 - Relay rows show a live status dot (`connecting`, `connected`, `read-only`, `failed`, `disabled`) and optional inline error text.
 - Relay error rows reserve layout height to avoid jitter when status text appears/disappears.
 - Offline relay toast signaling is suppressed during initial connection and only shown after a previously healthy relay drops in the same foreground lifecycle.
@@ -198,7 +203,7 @@
 - No offline outbox exists.
 - Failed sends are not queued for automatic retry.
 
-### Nostr transport and ingest
+### nostr transport and ingest
 
 - Payloads are JSON-encoded and published through `NostrSDK` gift wraps.
 - Outgoing publish awaits relay `OK` acceptance with timeout, and fanout sends only succeed after each published gift-wrap has at least one accepted relay path.
@@ -220,7 +225,7 @@
   - Live relay subscriptions use `since` filters so live ingest is new-event oriented.
   - Persist root posts only when sender and receiver are active at the event timestamp.
   - Live root ingest additionally requires sender and receiver to be active in the latest local membership snapshot.
-  - Linkstr delete notices remove matching stored root posts only when the delete sender matches the original post sender.
+- Linkstr delete notices remove matching stored root posts only when the delete sender matches the original post sender.
   - Upsert reaction state only when sender and receiver are active at the event timestamp and the root post exists locally.
   - Live reaction ingest additionally requires sender and receiver to be active in the latest local membership snapshot.
 
@@ -246,7 +251,7 @@
 
 - Extraction downloads the video file locally for native playback.
   - Local playback uses the system video player with full controls.
-  - Extracted media can be saved to Photos or Files.
+  - Extracted media can be saved to photos or files.
   - Works offline once cached.
   - Downloaded video cache auto-trims with a least-recently-used policy once device-local video cache exceeds about 1 GB.
 - Embed loads the provider's web player in an inline web view.
@@ -274,10 +279,10 @@
 
 - For extraction-capable providers, local playback is attempted first with explicit controls to switch to embed mode.
 - Local/embed action rows are normalized across post detail and deep-link playback surfaces.
-- Media playback surfaces temporarily acquire an `AVAudioSession` playback category while onscreen, so audio still plays when the iPhone silent switch is enabled.
-- In local playback mode with a locally cached media file, users can export via `Save...`:
-  - `Save to Photos` (requests Photos add-only permission).
-  - `Save to Files` (document export flow, no broad media permission).
+- Media playback surfaces temporarily acquire an `AVAudioSession` playback category while onscreen, so audio still plays when the iphone silent switch is enabled.
+- In local playback mode with a locally cached media file, users can export via `save...`:
+  - `save to photos` (requests photos add-only permission).
+  - `save to files` (document export flow, no broad media permission).
 - If extraction fails, embed mode remains available and offers retry-local plus Safari open actions.
 - Canonical TikTok post URLs prefer exact `aweme_id` API playback candidates and avoid page-sniff fallback when exact extraction fails, to reduce accidental related-video matches.
 - Twitter/X status handling is resolved at runtime:
@@ -314,32 +319,32 @@
 
 ### Contacts
 
-- Contacts mirror the account's Nostr follow list (`kind:3`, NIP-02).
+- Contacts mirror the account's nostr follow list (`kind:3`, NIP-02).
 - Add/remove contact actions publish a full replacement follow-list event and wait for relay acceptance.
 - Incoming follow-list events from the signed-in author reconcile local contacts (newer timestamp wins; equal timestamp uses lexicographic event-ID tie-break).
 - Follow-list recency watermarks are persisted per account so app restart does not allow stale follow-list rollback.
 - Aliases are private per-account device data and are never published to relays.
-- Remote Nostr profile names are fetched lazily by pubkey and are used only when no local alias exists.
-- When both exist, contact UI shows the local alias as primary and the published Nostr name as secondary.
+- Remote nostr profile names are fetched lazily by pubkey and are used only when no local alias exists.
+- When both exist, contact UI shows the local alias as primary and the published nostr name as secondary.
 - Contact management supports add, long-press unfollow, and alias edit.
-- Add-contact sheet uses a centered inline title, top-left close icon, and bottom action footer.
-- Add-contact input supports manual entry, paste, and QR scan.
-- Add-contact input previews the resolved identity for a valid contact key and lazily looks up the published Nostr name.
-- Contact-key helper controls render directly below the field in the same compact control row pattern used by post compose.
-- `Add Contact` stays disabled until the contact key normalizes to a valid public key.
+- Add-contact sheet uses grouped sections for key entry, identity preview, and alias entry, plus a bottom action footer.
+- Add-contact input supports manual entry, paste, and qr scan.
+- Add-contact input previews the resolved identity for a valid public key (`npub`) and lazily looks up the published nostr name.
+- Public-key helper controls render directly below the field in the same compact control row pattern used by post compose.
+- `add contact` stays disabled until the public key normalizes to a valid `npub`.
 - Re-adding the same contact updates the saved alias for that contact; it does not create a duplicate or republish the follow list.
 
-### Share tab
+### You tab
 
-- Share tab exposes current account `npub`.
-- Share tab lets the user publish, update, or clear an optional Nostr profile name.
-- Submitting the profile name with the keyboard `Return` key or the save button applies the change and dismisses the keyboard.
-- Share tab provides:
-  - QR code.
-  - Current profile name above the QR code when one is set.
-  - A centered scan helper caption below the QR code.
-  - Raw key text.
-  - Copy action.
+- The you tab exposes the current account public key (`npub`).
+- The you tab lets the user publish, update, or clear an optional nostr profile name.
+- Submitting the profile name with the keyboard `return` key or the save button applies the change and dismisses the keyboard.
+- The you tab provides:
+  - qr code.
+  - current profile name above the qr code when one is set.
+  - a short scan hint below the qr code.
+  - raw key text.
+  - copy action.
 
 ### Deep links
 
@@ -360,11 +365,11 @@
 - Managed thumbnails and cached video files live under app-owned directories, and cleanup only removes files from those managed paths.
 - Cached video files live under `Library/Caches` and are treated as disposable device cache.
 - The app enforces a least-recently-used video cache cap of about 1 GB for downloaded local playback media.
-- Settings storage actions can purge cached media plus hydrated preview titles/thumbnails for the signed-in account and let previews rebuild lazily.
+- Settings > Storage actions can purge cached media plus hydrated preview titles/thumbnails for the signed-in account and let previews rebuild lazily.
 - Local entities are owner-scoped by pubkey.
 - Account scoping is enforced in storage and query paths to prevent cross-account bleed.
-- `Log Out (Keep Local Data)` preserves persisted local entities so the same account can log back in later.
-- `Log Out and Clear Local Data` removes the signed-in account’s persisted entities and cached media references.
+- `log out (keep local data)` preserves persisted local entities so the same account can log back in later.
+- `log out and clear local data` removes the signed-in account's persisted entities and cached media references.
 - If account-scoped local cleanup cannot fully complete, the app surfaces an error instead of reporting a clean success.
 - Sensitive content fields are encrypted at rest with per-owner local keys (aliases, session/member identity values, URLs/notes, metadata, and creator keys).
 - Operational identifiers and timestamps remain plaintext in local storage for indexing/querying.
@@ -375,10 +380,10 @@
 ### Backup and migration expectations
 
 - Identity continuity across devices depends on keychain/iCloud keychain backup conditions.
-- SwiftData participates in iOS backup/restore according to device backup mode.
+- SwiftData participates in ios backup/restore according to device backup mode.
 - If encrypted local data restores without matching key material, encrypted fields are unreadable.
-- Reliable long-term portability still depends on preserving `nsec`.
-- A Nostr vanish/delete request is relay-side only; the key itself remains usable until you discard it.
+- Reliable long-term portability still depends on preserving the secret key (`nsec`).
+- A nostr vanish/delete request is relay-side only; the key itself remains usable until you discard it.
 
 ### Known non-goals
 

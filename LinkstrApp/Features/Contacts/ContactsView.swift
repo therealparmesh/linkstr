@@ -10,17 +10,28 @@ struct ContactsView: View {
 
   @State private var pendingUnfollowContact: ContactEntity?
   @State private var isUnfollowingContact = false
+  @State private var query = ""
 
   private var scopedContacts: [ContactEntity] {
-    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
     return
-      contacts
-      .filter { $0.ownerPubkey == ownerPubkey }
+      OwnerScopedCollections.contacts(contacts, ownerPubkey: session.identityService.pubkeyHex)
       .sorted {
         session.resolvedIdentity(for: $0).displayName.localizedCaseInsensitiveCompare(
           session.resolvedIdentity(for: $1).displayName
         ) == .orderedAscending
       }
+  }
+
+  private var visibleContacts: [ContactEntity] {
+    let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !normalizedQuery.isEmpty else { return scopedContacts }
+    return RecipientSearchLogic.filteredContacts(
+      scopedContacts,
+      query: normalizedQuery,
+      displayName: { session.resolvedIdentity(for: $0).displayName },
+      npub: \.npub,
+      additionalNames: { session.searchableNames(for: $0) }
+    )
   }
 
   private var profileLookupPubkeys: [String] {
@@ -39,7 +50,7 @@ struct ContactsView: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     .alert("unfollow contact", isPresented: isPresentingUnfollowConfirmation) {
       Button("cancel", role: .cancel) {}
-      Button(isUnfollowingContact ? "unfollowing…" : "unfollow", role: .destructive) {
+      Button(isUnfollowingContact ? "unfollowing..." : "unfollow", role: .destructive) {
         unfollowPendingContact()
       }
     } message: {
@@ -56,32 +67,46 @@ struct ContactsView: View {
       LinkstrCenteredEmptyStateView(
         title: "no contacts",
         systemImage: "person.2.slash",
-        description: "add at least one contact to start sharing links."
+        description: "add a contact to share links."
       )
     } else {
       ScrollView {
-        LazyVStack(spacing: 0) {
-          ForEach(scopedContacts) { contact in
-            NavigationLink {
-              EditContactView(contact: contact)
-            } label: {
-              ContactRowView(contact: contact)
-            }
-            .buttonStyle(.plain)
-            .contextMenu {
-              Button(role: .destructive) {
-                pendingUnfollowContact = contact
-              } label: {
-                Label("unfollow contact", systemImage: "person.crop.circle.badge.minus")
+        VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
+          LinkstrSearchField(prompt: "search contacts", text: $query)
+
+          if visibleContacts.isEmpty {
+            LinkstrCenteredEmptyStateView(
+              title: "no contacts found",
+              systemImage: "magnifyingglass",
+              description: "try another search."
+            )
+            .frame(maxWidth: .infinity, minHeight: 220)
+          } else {
+            LazyVStack(spacing: 0) {
+              ForEach(visibleContacts) { contact in
+                NavigationLink {
+                  EditContactView(contact: contact)
+                } label: {
+                  ContactRowView(contact: contact)
+                }
+                .buttonStyle(.plain)
+                .contextMenu {
+                  Button(role: .destructive) {
+                    pendingUnfollowContact = contact
+                  } label: {
+                    Label("unfollow contact", systemImage: "person.crop.circle.badge.minus")
+                  }
+                }
+                .accessibilityAction(named: Text("unfollow contact")) {
+                  pendingUnfollowContact = contact
+                }
               }
-            }
-            .accessibilityAction(named: Text("unfollow contact")) {
-              pendingUnfollowContact = contact
             }
           }
         }
-        .padding(.horizontal, 12)
-        .padding(.top, 6)
+        .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+        .padding(.top, LinkstrTheme.screenTopPadding)
+        .padding(.bottom, LinkstrTheme.screenBottomPadding)
       }
       .linkstrTabBarContentInset()
     }
@@ -100,12 +125,11 @@ struct ContactsView: View {
 
   private var unfollowConfirmationMessage: String {
     guard let pendingUnfollowContact else {
-      return
-        "this publishes an updated follow list to relays, effectively unfollows this contact, and removes it locally."
+      return "this updates your follow list on relays and removes this contact locally."
     }
 
     return
-      "this publishes an updated follow list to relays, effectively unfollows \(session.resolvedIdentity(for: pendingUnfollowContact).displayName), and removes it locally."
+      "this updates your follow list on relays, unfollows \(session.resolvedIdentity(for: pendingUnfollowContact).displayName), and removes the contact locally."
   }
 
   private func unfollowPendingContact() {
@@ -128,20 +152,22 @@ private struct ContactRowView: View {
 
   var body: some View {
     let identity = session.resolvedIdentity(for: contact)
-    HStack(spacing: 12) {
-      LinkstrContactAvatar(name: identity.displayName)
+    HStack(spacing: LinkstrTheme.rowSpacing) {
+      LinkstrContactAvatar(name: identity.displayName, size: 48)
 
-      LinkstrContactIdentityView(identity: identity, spacing: 3)
-        .frame(maxWidth: .infinity, alignment: .leading)
+      LinkstrContactIdentityView(
+        identity: identity,
+        primaryFont: LinkstrTheme.body(15, weight: .medium)
+      )
+      .frame(maxWidth: .infinity, alignment: .leading)
 
       Image(systemName: "chevron.right")
         .font(LinkstrTheme.system(12, weight: .semibold))
-        .foregroundStyle(LinkstrTheme.textSecondary.opacity(0.8))
+        .foregroundStyle(LinkstrTheme.textTertiary)
     }
-    .padding(.horizontal, 4)
-    .padding(.vertical, 10)
+    .padding(.vertical, LinkstrTheme.fieldVerticalPadding)
     .overlay(alignment: .bottom) {
-      LinkstrListRowDivider()
+      LinkstrListRowDivider(leadingInset: 62)
     }
   }
 }
@@ -164,66 +190,57 @@ private struct EditContactView: View {
     ZStack {
       LinkstrBackgroundView()
       ScrollView {
-        VStack(alignment: .leading, spacing: 12) {
-          LinkstrSectionHeader(title: "alias (optional)")
-          TextField("alias", text: $alias)
-            .textInputAutocapitalization(.words)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .frame(minHeight: LinkstrTheme.inputControlMinHeight)
-            .background(
-              RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(LinkstrTheme.panelSoft)
-            )
-
-          if let nostrChosenName = identity.chosenName {
-            LinkstrSectionHeader(title: "nostr name")
-            Text(nostrChosenName)
-              .font(LinkstrTheme.body(13))
-              .foregroundStyle(
-                contact.localAlias == nil
-                  ? LinkstrTheme.textPrimary : LinkstrTheme.neonPink.opacity(0.82)
-              )
-              .lineLimit(2)
-              .textSelection(.enabled)
-              .padding(.horizontal, 12)
-              .padding(.vertical, 10)
-              .frame(
-                maxWidth: .infinity,
-                minHeight: LinkstrTheme.inputControlMinHeight,
-                alignment: .leading
-              )
-              .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                  .fill(LinkstrTheme.panelSoft)
-              )
+        VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
+          LinkstrInsetSection(
+            title: "contact",
+            footer: "only you see this alias. the public key (npub) stays the real identity."
+          ) {
+            HStack(spacing: LinkstrTheme.rowSpacing) {
+              LinkstrContactAvatar(name: identity.displayName, size: 54)
+              LinkstrContactIdentityView(identity: identity, lineLimit: 2)
+            }
           }
 
-          LinkstrSectionHeader(title: "contact key (npub)")
-          Text(contact.npub)
-            .font(LinkstrTheme.body(13))
-            .foregroundStyle(LinkstrTheme.textSecondary)
-            .lineLimit(1)
-            .textSelection(.enabled)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .frame(minHeight: LinkstrTheme.inputControlMinHeight)
-            .background(
-              RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(LinkstrTheme.panelSoft)
-            )
+          LinkstrInsetSection(title: "alias") {
+            TextField("alias", text: $alias)
+              .font(LinkstrTheme.body(15))
+              .textInputAutocapitalization(.words)
+              .linkstrInputField()
+          }
+
+          if let nostrChosenName = identity.chosenName {
+            LinkstrInsetSection(title: "published nostr name") {
+              Text(nostrChosenName)
+                .font(LinkstrTheme.body(14))
+                .foregroundStyle(
+                  contact.localAlias == nil
+                    ? LinkstrTheme.textPrimary : LinkstrTheme.accentPink.opacity(0.88)
+                )
+                .lineLimit(3)
+                .textSelection(.enabled)
+                .linkstrInputField()
+            }
+          }
+
+          LinkstrInsetSection(title: "public key (npub)") {
+            Text(contact.npub)
+              .font(LinkstrTheme.body(13))
+              .foregroundStyle(LinkstrTheme.textSecondary)
+              .lineLimit(1)
+              .textSelection(.enabled)
+              .linkstrInputField()
+          }
         }
-        .padding(.horizontal, 12)
-        .padding(.top, 12)
+        .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+        .padding(.top, LinkstrTheme.screenTopPadding)
+        .padding(.bottom, LinkstrTheme.screenBottomPadding)
       }
       .linkstrTabBarContentInset()
     }
     .navigationTitle("edit contact")
     .navigationBarTitleDisplayMode(.inline)
     .navigationBarBackButtonHidden(true)
-    .toolbar(.visible, for: .navigationBar)
-    .toolbarBackground(.hidden, for: .navigationBar)
-    .toolbarColorScheme(.dark, for: .navigationBar)
+    .linkstrBarChrome()
     .toolbar {
       ToolbarItem(placement: .topBarLeading) {
         Button {
@@ -243,7 +260,7 @@ private struct EditContactView: View {
             .linkstrToolbarIconLabel()
         }
         .accessibilityLabel("save contact")
-        .tint(LinkstrTheme.neonCyan)
+        .tint(LinkstrTheme.accent)
         .disabled(canSaveAlias == false)
       }
     }
@@ -291,81 +308,66 @@ struct AddContactSheet: View {
       ZStack {
         LinkstrBackgroundView()
         ScrollView {
-          VStack(alignment: .leading, spacing: 12) {
-            TextField("contact key (npub...)", text: $npub)
-              .textInputAutocapitalization(.never)
-              .autocorrectionDisabled(true)
-              .disabled(isSubmitting || isNPubPrefilled)
-              .padding(.horizontal, 12)
-              .padding(.vertical, 10)
-              .frame(minHeight: LinkstrTheme.inputControlMinHeight)
-              .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                  .fill(LinkstrTheme.panelSoft)
-              )
+          VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
+            LinkstrInsetSection(title: "public key (npub)") {
+              TextField("public key (npub...)", text: $npub)
+                .font(LinkstrTheme.body(15))
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled(true)
+                .disabled(isSubmitting || isNPubPrefilled)
+                .linkstrInputField()
 
-            if !isNPubPrefilled {
-              LinkstrInputAssistRow(
-                showClear: !npub.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                isDisabled: isSubmitting,
-                onPaste: {
-                  pasteFromClipboard()
-                  scannerErrorMessage = nil
-                },
-                onScan: {
-                  scannerErrorMessage = nil
-                  isPresentingScanner = true
-                },
-                onClear: {
-                  npub = ""
-                  scannerErrorMessage = nil
-                }
-              )
+              if !isNPubPrefilled {
+                LinkstrInputAssistRow(
+                  showClear: !npub.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  isDisabled: isSubmitting,
+                  onPaste: {
+                    pasteFromClipboard()
+                    scannerErrorMessage = nil
+                  },
+                  onScan: {
+                    scannerErrorMessage = nil
+                    isPresentingScanner = true
+                  },
+                  onClear: {
+                    npub = ""
+                    scannerErrorMessage = nil
+                  }
+                )
+              }
             }
 
             if let previewIdentity {
-              VStack(alignment: .leading, spacing: 8) {
-                LinkstrSectionHeader(title: "preview")
-                HStack(spacing: 12) {
-                  LinkstrContactAvatar(name: previewIdentity.displayName)
+              LinkstrInsetSection(title: "preview") {
+                HStack(spacing: LinkstrTheme.rowSpacing) {
+                  LinkstrContactAvatar(name: previewIdentity.displayName, size: 50)
                   LinkstrContactIdentityView(
                     identity: previewIdentity,
-                    primaryFont: LinkstrTheme.body(14),
-                    secondaryFont: LinkstrTheme.body(11),
-                    npubFont: LinkstrTheme.body(11),
+                    primaryFont: LinkstrTheme.body(15, weight: .medium),
                     lineLimit: 2
                   )
                   .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(
-                  RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(LinkstrTheme.panelSoft)
-                )
 
                 if previewIdentity.chosenName == nil && normalizedAliasPreview == nil {
-                  Text("looking up published Nostr name…")
+                  Text("looking up published nostr name...")
                     .font(LinkstrTheme.body(12))
                     .foregroundStyle(LinkstrTheme.textSecondary)
                 }
               }
             }
 
-            TextField("alias (optional)", text: $alias)
-              .textInputAutocapitalization(.words)
-              .disabled(isSubmitting)
-              .padding(.horizontal, 12)
-              .padding(.vertical, 10)
-              .frame(minHeight: LinkstrTheme.inputControlMinHeight)
-              .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                  .fill(LinkstrTheme.panelSoft)
-              )
+            LinkstrInsetSection(title: "alias", footer: "optional. only you see this alias.") {
+              TextField("alias", text: $alias)
+                .font(LinkstrTheme.body(15))
+                .textInputAutocapitalization(.words)
+                .disabled(isSubmitting)
+                .linkstrInputField()
+            }
           }
-          .padding(.horizontal, 12)
-          .padding(.top, 14)
-          .padding(.bottom, 120)
+          .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+          .padding(.top, LinkstrTheme.screenTopPadding)
+          .padding(.bottom, LinkstrTheme.sheetBottomPadding)
         }
       }
       .task(id: previewLookupRequestID) {
@@ -374,9 +376,7 @@ struct AddContactSheet: View {
       }
       .navigationTitle("add contact")
       .navigationBarTitleDisplayMode(.inline)
-      .toolbar(.visible, for: .navigationBar)
-      .toolbarBackground(.hidden, for: .navigationBar)
-      .toolbarColorScheme(.dark, for: .navigationBar)
+      .linkstrBarChrome()
       .toolbar {
         ToolbarItem(placement: .topBarLeading) {
           Button {
@@ -392,7 +392,7 @@ struct AddContactSheet: View {
       }
       .safeAreaInset(edge: .bottom, spacing: 0) {
         LinkstrSheetActionFooter(
-          title: isSubmitting ? "adding contact…" : "add contact",
+          title: isSubmitting ? "adding contact..." : "add contact",
           systemImage: "person.crop.circle.badge.plus",
           isDisabled: !canSubmit,
           message: footerMessage,
@@ -406,7 +406,7 @@ struct AddContactSheet: View {
             npub = scannedNPub
             scannerErrorMessage = nil
           } else {
-            scannerErrorMessage = "no valid contact key (npub) found in that qr code."
+            scannerErrorMessage = "no valid public key (npub) found in that qr code."
           }
         }
       }
@@ -423,7 +423,7 @@ struct AddContactSheet: View {
 
   private var footerMessage: String {
     if isSubmitting {
-      return "waiting for relay reconnect before adding…"
+      return "waiting for relay reconnect before adding..."
     }
 
     if normalizedScannerErrorMessage.isEmpty == false {
@@ -431,15 +431,11 @@ struct AddContactSheet: View {
     }
 
     let trimmedNPub = npub.trimmingCharacters(in: .whitespacesAndNewlines)
-    if trimmedNPub.isEmpty {
-      return "valid contact key required. alias is optional."
+    if trimmedNPub.isEmpty == false && previewPubkeyHex == nil {
+      return "enter a valid public key."
     }
 
-    if previewPubkeyHex == nil {
-      return "enter a valid contact key."
-    }
-
-    return "alias is optional."
+    return ""
   }
 
   private var footerMessageColor: Color {
@@ -559,8 +555,8 @@ struct LinkstrQRScannerSheet: View {
           .padding(.vertical, 8)
           .background(.black.opacity(0.45), in: Capsule())
         }
-        .padding(.top, 16)
-        .padding(.horizontal, 16)
+        .padding(.top, LinkstrTheme.screenTopPadding)
+        .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
         Spacer()
       }
     }
@@ -609,7 +605,7 @@ private struct LinkstrQRScannerAccessDeniedView: View {
       Text("camera access required")
         .font(LinkstrTheme.title(18))
         .foregroundStyle(.white)
-      Text("enable camera access in settings to scan a contact key (npub) qr code.")
+      Text("enable camera access in settings to scan a public key (npub) qr code.")
         .font(LinkstrTheme.body(14))
         .foregroundStyle(LinkstrTheme.textSecondary)
         .multilineTextAlignment(.center)
@@ -619,7 +615,7 @@ private struct LinkstrQRScannerAccessDeniedView: View {
         UIApplication.shared.open(settingsURL)
       }
       .buttonStyle(.borderedProminent)
-      .tint(LinkstrTheme.neonCyan)
+      .tint(LinkstrTheme.accent)
       .padding(.top, 8)
     }
     .padding(.horizontal, 16)

@@ -961,7 +961,7 @@ enum NostrServiceError: Error, LocalizedError {
     case .payloadEncodingFailed:
       return "couldn't prepare this message. try again."
     case .invalidPubkey:
-      return "invalid recipient contact key (npub)."
+      return "invalid recipient public key (npub)."
     case .publishRejected(let message):
       return message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         ? "relay rejected this message."
