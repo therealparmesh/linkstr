@@ -1,6 +1,7 @@
 import EmojiKit
 import SwiftData
 import SwiftUI
+import UIKit
 
 struct ReactionSummary: Identifiable, Hashable {
   let emoji: String
@@ -294,7 +295,6 @@ struct LinkstrEmojiPickerSheet: View {
 }
 
 struct PostDetailView: View {
-  @Environment(\.dismiss) private var dismiss
   @EnvironmentObject private var session: AppSession
   @Environment(\.openURL) private var openURL
 
@@ -308,8 +308,6 @@ struct PostDetailView: View {
   private var allReactions: [SessionReactionEntity]
 
   @State private var isPresentingEmojiPicker = false
-  @State private var isPresentingDeleteConfirmation = false
-  @State private var isDeletingPost = false
 
   private var scopedContacts: [ContactEntity] {
     OwnerScopedCollections.contacts(contacts, ownerPubkey: session.identityService.pubkeyHex)
@@ -382,7 +380,7 @@ struct PostDetailView: View {
   var body: some View {
     ScrollView {
       LazyVStack(spacing: 10) {
-        postCard
+        postCardContent
       }
       .padding(.horizontal, 10)
       .padding(.top, 10)
@@ -401,54 +399,11 @@ struct PostDetailView: View {
     .task {
       session.markRootPostRead(postID: post.rootID)
     }
-    .alert("delete post", isPresented: $isPresentingDeleteConfirmation) {
-      Button("delete post", role: .destructive) {
-        guard !isDeletingPost else { return }
-        isDeletingPost = true
-        Task {
-          let didDelete = await session.deletePostAwaitingRelay(post)
-          await MainActor.run {
-            isDeletingPost = false
-            if didDelete {
-              dismiss()
-            }
-          }
-        }
-      }
-      Button("cancel", role: .cancel) {}
-    } message: {
-      Text(
-        "this permanently removes the post from your session feed and sends a Nostr deletion request."
-      )
-    }
     .sheet(isPresented: $isPresentingEmojiPicker) {
       LinkstrEmojiPickerSheet { emoji in
         toggleReaction(emoji)
       }
       .presentationDetents([.fraction(0.92)])
-    }
-  }
-
-  private var postCard: some View {
-    Group {
-      if isOutgoing(post) {
-        postCardContent
-          .contextMenu {
-            Button(role: .destructive) {
-              guard !isDeletingPost else { return }
-              isPresentingDeleteConfirmation = true
-            } label: {
-              Label("delete post", systemImage: "trash")
-            }
-          }
-          .accessibilityHint("Long press for post actions.")
-          .accessibilityAction(named: "Delete post") {
-            guard !isDeletingPost else { return }
-            isPresentingDeleteConfirmation = true
-          }
-      } else {
-        postCardContent
-      }
     }
   }
 
@@ -472,9 +427,9 @@ struct PostDetailView: View {
           .foregroundStyle(LinkstrTheme.textPrimary)
       }
 
-      if let url = post.url, let parsedURL = URL(string: url) {
+      if let url = post.url {
         Button {
-          openURL(parsedURL)
+          UIPasteboard.general.string = url
         } label: {
           Text(url)
             .font(LinkstrTheme.body(13))
@@ -484,11 +439,7 @@ struct PostDetailView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-      } else if let url = post.url {
-        Text(url)
-          .font(LinkstrTheme.body(13))
-          .foregroundStyle(LinkstrTheme.textSecondary)
-          .textSelection(.enabled)
+        .accessibilityHint("Copies the link.")
       }
 
       if let noteText {

@@ -122,7 +122,8 @@
 - URL input is normalized and must be valid `http`/`https`.
 - Unsupported schemes are rejected.
 - Note text is trimmed and persisted only when non-empty.
-- In post detail, the raw link text is tappable and opens in the browser.
+- In post detail, tapping the raw link text copies it to the clipboard.
+- Browser handoff uses the `open in browser` action.
 - In post detail, note text is rendered as an accented note callout for visual separation.
 - Send behavior is reconnect-and-timeout:
   - Composer remains on-screen while waiting to send.
@@ -135,7 +136,7 @@
 - Inbound root payloads with a non-empty `root_id` that does not match the event ID are ignored.
 - Outgoing root posts persist the relay-visible gift-wrap event IDs that carried that root payload.
 - Session post lists show sender headers above post cards and collapse repeated headers for consecutive posts from the same sender.
-- Post detail exposes delete only for posts sent by the signed-in user, via a long-press menu on the post card.
+- Session post lists expose delete for posts sent by the signed-in user via a long-press menu on the post row, matching the session-row archive interaction pattern.
 - Post delete publishes a Nostr deletion request (`kind:5`) against the stored gift-wrap event IDs when available, and also sends a Linkstr delete notice to known current and former session members so encrypted session feeds converge on the removal.
 - Older locally stored root posts without recorded gift-wrap IDs skip relay-side `kind:5` publication and still use the Linkstr delete notice plus local tombstoning.
 - Post delete persists a local deletion watermark so historical backfill cannot resurrect a previously deleted root post.
@@ -328,6 +329,7 @@
 
 - Share tab exposes current account `npub`.
 - Share tab lets the user publish, update, or clear an optional Nostr profile name.
+- Submitting the profile name with the keyboard `Return` key or the save button applies the change and dismisses the keyboard.
 - Share tab provides:
   - QR code.
   - Current profile name above the QR code when one is set.
@@ -404,3 +406,7 @@ xcodebuild test -project Linkstr.xcodeproj -scheme Linkstr -destination 'platfor
 ```
 
 - If your simulator name differs, replace `name=iPhone 17` with one available locally.
+
+## Copyright
+
+Copyright © 2026 ParmScript.

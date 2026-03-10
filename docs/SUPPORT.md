@@ -1,6 +1,6 @@
 # linkstr support
 
-last updated: march 9, 2026
+last updated: march 10, 2026
 
 ## getting started
 
@@ -33,6 +33,8 @@ tap a contact row to edit its alias. long-press a contact row to unfollow.
 2. show QR code or tap "copy" for npub
 3. share via messages, email, etc.
 
+profile name changes apply from the keyboard return key or the save button, and both dismiss the keyboard.
+
 ### post links
 
 1. open session → `+`
@@ -48,8 +50,9 @@ supported platforms: tiktok, instagram, facebook, youtube, twitter/x, rumble, an
 - videos play in embedded web players or can be downloaded for offline viewing
 - tap "save to photos" to save videos you have rights to save
 - tap "save to files" to export to files app
-- open in safari with browser button
-- delete your own post by opening it and long-pressing the post card
+- tap the raw link text to copy it
+- open in browser with browser button
+- delete your own post by long-pressing its row in the session post list
 
 ### react to posts
 
@@ -60,6 +63,7 @@ supported platforms: tiktok, instagram, facebook, youtube, twitter/x, rumble, an
 ### manage sessions
 
 - archive: long-press session → "archive"
+- delete your post: long-press your post row → "delete post"
 - view archived: tap archive icon on the left side of the sessions header
 - add/remove members: open session → tap member count → manage
 - only session creators can modify members
@@ -152,13 +156,13 @@ downloaded video cache is device-local, auto-trims with least-recently-used evic
 2. try switching "try local playback" ↔ "try embed playback"
 3. if a previously downloaded local copy was auto-trimmed, try "try local playback" again to re-download it
 4. settings → storage → "clear cached media and previews"
-5. use "open in safari"
+5. use "open in browser"
 
 **link preview looks stale or wrong**
 
 1. settings → storage → "clear cached media and previews"
 2. return to sessions/posts and let the app rebuild previews
-3. if the provider still serves bad metadata, use "open in safari"
+3. if the provider still serves bad metadata, use "open in browser"
 
 **can't scan qr codes**
 

@@ -46,7 +46,7 @@ struct DeepLinkVideoView: View {
           openSourceAction: { openURL(sourceURL) }
         )
       case .link:
-        Button("open in safari") {
+        Button("open in browser") {
           openURL(sourceURL)
         }
         .frame(maxWidth: .infinity)

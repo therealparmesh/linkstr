@@ -279,7 +279,7 @@ struct AdaptiveVideoPlaybackView: View {
           Button {
             openSourceAction()
           } label: {
-            Text("open in safari")
+            Text("open in browser")
               .frame(maxWidth: .infinity)
           }
           .frame(maxWidth: .infinity)
@@ -365,12 +365,12 @@ struct AdaptiveVideoPlaybackView: View {
       if allowsTryLocalPlayback, canOpenSource, let openSourceAction {
         HStack(spacing: 8) {
           retryLocalPlaybackButton
-          openInSafariButton(action: openSourceAction)
+          openInBrowserButton(action: openSourceAction)
         }
       } else if allowsTryLocalPlayback {
         retryLocalPlaybackButton
       } else if canOpenSource, let openSourceAction {
-        openInSafariButton(action: openSourceAction)
+        openInBrowserButton(action: openSourceAction)
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
@@ -382,7 +382,7 @@ struct AdaptiveVideoPlaybackView: View {
       VStack(spacing: 8) {
         HStack(spacing: 8) {
           useEmbeddedButton
-          openInSafariButton(action: openSourceAction)
+          openInBrowserButton(action: openSourceAction)
         }
         if let exportFileURL {
           saveButton(for: exportFileURL)
@@ -410,8 +410,8 @@ struct AdaptiveVideoPlaybackView: View {
     }
   }
 
-  private func openInSafariButton(action: @escaping () -> Void) -> some View {
-    secondaryActionButton("open in safari") {
+  private func openInBrowserButton(action: @escaping () -> Void) -> some View {
+    secondaryActionButton("open in browser") {
       action()
     }
   }

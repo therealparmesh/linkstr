@@ -1075,7 +1075,7 @@ enum TwitterEmbedDocumentBuilder {
               }
 
               container.innerHTML =
-                '<div class="linkstr-embed-fallback">couldn\\'t load this post preview. use open in safari.</div>';
+                '<div class="linkstr-embed-fallback">couldn\\'t load this post preview. use open in browser.</div>';
               markReady();
             };
 
