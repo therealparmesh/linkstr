@@ -122,7 +122,7 @@
 - URL input is normalized and must be valid `http`/`https`.
 - Unsupported schemes are rejected.
 - Note text is trimmed and persisted only when non-empty.
-- In post detail, tapping the raw link text copies it to the clipboard.
+- In post detail, the raw link text supports the standard iOS copy menu via text selection.
 - Browser handoff uses the `open in browser` action.
 - In post detail, note text is rendered as an accented note callout for visual separation.
 - Send behavior is reconnect-and-timeout:

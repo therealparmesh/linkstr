@@ -1,7 +1,6 @@
 import EmojiKit
 import SwiftData
 import SwiftUI
-import UIKit
 
 struct ReactionSummary: Identifiable, Hashable {
   let emoji: String
@@ -428,18 +427,12 @@ struct PostDetailView: View {
       }
 
       if let url = post.url {
-        Button {
-          UIPasteboard.general.string = url
-        } label: {
-          Text(url)
-            .font(LinkstrTheme.body(13))
-            .foregroundStyle(LinkstrTheme.textSecondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .multilineTextAlignment(.leading)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityHint("Copies the link.")
+        Text(url)
+          .font(LinkstrTheme.body(13))
+          .foregroundStyle(LinkstrTheme.textSecondary)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .multilineTextAlignment(.leading)
+          .textSelection(.enabled)
       }
 
       if let noteText {

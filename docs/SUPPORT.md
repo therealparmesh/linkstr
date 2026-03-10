@@ -50,7 +50,7 @@ supported platforms: tiktok, instagram, facebook, youtube, twitter/x, rumble, an
 - videos play in embedded web players or can be downloaded for offline viewing
 - tap "save to photos" to save videos you have rights to save
 - tap "save to files" to export to files app
-- tap the raw link text to copy it
+- long-press/select the raw link text to copy it
 - open in browser with browser button
 - delete your own post by long-pressing its row in the session post list
 
