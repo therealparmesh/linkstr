@@ -21,7 +21,6 @@ struct SettingsView: View {
   @State private var isDeletingAccount = false
   @State private var clearableStorageBytes: Int64?
   @State private var isRefreshingStorageUsage = false
-  private let identityActionSpacing: CGFloat = 6
 
   var body: some View {
     ZStack {
@@ -325,7 +324,7 @@ struct SettingsView: View {
           }
           .buttonStyle(.borderedProminent)
           .tint(LinkstrTheme.destructive)
-          .padding(.top, identityActionSpacing)
+          .padding(.top, 6)
 
           VStack(alignment: .leading, spacing: 8) {
             Button(role: .destructive) {
@@ -347,7 +346,7 @@ struct SettingsView: View {
             .font(LinkstrTheme.body(12))
             .foregroundStyle(LinkstrTheme.textSecondary)
           }
-          .padding(.top, identityActionSpacing)
+          .padding(.top, 6)
         } else {
           Text("no account found. sign in with a secret key (nsec) or create one.")
             .font(LinkstrTheme.body(12))

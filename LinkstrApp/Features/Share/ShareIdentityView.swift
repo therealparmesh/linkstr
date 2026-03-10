@@ -5,6 +5,7 @@ struct ShareIdentityView: View {
   @EnvironmentObject private var session: AppSession
   @State private var profileNameDraft = ""
   @State private var isSavingProfileName = false
+  @FocusState private var isProfileNameFieldFocused: Bool
 
   var body: some View {
     ZStack {
@@ -71,6 +72,11 @@ struct ShareIdentityView: View {
         TextField("name others see", text: $profileNameDraft)
           .textInputAutocapitalization(.words)
           .autocorrectionDisabled(true)
+          .submitLabel(.done)
+          .focused($isProfileNameFieldFocused)
+          .onSubmit {
+            submitProfileName()
+          }
           .padding(12)
           .frame(minHeight: LinkstrTheme.inputControlMinHeight)
           .background(
@@ -79,7 +85,7 @@ struct ShareIdentityView: View {
           )
 
         Button {
-          saveProfileName()
+          submitProfileName()
         } label: {
           Label(
             profileNameButtonTitle,
@@ -105,10 +111,12 @@ struct ShareIdentityView: View {
             .padding(.horizontal, 2)
           if let currentProfileName = session.currentProfileName {
             Text(currentProfileName)
-              .font(LinkstrTheme.title(24))
+              .font(LinkstrTheme.title(18))
               .foregroundStyle(LinkstrTheme.neonPink)
               .frame(maxWidth: .infinity, alignment: .center)
               .multilineTextAlignment(.center)
+              .lineLimit(2)
+              .minimumScaleFactor(0.8)
               .padding(.horizontal, 16)
           }
           Image(uiImage: qrImage)
@@ -193,6 +201,21 @@ struct ShareIdentityView: View {
         syncProfileNameDraft()
       }
     }
+  }
+
+  private func submitProfileName() {
+    dismissProfileNameKeyboard()
+    saveProfileName()
+  }
+
+  private func dismissProfileNameKeyboard() {
+    isProfileNameFieldFocused = false
+    UIApplication.shared.sendAction(
+      #selector(UIResponder.resignFirstResponder),
+      to: nil,
+      from: nil,
+      for: nil
+    )
   }
 
   private func syncProfileNameDraft() {

@@ -279,6 +279,9 @@ struct SessionPostsView: View {
 
   @State private var isPresentingNewPost = false
   @State private var isPresentingMembers = false
+  @State private var postPendingDelete: SessionMessageEntity?
+  @State private var isPresentingDeleteConfirmation = false
+  @State private var isDeletingPost = false
 
   private var scopedMessages: [SessionMessageEntity] {
     OwnerScopedCollections.messages(allMessages, ownerPubkey: session.identityService.pubkeyHex)
@@ -372,23 +375,7 @@ struct SessionPostsView: View {
           .padding(.top, 24)
         } else {
           ForEach(postRows) { row in
-            NavigationLink {
-              PostDetailView(post: row.post, sessionName: sessionEntity.name)
-            } label: {
-              PostListRowView(
-                post: row.post,
-                senderLabel: row.senderLabel,
-                isOutgoing: row.isOutgoing,
-                showsSenderHeader: row.showsSenderHeader,
-                isFollowedBySameSender: row.isFollowedBySameSender,
-                hasUnreadPost: row.hasUnreadPost,
-                reactionSummaries: row.reactionSummaries
-              )
-            }
-            .buttonStyle(.plain)
-            .onAppear {
-              session.refreshMetadataForVisiblePostIfNeeded(row.post)
-            }
+            postRow(row)
           }
         }
       }
@@ -438,8 +425,72 @@ struct SessionPostsView: View {
       )
       .environmentObject(session)
     }
+    .alert("delete post", isPresented: $isPresentingDeleteConfirmation) {
+      Button("delete post", role: .destructive) {
+        guard let postPendingDelete, !isDeletingPost else { return }
+        isDeletingPost = true
+        Task {
+          let didDelete = await session.deletePostAwaitingRelay(postPendingDelete)
+          await MainActor.run {
+            isDeletingPost = false
+            if didDelete {
+              self.postPendingDelete = nil
+            }
+          }
+        }
+      }
+      Button("cancel", role: .cancel) {
+        postPendingDelete = nil
+      }
+    } message: {
+      Text(
+        "this permanently removes the post from your session feed and sends a Nostr deletion request."
+      )
+    }
     .task(id: profileLookupRequestID) {
       session.requestRemoteProfilesIfNeeded(pubkeyHexes: profileLookupPubkeys)
+    }
+  }
+
+  @ViewBuilder
+  private func postRow(_ row: PostListRow) -> some View {
+    let postLink = NavigationLink {
+      PostDetailView(post: row.post, sessionName: sessionEntity.name)
+    } label: {
+      PostListRowView(
+        post: row.post,
+        senderLabel: row.senderLabel,
+        isOutgoing: row.isOutgoing,
+        showsSenderHeader: row.showsSenderHeader,
+        isFollowedBySameSender: row.isFollowedBySameSender,
+        hasUnreadPost: row.hasUnreadPost,
+        reactionSummaries: row.reactionSummaries
+      )
+    }
+    .buttonStyle(.plain)
+    .onAppear {
+      session.refreshMetadataForVisiblePostIfNeeded(row.post)
+    }
+
+    if row.isOutgoing {
+      postLink
+        .contextMenu {
+          Button(role: .destructive) {
+            guard !isDeletingPost else { return }
+            postPendingDelete = row.post
+            isPresentingDeleteConfirmation = true
+          } label: {
+            Label("delete post", systemImage: "trash")
+          }
+        }
+        .accessibilityHint("Long press for post actions.")
+        .accessibilityAction(named: "Delete post") {
+          guard !isDeletingPost else { return }
+          postPendingDelete = row.post
+          isPresentingDeleteConfirmation = true
+        }
+    } else {
+      postLink
     }
   }
 

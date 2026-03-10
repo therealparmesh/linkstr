@@ -9,7 +9,6 @@ struct OnboardingView: View {
   @State private var secretKey = ""
   @State private var createdProfileName = ""
   @State private var isSavingCreatedProfileName = false
-  private let formRowSpacing: CGFloat = 12
 
   var body: some View {
     NavigationStack {
@@ -52,7 +51,7 @@ struct OnboardingView: View {
   }
 
   private var signInAndCreateStep: some View {
-    VStack(alignment: .leading, spacing: formRowSpacing) {
+    VStack(alignment: .leading, spacing: 12) {
       LinkstrSectionHeader(title: "sign in")
       TextField("secret key (nsec...)", text: $secretKey)
         .textInputAutocapitalization(.never)
@@ -95,7 +94,7 @@ struct OnboardingView: View {
           .fill(LinkstrTheme.textSecondary.opacity(0.26))
           .frame(height: 1)
       }
-      .padding(.vertical, LinkstrTheme.sectionStackSpacing - formRowSpacing)
+      .padding(.vertical, LinkstrTheme.sectionStackSpacing - 12)
 
       LinkstrSectionHeader(title: "create account")
       Button {
@@ -111,7 +110,7 @@ struct OnboardingView: View {
   }
 
   private func createdAccountStep(nsec: String) -> some View {
-    VStack(alignment: .leading, spacing: formRowSpacing) {
+    VStack(alignment: .leading, spacing: 12) {
       LinkstrSectionHeader(title: "save your secret key")
       Text("this is your password. store it somewhere safe. it's also available later in settings.")
         .font(LinkstrTheme.body(14))
