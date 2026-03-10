@@ -17,13 +17,14 @@ your account is stored in device keychain and optionally syncs via iCloud.
 1. sessions tab → `+`
 2. enter session name
 3. add contacts (optional)
-4. tap "create session"
+4. tap the bottom "create session" button
 
 ### add contacts
 
 1. contacts tab → `+`
 2. enter nostr public key (npub) or scan QR code
 3. optionally add alias
+4. tap the bottom "add contact" button once the key is valid
 
 tap a contact row to edit its alias. long-press a contact row to unfollow.
 
@@ -40,7 +41,7 @@ profile name changes apply from the keyboard return key or the save button, and 
 1. open session → `+`
 2. paste link
 3. add optional note
-4. tap "send"
+4. tap the bottom "send post" button
 
 supported platforms: tiktok, instagram, facebook, youtube, twitter/x, rumble, any web link.
 

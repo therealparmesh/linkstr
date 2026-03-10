@@ -22,23 +22,18 @@ struct NewPostSheet: View {
         LinkstrBackgroundView()
         ScrollView {
           VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 8) {
-              sectionLabel("session")
-              Text(sessionEntity.name)
-                .font(LinkstrTheme.body(15))
-                .foregroundStyle(LinkstrTheme.textPrimary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(12)
-                .frame(minHeight: LinkstrTheme.inputControlMinHeight)
-                .background(
-                  RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(LinkstrTheme.panelSoft)
-                )
-            }
+            Text(sessionEntity.name)
+              .font(LinkstrTheme.body(15))
+              .foregroundStyle(LinkstrTheme.textPrimary)
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .padding(12)
+              .frame(minHeight: LinkstrTheme.inputControlMinHeight)
+              .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                  .fill(LinkstrTheme.panelSoft)
+              )
 
             VStack(alignment: .leading, spacing: 8) {
-              sectionLabel("link")
-
               TextField("https://...", text: $url)
                 .font(LinkstrTheme.body(14))
                 .textInputAutocapitalization(.never)
@@ -72,8 +67,6 @@ struct NewPostSheet: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-              sectionLabel("note")
-
               ZStack(alignment: .topLeading) {
                 if note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                   Text("optional context for this session")
@@ -97,11 +90,6 @@ struct NewPostSheet: View {
                   .fill(LinkstrTheme.panelSoft)
               )
             }
-
-            Text("send requires a valid link. note is optional.")
-              .font(LinkstrTheme.body(12))
-              .foregroundStyle(LinkstrTheme.textSecondary)
-              .padding(.horizontal, 2)
           }
         }
         .padding(.horizontal, 12)
@@ -110,39 +98,32 @@ struct NewPostSheet: View {
       }
       .navigationTitle("new post")
       .navigationBarTitleDisplayMode(.inline)
+      .toolbar(.visible, for: .navigationBar)
       .toolbarBackground(.hidden, for: .navigationBar)
       .toolbarColorScheme(.dark, for: .navigationBar)
       .toolbar {
-        ToolbarItem(placement: .cancellationAction) {
-          Button("cancel") { dismiss() }
-            .disabled(isSending)
+        ToolbarItem(placement: .topBarLeading) {
+          Button {
+            dismiss()
+          } label: {
+            Image(systemName: "xmark")
+              .linkstrToolbarIconLabel()
+          }
+          .accessibilityLabel("cancel")
+          .tint(LinkstrTheme.textSecondary)
+          .disabled(isSending)
         }
       }
       .safeAreaInset(edge: .bottom, spacing: 0) {
-        VStack(spacing: 8) {
-          Button(action: sendPost) {
-            Label(isSending ? "sending…" : "send post", systemImage: "paperplane.fill")
-              .frame(maxWidth: .infinity)
-          }
-          .buttonStyle(.borderedProminent)
-          .tint(LinkstrTheme.neonCyan)
-          .disabled(!canSend)
-
-          Text(isSending ? "waiting for relay reconnect before sending…" : " ")
-            .font(LinkstrTheme.body(12))
-            .foregroundStyle(LinkstrTheme.textSecondary)
-            .frame(maxWidth: .infinity, minHeight: 14, alignment: .center)
-            .opacity(isSending ? 1 : 0)
-            .accessibilityHidden(!isSending)
-        }
-        .padding(.horizontal, 12)
-        .padding(.top, 10)
-        .padding(.bottom, 12)
-        .background(.ultraThinMaterial)
-        .overlay(alignment: .top) {
-          Divider()
-            .overlay(LinkstrTheme.textSecondary.opacity(0.18))
-        }
+        LinkstrSheetActionFooter(
+          title: isSending ? "sending…" : "send post",
+          systemImage: "paperplane.fill",
+          isDisabled: !canSend,
+          message: isSending
+            ? "waiting for relay reconnect before sending…"
+            : "valid link required. note is optional.",
+          action: sendPost
+        )
       }
       .onChange(of: isURLFieldFocused) { _, isFocused in
         guard isFocused else { return }
@@ -166,12 +147,6 @@ struct NewPostSheet: View {
     let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return nil }
     return normalizedURL == nil ? "enter a valid http(s) url." : nil
-  }
-
-  private func sectionLabel(_ text: String) -> some View {
-    Text(text)
-      .font(LinkstrTheme.title(12))
-      .foregroundStyle(LinkstrTheme.textSecondary)
   }
 
   private func sendPost() {

@@ -128,6 +128,42 @@ struct LinkstrSectionHeader: View {
   }
 }
 
+struct LinkstrSheetActionFooter: View {
+  let title: String
+  let systemImage: String
+  let isDisabled: Bool
+  let message: String?
+  var messageColor: Color = LinkstrTheme.textSecondary
+  let action: () -> Void
+
+  var body: some View {
+    VStack(spacing: 8) {
+      Button(action: action) {
+        Label(title, systemImage: systemImage)
+          .frame(maxWidth: .infinity)
+      }
+      .buttonStyle(.borderedProminent)
+      .tint(LinkstrTheme.neonCyan)
+      .disabled(isDisabled)
+
+      Text(message ?? " ")
+        .font(LinkstrTheme.body(12))
+        .foregroundStyle(messageColor)
+        .frame(maxWidth: .infinity, minHeight: 14, alignment: .center)
+        .opacity((message ?? "").isEmpty ? 0 : 1)
+        .accessibilityHidden((message ?? "").isEmpty)
+    }
+    .padding(.horizontal, 12)
+    .padding(.top, 10)
+    .padding(.bottom, 12)
+    .background(.ultraThinMaterial)
+    .overlay(alignment: .top) {
+      Divider()
+        .overlay(LinkstrTheme.textSecondary.opacity(0.18))
+    }
+  }
+}
+
 struct LinkstrCenteredEmptyStateView: View {
   let title: String
   let systemImage: String

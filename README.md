@@ -78,6 +78,7 @@
   - Updated timestamp.
   - Archive flag.
 - Users create sessions from the Sessions tab `+` flow.
+- Session creation sheet uses a centered inline title, top-left close icon, and bottom action footer.
 - Session creation requires a non-empty name.
 - `Create Session` stays disabled (with disabled styling) until name is non-empty.
 - Member selection at creation is optional.
@@ -111,6 +112,7 @@
 ### Posts (root links)
 
 - Posting is session-scoped.
+- Post composer uses a centered inline title, top-left close icon, and bottom action footer.
 - Compose fields are:
   - Session context (read-only).
   - Link (required).
@@ -320,9 +322,11 @@
 - Remote Nostr profile names are fetched lazily by pubkey and are used only when no local alias exists.
 - When both exist, contact UI shows the local alias as primary and the published Nostr name as secondary.
 - Contact management supports add, long-press unfollow, and alias edit.
+- Add-contact sheet uses a centered inline title, top-left close icon, and bottom action footer.
 - Add-contact input supports manual entry, paste, and QR scan.
 - Add-contact input previews the resolved identity for a valid contact key and lazily looks up the published Nostr name.
 - Contact-key helper controls render directly below the field in the same compact control row pattern used by post compose.
+- `Add Contact` stays disabled until the contact key normalizes to a valid public key.
 - Re-adding the same contact updates the saved alias for that contact; it does not create a duplicate or republish the follow list.
 
 ### Share tab

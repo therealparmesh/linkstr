@@ -290,107 +290,115 @@ struct AddContactSheet: View {
     NavigationStack {
       ZStack {
         LinkstrBackgroundView()
-        VStack(spacing: 12) {
-          TextField("contact key (npub...)", text: $npub)
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled(true)
-            .disabled(isNPubPrefilled)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .frame(minHeight: LinkstrTheme.inputControlMinHeight)
-            .background(
-              RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(LinkstrTheme.panelSoft)
-            )
-
-          if !isNPubPrefilled {
-            LinkstrInputAssistRow(
-              showClear: !npub.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              isDisabled: isSubmitting,
-              onPaste: {
-                pasteFromClipboard()
-                scannerErrorMessage = nil
-              },
-              onScan: {
-                scannerErrorMessage = nil
-                isPresentingScanner = true
-              },
-              onClear: {
-                npub = ""
-                scannerErrorMessage = nil
-              }
-            )
-          }
-
-          if let previewIdentity {
-            VStack(alignment: .leading, spacing: 8) {
-              LinkstrSectionHeader(title: "preview")
-              HStack(spacing: 12) {
-                LinkstrContactAvatar(name: previewIdentity.displayName)
-                LinkstrContactIdentityView(
-                  identity: previewIdentity,
-                  primaryFont: LinkstrTheme.body(14),
-                  secondaryFont: LinkstrTheme.body(11),
-                  npubFont: LinkstrTheme.body(11),
-                  lineLimit: 2
-                )
-                .frame(maxWidth: .infinity, alignment: .leading)
-              }
+        ScrollView {
+          VStack(alignment: .leading, spacing: 12) {
+            TextField("contact key (npub...)", text: $npub)
+              .textInputAutocapitalization(.never)
+              .autocorrectionDisabled(true)
+              .disabled(isSubmitting || isNPubPrefilled)
               .padding(.horizontal, 12)
               .padding(.vertical, 10)
+              .frame(minHeight: LinkstrTheme.inputControlMinHeight)
               .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                   .fill(LinkstrTheme.panelSoft)
               )
 
-              if previewIdentity.chosenName == nil && normalizedAliasPreview == nil {
-                Text("looking up published Nostr name…")
-                  .font(LinkstrTheme.body(12))
-                  .foregroundStyle(LinkstrTheme.textSecondary)
+            if !isNPubPrefilled {
+              LinkstrInputAssistRow(
+                showClear: !npub.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                isDisabled: isSubmitting,
+                onPaste: {
+                  pasteFromClipboard()
+                  scannerErrorMessage = nil
+                },
+                onScan: {
+                  scannerErrorMessage = nil
+                  isPresentingScanner = true
+                },
+                onClear: {
+                  npub = ""
+                  scannerErrorMessage = nil
+                }
+              )
+            }
+
+            if let previewIdentity {
+              VStack(alignment: .leading, spacing: 8) {
+                LinkstrSectionHeader(title: "preview")
+                HStack(spacing: 12) {
+                  LinkstrContactAvatar(name: previewIdentity.displayName)
+                  LinkstrContactIdentityView(
+                    identity: previewIdentity,
+                    primaryFont: LinkstrTheme.body(14),
+                    secondaryFont: LinkstrTheme.body(11),
+                    npubFont: LinkstrTheme.body(11),
+                    lineLimit: 2
+                  )
+                  .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(
+                  RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(LinkstrTheme.panelSoft)
+                )
+
+                if previewIdentity.chosenName == nil && normalizedAliasPreview == nil {
+                  Text("looking up published Nostr name…")
+                    .font(LinkstrTheme.body(12))
+                    .foregroundStyle(LinkstrTheme.textSecondary)
+                }
               }
             }
+
+            TextField("alias (optional)", text: $alias)
+              .textInputAutocapitalization(.words)
+              .disabled(isSubmitting)
+              .padding(.horizontal, 12)
+              .padding(.vertical, 10)
+              .frame(minHeight: LinkstrTheme.inputControlMinHeight)
+              .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                  .fill(LinkstrTheme.panelSoft)
+              )
           }
-
-          TextField("alias (optional)", text: $alias)
-            .textInputAutocapitalization(.words)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .frame(minHeight: LinkstrTheme.inputControlMinHeight)
-            .background(
-              RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(LinkstrTheme.panelSoft)
-            )
-
-          Text(normalizedScannerErrorMessage.isEmpty ? " " : normalizedScannerErrorMessage)
-            .font(LinkstrTheme.body(12))
-            .foregroundStyle(LinkstrTheme.destructive.opacity(0.9))
-            .frame(maxWidth: .infinity, minHeight: 20, alignment: .leading)
-            .opacity(normalizedScannerErrorMessage.isEmpty ? 0 : 1)
-            .accessibilityHidden(normalizedScannerErrorMessage.isEmpty)
-
-          Spacer()
+          .padding(.horizontal, 12)
+          .padding(.top, 14)
+          .padding(.bottom, 120)
         }
-        .padding(14)
       }
       .task(id: previewLookupRequestID) {
         guard let previewPubkeyHex else { return }
         session.requestRemoteProfilesIfNeeded(pubkeyHexes: [previewPubkeyHex])
       }
       .navigationTitle("add contact")
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar(.visible, for: .navigationBar)
       .toolbarBackground(.hidden, for: .navigationBar)
       .toolbarColorScheme(.dark, for: .navigationBar)
       .toolbar {
-        ToolbarItem(placement: .cancellationAction) {
-          Button("cancel") { dismiss() }
-            .disabled(isSubmitting)
-        }
-        ToolbarItem(placement: .confirmationAction) {
-          Button(isSubmitting ? "adding contact…" : "add contact") {
-            submitFollow()
+        ToolbarItem(placement: .topBarLeading) {
+          Button {
+            dismiss()
+          } label: {
+            Image(systemName: "xmark")
+              .linkstrToolbarIconLabel()
           }
-          .disabled(isSubmitting || npub.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-          .tint(LinkstrTheme.neonCyan)
+          .accessibilityLabel("cancel")
+          .tint(LinkstrTheme.textSecondary)
+          .disabled(isSubmitting)
         }
+      }
+      .safeAreaInset(edge: .bottom, spacing: 0) {
+        LinkstrSheetActionFooter(
+          title: isSubmitting ? "adding contact…" : "add contact",
+          systemImage: "person.crop.circle.badge.plus",
+          isDisabled: !canSubmit,
+          message: footerMessage,
+          messageColor: footerMessageColor,
+          action: submitFollow
+        )
       }
       .sheet(isPresented: $isPresentingScanner) {
         LinkstrQRScannerSheet { scannedValue in
@@ -402,7 +410,51 @@ struct AddContactSheet: View {
           }
         }
       }
+      .onChange(of: npub) { _, _ in
+        guard normalizedScannerErrorMessage.isEmpty == false else { return }
+        scannerErrorMessage = nil
+      }
     }
+  }
+
+  private var canSubmit: Bool {
+    !isSubmitting && previewPubkeyHex != nil
+  }
+
+  private var footerMessage: String {
+    if isSubmitting {
+      return "waiting for relay reconnect before adding…"
+    }
+
+    if normalizedScannerErrorMessage.isEmpty == false {
+      return normalizedScannerErrorMessage
+    }
+
+    let trimmedNPub = npub.trimmingCharacters(in: .whitespacesAndNewlines)
+    if trimmedNPub.isEmpty {
+      return "valid contact key required. alias is optional."
+    }
+
+    if previewPubkeyHex == nil {
+      return "enter a valid contact key."
+    }
+
+    return "alias is optional."
+  }
+
+  private var footerMessageColor: Color {
+    if isSubmitting {
+      return LinkstrTheme.textSecondary
+    }
+
+    let trimmedNPub = npub.trimmingCharacters(in: .whitespacesAndNewlines)
+    if normalizedScannerErrorMessage.isEmpty == false
+      || (!trimmedNPub.isEmpty && previewPubkeyHex == nil)
+    {
+      return LinkstrTheme.destructive.opacity(0.9)
+    }
+
+    return LinkstrTheme.textSecondary
   }
 
   private func pasteFromClipboard() {
@@ -412,7 +464,7 @@ struct AddContactSheet: View {
   }
 
   private func submitFollow() {
-    guard !isSubmitting else { return }
+    guard canSubmit else { return }
     isSubmitting = true
     Task { @MainActor in
       let didAdd = await session.addContact(npub: npub, alias: alias)

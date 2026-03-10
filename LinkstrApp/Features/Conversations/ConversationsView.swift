@@ -693,8 +693,7 @@ struct NewSessionSheet: View {
         LinkstrBackgroundView()
         ScrollView {
           VStack(alignment: .leading, spacing: 12) {
-            LinkstrSectionHeader(title: "session name")
-            TextField("fun", text: $sessionName)
+            TextField("session name", text: $sessionName)
               .textInputAutocapitalization(.words)
               .padding(.horizontal, 12)
               .padding(.vertical, 10)
@@ -704,7 +703,6 @@ struct NewSessionSheet: View {
                   .fill(LinkstrTheme.panelSoft)
               )
 
-            LinkstrSectionHeader(title: "members (optional)")
             Text("create solo or add contacts now. you can manage members later.")
               .font(LinkstrTheme.body(12))
               .foregroundStyle(LinkstrTheme.textSecondary)
@@ -782,38 +780,32 @@ struct NewSessionSheet: View {
       }
       .navigationTitle("new session")
       .navigationBarTitleDisplayMode(.inline)
+      .toolbar(.visible, for: .navigationBar)
       .toolbarBackground(.hidden, for: .navigationBar)
       .toolbarColorScheme(.dark, for: .navigationBar)
       .toolbar {
-        ToolbarItem(placement: .cancellationAction) {
-          Button("cancel") { dismiss() }
-            .disabled(isCreating)
+        ToolbarItem(placement: .topBarLeading) {
+          Button {
+            dismiss()
+          } label: {
+            Image(systemName: "xmark")
+              .linkstrToolbarIconLabel()
+          }
+          .accessibilityLabel("cancel")
+          .tint(LinkstrTheme.textSecondary)
+          .disabled(isCreating)
         }
       }
-      .safeAreaInset(edge: .bottom) {
-        VStack(spacing: 8) {
-          Button(action: createSession) {
-            Label(isCreating ? "creating…" : "create session", systemImage: "plus.circle.fill")
-              .frame(maxWidth: .infinity)
-          }
-          .buttonStyle(.borderedProminent)
-          .tint(LinkstrTheme.neonCyan)
-          .disabled(isCreating || !canCreateSession)
-
-          Text(isCreating ? "waiting for relay reconnect before creating…" : " ")
-            .font(LinkstrTheme.body(12))
-            .foregroundStyle(LinkstrTheme.textSecondary)
-            .frame(maxWidth: .infinity, minHeight: 14, alignment: .center)
-            .opacity(isCreating ? 1 : 0)
-        }
-        .padding(.horizontal, 12)
-        .padding(.top, 10)
-        .padding(.bottom, 12)
-        .background(.ultraThinMaterial)
-        .overlay(alignment: .top) {
-          Divider()
-            .overlay(LinkstrTheme.textSecondary.opacity(0.18))
-        }
+      .safeAreaInset(edge: .bottom, spacing: 0) {
+        LinkstrSheetActionFooter(
+          title: isCreating ? "creating…" : "create session",
+          systemImage: "plus.circle.fill",
+          isDisabled: isCreating || !canCreateSession,
+          message: isCreating
+            ? "waiting for relay reconnect before creating…"
+            : "session name required. members are optional.",
+          action: createSession
+        )
       }
       .task(id: profileLookupRequestID) {
         session.requestRemoteProfilesIfNeeded(pubkeyHexes: profileLookupPubkeys)
