@@ -76,14 +76,7 @@ private struct LinkstrBootLoadingView: View {
 
   var body: some View {
     VStack(spacing: 18) {
-      Circle()
-        .fill(LinkstrTheme.panelElevated)
-        .frame(width: 72, height: 72)
-        .overlay {
-          Image(systemName: "bolt.horizontal.fill")
-            .font(LinkstrTheme.system(26, weight: .semibold))
-            .foregroundStyle(LinkstrTheme.accent)
-        }
+      LinkstrAppIconBadge(size: 72)
 
       VStack(spacing: 8) {
         Text("loading linkstr")

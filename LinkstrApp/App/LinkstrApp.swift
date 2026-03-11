@@ -142,8 +142,12 @@ struct LinkstrAppMain: App {
       case .loading:
         ZStack {
           LinkstrBackgroundView()
-          ProgressView()
-            .tint(LinkstrTheme.accent)
+          VStack(spacing: LinkstrTheme.sectionStackSpacing) {
+            LinkstrAppIconBadge(size: 72)
+
+            ProgressView()
+              .tint(LinkstrTheme.accent)
+          }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
       }

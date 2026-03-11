@@ -450,6 +450,31 @@ struct LinkstrCenteredEmptyStateView: View {
   }
 }
 
+struct LinkstrAppIconBadge: View {
+  var size: CGFloat = 72
+
+  private var imageSize: CGFloat {
+    size - 10
+  }
+
+  var body: some View {
+    Circle()
+      .fill(LinkstrTheme.panelElevated)
+      .frame(width: size, height: size)
+      .overlay {
+        Image("LinkstrSplashIcon")
+          .resizable()
+          .scaledToFill()
+          .frame(width: imageSize, height: imageSize)
+          .clipShape(Circle())
+      }
+      .overlay {
+        Circle()
+          .stroke(LinkstrTheme.separator.opacity(1.4), lineWidth: 1)
+      }
+  }
+}
+
 enum LinkstrAvatarStyleResolver {
   private static let sessionPalette: [Color] = [
     Color(red: 0.47, green: 0.63, blue: 0.98),
