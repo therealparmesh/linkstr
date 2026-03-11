@@ -133,22 +133,16 @@ struct SettingsView: View {
             relayURL = ""
           }
         } label: {
-          Text("add relay")
-            .frame(maxWidth: .infinity)
+          LinkstrActionButtonLabel(title: "add relay")
         }
-        .buttonStyle(.borderedProminent)
-        .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
-        .tint(LinkstrTheme.accent)
+        .linkstrPrimaryButton()
 
         Button {
           session.resetDefaultRelays()
         } label: {
-          Text("reset defaults")
-            .frame(maxWidth: .infinity)
+          LinkstrActionButtonLabel(title: "reset defaults")
         }
-        .buttonStyle(.bordered)
-        .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
-        .tint(LinkstrTheme.textSecondary)
+        .linkstrSecondaryButton()
       }
     }
   }
@@ -233,12 +227,9 @@ struct SettingsView: View {
         session.clearCachedMediaAndPreviews()
         refreshStorageUsage()
       } label: {
-        Text("clear cached media and previews")
-          .frame(maxWidth: .infinity)
+        LinkstrActionButtonLabel(title: "clear cached media and previews")
       }
-      .buttonStyle(.borderedProminent)
-      .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
-      .tint(LinkstrTheme.destructive)
+      .linkstrDestructiveButton()
     }
   }
 
@@ -254,27 +245,21 @@ struct SettingsView: View {
               isNsecVisible = true
             }
           } label: {
-            Label(
-              isNsecVisible ? "hide secret key" : "reveal secret key",
+            LinkstrActionButtonLabel(
+              title: isNsecVisible ? "hide secret key" : "reveal secret key",
               systemImage: "key.fill"
             )
-            .frame(maxWidth: .infinity)
           }
-          .buttonStyle(.bordered)
-          .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
-          .tint(LinkstrTheme.textSecondary)
+          .linkstrCautionButton()
 
           if isNsecVisible {
             Button {
               guard !revealedNsec.isEmpty else { return }
               UIPasteboard.general.string = revealedNsec
             } label: {
-              Label("copy", systemImage: "doc.on.doc")
-                .frame(maxWidth: .infinity)
+              LinkstrActionButtonLabel(title: "copy", systemImage: "doc.on.doc")
             }
-            .buttonStyle(.bordered)
-            .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
-            .tint(LinkstrTheme.amber)
+            .linkstrCautionButton()
             .disabled(revealedNsec.isEmpty)
           }
         }
@@ -291,25 +276,22 @@ struct SettingsView: View {
         Button(role: .destructive) {
           isPresentingLogoutOptions = true
         } label: {
-          Label("log out", systemImage: "rectangle.portrait.and.arrow.right")
-            .frame(maxWidth: .infinity)
+          LinkstrActionButtonLabel(
+            title: "log out",
+            systemImage: "rectangle.portrait.and.arrow.right"
+          )
         }
-        .buttonStyle(.borderedProminent)
-        .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
-        .tint(LinkstrTheme.destructive)
+        .linkstrSecondaryButton()
 
         Button(role: .destructive) {
           isPresentingDeleteAccountConfirm = true
         } label: {
-          Label(
-            isDeletingAccount ? "deleting account..." : "delete account",
+          LinkstrActionButtonLabel(
+            title: isDeletingAccount ? "deleting account..." : "delete account",
             systemImage: "person.crop.circle.badge.xmark"
           )
-          .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.bordered)
-        .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
-        .tint(LinkstrTheme.destructive)
+        .linkstrDestructiveButton(prominent: true)
         .disabled(isDeletingAccount)
       } else {
         Text("no account found. sign in with a secret key (nsec) or create one.")

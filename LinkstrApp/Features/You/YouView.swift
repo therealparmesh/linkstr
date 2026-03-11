@@ -70,19 +70,7 @@ struct YouView: View {
           .foregroundStyle(LinkstrTheme.destructive.opacity(0.92))
       }
 
-      Button {
-        submitProfileName()
-      } label: {
-        Label(
-          profileNameButtonTitle,
-          systemImage: isClearingProfileName ? "trash" : "checkmark.circle.fill"
-        )
-        .frame(maxWidth: .infinity)
-      }
-      .buttonStyle(.borderedProminent)
-      .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
-      .tint(isClearingProfileName ? LinkstrTheme.amber : LinkstrTheme.accent)
-      .disabled(!canSaveProfileName || isSavingProfileName)
+      profileNameButton
     }
   }
 
@@ -124,12 +112,36 @@ struct YouView: View {
       Button {
         UIPasteboard.general.string = npub
       } label: {
-        Label("copy public key", systemImage: "doc.on.doc")
-          .frame(maxWidth: .infinity)
+        LinkstrActionButtonLabel(title: "copy public key", systemImage: "doc.on.doc")
       }
-      .buttonStyle(.borderedProminent)
-      .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
-      .tint(LinkstrTheme.accent)
+      .linkstrSecondaryButton()
+    }
+  }
+
+  @ViewBuilder
+  private var profileNameButton: some View {
+    if isClearingProfileName {
+      Button {
+        submitProfileName()
+      } label: {
+        LinkstrActionButtonLabel(
+          title: profileNameButtonTitle,
+          systemImage: "minus.circle.fill"
+        )
+      }
+      .linkstrSecondaryButton()
+      .disabled(!canSaveProfileName || isSavingProfileName)
+    } else {
+      Button {
+        submitProfileName()
+      } label: {
+        LinkstrActionButtonLabel(
+          title: profileNameButtonTitle,
+          systemImage: "checkmark.circle.fill"
+        )
+      }
+      .linkstrPrimaryButton()
+      .disabled(!canSaveProfileName || isSavingProfileName)
     }
   }
 

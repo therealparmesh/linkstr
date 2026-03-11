@@ -37,6 +37,8 @@ enum LinkstrTheme {
   static let inputAssistButtonSpacing: CGFloat = 14
   static let inputAssistIconSpacing: CGFloat = 6
   static let inputAssistBottomSpacing: CGFloat = 6
+  static let actionButtonLabelSpacing: CGFloat = 8
+  static let actionButtonIconWidth: CGFloat = 18
   static let fieldCornerRadius: CGFloat = 12
 
   static func title(_ size: CGFloat, weight: Font.Weight = .semibold) -> Font {
@@ -110,6 +112,60 @@ private struct LinkstrInputField: ViewModifier {
   }
 }
 
+private enum LinkstrActionButtonTone {
+  case primary
+  case secondary
+  case caution
+  case cautionProminent
+  case destructive
+  case destructiveProminent
+}
+
+private struct LinkstrActionButtonChrome: ViewModifier {
+  let tone: LinkstrActionButtonTone
+
+  func body(content: Content) -> some View {
+    switch tone {
+    case .primary:
+      content
+        .font(LinkstrTheme.body(15, weight: .semibold))
+        .buttonStyle(.borderedProminent)
+        .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
+        .tint(LinkstrTheme.accent)
+    case .secondary:
+      content
+        .font(LinkstrTheme.body(15, weight: .semibold))
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
+        .tint(LinkstrTheme.textSecondary)
+    case .caution:
+      content
+        .font(LinkstrTheme.body(15, weight: .semibold))
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
+        .tint(LinkstrTheme.amber)
+    case .cautionProminent:
+      content
+        .font(LinkstrTheme.body(15, weight: .semibold))
+        .buttonStyle(.borderedProminent)
+        .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
+        .tint(LinkstrTheme.amber)
+    case .destructive:
+      content
+        .font(LinkstrTheme.body(15, weight: .semibold))
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
+        .tint(LinkstrTheme.destructive)
+    case .destructiveProminent:
+      content
+        .font(LinkstrTheme.body(15, weight: .semibold))
+        .buttonStyle(.borderedProminent)
+        .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
+        .tint(LinkstrTheme.destructive)
+    }
+  }
+}
+
 extension View {
   func linkstrSurfaceCard() -> some View {
     modifier(LinkstrSurfaceCard())
@@ -124,6 +180,22 @@ extension View {
     alignment: Alignment = .leading
   ) -> some View {
     modifier(LinkstrInputField(minHeight: minHeight, alignment: alignment))
+  }
+
+  func linkstrPrimaryButton() -> some View {
+    modifier(LinkstrActionButtonChrome(tone: .primary))
+  }
+
+  func linkstrSecondaryButton() -> some View {
+    modifier(LinkstrActionButtonChrome(tone: .secondary))
+  }
+
+  func linkstrCautionButton(prominent: Bool = false) -> some View {
+    modifier(LinkstrActionButtonChrome(tone: prominent ? .cautionProminent : .caution))
+  }
+
+  func linkstrDestructiveButton(prominent: Bool = false) -> some View {
+    modifier(LinkstrActionButtonChrome(tone: prominent ? .destructiveProminent : .destructive))
   }
 
   func linkstrTabBarContentInset() -> some View {
@@ -145,6 +217,33 @@ extension View {
       .toolbarBackground(LinkstrTheme.chrome.opacity(0.88), for: .tabBar)
       .toolbarColorScheme(.dark, for: .navigationBar)
       .toolbarColorScheme(.dark, for: .tabBar)
+  }
+}
+
+struct LinkstrActionButtonLabel: View {
+  let title: String
+  var systemImage: String? = nil
+
+  var body: some View {
+    if let systemImage {
+      HStack(spacing: LinkstrTheme.actionButtonLabelSpacing) {
+        Image(systemName: systemImage)
+          .frame(width: LinkstrTheme.actionButtonIconWidth, alignment: .center)
+
+        Text(title)
+          .lineLimit(2)
+          .multilineTextAlignment(.center)
+
+        Color.clear
+          .frame(width: LinkstrTheme.actionButtonIconWidth, height: 1)
+      }
+      .frame(maxWidth: .infinity)
+    } else {
+      Text(title)
+        .lineLimit(2)
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity)
+    }
   }
 }
 
@@ -296,13 +395,9 @@ struct LinkstrSheetActionFooter: View {
   var body: some View {
     VStack(spacing: LinkstrTheme.buttonRowSpacing) {
       Button(action: action) {
-        Label(title, systemImage: systemImage)
-          .font(LinkstrTheme.body(15, weight: .semibold))
-          .frame(maxWidth: .infinity)
+        LinkstrActionButtonLabel(title: title, systemImage: systemImage)
       }
-      .buttonStyle(.borderedProminent)
-      .tint(LinkstrTheme.accent)
-      .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
+      .linkstrPrimaryButton()
       .disabled(isDisabled)
 
       Text(message ?? " ")

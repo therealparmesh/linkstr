@@ -67,12 +67,9 @@ struct OnboardingView: View {
         Button {
           session.importNsec(secretKey)
         } label: {
-          Label("sign in", systemImage: "arrow.right.circle.fill")
-            .frame(maxWidth: .infinity)
+          LinkstrActionButtonLabel(title: "sign in", systemImage: "arrow.right.circle.fill")
         }
-        .buttonStyle(.borderedProminent)
-        .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
-        .tint(LinkstrTheme.accent)
+        .linkstrPrimaryButton()
         .disabled(secretKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
       }
 
@@ -95,12 +92,9 @@ struct OnboardingView: View {
         Button {
           session.createAccount()
         } label: {
-          Label("create account", systemImage: "plus.circle.fill")
-            .frame(maxWidth: .infinity)
+          LinkstrActionButtonLabel(title: "create account", systemImage: "plus.circle.fill")
         }
-        .buttonStyle(.borderedProminent)
-        .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
-        .tint(LinkstrTheme.panelElevated)
+        .linkstrSecondaryButton()
       }
     }
   }
@@ -121,12 +115,9 @@ struct OnboardingView: View {
         Button {
           UIPasteboard.general.string = nsec
         } label: {
-          Label("copy key", systemImage: "doc.on.doc")
-            .frame(maxWidth: .infinity)
+          LinkstrActionButtonLabel(title: "copy key", systemImage: "doc.on.doc")
         }
-        .buttonStyle(.borderedProminent)
-        .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
-        .tint(LinkstrTheme.amber)
+        .linkstrCautionButton(prominent: true)
       }
 
       LinkstrInsetSection(
@@ -148,12 +139,12 @@ struct OnboardingView: View {
         Button {
           completePendingAccountCreation()
         } label: {
-          Label(createdAccountContinueButtonTitle, systemImage: "checkmark.circle.fill")
-            .frame(maxWidth: .infinity)
+          LinkstrActionButtonLabel(
+            title: createdAccountContinueButtonTitle,
+            systemImage: "checkmark.circle.fill"
+          )
         }
-        .buttonStyle(.borderedProminent)
-        .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
-        .tint(LinkstrTheme.accent)
+        .linkstrPrimaryButton()
         .disabled(isSavingCreatedProfileName)
       }
     }

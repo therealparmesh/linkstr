@@ -309,21 +309,15 @@ struct LinkstrStorageRecoveryView: View {
 
         VStack(spacing: LinkstrTheme.buttonRowSpacing) {
           Button(action: onPrimaryAction) {
-            Text(primaryActionTitle)
-              .frame(maxWidth: .infinity)
+            LinkstrActionButtonLabel(title: primaryActionTitle)
           }
-          .buttonStyle(.borderedProminent)
-          .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
-          .tint(LinkstrTheme.accent)
+          .linkstrPrimaryButton()
 
           if let secondaryActionTitle, let onSecondaryAction {
             Button(action: onSecondaryAction) {
-              Text(secondaryActionTitle)
-                .frame(maxWidth: .infinity)
+              LinkstrActionButtonLabel(title: secondaryActionTitle)
             }
-            .buttonStyle(.bordered)
-            .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
-            .tint(LinkstrTheme.amber)
+            .linkstrSecondaryButton()
           }
         }
       }

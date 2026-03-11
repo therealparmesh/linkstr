@@ -279,13 +279,10 @@ struct AdaptiveVideoPlaybackView: View {
           Button {
             openSourceAction()
           } label: {
-            Text("open in browser")
-              .frame(maxWidth: .infinity)
+            LinkstrActionButtonLabel(title: "open in browser")
           }
           .frame(maxWidth: .infinity)
-          .buttonStyle(.borderedProminent)
-          .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
-          .tint(LinkstrTheme.accent)
+          .linkstrSecondaryButton()
         } else {
           EmptyView()
         }
@@ -428,12 +425,10 @@ struct AdaptiveVideoPlaybackView: View {
 
   private func secondaryActionButton(_ title: String, action: @escaping () -> Void) -> some View {
     Button(action: action) {
-      Text(title)
-        .frame(maxWidth: .infinity)
+      LinkstrActionButtonLabel(title: title)
     }
     .frame(maxWidth: .infinity)
-    .buttonStyle(.bordered)
-    .tint(LinkstrTheme.textSecondary)
+    .linkstrSecondaryButton()
   }
 
   private func retryLocalPlayback() {

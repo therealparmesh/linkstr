@@ -614,8 +614,7 @@ private struct LinkstrQRScannerAccessDeniedView: View {
         guard let settingsURL = URL(string: UIApplication.openSettingsURLString) else { return }
         UIApplication.shared.open(settingsURL)
       }
-      .buttonStyle(.borderedProminent)
-      .tint(LinkstrTheme.accent)
+      .linkstrPrimaryButton()
       .padding(.top, 8)
     }
     .padding(.horizontal, 16)

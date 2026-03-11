@@ -51,9 +51,7 @@ struct DeepLinkVideoView: View {
           openURL(sourceURL)
         }
         .frame(maxWidth: .infinity)
-        .buttonStyle(.borderedProminent)
-        .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
-        .tint(LinkstrTheme.accent)
+        .linkstrSecondaryButton()
       }
     } else {
       LinkstrInsetSection(title: "unavailable") {
