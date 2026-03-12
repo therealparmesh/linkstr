@@ -549,20 +549,12 @@ struct LinkstrContactAvatar: View {
 
 struct LinkstrSessionAvatar: View {
   let seed: String
-  var label: String? = nil
   var size: CGFloat = 42
 
   var body: some View {
     Circle()
       .fill(LinkstrAvatarStyleResolver.sessionColor(for: seed))
       .frame(width: size, height: size)
-      .overlay {
-        if let label, !label.isEmpty {
-          Text(LinkstrAvatarStyleResolver.contactInitials(for: label))
-            .font(LinkstrTheme.body(max(12, size * 0.34), weight: .semibold))
-            .foregroundStyle(Color.white)
-        }
-      }
       .overlay {
         Circle()
           .stroke(Color.white.opacity(0.12), lineWidth: 1)

@@ -210,7 +210,6 @@ private struct SessionRowView: View {
     HStack(spacing: LinkstrTheme.rowSpacing) {
       LinkstrSessionAvatar(
         seed: summary.session.sessionID,
-        label: summary.session.name,
         size: 50
       )
 

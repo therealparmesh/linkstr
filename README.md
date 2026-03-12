@@ -108,7 +108,7 @@ linkstr still does not have a durable offline outbox. If a send cannot get relay
   - Updated timestamp.
   - Archive flag.
 - Users create sessions from the sessions tab compose action in the top-right corner.
-- Session list includes inline search and uses full-width chat-list rows with avatars, timestamps, and unread markers.
+- Session list includes inline search and uses full-width chat-list rows with solid-color avatars, timestamps, and unread markers.
 - Session creation uses grouped sections for session details and member selection, plus a persistent bottom action footer.
 - Session creation requires a non-empty name.
 - `create session` stays disabled (with disabled styling) until name is non-empty.
