@@ -276,6 +276,9 @@ struct SessionPostsView: View {
   @Query(sort: [SortDescriptor(\SessionMemberEntity.createdAt)])
   private var allMembers: [SessionMemberEntity]
 
+  @Query(sort: [SortDescriptor(\SessionMemberIntervalEntity.startAt)])
+  private var allMemberIntervals: [SessionMemberIntervalEntity]
+
   @Query(sort: [SortDescriptor(\SessionReactionEntity.updatedAt, order: .reverse)])
   private var allReactions: [SessionReactionEntity]
 
@@ -305,6 +308,14 @@ struct SessionPostsView: View {
       .filter { $0.sessionID == sessionEntity.sessionID && $0.isActive }
   }
 
+  private var scopedMemberIntervals: [SessionMemberIntervalEntity] {
+    OwnerScopedCollections.memberIntervals(
+      allMemberIntervals,
+      ownerPubkey: session.identityService.pubkeyHex
+    )
+    .filter { $0.sessionID == sessionEntity.sessionID }
+  }
+
   private var scopedReactions: [SessionReactionEntity] {
     OwnerScopedCollections.reactions(allReactions, ownerPubkey: session.identityService.pubkeyHex)
       .filter { $0.sessionID == sessionEntity.sessionID && $0.isActive }
@@ -320,22 +331,56 @@ struct SessionPostsView: View {
       .sorted { $0.timestamp > $1.timestamp }
   }
 
-  private var postRows: [PostListRow] {
-    var previousSenderPubkey: String?
-    return posts.enumerated().map { index, post in
-      let nextSenderPubkey =
-        index < posts.count - 1 ? posts[index + 1].senderPubkey : nil
-      let row = PostListRow(
-        post: post,
-        senderLabel: senderLabel(for: post),
-        isOutgoing: isOutgoing(post),
-        showsSenderHeader: previousSenderPubkey != post.senderPubkey,
-        isFollowedBySameSender: nextSenderPubkey == post.senderPubkey,
-        hasUnreadPost: hasUnreadIncomingRootPost(post),
-        reactionSummaries: reactionSummariesByPostID[post.rootID] ?? []
+  private var membershipChangeRows: [SessionMembershipChangeRow] {
+    let myPubkey = session.identityService.pubkeyHex
+    let intervals = scopedMemberIntervals.map {
+      SessionMembershipTimelineInterval(
+        memberPubkey: $0.memberPubkey,
+        startAt: $0.startAt,
+        endAt: $0.endAt
       )
-      previousSenderPubkey = post.senderPubkey
-      return row
+    }
+    return SessionMembershipTimelineBuilder.changes(from: intervals).map { change in
+      let displayName: String
+      if change.memberPubkey == myPubkey {
+        displayName = "you"
+      } else {
+        displayName = session.displayName(for: change.memberPubkey, contacts: scopedContacts)
+      }
+      return SessionMembershipChangeRow(change: change, displayName: displayName)
+    }
+  }
+
+  private var timelineRows: [SessionTimelineRow] {
+    let entries =
+      posts.map(SessionTimelineEntry.post)
+      + membershipChangeRows.map(SessionTimelineEntry.membershipChange)
+    let sortedEntries = entries.sorted { lhs, rhs in
+      if lhs.timestamp != rhs.timestamp {
+        return lhs.timestamp > rhs.timestamp
+      }
+      return lhs.sortPriority < rhs.sortPriority
+    }
+
+    return sortedEntries.enumerated().map { index, entry in
+      switch entry {
+      case .membershipChange(let change):
+        return .membershipChange(change)
+      case .post(let post):
+        let previousPost = index > 0 ? sortedEntries[index - 1].post : nil
+        let nextPost = index < sortedEntries.count - 1 ? sortedEntries[index + 1].post : nil
+        return .post(
+          PostListRow(
+            post: post,
+            senderLabel: senderLabel(for: post),
+            isOutgoing: isOutgoing(post),
+            showsSenderHeader: previousPost?.senderPubkey != post.senderPubkey,
+            isFollowedBySameSender: nextPost?.senderPubkey == post.senderPubkey,
+            hasUnreadPost: hasUnreadIncomingRootPost(post),
+            reactionSummaries: reactionSummariesByPostID[post.rootID] ?? []
+          )
+        )
+      }
     }
   }
 
@@ -358,6 +403,7 @@ struct SessionPostsView: View {
   private var profileLookupPubkeys: [String] {
     var pubkeys = scopedContacts.map(\.targetPubkey)
     pubkeys.append(contentsOf: scopedMembers.map(\.memberPubkey))
+    pubkeys.append(contentsOf: scopedMemberIntervals.map(\.memberPubkey))
     pubkeys.append(contentsOf: posts.map(\.senderPubkey))
     pubkeys.append(contentsOf: scopedReactions.map(\.senderPubkey))
     return NostrValueNormalizer.dedupedNormalizedPubkeyHexes(pubkeys)
@@ -370,7 +416,7 @@ struct SessionPostsView: View {
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
-        if posts.isEmpty {
+        if timelineRows.isEmpty {
           LinkstrCenteredEmptyStateView(
             title: "no posts yet",
             systemImage: "link.badge.plus",
@@ -379,8 +425,8 @@ struct SessionPostsView: View {
           .frame(maxWidth: .infinity, minHeight: 260)
         } else {
           LazyVStack(alignment: .leading, spacing: 0) {
-            ForEach(postRows) { row in
-              postRow(row)
+            ForEach(timelineRows) { row in
+              timelineRow(row)
             }
           }
         }
@@ -457,6 +503,16 @@ struct SessionPostsView: View {
   }
 
   @ViewBuilder
+  private func timelineRow(_ row: SessionTimelineRow) -> some View {
+    switch row {
+    case .post(let postListRow):
+      postRow(postListRow)
+    case .membershipChange(let changeRow):
+      membershipChangeRow(changeRow)
+    }
+  }
+
+  @ViewBuilder
   private func postRow(_ row: PostListRow) -> some View {
     let postLink = NavigationLink {
       PostDetailView(post: row.post, sessionName: sessionEntity.name)
@@ -498,6 +554,10 @@ struct SessionPostsView: View {
     }
   }
 
+  private func membershipChangeRow(_ row: SessionMembershipChangeRow) -> some View {
+    SessionMembershipChangeRowView(row: row)
+  }
+
   private func isOutgoing(_ message: SessionMessageEntity) -> Bool {
     guard let myPubkey = session.identityService.pubkeyHex else { return false }
     return message.senderPubkey == myPubkey
@@ -526,6 +586,55 @@ private struct PostListRow: Identifiable {
   let reactionSummaries: [ReactionSummary]
 
   var id: String { post.rootID }
+}
+
+private struct SessionMembershipChangeRow: Identifiable {
+  let change: SessionMembershipTimelineChange
+  let displayName: String
+
+  var id: String { change.id }
+}
+
+private enum SessionTimelineEntry {
+  case post(SessionMessageEntity)
+  case membershipChange(SessionMembershipChangeRow)
+
+  var timestamp: Date {
+    switch self {
+    case .post(let post):
+      return post.timestamp
+    case .membershipChange(let row):
+      return row.change.timestamp
+    }
+  }
+
+  var sortPriority: Int {
+    switch self {
+    case .membershipChange:
+      return 0
+    case .post:
+      return 1
+    }
+  }
+
+  var post: SessionMessageEntity? {
+    guard case .post(let post) = self else { return nil }
+    return post
+  }
+}
+
+private enum SessionTimelineRow: Identifiable {
+  case post(PostListRow)
+  case membershipChange(SessionMembershipChangeRow)
+
+  var id: String {
+    switch self {
+    case .post(let row):
+      return row.id
+    case .membershipChange(let row):
+      return row.id
+    }
+  }
 }
 
 private struct PostListRowView: View {
@@ -676,6 +785,112 @@ private struct PostCardView: View {
           .font(LinkstrTheme.body(16))
           .foregroundStyle(LinkstrTheme.textSecondary)
       }
+  }
+}
+
+private struct SessionMembershipChangeRowView: View {
+  let row: SessionMembershipChangeRow
+
+  private var verb: String {
+    switch row.change.kind {
+    case .joined:
+      return "joined"
+    case .left:
+      return "left"
+    }
+  }
+
+  var body: some View {
+    HStack(spacing: 10) {
+      Rectangle()
+        .fill(LinkstrTheme.separator)
+        .frame(height: 1)
+
+      Text("\(row.displayName) \(verb) · \(row.change.timestamp.linkstrMessageTimestampLabel)")
+        .font(LinkstrTheme.body(11, weight: .semibold))
+        .foregroundStyle(LinkstrTheme.textTertiary)
+        .lineLimit(1)
+
+      Rectangle()
+        .fill(LinkstrTheme.separator)
+        .frame(height: 1)
+    }
+    .padding(.vertical, 12)
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel("\(row.displayName) \(verb)")
+    .accessibilityValue(row.change.timestamp.linkstrMessageTimestampLabel)
+  }
+}
+
+struct SessionMembershipTimelineInterval: Equatable {
+  let memberPubkey: String
+  let startAt: Date
+  let endAt: Date?
+}
+
+struct SessionMembershipTimelineChange: Identifiable, Equatable {
+  enum Kind: String {
+    case joined
+    case left
+
+    fileprivate var sortPriority: Int {
+      switch self {
+      case .joined:
+        return 0
+      case .left:
+        return 1
+      }
+    }
+  }
+
+  let memberPubkey: String
+  let timestamp: Date
+  let kind: Kind
+
+  var id: String {
+    "\(memberPubkey):\(kind.rawValue):\(timestamp.timeIntervalSince1970)"
+  }
+}
+
+enum SessionMembershipTimelineBuilder {
+  static func changes(
+    from intervals: [SessionMembershipTimelineInterval]
+  ) -> [SessionMembershipTimelineChange] {
+    guard let baselineTimestamp = intervals.map(\.startAt).min() else { return [] }
+
+    var changes: [SessionMembershipTimelineChange] = []
+    changes.reserveCapacity(intervals.count * 2)
+
+    for interval in intervals {
+      if interval.startAt > baselineTimestamp {
+        changes.append(
+          SessionMembershipTimelineChange(
+            memberPubkey: interval.memberPubkey,
+            timestamp: interval.startAt,
+            kind: .joined
+          )
+        )
+      }
+      if let endAt = interval.endAt, endAt > baselineTimestamp {
+        changes.append(
+          SessionMembershipTimelineChange(
+            memberPubkey: interval.memberPubkey,
+            timestamp: endAt,
+            kind: .left
+          )
+        )
+      }
+    }
+
+    return changes.sorted { lhs, rhs in
+      if lhs.timestamp != rhs.timestamp {
+        return lhs.timestamp < rhs.timestamp
+      }
+      if lhs.kind != rhs.kind {
+        return lhs.kind.sortPriority < rhs.kind.sortPriority
+      }
+      return lhs.memberPubkey < rhs.memberPubkey
+    }
   }
 }
 

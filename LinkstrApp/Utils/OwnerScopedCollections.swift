@@ -33,6 +33,14 @@ enum OwnerScopedCollections {
     return members.filter { $0.ownerPubkey == ownerPubkey }
   }
 
+  static func memberIntervals(
+    _ intervals: [SessionMemberIntervalEntity],
+    ownerPubkey: String?
+  ) -> [SessionMemberIntervalEntity] {
+    guard let ownerPubkey else { return [] }
+    return intervals.filter { $0.ownerPubkey == ownerPubkey }
+  }
+
   static func reactions(
     _ reactions: [SessionReactionEntity],
     ownerPubkey: String?
