@@ -39,6 +39,13 @@ final class SessionMessageStore {
     return try modelContext.fetch(descriptor).first
   }
 
+  func archivedConversationIDs(ownerPubkey: String) throws -> [String] {
+    let descriptor = FetchDescriptor<SessionEntity>(
+      predicate: #Predicate { $0.ownerPubkey == ownerPubkey && $0.isArchived == true }
+    )
+    return try modelContext.fetch(descriptor).map(\.sessionID)
+  }
+
   @discardableResult
   func upsertSession(
     ownerPubkey: String,

@@ -1,19 +1,20 @@
 # privacy policy
 
-last updated: march 10, 2026
+last updated: march 11, 2026
 
 ## overview
 
-linkstr does not run developer-controlled servers. your account keys and app data stay on your device, and encrypted session payloads move only through the nostr relays and content providers needed to use the app.
+linkstr runs a small developer-controlled push notification service for ios delivery. your account keys and encrypted session content still stay on your device and on the nostr relays you use, but APNs device tokens and a small amount of routing state are stored by that push service.
 
 ## data collection
 
-**none.**
+linkstr does not run analytics, ads, or tracking. it does operate a push notification service that stores:
 
-- no analytics or tracking by the developer
-- no advertising
-- no data sent to external servers controlled by the developer
-- encrypted nostr payloads are transmitted only to relays you choose
+- APNs device tokens
+- nostr pubkey to device-token associations
+- archived conversation ids used to suppress push notifications
+
+encrypted nostr payloads are still transmitted only to the relays you choose.
 
 ## data you control
 
@@ -41,6 +42,16 @@ when you use linkstr, you communicate through the decentralized nostr protocol:
 
 nostr relays are third-party servers not controlled by linkstr. each relay operator has their own privacy policy and data retention practices.
 
+### push notification service
+
+when you allow notifications, linkstr sends limited routing data to a developer-operated push service:
+
+- **APNs device token**: required so Apple can deliver notifications to your device
+- **nostr pubkey association**: used to know which device tokens belong to which account
+- **archived conversation ids**: used to suppress notifications for archived sessions
+
+the push service does not store decrypted post text, reaction text, or session payload plaintext. notification banners use generic text such as new post or new reaction.
+
 ### optional icloud sync
 
 if you enable iCloud keychain on your device:
@@ -65,9 +76,15 @@ if you enable iCloud keychain on your device:
 
 ### network access
 
-- **purpose**: connect to nostr relays and download media
+- **purpose**: connect to nostr relays, talk to the linkstr push service, and download media
 - **usage**: required for app functionality
-- **data**: encrypted session payloads sent to relays you configure; media downloaded from urls you share
+- **data**: encrypted session payloads sent to relays you configure; APNs device token and archive state sent to the linkstr push service; media downloaded from urls you share
+
+### notifications
+
+- **purpose**: deliver ios alerts for new posts and reactions
+- **usage**: only after you grant notification permission
+- **data**: APNs device token is registered with the linkstr push service and with Apple Push Notification service
 
 ## third-party content
 
@@ -96,6 +113,7 @@ linkstr does not knowingly collect information from children under 13. the app d
 - **local data**: remains on device until you delete app or use "log out and clear local data"
 - **media cache**: downloaded video cache may be evicted automatically by linkstr's cache cap or by ios storage pressure
 - **relay data**: controlled by individual nostr relay operators; linkstr has no control over relay data retention
+- **push service data**: APNs device tokens and archive-state mappings remain until you unregister, log out, the token is invalidated by APNs, or operational cleanup removes stale records
 - **icloud sync**: controlled by icloud settings and apple's retention policies
 - **account deletion**: linkstr can ask enabled relays to delete account data, but your nsec remains valid unless you discard it yourself
 
@@ -104,7 +122,7 @@ linkstr does not knowingly collect information from children under 13. the app d
 - end-to-end encryption for session payloads
 - account keys stored in iOS keychain with whenunlocked accessibility
 - local data encrypted at rest using per-account encryption keys
-- no external servers controlled by the linkstr developer
+- limited developer-operated push infrastructure for notification routing
 
 ## your rights
 
@@ -122,14 +140,16 @@ updates will be posted at the same location with a new "last updated" date.
 
 ## international users
 
-linkstr is designed to work globally. no data is transmitted to servers controlled by the developer, regardless of your location.
+linkstr is designed to work globally. APNs routing data may be transmitted to servers controlled by the developer so ios notifications can function.
 
 ## third-party services
 
 the app uses:
 
 - **nostr protocol**: decentralized network; refer to individual relay privacy policies
+- **linkstr push service**: stores APNs device tokens, pubkey associations, and archived conversation ids for ios push delivery
 - **apple icloud** (optional): subject to apple's privacy policy
+- **apple push notification service (APNs)**: subject to apple's privacy policy
 - **web content providers**: when you share links, you interact with third-party websites subject to their policies
 
 ## contact

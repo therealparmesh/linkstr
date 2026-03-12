@@ -1,0 +1,20 @@
+app = "linkstr-push-service"
+primary_region = "dfw"
+
+[build]
+dockerfile = "Dockerfile"
+
+[env]
+LISTEN_ADDR = ":8080"
+DATABASE_PATH = "/data/push-service.db"
+
+[http_service]
+internal_port = 8080
+force_https = true
+auto_stop_machines = false
+auto_start_machines = true
+min_machines_running = 1
+
+[[mounts]]
+source = "linkstr_push_service_data"
+destination = "/data"

@@ -100,8 +100,10 @@ class AppSessionTestCase: XCTestCase {
     onNostrStart: (() -> Void)? = nil,
     requestProfileMetadata: (([String]) -> Void)? = nil,
     clearLocalAccountData: ((String) throws -> Void)? = nil,
-    onIncomingPostNotification: ((String) -> Void)? = nil,
-    onIncomingReactionNotification: ((String) -> Void)? = nil
+    registerPushDevice: ((PushDeviceRegistration) async throws -> Void)? = nil,
+    unregisterPushDevice: ((String) async throws -> Void)? = nil,
+    syncArchivedConversationIDs: (([String]) async throws -> Void)? = nil,
+    enqueuePushNotification: ((PushEnqueueRequest) async throws -> Void)? = nil
   ) throws -> (AppSession, ModelContainer) {
     var testingOverrides = AppSession.TestingOverrides()
     testingOverrides.disableNostrStartup = disableNostrStartup
@@ -117,8 +119,10 @@ class AppSessionTestCase: XCTestCase {
     testingOverrides.onNostrStart = onNostrStart
     testingOverrides.requestProfileMetadata = requestProfileMetadata
     testingOverrides.clearLocalAccountData = clearLocalAccountData
-    testingOverrides.onIncomingPostNotification = onIncomingPostNotification
-    testingOverrides.onIncomingReactionNotification = onIncomingReactionNotification
+    testingOverrides.registerPushDevice = registerPushDevice
+    testingOverrides.unregisterPushDevice = unregisterPushDevice
+    testingOverrides.syncArchivedConversationIDs = syncArchivedConversationIDs
+    testingOverrides.enqueuePushNotification = enqueuePushNotification
     return try makeSession(testingOverrides: testingOverrides)
   }
 

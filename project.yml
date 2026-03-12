@@ -48,17 +48,23 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.parmscript.linkstr
         TARGETED_DEVICE_FAMILY: "1,2"
-        CODE_SIGN_ENTITLEMENTS: LinkstrApp/Linkstr.entitlements
         CODE_SIGN_IDENTITY: Apple Development
         CODE_SIGN_STYLE: Automatic
         INFOPLIST_FILE: LinkstrApp/Info.plist
         DEVELOPMENT_TEAM: "7654L3CX5L"
+        LINKSTR_PUSH_SERVICE_BASE_URL: "https://linkstr-push-service.fly.dev"
+      configs:
+        Debug:
+          CODE_SIGN_ENTITLEMENTS: LinkstrApp/Linkstr.Debug.entitlements
+        Release:
+          CODE_SIGN_ENTITLEMENTS: LinkstrApp/Linkstr.Release.entitlements
     info:
       path: LinkstrApp/Info.plist
       properties:
         CFBundleDisplayName: linkstr
         CFBundleShortVersionString: "1.1"
         CFBundleVersion: "4"
+        LinkstrPushServiceBaseURL: $(LINKSTR_PUSH_SERVICE_BASE_URL)
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         NSCameraUsageDescription: Camera access is used to scan Contact Key (npub) QR codes.

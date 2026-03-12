@@ -70,8 +70,10 @@ final class AppSession: ObservableObject {
     var onNostrStart: (() -> Void)?
     var requestProfileMetadata: (([String]) -> Void)?
     var clearLocalAccountData: ((String) throws -> Void)?
-    var onIncomingPostNotification: ((String) -> Void)?
-    var onIncomingReactionNotification: ((String) -> Void)?
+    var registerPushDevice: ((PushDeviceRegistration) async throws -> Void)?
+    var unregisterPushDevice: ((String) async throws -> Void)?
+    var syncArchivedConversationIDs: (([String]) async throws -> Void)?
+    var enqueuePushNotification: ((PushEnqueueRequest) async throws -> Void)?
   }
 
   private enum MutationPreparationError: Error {
@@ -132,6 +134,8 @@ final class AppSession: ObservableObject {
   private var inFlightRemoteProfilePubkeys = Set<String>()
   private var isBooting = false
   private var isRetryingIdentityLoad = false
+  private var lastRegisteredPushDeviceSignature: String?
+  private var lastArchivedConversationSyncSignature: String?
 
   @Published var composeError: String?
   @Published var pendingSessionNavigationID: String?
@@ -174,9 +178,9 @@ final class AppSession: ObservableObject {
       maxAttempts: bootIdentityRetryAttemptCount,
       retryDelayNanoseconds: configuredIdentityRetryDelayNanoseconds
     )
-    LocalNotificationService.shared.configure()
+    PushNotificationService.shared.configure()
     if !isRunningTests && !isEnvironmentFlagEnabled("LINKSTR_SKIP_NOTIFICATION_PROMPT") {
-      LocalNotificationService.shared.requestAuthorizationIfNeeded()
+      PushNotificationService.shared.requestAuthorizationIfNeeded()
     }
 
     #if targetEnvironment(simulator)
@@ -208,6 +212,9 @@ final class AppSession: ObservableObject {
 
   func handleAppDidBecomeActive() {
     resetForegroundRelayState()
+    if !isRunningTests && !isEnvironmentFlagEnabled("LINKSTR_SKIP_NOTIFICATION_PROMPT") {
+      PushNotificationService.shared.refreshRegistrationIfAuthorized()
+    }
     guard didFinishBoot else { return }
     scheduleIdentityLoadAndNostrRestart(maxAttempts: activeIdentityRetryAttempts)
   }
@@ -222,6 +229,10 @@ final class AppSession: ObservableObject {
   func handleProtectedDataDidBecomeAvailable() {
     guard didFinishBoot else { return }
     scheduleIdentityLoadAndNostrRestart(maxAttempts: protectedDataIdentityRetryAttempts)
+  }
+
+  func handlePushDeviceTokenDidChange() {
+    schedulePushStateSync()
   }
 
   private func report(error: Error) {
@@ -703,6 +714,132 @@ final class AppSession: ObservableObject {
     return isEnvironmentFlagEnabled("LINKSTR_ENABLE_METADATA_IN_TESTS")
   }
 
+  private func resetPushSyncState() {
+    lastRegisteredPushDeviceSignature = nil
+    lastArchivedConversationSyncSignature = nil
+  }
+
+  private func shouldManagePushStateForCurrentProcess() -> Bool {
+    if testingOverrides.registerPushDevice != nil
+      || testingOverrides.syncArchivedConversationIDs != nil
+      || testingOverrides.enqueuePushNotification != nil
+      || testingOverrides.unregisterPushDevice != nil
+    {
+      return true
+    }
+    if isRunningTests {
+      return false
+    }
+    return PushAPIClient.shared.isConfigured
+  }
+
+  private func schedulePushStateSync() {
+    guard shouldManagePushStateForCurrentProcess() else { return }
+    guard let keypair = identityService.keypair, let ownerPubkey = identityService.pubkeyHex else {
+      resetPushSyncState()
+      return
+    }
+
+    let deviceToken = PushNotificationService.shared.deviceTokenHex
+    let apnsEnvironment = PushNotificationService.shared.apnsEnvironment
+    let archivedConversationIDs =
+      (try? messageStore.archivedConversationIDs(ownerPubkey: ownerPubkey)) ?? []
+    let deviceSignature =
+      deviceToken.map { "\(ownerPubkey)|\($0)|\(apnsEnvironment)" }
+    let archiveSignature =
+      "\(ownerPubkey)|\(archivedConversationIDs.sorted().joined(separator: ","))"
+
+    Task { @MainActor in
+      if let deviceToken, lastRegisteredPushDeviceSignature != deviceSignature {
+        do {
+          try await registerPushDevice(
+            PushDeviceRegistration(
+              deviceToken: deviceToken,
+              apnsEnvironment: apnsEnvironment
+            ),
+            signedBy: keypair
+          )
+          lastRegisteredPushDeviceSignature = deviceSignature
+        } catch {
+          NSLog("Push device registration failed: \(error.localizedDescription)")
+        }
+      }
+
+      guard lastArchivedConversationSyncSignature != archiveSignature else { return }
+      do {
+        try await syncArchivedConversationIDs(archivedConversationIDs, signedBy: keypair)
+        lastArchivedConversationSyncSignature = archiveSignature
+      } catch {
+        NSLog("Push archive sync failed: \(error.localizedDescription)")
+      }
+    }
+  }
+
+  private func schedulePushDeviceUnregistration(deviceToken: String?, keypair: Keypair?) {
+    guard shouldManagePushStateForCurrentProcess() else { return }
+    guard let deviceToken, let keypair else { return }
+    Task { @MainActor in
+      do {
+        try await unregisterPushDevice(deviceToken: deviceToken, signedBy: keypair)
+      } catch {
+        NSLog("Push device unregistration failed: \(error.localizedDescription)")
+      }
+    }
+  }
+
+  private func schedulePushEnqueue(_ request: PushEnqueueRequest) {
+    guard shouldManagePushStateForCurrentProcess() else { return }
+    guard let keypair = identityService.keypair else { return }
+    Task { @MainActor in
+      do {
+        try await enqueuePushNotification(request, signedBy: keypair)
+      } catch {
+        NSLog("Push enqueue failed: \(error.localizedDescription)")
+      }
+    }
+  }
+
+  private func registerPushDevice(_ registration: PushDeviceRegistration, signedBy keypair: Keypair)
+    async throws
+  {
+    if let registerPushDeviceOverride = testingOverrides.registerPushDevice {
+      try await registerPushDeviceOverride(registration)
+      return
+    }
+    try await PushAPIClient.shared.registerDevice(registration, signedBy: keypair)
+  }
+
+  private func unregisterPushDevice(deviceToken: String, signedBy keypair: Keypair) async throws {
+    if let unregisterPushDeviceOverride = testingOverrides.unregisterPushDevice {
+      try await unregisterPushDeviceOverride(deviceToken)
+      return
+    }
+    try await PushAPIClient.shared.unregisterDevice(deviceToken: deviceToken, signedBy: keypair)
+  }
+
+  private func syncArchivedConversationIDs(_ conversationIDs: [String], signedBy keypair: Keypair)
+    async throws
+  {
+    if let syncArchivedConversationIDsOverride = testingOverrides.syncArchivedConversationIDs {
+      try await syncArchivedConversationIDsOverride(conversationIDs)
+      return
+    }
+    try await PushAPIClient.shared.syncArchivedConversations(
+      conversationIDs.sorted(),
+      signedBy: keypair
+    )
+  }
+
+  private func enqueuePushNotification(_ request: PushEnqueueRequest, signedBy keypair: Keypair)
+    async throws
+  {
+    if let enqueuePushNotificationOverride = testingOverrides.enqueuePushNotification {
+      try await enqueuePushNotificationOverride(request)
+      return
+    }
+    try await PushAPIClient.shared.enqueuePush(request, signedBy: keypair)
+  }
+
   func createAccount() {
     guard identityService.keypair == nil else {
       refreshIdentityState()
@@ -841,6 +978,9 @@ final class AppSession: ObservableObject {
 
   func logOut(clearLocalData: Bool) {
     let ownerPubkey = identityService.pubkeyHex
+    let keypair = identityService.keypair
+    let deviceToken = PushNotificationService.shared.deviceTokenHex
+    schedulePushDeviceUnregistration(deviceToken: deviceToken, keypair: keypair)
     resetRuntimeSessionState()
 
     do {
@@ -895,6 +1035,8 @@ final class AppSession: ObservableObject {
       return false
     }
 
+    let deviceToken = PushNotificationService.shared.deviceTokenHex
+    schedulePushDeviceUnregistration(deviceToken: deviceToken, keypair: keypair)
     resetRuntimeSessionState()
 
     do {
@@ -918,6 +1060,7 @@ final class AppSession: ObservableObject {
   private func refreshIdentityState() {
     hasIdentity = identityService.keypair != nil
     guard let ownerPubkey = identityService.pubkeyHex else {
+      resetPushSyncState()
       resetFollowListStateInMemory()
       resetRemoteProfileStateInMemory()
       resetProfileMetadataStateInMemory()
@@ -932,6 +1075,7 @@ final class AppSession: ObservableObject {
     loadPersistedFollowListState(ownerPubkey: ownerPubkey)
     resetRemoteProfileStateInMemory()
     loadPersistedProfileMetadataState(ownerPubkey: ownerPubkey)
+    schedulePushStateSync()
   }
 
   private func resetRuntimeSessionState() {
@@ -949,6 +1093,7 @@ final class AppSession: ObservableObject {
   }
 
   private func handleIdentityCleared() {
+    resetPushSyncState()
     refreshIdentityState()
     resetFollowListStateInMemory()
     resetRemoteProfileStateInMemory()
@@ -1349,15 +1494,29 @@ final class AppSession: ObservableObject {
 
     do {
       let reactionEventID: String
+      let shouldEnqueuePush: Bool
       if isRelayPublicationEnabledForCurrentProcess() {
         reactionEventID = try await sendPayloadAwaitingRelayAcceptance(
           payload: draft.payload,
           recipientPubkeyHexes: draft.recipientPubkeys
         ).rumorEventID
+        shouldEnqueuePush = true
       } else {
         reactionEventID = makeLocalEventID()
+        shouldEnqueuePush = false
       }
       try persistReactionState(draft, eventID: reactionEventID)
+      if shouldEnqueuePush, draft.payload.reactionActive == true {
+        schedulePushEnqueue(
+          PushEnqueueRequest(
+            notificationType: "new_emoji_reaction",
+            eventID: reactionEventID,
+            conversationID: draft.payload.conversationID,
+            recipientPubkeys: draft.recipientPubkeys,
+            emoji: draft.payload.emoji
+          )
+        )
+      }
       composeError = nil
       return true
     } catch {
@@ -1453,6 +1612,15 @@ final class AppSession: ObservableObject {
         recipientPubkeyHexes: draft.recipientPubkeys
       )
       try persistSentRootPost(draft, receipt: receipt)
+      schedulePushEnqueue(
+        PushEnqueueRequest(
+          notificationType: "new_post",
+          eventID: receipt.rumorEventID,
+          conversationID: draft.payload.conversationID,
+          recipientPubkeys: draft.recipientPubkeys,
+          emoji: nil
+        )
+      )
       composeError = nil
       return true
     } catch {
@@ -2074,6 +2242,7 @@ final class AppSession: ObservableObject {
         ownerPubkey: ownerPubkey,
         archived: archived
       )
+      schedulePushStateSync()
     } catch {
       report(error: error)
     }
@@ -2366,11 +2535,11 @@ final class AppSession: ObservableObject {
 
     do {
       guard
-        let rootPost = try messageStore.rootPost(
+        try messageStore.rootPost(
           ownerPubkey: ownerPubkey,
           sessionID: sessionID,
           rootID: postID
-        )
+        ) != nil
       else {
         return
       }
@@ -2384,15 +2553,6 @@ final class AppSession: ObservableObject {
         updatedAt: incoming.createdAt,
         eventID: incoming.eventID
       )
-      if isActive, incoming.source == .live {
-        notifyForIncomingReaction(
-          eventID: incoming.eventID,
-          conversationID: sessionID,
-          senderPubkey: incoming.senderPubkey,
-          emoji: emoji,
-          rootPost: rootPost
-        )
-      }
     } catch {
       report(error: error)
       return
@@ -2541,9 +2701,6 @@ final class AppSession: ObservableObject {
       return
     }
 
-    if incoming.source == .live {
-      notifyForIncomingMessage(message)
-    }
     enqueueMetadataRefresh(for: message, in: .backgroundHydration)
   }
 
@@ -2604,67 +2761,6 @@ final class AppSession: ObservableObject {
       report(error: error)
       return false
     }
-  }
-
-  private func notifyForIncomingMessage(_ message: SessionMessageEntity) {
-    guard let myPubkey = identityService.pubkeyHex, message.senderPubkey != myPubkey else {
-      return
-    }
-    if let onIncomingPostNotification = testingOverrides.onIncomingPostNotification {
-      onIncomingPostNotification(message.eventID)
-      return
-    }
-
-    let contacts = (try? contactStore.fetchContacts(ownerPubkey: myPubkey)) ?? []
-    let senderName = displayName(for: message.senderPubkey, contacts: contacts)
-    LocalNotificationService.shared.postIncomingPostNotification(
-      senderName: senderName,
-      url: message.url,
-      note: message.note,
-      eventID: message.eventID,
-      conversationID: message.conversationID
-    )
-  }
-
-  private func notifyForIncomingReaction(
-    eventID: String,
-    conversationID: String,
-    senderPubkey: String,
-    emoji: String,
-    rootPost: SessionMessageEntity
-  ) {
-    guard let myPubkey = identityService.pubkeyHex, senderPubkey != myPubkey else {
-      return
-    }
-    if let onIncomingReactionNotification = testingOverrides.onIncomingReactionNotification {
-      onIncomingReactionNotification(eventID)
-      return
-    }
-
-    let contacts = (try? contactStore.fetchContacts(ownerPubkey: myPubkey)) ?? []
-    let senderName = displayName(for: senderPubkey, contacts: contacts)
-    LocalNotificationService.shared.postIncomingReactionNotification(
-      senderName: senderName,
-      emoji: emoji,
-      postPreview: notificationPreview(for: rootPost),
-      eventID: eventID,
-      conversationID: conversationID
-    )
-  }
-
-  private func notificationPreview(for message: SessionMessageEntity) -> String? {
-    let title = message.metadataTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    if !title.isEmpty {
-      return title
-    }
-
-    let note = message.note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    if !note.isEmpty {
-      return note
-    }
-
-    let url = message.url?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    return url.isEmpty ? nil : url
   }
 
   private func hydrateMissingMetadata() {

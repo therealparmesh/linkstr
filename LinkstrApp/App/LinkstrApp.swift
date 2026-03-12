@@ -6,6 +6,7 @@ import UIKit
 struct LinkstrAppMain: App {
   @Environment(\.scenePhase) private var scenePhase
 
+  @UIApplicationDelegateAdaptor(LinkstrAppDelegate.self) private var appDelegate
   @StateObject private var bootstrap = AppBootstrapState()
   @StateObject private var deepLinkHandler = DeepLinkHandler()
 
@@ -112,6 +113,13 @@ struct LinkstrAppMain: App {
                 )
               ) { _ in
                 readyContext.session.handleProtectedDataDidBecomeAvailable()
+              }
+              .onReceive(
+                NotificationCenter.default.publisher(
+                  for: .linkstrPushDeviceTokenDidChange
+                )
+              ) { _ in
+                readyContext.session.handlePushDeviceTokenDidChange()
               }
               .onChange(of: scenePhase) { _, newValue in
                 switch newValue {

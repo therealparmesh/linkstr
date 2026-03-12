@@ -1,6 +1,6 @@
 # linkstr support
 
-last updated: march 10, 2026
+last updated: march 11, 2026
 
 ## getting started
 
@@ -83,7 +83,7 @@ settings tab → relays section
 ## faq
 
 **what is nostr?**
-decentralized protocol for social communication. there is no central server, and encrypted session payloads move across relays. your nostr identity works across any nostr-compatible app.
+decentralized protocol for social communication. encrypted session payloads move across relays, and your nostr identity works across any nostr-compatible app. linkstr also runs a small push service for ios notifications.
 
 **is my data private?**
 yes. all session content is end-to-end encrypted. only session members can read posts and reactions. your secret key (nsec) never leaves your device.
@@ -128,12 +128,13 @@ you are responsible for respecting content creators' rights and platform terms w
 ## privacy & data
 
 **what data does linkstr collect?**
-none. linkstr does not collect or store data on developer-controlled servers. your account keys can sync through iCloud keychain if you enable it, and encrypted session payloads travel through the nostr relays you choose.
+linkstr does not run analytics or ads, but it does operate a push notification service. that service stores your APNs device token, your nostr pubkey, and archived conversation ids so ios push can work. encrypted post and reaction content still travels through nostr relays, not through the push service.
 
 **what permissions does linkstr need?**
 
 - camera: scan contact qr codes
 - photos (add only): save videos to photos library
+- notifications: deliver ios alerts for new posts and reactions
 - network: connect to nostr relays and download media
 
 **where is my data stored?**
@@ -141,6 +142,7 @@ none. linkstr does not collect or store data on developer-controlled servers. yo
 - account keys: device keychain (optionally iCloud synced)
 - sessions, posts, and reactions: local device storage only
 - media cache: local device storage only
+- push routing data: linkstr push service stores APNs device tokens, pubkey associations, and archived conversation ids
 
 downloaded video cache is device-local, auto-trims with least-recently-used eviction at about 1 gb, and can also be cleared from settings tab → storage section. that screen shows an estimate of how much local storage the signed-in account can clear.
 
@@ -180,7 +182,7 @@ linkstr stores posts, reactions, contacts, and caches locally on each device. to
 3. both devices must connect to relays to sync new posts and reactions
 
 note: historical posts depend on relay retention and what each device has already received locally. new posts sync when both devices reconnect to relays.
-historical restore after a fresh sign-in does not replay old local notifications.
+historical restore after a fresh sign-in does not replay old push notifications.
 
 ## contact
 

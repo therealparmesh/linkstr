@@ -27,7 +27,7 @@
   - `preparing local data…`
   - `connecting relays…`
   - `starting session…`
-- Boot loads identity from keychain and configures local notifications.
+- Boot loads identity from keychain and registers for remote notifications when allowed.
 - Boot briefly retries identity load before falling back to onboarding, to tolerate transient keychain/protected-data unavailability on launch.
 - Boot ensures default relays exist if the local relay list is empty.
 - Boot starts relay runtime when identity is available.
@@ -229,18 +229,18 @@
   - Upsert reaction state only when sender and receiver are active at the event timestamp and the root post exists locally.
   - Live reaction ingest additionally requires sender and receiver to be active in the latest local membership snapshot.
 
-### Notifications (best effort)
+### Notifications
 
-- Notifications are local notifications based on incoming relay events.
-- APNs remote push is not implemented.
+- Notifications are APNs remote notifications backed by a Linkstr-operated push service.
 - Current notification types are:
   - Inbound root posts.
   - Inbound active emoji reactions.
+- Archived conversations do not notify.
 - Reaction deactivations do not trigger notifications.
 - Self-echoed events do not trigger notifications.
 - Historical relay restore/backfill does not trigger catch-up notifications.
 - Foreground presentation remains enabled (`banner`, `list`, `sound`).
-- Background delivery is best-effort only; when the app is suspended and sockets are not active, content can restore on next reconnect/foreground without replaying local notifications for old events.
+- Push alerts use generic text; encrypted session content is still fetched and decrypted on-device.
 
 ### Media and link behavior
 
@@ -389,7 +389,6 @@
 
 - No offline guaranteed delivery queue.
 - No automatic resend of previously failed posts.
-- No APNs remote push.
 - No public discovery feed/social graph product surface.
 - No text-based post replies.
 
