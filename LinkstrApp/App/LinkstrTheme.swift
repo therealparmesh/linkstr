@@ -307,6 +307,7 @@ struct LinkstrInsetSection<Content: View>: View {
 struct LinkstrSearchField: View {
   let prompt: String
   @Binding var text: String
+  private let clearButtonSize: CGFloat = 18
 
   var body: some View {
     HStack(spacing: LinkstrTheme.compactSpacing) {
@@ -319,16 +320,18 @@ struct LinkstrSearchField: View {
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled(true)
 
-      if !text.isEmpty {
-        Button {
-          text = ""
-        } label: {
-          Image(systemName: "xmark.circle.fill")
-            .font(LinkstrTheme.system(13))
-            .foregroundStyle(LinkstrTheme.textTertiary)
-        }
-        .buttonStyle(.plain)
+      Button {
+        text = ""
+      } label: {
+        Image(systemName: "xmark.circle.fill")
+          .font(LinkstrTheme.system(13))
+          .foregroundStyle(LinkstrTheme.textTertiary)
+          .frame(width: clearButtonSize, height: clearButtonSize)
       }
+      .buttonStyle(.plain)
+      .opacity(text.isEmpty ? 0 : 1)
+      .allowsHitTesting(!text.isEmpty)
+      .accessibilityHidden(text.isEmpty)
     }
     .linkstrInputField()
   }
