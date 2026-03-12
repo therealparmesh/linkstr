@@ -30,7 +30,7 @@ Status: Proposal only. Not implemented.
 ## Relay behavior (best effort)
 
 - Optionally publish NIP-09 kind `5` requests for known session event IDs.
-- Treat relay deletion as non-authoritative; local tombstone logic remains authoritative for Linkstr UX.
+- Treat relay deletion as non-authoritative; local tombstone logic remains authoritative for linkstr UX.
 
 ## Non-goals
 

@@ -1,180 +1,144 @@
 # privacy policy
 
-last updated: march 12, 2026
+Last updated: March 12, 2026
 
-## overview
+## Overview
 
-linkstr runs a small developer-controlled push notification service for ios delivery. your account keys and encrypted session content still stay on your device and on the nostr relays you use, but APNs device tokens and a small amount of routing state are stored by that push service.
+linkstr is a private link-sharing app built on nostr. Your account keys stay on your device. Encrypted session content moves through the nostr relays you choose. If you enable notifications, a small amount of routing data is also stored by the developer-operated push service so Apple Push Notification service can reach your device.
 
-## data collection
+linkstr does not run ads, analytics, or behavioral tracking.
 
-linkstr does not run analytics, ads, or tracking. it does operate a push notification service that stores:
+## What linkstr stores
 
-- APNs device tokens
-- nostr pubkey to device-token associations
-- archived conversation ids used to suppress push notifications
+### On your device
 
-encrypted nostr payloads are still transmitted only to the relays you choose.
+linkstr stores app data locally for the signed-in account, including:
 
-## data you control
+- Account keys in the device keychain.
+- Contacts, including private aliases you save locally.
+- Sessions, member snapshots, and membership intervals.
+- Posts, reactions, delete watermarks, read state, and archive state.
+- Media cache references, downloaded videos, and generated previews.
+- Local per-account encryption keys used to protect sensitive stored fields at rest.
 
-### local device storage
+Sensitive local fields are encrypted at rest with per-account local keys. Operational identifiers and timestamps may remain plaintext locally for indexing and query purposes.
 
-stored only on your device:
+Downloaded videos and generated previews are device-local. Video cache is treated as disposable cache and may be trimmed automatically with least-recently-used eviction once local video cache reaches about 1 GB.
 
-- **account keys**: your secret key (nsec) plus device-local encryption keys stored in keychain
-- **contacts**: contact aliases and public keys you add
-- **sessions**: session names and member lists you create
-- **posts and reactions**: links, notes, and reactions you send and receive
-- **media cache**: videos and thumbnails downloaded for offline viewing
+### In temporary runtime memory
 
-downloaded videos are stored as device-local cache. linkstr automatically trims older cached video files with least-recently-used eviction once local video cache reaches about 1 gb.
+During relay sync, linkstr may temporarily stage out-of-order session, post, delete, or reaction events in memory until the missing session snapshot or root post arrives. If reconnect happens while required history is still missing, linkstr may ask the same relays for history again so those staged events can be retried.
 
-this data is encrypted at rest using device-local encryption keys and never leaves your device except as described below.
+Those in-memory buffers are not sent to the push service. They are cleared when app runtime state resets.
 
-during relay sync, linkstr may also hold out-of-order session, post, delete, or reaction events in temporary in-memory buffers until the missing session snapshot or root post arrives. if those dependencies are still missing after a relay reconnect, linkstr may request relay history again from the same relays. those transient buffers are not sent to the push service and are cleared when app runtime state resets.
+### On nostr relays
 
-### nostr network
+When you use linkstr, encrypted session payloads are transmitted through the nostr relays you configure. Depending on what you do in the app, relays may receive:
 
-when you use linkstr, you communicate through the decentralized nostr protocol:
+- Encrypted session payloads for session creation, membership updates, posts, reactions, and delete notices.
+- Your nostr follow list when you add or remove contacts.
+- Standard relay connection metadata that any relay operator can observe, such as connection timing and network-level information.
 
-- **encrypted session payloads**: posts, reactions, and membership updates are end-to-end encrypted and transmitted through nostr relays you connect to
-- **contact list**: your nostr follow list is published to relays as part of the nostr protocol (nip-02)
-- **relay connections**: you choose which nostr relays to connect to; encrypted session payloads are transmitted through these relays
+nostr relays are third-party services. linkstr does not control their retention policies, logs, or privacy practices.
 
-nostr relays are third-party servers not controlled by linkstr. each relay operator has their own privacy policy and data retention practices.
+### In the push service
 
-### push notification service
+If you allow notifications, linkstr sends limited routing data to a developer-operated push service:
 
-when you allow notifications, linkstr sends limited routing data to a developer-operated push service:
+- APNs device tokens.
+- Associations between your nostr pubkey and those device tokens.
+- Archived conversation IDs used to suppress notifications for archived sessions.
 
-- **APNs device token**: required so Apple can deliver notifications to your device
-- **nostr pubkey association**: used to know which device tokens belong to which account
-- **archived conversation ids**: used to suppress notifications for archived sessions
+The push service is used for notification routing, not message transport. Encrypted session content still travels through nostr relays, not through the push service.
 
-the push service does not store decrypted post text, reaction text, or session payload plaintext. notification banners use generic text such as new post or new reaction.
+The push service does not store decrypted post text, reaction text, or session payload plaintext. Push banners use generic notification text. Historical relay restore does not replay old push notifications.
 
-### optional icloud sync
+## What linkstr does not do
 
-if you enable iCloud keychain on your device:
+linkstr does not:
 
-- your account keys may sync across your Apple devices via iCloud
-- this is controlled by your iOS settings, not by linkstr
-- refer to Apple's privacy policy for iCloud data handling
+- Run ads or third-party analytics.
+- Sell your data.
+- Store your decrypted session payloads in the push service.
+- Queue failed outbound posts or reactions in a durable offline outbox.
 
-## permissions
+## Permissions
 
-### camera
+### Camera
 
-- **purpose**: scan qr codes when adding contacts
-- **usage**: only when you tap scan button
-- **data**: no photos or camera data stored or transmitted
+- Purpose: scan QR codes when adding contacts.
+- Used only when you explicitly choose to scan.
+- Camera images are not uploaded by linkstr as part of QR scanning.
 
-### photos library (add only)
+### Photos library (add only)
 
-- **purpose**: save videos to photos library
-- **usage**: only when you tap "save to photos"
-- **data**: videos saved locally; no data uploaded
+- Purpose: export videos to Photos.
+- Used only when you choose `save to photos`.
+- Content is saved locally to your library; linkstr does not upload it as part of that action.
 
-### network access
+### Notifications
 
-- **purpose**: connect to nostr relays, talk to the linkstr push service, and download media
-- **usage**: required for app functionality
-- **data**: encrypted session payloads sent to relays you configure; APNs device token and archive state sent to the linkstr push service; media downloaded from urls you share
+- Purpose: deliver iOS alerts for new posts and active reactions.
+- Used only after you grant notification permission.
+- Requires APNs device token registration with Apple and the linkstr push service.
 
-### notifications
+Archived sessions do not notify.
 
-- **purpose**: deliver ios alerts for new posts and reactions
-- **usage**: only after you grant notification permission
-- **data**: APNs device token is registered with the linkstr push service and with Apple Push Notification service
+### Network access
 
-## third-party content
+- Purpose: connect to relays, talk to the push service, and download shared media.
+- Required for relay-backed syncing and remote media playback.
+- Network requests may reach relays you configure, the linkstr push service, Apple Push Notification service, and third-party content providers whose links you open or preview.
 
-when you share links to third-party platforms (tiktok, instagram, facebook, youtube, twitter, rumble):
+## Account keys and iCloud
 
-- the app may download publicly accessible media from these platforms
-- those platforms may still receive standard network metadata such as your ip address and user agent when content is requested
-- you are subject to those platforms' terms of service and privacy policies
-- downloaded media is stored locally on your device only
+Your active account keys are stored in the device keychain with iOS-managed protection. If you enable iCloud Keychain, Apple may sync that keychain data across your devices according to your iCloud settings and Apple's policies.
 
-## user responsibility
+If encrypted local app data is restored without the matching local key material, some encrypted fields may be unreadable until the correct keys are available again.
 
-you are responsible for:
+## Third-party content and providers
 
-- respecting intellectual property rights when downloading and sharing content
-- complying with applicable laws and third-party platform terms of service
-- managing your secret key (nsec) securely
-- understanding that archived sessions remain on local device unless explicitly cleared through account cleanup
+When you share or open links from third-party platforms such as TikTok, Instagram, Facebook, YouTube, X, or Rumble, those providers may receive standard network metadata such as your IP address, user agent, and request timing. Their own terms and privacy policies apply.
 
-## children's privacy
+Downloaded media from those providers is stored locally on your device only, unless you separately export or share it.
 
-linkstr does not knowingly collect information from children under 13. the app does not collect any personal information from any users.
+## Data retention
 
-## data retention
+- Local app data remains on your device until you delete it, log out and clear local data, or remove the app.
+- Media cache may also be removed automatically by cache eviction or iOS storage pressure.
+- Relay-side data retention depends on each relay operator.
+- Push-service routing data remains until you unregister, log out, APNs invalidates the token, or operational cleanup removes stale records.
+- If you delete your account in linkstr and relays are available, the app can publish an empty follow list and a nostr vanish request to enabled relays, but your `nsec` remains valid unless you discard it yourself.
 
-- **local data**: remains on device until you delete app or use "log out and clear local data"
-- **media cache**: downloaded video cache may be evicted automatically by linkstr's cache cap or by ios storage pressure
-- **relay data**: controlled by individual nostr relay operators; linkstr has no control over relay data retention
-- **push service data**: APNs device tokens and archive-state mappings remain until you unregister, log out, the token is invalidated by APNs, or operational cleanup removes stale records
-- **icloud sync**: controlled by icloud settings and apple's retention policies
-- **account deletion**: linkstr can ask enabled relays to delete account data, but your nsec remains valid unless you discard it yourself
+## Your choices
 
-## data security
+You can:
 
-- end-to-end encryption for session payloads
-- account keys stored in iOS keychain with whenunlocked accessibility
-- local data encrypted at rest using per-account encryption keys
-- limited developer-operated push infrastructure for notification routing
+- Control which relays you use.
+- Disable notifications in iOS settings.
+- Disable iCloud Keychain in Apple settings.
+- Log out while keeping local data.
+- Log out and clear local data for the signed-in account.
+- Delete your account in-app.
+- Export your `nsec` and use it in other nostr apps.
 
-## your rights
+## Children's privacy
 
-you have the right to:
+linkstr is not directed to children under 13, and the app is not intended to knowingly collect personal information from children.
 
-- delete all local data using "log out and clear local data"
-- delete your account using the in-app delete-account flow
-- export your secret key (nsec) and use it in other nostr-compatible apps
-- control which relays you connect to
-- disable iCloud sync in iOS settings
+## International use
 
-## changes to privacy policy
+linkstr is designed to work globally. If notifications are enabled, APNs routing data may be transmitted to infrastructure controlled by the developer and to Apple services as part of notification delivery.
 
-updates will be posted at the same location with a new "last updated" date.
+## Contact
 
-## international users
+- GitHub: https://github.com/therealparmesh/linkstr
+- Email: parmesh@hey.com
 
-linkstr is designed to work globally. APNs routing data may be transmitted to servers controlled by the developer so ios notifications can function.
+## Changes
 
-## third-party services
-
-the app uses:
-
-- **nostr protocol**: decentralized network; refer to individual relay privacy policies
-- **linkstr push service**: stores APNs device tokens, pubkey associations, and archived conversation ids for ios push delivery
-- **apple icloud** (optional): subject to apple's privacy policy
-- **apple push notification service (APNs)**: subject to apple's privacy policy
-- **web content providers**: when you share links, you interact with third-party websites subject to their policies
-
-## contact
-
-- github: https://github.com/therealparmesh/linkstr
-- email: parmesh@hey.com
-
-## legal basis
-
-linkstr processes data based on:
-
-- your explicit consent (when granting permissions)
-- necessity for app functionality (local storage, relay communication)
-- your voluntary use of the app
-
-## disclaimer
-
-linkstr is provided as-is. the developer is not responsible for:
-
-- data retention policies of third-party nostr relays
-- content you choose to download or share
-- compliance with third-party platform terms of service
+This policy may be updated as the app changes. The `Last updated` date above will change when the policy is revised.
 
 ---
 
-by using linkstr, you acknowledge that you have read and understood this privacy policy.
+By using linkstr, you acknowledge that you have read and understood this privacy policy.

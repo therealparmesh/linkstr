@@ -2472,16 +2472,10 @@ final class AppSession: ObservableObject {
     }
 
     func enqueuePendingIncomingForTesting(_ incoming: ReceivedDirectMessage) {
-      enqueuePendingIncomingMessage(incoming)
+      enqueuePendingIncomingMessage(PendingIncomingMessage(incoming))
     }
 
-    func simulateRelayStatusForTesting(
-      _ status: RelayHealthStatus,
-      relayURL: String = "wss://relay.example.com",
-      message: String? = nil
-    ) {
-      _ = relayURL
-      _ = message
+    func simulateRelayStatusForTesting(_ status: RelayHealthStatus) {
       maybeForceRestartRelaysForPendingIncomingRecovery(triggeredBy: status)
     }
 
@@ -2495,29 +2489,15 @@ final class AppSession: ObservableObject {
   #endif
 
   private func persistIncoming(_ incoming: ReceivedDirectMessage) {
-    persistIncoming(
-      PendingIncomingMessage(incoming),
-      allowPendingEnqueue: true,
-      shouldDrainPending: true
-    )
-  }
-
-  private func persistIncoming(
-    _ incoming: PendingIncomingMessage,
-    allowPendingEnqueue: Bool,
-    shouldDrainPending: Bool
-  ) {
-    switch reduceIncoming(incoming) {
+    let pending = PendingIncomingMessage(incoming)
+    switch reduceIncoming(pending) {
     case .applied:
-      removePendingIncomingMessage(eventID: incoming.eventID)
-      if shouldDrainPending {
-        drainPendingIncomingMessagesIfNeeded()
-      }
+      removePendingIncomingMessage(eventID: pending.eventID)
+      drainPendingIncomingMessagesIfNeeded()
     case .ignored:
-      removePendingIncomingMessage(eventID: incoming.eventID)
+      removePendingIncomingMessage(eventID: pending.eventID)
     case .pending:
-      guard allowPendingEnqueue else { return }
-      enqueuePendingIncomingMessage(incoming.incoming)
+      enqueuePendingIncomingMessage(pending)
     }
   }
 
@@ -2539,12 +2519,12 @@ final class AppSession: ObservableObject {
     }
   }
 
-  private func enqueuePendingIncomingMessage(_ incoming: ReceivedDirectMessage) {
-    if let index = pendingIncomingMessages.firstIndex(where: { $0.eventID == incoming.eventID }) {
-      pendingIncomingMessages[index].mergeDuplicate(incoming)
+  private func enqueuePendingIncomingMessage(_ pending: PendingIncomingMessage) {
+    if let index = pendingIncomingMessages.firstIndex(where: { $0.eventID == pending.eventID }) {
+      pendingIncomingMessages[index].mergeDuplicate(pending.incoming)
       return
     }
-    pendingIncomingMessages.append(PendingIncomingMessage(incoming))
+    pendingIncomingMessages.append(pending)
   }
 
   private func removePendingIncomingMessage(eventID: String) {

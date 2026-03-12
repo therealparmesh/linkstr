@@ -2,7 +2,23 @@
 
 `linkstr` lets you save links in private sessions, share them with people you trust, and open supported video without leaving the app.
 
-## Product behavior specification
+## How linkstr syncs
+
+linkstr is built around private sessions, not one-off direct messages. A session has a creator, a name, a current member list, and a feed of link posts. Reactions and deletes hang off those root posts.
+
+The important rule is that membership changes are snapshot-based. When the session creator adds or removes people, linkstr sends the full member list for that moment, not just a delta. That makes the latest valid snapshot the source of truth for who should be able to see future posts and reactions.
+
+Adding someone later does not retroactively share older posts with them. Removing someone stops future delivery, but it cannot claw back content they already received while they were a valid member.
+
+Relays do not guarantee delivery order. A post can arrive before the session snapshot that makes it valid, and a reaction can arrive before the root post it belongs to. linkstr handles that by staging valid-but-early events in memory, retrying them when the missing session or root shows up, and asking relays for history again after reconnect if something is still waiting.
+
+Deletes are intentionally stricter. A delete notice does not become authoritative until linkstr can match it to the original root post and verify that the delete sender is the same account that sent that root. That prevents bad delete notices from silently wiping out posts or reactions just because they arrived first.
+
+Duplicate relay delivery is normal, especially across reconnects and backfill. linkstr deduplicates by event ID, and when the same root is seen through multiple gift-wrap transport events it merges those wrapper IDs into the same stored post instead of creating duplicates. That keeps the UI clean while still preserving the transport IDs needed for relay-side delete requests later.
+
+linkstr still does not have a durable offline outbox. If a send cannot get relay acceptance, the app leaves the composer open and shows an error instead of pretending the post was sent.
+
+## Product behavior reference
 
 ### Product model
 
@@ -91,6 +107,8 @@
 - Member updates are snapshot-based (`session_members`):
   - The active member set becomes exactly the snapshot.
   - Missing previous members become inactive.
+  - Newly added members are eligible only for content sent while they are active.
+  - Removed members stop receiving future content, but they may still retain anything they already received earlier.
   - Update fanout targets both prior-active and next-active members so removed members receive the removal snapshot.
   - Outbound snapshots authored by this client include the session name so newly added members can materialize the session from the snapshot alone.
   - Snapshot application is monotonic by `created_at`; older snapshots are ignored.
@@ -207,10 +225,10 @@
 - No offline outbox exists.
 - Failed sends are not queued for automatic retry.
 
-### nostr transport and ingest
+### Relay delivery and ingest
 
-- Payloads are JSON-encoded and published through `NostrSDK` gift wraps.
-- Outgoing publish awaits relay `OK` acceptance with timeout, and fanout sends only succeed after each published gift-wrap has at least one accepted relay path.
+- linkstr payloads are JSON-encoded and delivered through nostr gift-wrap direct messages.
+- Outgoing publish waits for relay `OK` acceptance with timeout, and fanout only counts as successful once every published gift-wrap has at least one accepted relay path.
 - Accepted incoming payload kinds are:
   - `session_create`
   - `session_members`
@@ -218,29 +236,29 @@
   - `root_delete`
   - `reaction`
 - Ingest processing rules:
-  - Ignore undecodable/unvalidated payloads.
+  - Ignore anything that cannot be decoded or validated.
   - Deduplicate by event ID.
-  - Self-authored duplicate root echoes merge additional gift-wrap transport IDs into the stored or staged root post instead of creating duplicate posts.
-  - `session_create` requires sender and receiver inclusion in the snapshot member set.
+  - If your own root comes back through more than one gift-wrap, merge the extra transport IDs into the same stored or staged root instead of creating duplicate posts.
+  - `session_create` requires both sender and receiver to appear in the snapshot member set.
   - `session_create` for an existing session is accepted only from the stored creator pubkey.
   - `session_members` is accepted only from the stored creator pubkey.
   - `session_members` can bootstrap a missing session when the snapshot includes sender, receiver, and a non-empty session name.
   - `session_members` snapshots must include the creator pubkey.
-  - Upsert sessions/member snapshots from accepted session events.
-  - Live relay subscriptions use `since` filters so live ingest is new-event oriented.
+  - Accepted session events update the stored session row and membership snapshot.
+  - Live relay subscriptions use `since` filters so live ingest stays focused on new events.
 - Persist root posts only when sender and receiver are active at the event timestamp.
 - Live root ingest additionally requires sender and receiver to be active in the latest local membership snapshot.
 - Out-of-order root posts are staged in memory until a valid session snapshot arrives.
 - Out-of-order root deletes are staged in memory until the target root exists locally and the delete sender matches that root.
 - If staged dependencies remain across relay reconnects, the app restarts the relay runtime to request a fresh historical replay.
-- Linkstr delete notices remove matching stored root posts only when the delete sender matches the original post sender, and they do not persist speculative tombstones before that validation exists.
+- linkstr delete notices remove matching stored root posts only when the delete sender matches the original post sender, and they do not persist speculative tombstones before that validation exists.
 - Upsert reaction state only when sender and receiver are active at the event timestamp and the root post exists locally.
 - Out-of-order reactions are staged in memory until the root post arrives, then retried against the same membership rules.
 - Live reaction ingest additionally requires sender and receiver to be active in the latest local membership snapshot.
 
 ### Notifications
 
-- Notifications are APNs remote notifications backed by a Linkstr-operated push service.
+- Notifications are APNs remote notifications backed by a linkstr-operated push service.
 - Current notification types are:
   - Inbound root posts.
   - Inbound active emoji reactions.

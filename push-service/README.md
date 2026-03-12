@@ -168,7 +168,7 @@ curl -fsS "https://$APP_NAME.fly.dev/healthz"
 The health endpoint should answer:
 
 ```json
-{"status":"ok"}
+{ "status": "ok" }
 ```
 
 ## Point the app at Fly

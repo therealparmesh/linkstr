@@ -1,200 +1,245 @@
 # linkstr support
 
-last updated: march 11, 2026
+Last updated: March 12, 2026
 
-## getting started
+linkstr is a private link-sharing app built on nostr. You create or join private sessions, share links inside those sessions, and react with emoji. This page explains the current shipped behavior.
 
-### create account
+## Quick start
 
-- tap "create account" for a new account
-- copy and store the shown secret key (nsec). it works like your account password
-- optionally add a profile name others can see
-- or sign in with an existing secret key (nsec) if you already have one
+### Create or import an account
 
-your account stays in the device keychain and can sync through iCloud keychain if you enable it.
+1. Open linkstr.
+2. Choose `create account` for a new account, or import an existing secret key (`nsec`).
+3. If you create a new account, copy the shown `nsec` and store it somewhere safe.
+4. Optionally set a public profile name.
 
-### create session
+Your active account is stored in the device keychain. If you use iCloud Keychain, iOS may also sync that keychain item across your devices.
 
-1. sessions tab → top-right compose button
-2. enter session name
-3. add contacts (optional)
-4. tap the bottom "create session" button
+### Add contacts
 
-### add contacts
+1. Open the Contacts tab.
+2. Tap the add contact button.
+3. Paste an `npub` or scan a QR code.
+4. Optionally save a private alias.
+5. Tap `add contact`.
 
-1. contacts tab → top-right add-contact button
-2. enter public key (npub) or scan qr code
-3. optionally add alias
-4. tap the bottom "add contact" button once the key is valid
+Adding the same contact again updates the saved alias instead of creating a duplicate. To edit an alias later, tap the contact row.
 
-tap a contact row to edit its alias. long-press a contact row to remove it.
+### Create a session
 
-### use the you tab
+1. Open the Sessions tab.
+2. Tap the compose button in the top-right corner.
+3. Enter a session name.
+4. Optionally add contacts now, or start solo and add them later.
+5. Tap `create session`.
 
-1. you tab
-2. use the profile card, qr code, or "copy public key"
-3. share it over messages, email, or any other app.
+After creation, linkstr opens the session for you immediately.
 
-profile name changes apply from the keyboard return key or the save button, and both dismiss the keyboard.
+### Use the You tab
 
-### post links
+The You tab shows your current public key (`npub`), QR code, and published profile name. You can copy the public key from there or update the profile name that other nostr apps can see.
 
-1. open session → top-right compose button
-2. paste link
-3. add optional note
-4. tap the bottom "send post" button
+Profile name changes can be submitted with either the keyboard return key or the save button.
 
-supported platforms: tiktok, instagram, facebook, youtube, twitter/x, rumble, any web link.
+### Send a post
 
-### view and save content
+1. Open a session.
+2. Tap the compose button in the top-right corner.
+3. Paste a link.
+4. Optionally add a note.
+5. Tap `send post`.
 
-- tap post to view detail
-- videos play in embedded web players or can be downloaded for offline viewing
-- tap "save to photos" to save videos you have rights to save
-- tap "save to files" to export to files app
-- long-press/select the raw link text to copy it
-- open in browser with browser button
-- delete your own post by long-pressing its row in the session post list
+Supported links currently include TikTok, Instagram, Facebook, YouTube, Twitter/X, Rumble, and generic web URLs.
 
-### react to posts
+### React, delete, archive, and manage members
 
-- open post
-- tap quick reaction (👍 👎 👀) or `...` for emoji picker
-- tap again to remove reaction
+- Reactions: open a post and tap `👍`, `👎`, `👀`, or `...` for the emoji picker.
+- Remove your reaction: tap the same emoji again.
+- Delete your own post: long-press the post row in the session view.
+- Archive a session: long-press the session row.
+- View archived sessions: tap the archive icon in the sessions header.
+- Add or remove members: open a session and use the members button.
 
-### manage sessions
+Only the session creator can change session membership.
 
-- archive: long-press session → "archive"
-- delete your post: long-press your post row → "delete post"
-- view archived: tap archive icon on the left side of the sessions header
-- add/remove members: open session → tap the members button in the top-right corner
-- only session creators can modify members
+### Relay settings
 
-### relay settings
+Open Settings to manage relays.
 
-settings tab → relays section
+- Default relays are created automatically if you do not have any yet.
+- You can add your own relay URLs.
+- Enabled relays can be turned on or off.
+- Relay rows can be removed.
+- `Reset defaults` restores the shipped relay set.
 
-- default relays provided automatically
-- add custom relays with the relay URL field and "add relay"
-- toggle relays on/off
-- use the "remove" button to delete a relay
-- reset to defaults if needed
+## How linkstr sessions work
 
-## faq
+linkstr is session-first. A session is a private shared feed with a name, a creator, a member list, and root link posts. Reactions and deletes belong to those root posts.
 
-**what is nostr?**
-decentralized protocol for social communication. encrypted session payloads move across relays, and your nostr identity works across any nostr-compatible app. linkstr also runs a small push service for ios notifications.
+Membership changes are snapshot-based. When the creator adds or removes people, linkstr sends the full member list for that point in time. The latest valid snapshot is what defines the current member set.
 
-**is my data private?**
-yes. all session content is end-to-end encrypted. only session members can read posts and reactions. your secret key (nsec) never leaves your device.
+That means adding someone later does not retroactively share older posts with them. It only makes them eligible to receive content sent while they are an active member. Removing someone stops future delivery, but it cannot erase content they already received earlier.
 
-**can i use my nostr account in other apps?**
-yes. your secret key (nsec) works with any nostr app. find it in settings → identity.
+Posts, reactions, and deletes are validated against session state before they are applied locally.
 
-**what happens if i log out?**
+- A post must belong to a real session and come from someone who was a valid member when it was sent.
+- A reaction must pass the same membership check and also point to a real root post.
+- A delete must match the original root sender before it becomes authoritative.
 
-- "log out (keep local data)": local sessions, posts, and contacts stay on device and reappear when you sign in again with the same account
-- "log out and clear local data": permanently deletes all local data for this account
+Relays can deliver messages out of order. A post may arrive before the session snapshot that makes it valid, and a reaction may arrive before the root it belongs to. linkstr handles that by temporarily staging those events in memory and retrying them when the missing session or root shows up.
 
-**what happens if i delete my account?**
+If reconnect happens while something is still waiting on missing history, linkstr asks relays for history again instead of leaving that event stranded in memory. If you fully reset runtime state before the missing history comes back, recovery still depends on whether the relays can replay those events.
 
-- linkstr sends a nostr vanish request to your enabled relays, clears local data on this device, and logs you out
-- if you keep the secret key (nsec), it still works and can sign in again later
+Duplicate relay delivery is normal. linkstr deduplicates by event ID, so reconnects and backfill should not create duplicate posts or reactions in the app.
 
-**what if i add the same contact again?**
+linkstr does not have a durable offline outbox. If a send fails, the app shows an error instead of quietly pretending the post or reaction was sent.
 
-- linkstr keeps one contact per key
-- adding the same contact again updates the saved alias for that contact
-- this does not publish a new follow-list event because the followed account did not change
+## FAQ
 
-**why can't i send posts?**
-check: internet connection, at least one relay connected (settings tab → relays section), you are a member of the session.
+**What is nostr?**
 
-**can i delete a session?**
-sessions can be archived but not deleted. archived sessions don't appear in main list but data remains on device.
+Nostr is a decentralized protocol. Your encrypted session payloads move through the relays you connect to, and your account key can also work in other nostr apps.
 
-**can i remove a contact?**
-yes. long-press the contact row and choose "remove contact." this publishes your updated follow list to relays, removes that person from your contact list, and removes the contact locally.
+**Is my data private?**
 
-**can i save videos?**
-yes, for content you have rights to save:
+Session content is end-to-end encrypted before it goes to relays. Only session members can decrypt posts, reactions, and membership updates. Your secret key (`nsec`) stays on your device unless you choose to copy or export it.
 
-1. tap video post
-2. tap "try local playback" to download
-3. use "save to photos" or "save to files"
+**What goes through linkstr's push service?**
 
-you are responsible for respecting content creators' rights and platform terms when downloading media.
+linkstr uses an APNs push service for iOS notifications. That service stores your APNs device token, your nostr pubkey, and the list of archived conversation IDs needed to suppress notifications for archived sessions. Encrypted session content still travels through nostr relays, not through the push service.
 
-## privacy & data
+Push alerts use generic text. Old push notifications are not replayed during historical restore.
 
-**what data does linkstr collect?**
-linkstr does not run analytics or ads, but it does operate a push notification service. that service stores your APNs device token, your nostr pubkey, and archived conversation ids so ios push can work. encrypted post and reaction content still travels through nostr relays, not through the push service.
+**Can I use my account in other nostr apps?**
 
-**what permissions does linkstr need?**
+Yes. Your `nsec` is a nostr secret key, not a linkstr-only credential.
 
-- camera: scan contact qr codes
-- photos (add only): save videos to photos library
-- notifications: deliver ios alerts for new posts and reactions
-- network: connect to nostr relays and download media
+**What happens if I log out?**
 
-**where is my data stored?**
+- `log out (keep local data)` removes the active identity from memory and keychain state, but keeps the signed-in account's local sessions, posts, contacts, and caches on the device
+- `log out and clear local data` removes the active identity and deletes account-scoped local data for that account from the device
 
-- account keys: device keychain (optionally iCloud synced)
-- sessions, posts, and reactions: local device storage only
-- media cache: local device storage only
-- push routing data: linkstr push service stores APNs device tokens, pubkey associations, and archived conversation ids
+**What happens if I delete my account?**
 
-downloaded video cache is device-local, auto-trims with least-recently-used eviction at about 1 gb, and can also be cleared from settings tab → storage section. that screen shows an estimate of how much local storage the signed-in account can clear.
+linkstr clears your local data on this device and logs you out. When relays are available, it also publishes an empty follow list and sends a nostr vanish request to your enabled relays.
 
-## troubleshooting
+Deleting the account in linkstr does not invalidate the `nsec` itself. If you still have that key, you can sign in again later.
 
-**app won't connect to relays**
+**What happens when I add or remove a member?**
 
-1. check internet connection
-2. settings tab → relays section → "reset defaults"
-3. force-quit and reopen app
+Adding someone sends a new session snapshot with the full member list. That person can receive content sent after they become an active member. Older posts are not retroactively shared with them.
 
-**videos won't play**
+Removing someone sends another full snapshot. They stop receiving future posts and reactions, but anything they already received remains theirs.
 
-1. check internet connection
-2. try switching "try local playback" ↔ "try embed playback"
-3. if a previously downloaded local copy was auto-trimmed, try "try local playback" again to re-download it
-4. settings tab → storage section → "clear cached media and previews"
-5. use "open in browser"
+**Why can't I send a post or reaction?**
 
-**link preview looks stale or wrong**
+Most send failures come down to one of these:
 
-1. settings tab → storage section → "clear cached media and previews"
-2. return to sessions/posts and let the app rebuild previews
-3. if the provider still serves bad metadata, use "open in browser"
+- No enabled relays.
+- Only read-only relays are connected.
+- The app could not get relay acceptance before the send timeout.
+- You are no longer an active member of that session.
 
-**can't scan qr codes**
+linkstr does not queue failed sends for later automatic retry. If a send fails, the composer stays open and shows an error.
 
-1. check camera permission in settings → privacy & security → camera
-2. ensure good lighting
-3. alternatively paste public key (npub) manually
+**Why didn't a post, reaction, or delete show up right away?**
 
-**posts not syncing across devices**
-linkstr stores posts, reactions, contacts, and caches locally on each device. to use the same account on multiple devices:
+The most common reason is relay ordering. linkstr may receive a reaction before the root post it belongs to, or a post before the session snapshot that makes it valid. In that case the app stages the event and retries it once the missing dependency arrives.
 
-1. export secret key (nsec) from settings on first device
-2. import the same secret key (nsec) on second device
-3. both devices must connect to relays to sync new posts and reactions
+Delete notices are even stricter: linkstr waits until it can match the delete to the original root sender before applying it.
 
-note: historical posts depend on relay retention and what each device has already received locally. new posts sync when both devices reconnect to relays.
-current builds also retry out-of-order session snapshots, posts, delete notices, and reactions locally during relay sync, so a valid message that arrives before its session or root prerequisite can still be applied once the missing state shows up. delete notices wait until the matching root exists locally before they become authoritative. if reconnect happens while a dependency is still missing, linkstr requests relay history again instead of leaving the message stranded in memory.
-historical restore after a fresh sign-in does not replay old push notifications.
+**Can I use the same account on multiple devices?**
 
-## contact
+Yes, but linkstr is local-first and relay-backed, so there are a couple of limits:
 
-- github issues: https://github.com/therealparmesh/linkstr
-- email: parmesh@hey.com
+1. Export the `nsec` from the first device.
+2. Import the same `nsec` on the second device.
+3. Make sure both devices can connect to relays.
 
-## legal
+New posts and reactions should sync when both devices reconnect to relays. Historical restore depends on relay retention and what each device can replay from relay history.
 
-by using linkstr, you agree to respect content creators' intellectual property rights and comply with applicable laws and platform terms when downloading or sharing content.
+**Can I delete a session?**
 
-linkstr is provided as-is. the developer is not responsible for user-generated content or misuse of downloading features.
+Not yet. Sessions can be archived and unarchived, but there is no shipped session-delete feature.
+
+**Can I remove a contact?**
+
+Yes. Long-press the contact row and choose `remove contact`. linkstr publishes an updated follow list to relays and removes the contact locally.
+
+**Can I save videos?**
+
+Yes, for content you have the right to save. Extracted videos can be exported to Photos or Files. Embedded web playback is provider-dependent and may not always offer save/export.
+
+## Privacy and storage
+
+**What data is stored locally?**
+
+linkstr stores account-scoped sessions, member snapshots and intervals, posts, reactions, read state, archive state, contacts, and media cache references on the device. Sensitive content fields are encrypted at rest with local per-owner keys.
+
+**Where are account keys stored?**
+
+In the device keychain, with iOS-controlled protection. Simulator fallback storage is used only when simulator keychain access is unavailable.
+
+**Where are videos and previews stored?**
+
+Downloaded media and generated previews are stored in app-owned local storage. Video cache is treated as disposable device cache and auto-trims with least-recently-used eviction at about 1 GB. You can also clear cached media and previews from Settings.
+
+**What permissions does linkstr ask for?**
+
+- Camera: scanning contact QR codes.
+- Photos add-only: exporting saved videos to Photos.
+- Notifications: APNs alerts for new posts and active reactions.
+- Network access: relay sync and media playback.
+
+Archived sessions do not send notifications.
+
+## Troubleshooting
+
+**The app won't connect to relays**
+
+1. Confirm your internet connection works.
+2. Open Settings and check that at least one relay is enabled.
+3. If needed, use `Reset defaults` in the relays section.
+4. Force-quit and reopen the app.
+
+**My posts are not syncing across devices**
+
+1. Confirm both devices are signed in with the same `nsec`.
+2. Confirm both devices can connect to relays.
+3. Leave the app open long enough for relay sync to complete after reconnect.
+
+Remember that historical replay depends on relay retention. linkstr can retry out-of-order posts, reactions, and deletes locally, but it still needs the missing relay history to arrive.
+
+**Videos won't play**
+
+1. Check your network connection.
+2. Switch between `try local playback` and `try embed playback`.
+3. If a downloaded copy was auto-trimmed, try local playback again to re-download it.
+4. Clear cached media and previews from Settings if playback metadata looks stale.
+5. Use `open in browser` if the provider blocks embedded playback.
+
+**A preview looks stale or wrong**
+
+1. Clear cached media and previews from Settings.
+2. Reopen the post and let linkstr rebuild the preview.
+3. If the provider itself is serving bad metadata, use `open in browser`.
+
+**I can't scan a QR code**
+
+1. Check camera permission in iOS Settings.
+2. Use better lighting and a steady camera.
+3. Paste the `npub` manually if needed.
+
+## Contact
+
+- GitHub issues: https://github.com/therealparmesh/linkstr
+- Email: parmesh@hey.com
+
+## Legal
+
+By using linkstr, you agree to respect content creators' intellectual property rights and comply with applicable laws and platform terms when downloading or sharing content.
+
+linkstr is provided as-is. The developer is not responsible for user-generated content or misuse of downloading features.
 
 ---
 
