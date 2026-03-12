@@ -790,12 +790,12 @@ private struct PostCardView: View {
 private struct SessionMembershipChangeRowView: View {
   let row: SessionMembershipChangeRow
 
-  private var verb: String {
+  private var markerLabel: String {
     switch row.change.kind {
     case .joined:
-      return "joined"
+      return "in: \(row.displayName)"
     case .left:
-      return "left"
+      return "out: \(row.displayName)"
     }
   }
 
@@ -805,7 +805,7 @@ private struct SessionMembershipChangeRowView: View {
         .fill(LinkstrTheme.separator)
         .frame(height: 1)
 
-      Text("\(row.displayName) \(verb) · \(row.change.timestamp.linkstrMessageTimestampLabel)")
+      Text(markerLabel)
         .font(LinkstrTheme.body(11, weight: .semibold))
         .foregroundStyle(LinkstrTheme.textTertiary)
         .lineLimit(1)
@@ -814,9 +814,9 @@ private struct SessionMembershipChangeRowView: View {
         .fill(LinkstrTheme.separator)
         .frame(height: 1)
     }
-    .padding(.vertical, 12)
+    .padding(.vertical, 8)
     .accessibilityElement(children: .ignore)
-    .accessibilityLabel("\(row.displayName) \(verb)")
+    .accessibilityLabel(markerLabel)
     .accessibilityValue(row.change.timestamp.linkstrMessageTimestampLabel)
   }
 }

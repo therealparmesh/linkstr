@@ -141,7 +141,7 @@ linkstr still does not have a durable offline outbox. If a send cannot get relay
 - Members can be removed from active membership.
 - Only the session creator can add or remove members.
 - Non-creator membership mutations are ignored on ingest.
-- Session detail inserts centered `joined` / `left` separators for membership changes observed after the first local membership snapshot for that session.
+- Session detail inserts centered `in:` / `out:` separators for membership changes observed after the first local membership snapshot for that session.
 - Member identity resolves as local alias, then remote nostr profile name, then public key (`npub`).
 - Outbound membership snapshots authored by this client always include the local sender key.
 
