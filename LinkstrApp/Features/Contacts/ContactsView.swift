@@ -9,8 +9,8 @@ struct ContactsView: View {
   private var contacts: [ContactEntity]
 
   @State private var selectedContact: ContactEntity?
-  @State private var pendingUnfollowContact: ContactEntity?
-  @State private var isUnfollowingContact = false
+  @State private var pendingContactRemoval: ContactEntity?
+  @State private var isRemovingContact = false
   @State private var query = ""
 
   private var scopedContacts: [ContactEntity] {
@@ -49,13 +49,13 @@ struct ContactsView: View {
       content
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-    .alert("unfollow contact", isPresented: isPresentingUnfollowConfirmation) {
+    .alert("remove contact", isPresented: isPresentingRemovalConfirmation) {
       Button("cancel", role: .cancel) {}
-      Button(isUnfollowingContact ? "unfollowing..." : "unfollow", role: .destructive) {
-        unfollowPendingContact()
+      Button(isRemovingContact ? "removing..." : "remove", role: .destructive) {
+        removePendingContact()
       }
     } message: {
-      Text(unfollowConfirmationMessage)
+      Text(removeContactConfirmationMessage)
     }
     .task(id: profileLookupRequestID) {
       session.requestRemoteProfilesIfNeeded(pubkeyHexes: profileLookupPubkeys)
@@ -98,14 +98,14 @@ struct ContactsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contextMenu {
                   Button(role: .destructive) {
-                    pendingUnfollowContact = contact
+                    pendingContactRemoval = contact
                   } label: {
-                    Label("unfollow contact", systemImage: "person.crop.circle.badge.minus")
+                    Label("remove contact", systemImage: "person.crop.circle.badge.minus")
                   }
                 }
                 .accessibilityHint("long press for contact actions.")
-                .accessibilityAction(named: Text("unfollow contact")) {
-                  pendingUnfollowContact = contact
+                .accessibilityAction(named: Text("remove contact")) {
+                  pendingContactRemoval = contact
                 }
               }
             }
@@ -119,35 +119,35 @@ struct ContactsView: View {
     }
   }
 
-  private var isPresentingUnfollowConfirmation: Binding<Bool> {
+  private var isPresentingRemovalConfirmation: Binding<Bool> {
     Binding(
-      get: { pendingUnfollowContact != nil },
+      get: { pendingContactRemoval != nil },
       set: { isPresented in
         if !isPresented {
-          pendingUnfollowContact = nil
+          pendingContactRemoval = nil
         }
       }
     )
   }
 
-  private var unfollowConfirmationMessage: String {
-    guard let pendingUnfollowContact else {
+  private var removeContactConfirmationMessage: String {
+    guard let pendingContactRemoval else {
       return "this updates your follow list on relays and removes this contact locally."
     }
 
     return
-      "this updates your follow list on relays, unfollows \(session.resolvedIdentity(for: pendingUnfollowContact).displayName), and removes the contact locally."
+      "this updates your follow list on relays, removes \(session.resolvedIdentity(for: pendingContactRemoval).displayName) from your contacts, and removes the contact locally."
   }
 
-  private func unfollowPendingContact() {
-    guard !isUnfollowingContact, let pendingUnfollowContact else { return }
+  private func removePendingContact() {
+    guard !isRemovingContact, let pendingContactRemoval else { return }
 
-    isUnfollowingContact = true
+    isRemovingContact = true
     Task { @MainActor in
-      let didRemove = await session.unfollowContact(pendingUnfollowContact)
-      isUnfollowingContact = false
+      let didRemove = await session.removeContact(pendingContactRemoval)
+      isRemovingContact = false
       if didRemove {
-        self.pendingUnfollowContact = nil
+        self.pendingContactRemoval = nil
       }
     }
   }

@@ -371,7 +371,7 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     XCTAssertFalse(identity.showsNPubLine)
   }
 
-  func testUnfollowContactUpdatesLocalFollowSet() async throws {
+  func testRemoveContactUpdatesLocalFollowSet() async throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
     let firstNPub = try TestKeyMaterialFactory.makeNPub()
@@ -388,7 +388,7 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
       contactsBeforeDelete.first { $0.npub == firstNPub }
     )
 
-    let didRemove = await session.unfollowContact(firstContact)
+    let didRemove = await session.removeContact(firstContact)
     XCTAssertTrue(didRemove)
 
     let contactsAfterDelete = try fetchContacts(in: container.mainContext)
@@ -397,7 +397,7 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     XCTAssertTrue(contactsAfterDelete.contains(where: { $0.npub == secondNPub }))
   }
 
-  func testUnfollowContactPublishesUpdatedFollowListBeforeLocalRemoval() async throws {
+  func testRemoveContactPublishesUpdatedFollowListBeforeLocalRemoval() async throws {
     var publishedFollowLists: [[String]] = []
     let (session, container) = try makeSession(
       disableNostrStartup: false,
@@ -420,7 +420,7 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     let firstContact = try XCTUnwrap(contactsBeforeDelete.first { $0.npub == firstNPub })
     let secondContact = try XCTUnwrap(contactsBeforeDelete.first { $0.npub == secondNPub })
 
-    let didRemove = await session.unfollowContact(
+    let didRemove = await session.removeContact(
       firstContact,
       timeoutSeconds: 0.05,
       pollIntervalSeconds: 0.01
@@ -433,7 +433,7 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     XCTAssertEqual(contactsAfterDelete.map(\.targetPubkey), [secondContact.targetPubkey])
   }
 
-  func testUnfollowContactKeepsLocalDataWhenFollowListPublishFails() async throws {
+  func testRemoveContactKeepsLocalDataWhenFollowListPublishFails() async throws {
     var publishCount = 0
     let (session, container) = try makeSession(
       disableNostrStartup: false,
@@ -453,7 +453,7 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     XCTAssertTrue(didAdd)
 
     let contact = try XCTUnwrap(fetchContacts(in: container.mainContext).first)
-    let didRemove = await session.unfollowContact(
+    let didRemove = await session.removeContact(
       contact,
       timeoutSeconds: 0.05,
       pollIntervalSeconds: 0.01

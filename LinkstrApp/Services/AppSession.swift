@@ -2179,7 +2179,7 @@ final class AppSession: ObservableObject {
   }
 
   @discardableResult
-  func unfollowContact(
+  func removeContact(
     _ contact: ContactEntity,
     timeoutSeconds: TimeInterval = 12,
     pollIntervalSeconds: TimeInterval = 0.35

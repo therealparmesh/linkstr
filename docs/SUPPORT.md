@@ -27,7 +27,7 @@ your account stays in the device keychain and can sync through iCloud keychain i
 3. optionally add alias
 4. tap the bottom "add contact" button once the key is valid
 
-tap a contact row to edit its alias. long-press a contact row to unfollow.
+tap a contact row to edit its alias. long-press a contact row to remove it.
 
 ### use the you tab
 
@@ -114,7 +114,7 @@ check: internet connection, at least one relay connected (settings tab → relay
 sessions can be archived but not deleted. archived sessions don't appear in main list but data remains on device.
 
 **can i remove a contact?**
-yes. long-press the contact row and choose "unfollow contact." this publishes your updated follow list to relays, which is effectively a nostr unfollow, and removes the contact locally.
+yes. long-press the contact row and choose "remove contact." this publishes your updated follow list to relays, removes that person from your contact list, and removes the contact locally.
 
 **can i save videos?**
 yes, for content you have rights to save:

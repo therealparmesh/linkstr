@@ -326,7 +326,7 @@
 - Aliases are private per-account device data and are never published to relays.
 - Remote nostr profile names are fetched lazily by pubkey and are used only when no local alias exists.
 - When both exist, contact UI shows the local alias as primary and the published nostr name as secondary.
-- Contact management supports add, long-press unfollow, and alias edit.
+- Contact management supports add, long-press remove contact, and alias edit.
 - Add-contact sheet uses grouped sections for key entry, identity preview, and alias entry, plus a bottom action footer.
 - Add-contact input supports manual entry, paste, and qr scan.
 - Add-contact input previews the resolved identity for a valid public key (`npub`) and lazily looks up the published nostr name.
