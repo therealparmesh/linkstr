@@ -57,8 +57,8 @@ targets:
       path: LinkstrApp/Info.plist
       properties:
         CFBundleDisplayName: linkstr
-        CFBundleShortVersionString: "1.0.2"
-        CFBundleVersion: "3"
+        CFBundleShortVersionString: "1.1"
+        CFBundleVersion: "4"
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         NSCameraUsageDescription: Camera access is used to scan Contact Key (npub) QR codes.
