@@ -606,7 +606,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = LinkstrApp/Linkstr.Debug.entitlements;
+				"CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]" = LinkstrApp/Linkstr.Debug.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 7654L3CX5L;
@@ -727,7 +727,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = LinkstrApp/Linkstr.Release.entitlements;
+				"CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]" = LinkstrApp/Linkstr.Release.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 7654L3CX5L;

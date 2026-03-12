@@ -55,9 +55,9 @@ targets:
         LINKSTR_PUSH_SERVICE_BASE_URL: "https://linkstr-push-service.fly.dev"
       configs:
         Debug:
-          CODE_SIGN_ENTITLEMENTS: LinkstrApp/Linkstr.Debug.entitlements
+          CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]: LinkstrApp/Linkstr.Debug.entitlements
         Release:
-          CODE_SIGN_ENTITLEMENTS: LinkstrApp/Linkstr.Release.entitlements
+          CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]: LinkstrApp/Linkstr.Release.entitlements
     info:
       path: LinkstrApp/Info.plist
       properties:

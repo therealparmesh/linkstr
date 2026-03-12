@@ -8,6 +8,7 @@ struct ContactsView: View {
   @Query(sort: [SortDescriptor(\ContactEntity.createdAt)])
   private var contacts: [ContactEntity]
 
+  @State private var selectedContact: ContactEntity?
   @State private var pendingUnfollowContact: ContactEntity?
   @State private var isUnfollowingContact = false
   @State private var query = ""
@@ -59,6 +60,9 @@ struct ContactsView: View {
     .task(id: profileLookupRequestID) {
       session.requestRemoteProfilesIfNeeded(pubkeyHexes: profileLookupPubkeys)
     }
+    .navigationDestination(item: $selectedContact) { contact in
+      EditContactView(contact: contact)
+    }
   }
 
   @ViewBuilder
@@ -84,12 +88,14 @@ struct ContactsView: View {
           } else {
             LazyVStack(spacing: 0) {
               ForEach(visibleContacts) { contact in
-                NavigationLink {
-                  EditContactView(contact: contact)
+                Button {
+                  selectedContact = contact
                 } label: {
                   ContactRowView(contact: contact)
                 }
                 .buttonStyle(.plain)
+                .contentShape(Rectangle())
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .contextMenu {
                   Button(role: .destructive) {
                     pendingUnfollowContact = contact
@@ -97,6 +103,7 @@ struct ContactsView: View {
                     Label("unfollow contact", systemImage: "person.crop.circle.badge.minus")
                   }
                 }
+                .accessibilityHint("long press for contact actions.")
                 .accessibilityAction(named: Text("unfollow contact")) {
                   pendingUnfollowContact = contact
                 }
