@@ -42,12 +42,12 @@ final class AppSessionPushTests: AppSessionTestCase {
       url: "https://example.com/path",
       note: "hello",
       session: sessionEntity,
-      timeoutSeconds: 0.05,
-      pollIntervalSeconds: 0.01
+      timeoutSeconds: shortRelayMutationTimeoutSeconds,
+      pollIntervalSeconds: shortRelayMutationPollIntervalSeconds
     )
 
     XCTAssertTrue(didCreate)
-    await fulfillment(of: [enqueueExpectation], timeout: 1.0)
+    await fulfillment(of: [enqueueExpectation], timeout: asyncExpectationTimeoutSeconds)
     XCTAssertEqual(capturedRequests.count, 1)
     XCTAssertEqual(capturedRequests[0].notificationType, "new_post")
     XCTAssertEqual(capturedRequests[0].eventID, "await-root-event")
@@ -101,7 +101,7 @@ final class AppSessionPushTests: AppSessionTestCase {
     let didActivate = await session.toggleReactionAwaitingRelay(emoji: "🔥", post: post)
 
     XCTAssertTrue(didActivate)
-    await fulfillment(of: [enqueueExpectation], timeout: 1.0)
+    await fulfillment(of: [enqueueExpectation], timeout: asyncExpectationTimeoutSeconds)
     XCTAssertEqual(capturedRequests.count, 1)
     XCTAssertEqual(capturedRequests[0].notificationType, "new_emoji_reaction")
     XCTAssertEqual(capturedRequests[0].eventID, "reaction-on")
@@ -143,11 +143,11 @@ final class AppSessionPushTests: AppSessionTestCase {
     )
 
     session.setSessionArchived(sessionID: "session-archive-target", archived: true)
-    await fulfillment(of: [archiveExpectation], timeout: 1.0)
+    await fulfillment(of: [archiveExpectation], timeout: asyncExpectationTimeoutSeconds)
     XCTAssertEqual(syncedConversationIDs, [["session-archive-target"]])
 
     session.setSessionArchived(sessionID: "session-archive-target", archived: false)
-    await fulfillment(of: [unarchiveExpectation], timeout: 1.0)
+    await fulfillment(of: [unarchiveExpectation], timeout: asyncExpectationTimeoutSeconds)
     XCTAssertEqual(syncedConversationIDs, [["session-archive-target"], []])
   }
 }

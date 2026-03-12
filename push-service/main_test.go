@@ -323,6 +323,45 @@ func TestMissingAuthorizationIsRejected(t *testing.T) {
 	}
 }
 
+func TestAuthorizationNonceReplayIsRejected(t *testing.T) {
+	mux, _ := newTestMux(t)
+	secret := nostr.GeneratePrivateKey()
+
+	requestBody, err := json.Marshal(registerDeviceRequest{
+		DeviceToken:     "device-token-1",
+		APNSEnvironment: "sandbox",
+	})
+	if err != nil {
+		t.Fatalf("marshal request body: %v", err)
+	}
+
+	firstRequest, err := signedJSONRequest("POST", "/v1/devices/register", requestBody, secret)
+	if err != nil {
+		t.Fatalf("build signed request: %v", err)
+	}
+	authHeader := firstRequest.Header.Get("Authorization")
+
+	firstRecorder := httptest.NewRecorder()
+	mux.ServeHTTP(firstRecorder, firstRequest)
+	if firstRecorder.Code != http.StatusAccepted {
+		t.Fatalf("expected first request to succeed, got %d body=%s", firstRecorder.Code, firstRecorder.Body.String())
+	}
+
+	secondRequest := httptest.NewRequest(
+		"POST",
+		"/v1/devices/register",
+		bytes.NewReader(requestBody),
+	)
+	secondRequest.Header.Set("Content-Type", "application/json")
+	secondRequest.Header.Set("Authorization", authHeader)
+
+	secondRecorder := httptest.NewRecorder()
+	mux.ServeHTTP(secondRecorder, secondRequest)
+	if secondRecorder.Code != http.StatusUnauthorized {
+		t.Fatalf("expected replay to be rejected, got %d body=%s", secondRecorder.Code, secondRecorder.Body.String())
+	}
+}
+
 func TestNewPushSenderRequiresAPNSConfigWhenNotDisabled(t *testing.T) {
 	_, err := newPushSender(config{})
 	if err == nil {
@@ -415,6 +454,7 @@ func signedJSONRequest(method, path string, body []byte, secret string) (*http.R
 			{"method", method},
 			{"path", path},
 			{"payload_sha256", hex.EncodeToString(bodyHash[:])},
+			{"nonce", nostr.GeneratePrivateKey()},
 		},
 		Content: "",
 	}

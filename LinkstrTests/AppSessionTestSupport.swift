@@ -6,6 +6,10 @@ import XCTest
 
 @MainActor
 class AppSessionTestCase: XCTestCase {
+  let shortRelayMutationTimeoutSeconds: TimeInterval = 0.05
+  let shortRelayMutationPollIntervalSeconds: TimeInterval = 0.01
+  let asyncExpectationTimeoutSeconds: TimeInterval = 1.0
+
   override func setUpWithError() throws {
     try KeychainStore.shared.delete("nostr_nsec")
   }

@@ -181,11 +181,13 @@ final class PushAPIClient {
     signedBy keypair: Keypair
   ) throws -> String {
     let payloadHashHex = SHA256.hash(data: bodyData).map { String(format: "%02x", $0) }.joined()
+    let nonce = UUID().uuidString.lowercased()
     let authEvent = try NostrEvent.Builder<NostrEvent>(kind: .unknown(27235))
       .content("")
       .appendTags(try customTag(name: "method", value: method))
       .appendTags(try customTag(name: "path", value: path))
       .appendTags(try customTag(name: "payload_sha256", value: payloadHashHex))
+      .appendTags(try customTag(name: "nonce", value: nonce))
       .build(signedBy: keypair)
     let authData = try JSONEncoder().encode(authEvent)
     return "Nostr \(authData.base64EncodedString())"

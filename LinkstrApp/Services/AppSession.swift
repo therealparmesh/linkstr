@@ -6,6 +6,11 @@ import SwiftData
   import UIKit
 #endif
 
+private enum RelayMutationDefaults {
+  static let timeoutSeconds: TimeInterval = 12
+  static let pollIntervalSeconds: TimeInterval = 0.35
+}
+
 @MainActor
 final class AppSession: ObservableObject {
   enum RelayConnectivityState: Equatable {
@@ -258,6 +263,11 @@ final class AppSession: ObservableObject {
       PushNotificationService.shared.refreshRegistrationIfAuthorized()
     }
     guard didFinishBoot else { return }
+    if identityService.keypair != nil {
+      // Foreground re-entry is the safest cheap retry point for push registration and archive
+      // sync, especially after transient network failures that did not change local signatures.
+      schedulePushStateSync()
+    }
     scheduleIdentityLoadAndNostrRestart(maxAttempts: activeIdentityRetryAttempts)
   }
 
@@ -928,8 +938,8 @@ final class AppSession: ObservableObject {
   @discardableResult
   func completePendingAccountCreation(
     profileName: String?,
-    timeoutSeconds: TimeInterval = 12,
-    pollIntervalSeconds: TimeInterval = 0.35
+    timeoutSeconds: TimeInterval = RelayMutationDefaults.timeoutSeconds,
+    pollIntervalSeconds: TimeInterval = RelayMutationDefaults.pollIntervalSeconds
   ) async -> Bool {
     let normalizedProfileName = NostrProfileMetadata.normalizedChosenName(profileName)
     guard normalizedProfileName != nil else {
@@ -967,8 +977,8 @@ final class AppSession: ObservableObject {
   @discardableResult
   func updateOwnProfileName(
     _ profileName: String?,
-    timeoutSeconds: TimeInterval = 12,
-    pollIntervalSeconds: TimeInterval = 0.35
+    timeoutSeconds: TimeInterval = RelayMutationDefaults.timeoutSeconds,
+    pollIntervalSeconds: TimeInterval = RelayMutationDefaults.pollIntervalSeconds
   ) async -> Bool {
     guard let keypair = identityService.keypair, let ownerPubkey = identityService.pubkeyHex else {
       let message = "you're signed out. sign in to manage your profile."
@@ -1067,8 +1077,8 @@ final class AppSession: ObservableObject {
 
   @discardableResult
   func deleteAccountAwaitingRelay(
-    timeoutSeconds: TimeInterval = 12,
-    pollIntervalSeconds: TimeInterval = 0.35
+    timeoutSeconds: TimeInterval = RelayMutationDefaults.timeoutSeconds,
+    pollIntervalSeconds: TimeInterval = RelayMutationDefaults.pollIntervalSeconds
   ) async -> Bool {
     guard let keypair = identityService.keypair, let ownerPubkey = identityService.pubkeyHex else {
       composeError = "you're signed out. sign in to manage this account."
@@ -1325,8 +1335,8 @@ final class AppSession: ObservableObject {
   func createSessionAwaitingRelay(
     name: String,
     memberNPubs: [String],
-    timeoutSeconds: TimeInterval = 12,
-    pollIntervalSeconds: TimeInterval = 0.35
+    timeoutSeconds: TimeInterval = RelayMutationDefaults.timeoutSeconds,
+    pollIntervalSeconds: TimeInterval = RelayMutationDefaults.pollIntervalSeconds
   ) async -> Bool {
     let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !normalizedName.isEmpty else {
@@ -1408,8 +1418,8 @@ final class AppSession: ObservableObject {
   func updateSessionMembersAwaitingRelay(
     session: SessionEntity,
     memberNPubs: [String],
-    timeoutSeconds: TimeInterval = 12,
-    pollIntervalSeconds: TimeInterval = 0.35
+    timeoutSeconds: TimeInterval = RelayMutationDefaults.timeoutSeconds,
+    pollIntervalSeconds: TimeInterval = RelayMutationDefaults.pollIntervalSeconds
   ) async -> Bool {
     guard let keypair = identityService.keypair, let ownerPubkey = identityService.pubkeyHex else {
       composeError = "you're signed out. sign in to manage session members."
@@ -1497,8 +1507,8 @@ final class AppSession: ObservableObject {
     url: String,
     note: String?,
     session: SessionEntity,
-    timeoutSeconds: TimeInterval = 12,
-    pollIntervalSeconds: TimeInterval = 0.35
+    timeoutSeconds: TimeInterval = RelayMutationDefaults.timeoutSeconds,
+    pollIntervalSeconds: TimeInterval = RelayMutationDefaults.pollIntervalSeconds
   ) async -> Bool {
     guard let draft = makeRootPostDraft(url: url, note: note, sessionID: session.sessionID) else {
       return false
@@ -1540,8 +1550,8 @@ final class AppSession: ObservableObject {
   func toggleReactionAwaitingRelay(
     emoji: String,
     post: SessionMessageEntity,
-    timeoutSeconds: TimeInterval = 12,
-    pollIntervalSeconds: TimeInterval = 0.35
+    timeoutSeconds: TimeInterval = RelayMutationDefaults.timeoutSeconds,
+    pollIntervalSeconds: TimeInterval = RelayMutationDefaults.pollIntervalSeconds
   ) async -> Bool {
     guard let draft = makeReactionDraft(emoji: emoji, post: post) else {
       return false
@@ -1595,8 +1605,8 @@ final class AppSession: ObservableObject {
   @discardableResult
   func deletePostAwaitingRelay(
     _ post: SessionMessageEntity,
-    timeoutSeconds: TimeInterval = 12,
-    pollIntervalSeconds: TimeInterval = 0.35
+    timeoutSeconds: TimeInterval = RelayMutationDefaults.timeoutSeconds,
+    pollIntervalSeconds: TimeInterval = RelayMutationDefaults.pollIntervalSeconds
   ) async -> Bool {
     guard let draft = makeRootDeletionDraft(post: post) else {
       return false
@@ -2150,8 +2160,8 @@ final class AppSession: ObservableObject {
   func addContact(
     npub: String,
     alias: String,
-    timeoutSeconds: TimeInterval = 12,
-    pollIntervalSeconds: TimeInterval = 0.35
+    timeoutSeconds: TimeInterval = RelayMutationDefaults.timeoutSeconds,
+    pollIntervalSeconds: TimeInterval = RelayMutationDefaults.pollIntervalSeconds
   ) async -> Bool {
     guard let ownerPubkey = identityService.pubkeyHex else {
       composeError = "you're signed out. sign in to manage contacts."
@@ -2252,8 +2262,8 @@ final class AppSession: ObservableObject {
   @discardableResult
   func removeContact(
     _ contact: ContactEntity,
-    timeoutSeconds: TimeInterval = 12,
-    pollIntervalSeconds: TimeInterval = 0.35
+    timeoutSeconds: TimeInterval = RelayMutationDefaults.timeoutSeconds,
+    pollIntervalSeconds: TimeInterval = RelayMutationDefaults.pollIntervalSeconds
   ) async -> Bool {
     guard let ownerPubkey = identityService.pubkeyHex else {
       composeError = "you're signed out. sign in to manage contacts."

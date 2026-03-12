@@ -240,8 +240,8 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
 
     let didSave = await session.updateOwnProfileName(
       "New Name",
-      timeoutSeconds: 0.05,
-      pollIntervalSeconds: 0.01
+      timeoutSeconds: shortRelayMutationTimeoutSeconds,
+      pollIntervalSeconds: shortRelayMutationPollIntervalSeconds
     )
 
     XCTAssertTrue(didSave)
@@ -268,8 +268,8 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
 
     let didSave = await session.updateOwnProfileName(
       "  Alice \n\t Bob \u{0007}  ",
-      timeoutSeconds: 0.05,
-      pollIntervalSeconds: 0.01
+      timeoutSeconds: shortRelayMutationTimeoutSeconds,
+      pollIntervalSeconds: shortRelayMutationPollIntervalSeconds
     )
 
     XCTAssertTrue(didSave)
@@ -311,8 +311,8 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
 
     let didSave = await session.updateOwnProfileName(
       "Restored Name",
-      timeoutSeconds: 0.05,
-      pollIntervalSeconds: 0.01
+      timeoutSeconds: shortRelayMutationTimeoutSeconds,
+      pollIntervalSeconds: shortRelayMutationPollIntervalSeconds
     )
     XCTAssertTrue(didSave)
 
@@ -422,8 +422,8 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
 
     let didRemove = await session.removeContact(
       firstContact,
-      timeoutSeconds: 0.05,
-      pollIntervalSeconds: 0.01
+      timeoutSeconds: shortRelayMutationTimeoutSeconds,
+      pollIntervalSeconds: shortRelayMutationPollIntervalSeconds
     )
 
     XCTAssertTrue(didRemove)
@@ -455,8 +455,8 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     let contact = try XCTUnwrap(fetchContacts(in: container.mainContext).first)
     let didRemove = await session.removeContact(
       contact,
-      timeoutSeconds: 0.05,
-      pollIntervalSeconds: 0.01
+      timeoutSeconds: shortRelayMutationTimeoutSeconds,
+      pollIntervalSeconds: shortRelayMutationPollIntervalSeconds
     )
 
     XCTAssertFalse(didRemove)

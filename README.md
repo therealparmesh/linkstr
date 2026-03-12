@@ -1,6 +1,18 @@
 # linkstr
 
-`linkstr` lets you save links in private sessions, share them with people you trust, and open supported video without leaving the app.
+Last updated: March 12, 2026
+
+`linkstr` is an iOS app for private link sharing on nostr. You create private sessions, share links with people you trust, react with emoji, and open supported video inside the app when a provider allows it.
+
+This repo contains the app plus the small Go push service used for APNs routing.
+
+## Documentation map
+
+- Product support and user-facing behavior: [docs/SUPPORT.md](docs/SUPPORT.md)
+- Privacy details: [docs/PRIVACY.md](docs/PRIVACY.md)
+- App Store Connect checklist: [docs/APP_STORE_CONNECT.md](docs/APP_STORE_CONNECT.md)
+- Push-service setup, operations, and request auth: [push-service/README.md](push-service/README.md)
+- Future proposals that are not shipped yet: [docs/future/](docs/future/)
 
 ## How linkstr syncs
 
@@ -434,13 +446,21 @@ linkstr still does not have a durable offline outbox. If a send cannot get relay
 open Linkstr.xcodeproj
 ```
 
-### Run tests
+### Run iOS tests
 
 ```bash
-xcodebuild test -project Linkstr.xcodeproj -scheme Linkstr -destination 'platform=iOS Simulator,name=iPhone 17'
+xcodebuild -project Linkstr.xcodeproj -scheme Linkstr -showdestinations
+xcodebuild test -project Linkstr.xcodeproj -scheme Linkstr -destination 'platform=iOS Simulator,id=<SIMULATOR_ID>'
 ```
 
-- If your simulator name differs, replace `name=iPhone 17` with one available locally.
+- Use `-showdestinations` first, then swap in a locally available simulator ID.
+
+### Run push-service tests
+
+```bash
+cd push-service
+go test ./...
+```
 
 ## Copyright
 

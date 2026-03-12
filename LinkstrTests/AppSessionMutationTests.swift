@@ -25,8 +25,8 @@ final class AppSessionMutationTests: AppSessionTestCase {
       url: "https://example.com/path",
       note: nil,
       session: sessionEntity,
-      timeoutSeconds: 0.05,
-      pollIntervalSeconds: 0.01
+      timeoutSeconds: shortRelayMutationTimeoutSeconds,
+      pollIntervalSeconds: shortRelayMutationPollIntervalSeconds
     )
 
     XCTAssertFalse(didCreate)
@@ -82,8 +82,8 @@ final class AppSessionMutationTests: AppSessionTestCase {
       url: "https://example.com/path",
       note: nil,
       session: sessionEntity,
-      timeoutSeconds: 0.05,
-      pollIntervalSeconds: 0.01
+      timeoutSeconds: shortRelayMutationTimeoutSeconds,
+      pollIntervalSeconds: shortRelayMutationPollIntervalSeconds
     )
 
     XCTAssertTrue(didCreate)
@@ -110,8 +110,8 @@ final class AppSessionMutationTests: AppSessionTestCase {
       url: "https://example.com/path",
       note: nil,
       session: sessionEntity,
-      timeoutSeconds: 0.05,
-      pollIntervalSeconds: 0.01
+      timeoutSeconds: shortRelayMutationTimeoutSeconds,
+      pollIntervalSeconds: shortRelayMutationPollIntervalSeconds
     )
 
     XCTAssertFalse(didCreate)
@@ -140,8 +140,8 @@ final class AppSessionMutationTests: AppSessionTestCase {
       url: "https://example.com/path",
       note: nil,
       session: sessionEntity,
-      timeoutSeconds: 0.05,
-      pollIntervalSeconds: 0.01
+      timeoutSeconds: shortRelayMutationTimeoutSeconds,
+      pollIntervalSeconds: shortRelayMutationPollIntervalSeconds
     )
 
     XCTAssertFalse(didCreate)
@@ -209,8 +209,8 @@ final class AppSessionMutationTests: AppSessionTestCase {
       url: "https://example.com/path",
       note: "hello",
       session: sessionEntity,
-      timeoutSeconds: 0.05,
-      pollIntervalSeconds: 0.01
+      timeoutSeconds: shortRelayMutationTimeoutSeconds,
+      pollIntervalSeconds: shortRelayMutationPollIntervalSeconds
     )
 
     XCTAssertTrue(didCreate)
@@ -329,8 +329,8 @@ final class AppSessionMutationTests: AppSessionTestCase {
 
     let didDelete = await session.deletePostAwaitingRelay(
       rootPost,
-      timeoutSeconds: 0.05,
-      pollIntervalSeconds: 0.01
+      timeoutSeconds: shortRelayMutationTimeoutSeconds,
+      pollIntervalSeconds: shortRelayMutationPollIntervalSeconds
     )
 
     XCTAssertTrue(didDelete)
@@ -479,8 +479,8 @@ final class AppSessionMutationTests: AppSessionTestCase {
 
     let didDelete = await session.deletePostAwaitingRelay(
       rootPost,
-      timeoutSeconds: 0.05,
-      pollIntervalSeconds: 0.01
+      timeoutSeconds: shortRelayMutationTimeoutSeconds,
+      pollIntervalSeconds: shortRelayMutationPollIntervalSeconds
     )
 
     XCTAssertTrue(didDelete)
@@ -693,8 +693,8 @@ final class AppSessionMutationTests: AppSessionTestCase {
       url: "https://example.com/path",
       note: nil,
       session: sessionEntity,
-      timeoutSeconds: 0.05,
-      pollIntervalSeconds: 0.01
+      timeoutSeconds: shortRelayMutationTimeoutSeconds,
+      pollIntervalSeconds: shortRelayMutationPollIntervalSeconds
     )
 
     XCTAssertFalse(didCreate)

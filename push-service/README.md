@@ -1,6 +1,8 @@
 # push-service
 
-Minimal linkstr push backend for ios APNs delivery.
+Last updated: March 12, 2026
+
+Minimal linkstr push backend for iOS APNs delivery.
 
 ## What it does
 
@@ -12,6 +14,15 @@ Minimal linkstr push backend for ios APNs delivery.
   - `new_emoji_reaction`
 
 It does not decrypt linkstr content, watch relays directly, or keep a notification inbox.
+
+## Request auth
+
+Every mutating request is authorized with a signed nostr HTTP auth event.
+
+- The signature covers the HTTP method, request path, request body hash, and a random nonce.
+- The service stores recently used nonces for the current auth window and rejects reuse.
+
+That keeps a captured request from being replayed over and over during the normal auth TTL.
 
 ## What you need to do manually
 
@@ -226,7 +237,8 @@ Backend:
 
 App:
 
-- `xcodebuild test -project Linkstr.xcodeproj -scheme Linkstr -destination 'platform=iOS Simulator,name=iPhone 14 Plus'`
+- `xcodebuild -project Linkstr.xcodeproj -scheme Linkstr -showdestinations`
+- `xcodebuild test -project Linkstr.xcodeproj -scheme Linkstr -destination 'platform=iOS Simulator,id=<SIMULATOR_ID>'`
 - Post enqueue coverage.
 - Reaction enqueue coverage.
 - Archive sync coverage.

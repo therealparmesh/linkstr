@@ -2,7 +2,7 @@
 
 Last updated: March 12, 2026
 
-linkstr is a private link-sharing app built on nostr. You create or join private sessions, share links inside those sessions, and react with emoji. This page explains the current shipped behavior.
+linkstr is a private link-sharing app built on nostr. You create or join private sessions, share links inside those sessions, and react with emoji. This page describes the current shipped behavior in plain language.
 
 ## Quick start
 
@@ -49,7 +49,7 @@ Profile name changes can be submitted with either the keyboard return key or the
 4. Optionally add a note.
 5. Tap `send post`.
 
-Supported links currently include TikTok, Instagram, Facebook, YouTube, Twitter/X, Rumble, and generic web URLs.
+Generic web URLs are valid posts too. In-app playback, local caching, and save/export options depend on the provider and the specific URL.
 
 ### React, delete, archive, and manage members
 
@@ -71,6 +71,16 @@ Open Settings to manage relays.
 - Enabled relays can be turned on or off.
 - Relay rows can be removed.
 - `Reset defaults` restores the shipped relay set.
+
+## What works in-app
+
+linkstr accepts normal web URLs, but in-app playback is provider-dependent.
+
+- Extraction-first playback: TikTok videos, Instagram Reels, Facebook Reels, and Twitter/X statuses when provider metadata confirms a video is present.
+- Embed-first playback: YouTube, Rumble, Instagram video posts, Facebook video posts, and Twitter/X non-video statuses when the official tweet embed is available.
+- Browser fallback: everything else, plus any provider URL that blocks extraction or embed playback at runtime.
+
+When local extraction succeeds, linkstr can cache the media on-device and offer `save to photos` or `save to files`. Embed-only playback stays network-backed and does not get local export controls.
 
 ## How linkstr sessions work
 
@@ -106,7 +116,7 @@ Session content is end-to-end encrypted before it goes to relays. Only session m
 
 **What goes through linkstr's push service?**
 
-linkstr uses an APNs push service for iOS notifications. That service stores your APNs device token, your nostr pubkey, and the list of archived conversation IDs needed to suppress notifications for archived sessions. Encrypted session content still travels through nostr relays, not through the push service.
+linkstr uses an APNs push service for iOS notifications. That service stores your APNs device token, your nostr pubkey, archived conversation IDs used to suppress notifications for archived sessions, and lightweight push-dedupe bookkeeping so the same event is not pushed repeatedly.
 
 Push alerts use generic text. Old push notifications are not replayed during historical restore.
 
@@ -121,7 +131,9 @@ Yes. Your `nsec` is a nostr secret key, not a linkstr-only credential.
 
 **What happens if I delete my account?**
 
-linkstr clears your local data on this device and logs you out. When relays are available, it also publishes an empty follow list and sends a nostr vanish request to your enabled relays.
+Deleting the account is relay-gated. linkstr only finishes the delete flow when it can reach a writable relay and get relay acceptance for the account-removal events.
+
+When that succeeds, linkstr clears your local data on this device, logs you out, publishes an empty follow list, and sends a nostr vanish request to your enabled relays.
 
 Deleting the account in linkstr does not invalidate the `nsec` itself. If you still have that key, you can sign in again later.
 
@@ -168,7 +180,7 @@ Yes. Long-press the contact row and choose `remove contact`. linkstr publishes a
 
 **Can I save videos?**
 
-Yes, for content you have the right to save. Extracted videos can be exported to Photos or Files. Embedded web playback is provider-dependent and may not always offer save/export.
+Yes, for content you have the right to save. Save/export is available only when linkstr can extract and cache a local media file. Embed-only playback is provider-dependent and may not offer save/export even if the post plays in-app.
 
 ## Privacy and storage
 

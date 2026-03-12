@@ -124,7 +124,7 @@ func (s *apiServer) handleHealthz(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *apiServer) handleRegisterDevice(w http.ResponseWriter, r *http.Request) {
-	pubkey, body, ok := authenticateRequest(w, r)
+	pubkey, body, ok := s.authenticateRequest(w, r)
 	if !ok {
 		return
 	}
@@ -151,7 +151,7 @@ func (s *apiServer) handleRegisterDevice(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *apiServer) handleUnregisterDevice(w http.ResponseWriter, r *http.Request) {
-	pubkey, body, ok := authenticateRequest(w, r)
+	pubkey, body, ok := s.authenticateRequest(w, r)
 	if !ok {
 		return
 	}
@@ -177,7 +177,7 @@ func (s *apiServer) handleUnregisterDevice(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *apiServer) handleArchiveState(w http.ResponseWriter, r *http.Request) {
-	pubkey, body, ok := authenticateRequest(w, r)
+	pubkey, body, ok := s.authenticateRequest(w, r)
 	if !ok {
 		return
 	}
@@ -198,7 +198,7 @@ func (s *apiServer) handleArchiveState(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *apiServer) handlePush(w http.ResponseWriter, r *http.Request) {
-	senderPubkey, body, ok := authenticateRequest(w, r)
+	senderPubkey, body, ok := s.authenticateRequest(w, r)
 	if !ok {
 		return
 	}
@@ -320,14 +320,14 @@ func validatePush(push outboundPush) error {
 	return nil
 }
 
-func authenticateRequest(w http.ResponseWriter, r *http.Request) (string, []byte, bool) {
+func (s *apiServer) authenticateRequest(w http.ResponseWriter, r *http.Request) (string, []byte, bool) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxRequestBodyBytes))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "failed to read request body")
 		return "", nil, false
 	}
 
-	pubkey, err := verifyAuthorizationHeader(r, body)
+	pubkey, err := s.verifyAuthorizationHeader(r, body)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, err.Error())
 		return "", nil, false
@@ -336,7 +336,7 @@ func authenticateRequest(w http.ResponseWriter, r *http.Request) (string, []byte
 	return pubkey, body, true
 }
 
-func verifyAuthorizationHeader(r *http.Request, body []byte) (string, error) {
+func (s *apiServer) verifyAuthorizationHeader(r *http.Request, body []byte) (string, error) {
 	headerValue := strings.TrimSpace(r.Header.Get("Authorization"))
 	if !strings.HasPrefix(headerValue, authHeaderPrefix) {
 		return "", errors.New("missing Authorization header")
@@ -378,9 +378,21 @@ func verifyAuthorizationHeader(r *http.Request, body []byte) (string, error) {
 	if tagValue(event.Tags, "payload_sha256") != hex.EncodeToString(bodyHash[:]) {
 		return "", errors.New("auth event body hash mismatch")
 	}
+	nonce := strings.TrimSpace(tagValue(event.Tags, "nonce"))
+	if nonce == "" {
+		return "", errors.New("auth event nonce missing")
+	}
 
 	if strings.TrimSpace(event.PubKey) == "" {
 		return "", errors.New("auth event pubkey missing")
+	}
+
+	inserted, err := s.store.claimAuthNonce(r.Context(), event.PubKey, nonce, now)
+	if err != nil {
+		return "", errors.New("failed to persist auth nonce")
+	}
+	if !inserted {
+		return "", errors.New("auth event nonce already used")
 	}
 
 	return event.PubKey, nil

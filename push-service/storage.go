@@ -43,12 +43,18 @@ func (s *store) migrate(ctx context.Context) error {
 			PRIMARY KEY (pubkey, conversation_id)
 		);`,
 		`CREATE TABLE IF NOT EXISTS push_dedupe (
-			event_id TEXT NOT NULL,
-			notification_type TEXT NOT NULL,
-			recipient_pubkey TEXT NOT NULL,
-			created_at INTEGER NOT NULL,
-			PRIMARY KEY (event_id, notification_type, recipient_pubkey)
-		);`,
+				event_id TEXT NOT NULL,
+				notification_type TEXT NOT NULL,
+				recipient_pubkey TEXT NOT NULL,
+				created_at INTEGER NOT NULL,
+				PRIMARY KEY (event_id, notification_type, recipient_pubkey)
+			);`,
+		`CREATE TABLE IF NOT EXISTS auth_nonces (
+				pubkey TEXT NOT NULL,
+				nonce TEXT NOT NULL,
+				created_at INTEGER NOT NULL,
+				PRIMARY KEY (pubkey, nonce)
+			);`,
 	}
 
 	for _, statement := range statements {
@@ -216,6 +222,46 @@ func (s *store) insertPushDedupe(ctx context.Context, eventID, notificationType,
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
+		return false, err
+	}
+	return rowsAffected == 1, nil
+}
+
+func (s *store) claimAuthNonce(ctx context.Context, pubkey, nonce string, now time.Time) (bool, error) {
+	ctx, cancel := withTimeoutContext(ctx)
+	defer cancel()
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(
+		ctx,
+		`DELETE FROM auth_nonces WHERE created_at < ?;`,
+		now.Add(-authTTL).Unix(),
+	); err != nil {
+		return false, err
+	}
+
+	result, err := tx.ExecContext(
+		ctx,
+		`INSERT OR IGNORE INTO auth_nonces (pubkey, nonce, created_at)
+		 VALUES (?, ?, ?);`,
+		pubkey,
+		nonce,
+		now.Unix(),
+	)
+	if err != nil {
+		return false, err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	if err := tx.Commit(); err != nil {
 		return false, err
 	}
 	return rowsAffected == 1, nil

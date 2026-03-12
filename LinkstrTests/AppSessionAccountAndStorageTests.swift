@@ -162,8 +162,8 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     try container.mainContext.save()
 
     let didDelete = await session.deleteAccountAwaitingRelay(
-      timeoutSeconds: 0.05,
-      pollIntervalSeconds: 0.01
+      timeoutSeconds: shortRelayMutationTimeoutSeconds,
+      pollIntervalSeconds: shortRelayMutationPollIntervalSeconds
     )
 
     XCTAssertTrue(didDelete)
@@ -202,8 +202,8 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     try container.mainContext.save()
 
     let didDelete = await session.deleteAccountAwaitingRelay(
-      timeoutSeconds: 0.05,
-      pollIntervalSeconds: 0.01
+      timeoutSeconds: shortRelayMutationTimeoutSeconds,
+      pollIntervalSeconds: shortRelayMutationPollIntervalSeconds
     )
 
     XCTAssertFalse(didDelete)
