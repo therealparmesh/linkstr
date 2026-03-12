@@ -16,9 +16,9 @@ private by design
 
 - solo or group sessions for friends, family, or projects
 - no phone number or email required
-- no ads, analytics, or tracking SDKs
+- no ads, analytics, or tracking sdks
 
-watch, save, and organize
+watch and save
 
 - in-app playback for supported social video links
 - download eligible media for offline access
