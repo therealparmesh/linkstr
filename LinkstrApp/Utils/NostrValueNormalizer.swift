@@ -50,6 +50,19 @@ enum NostrValueNormalizer {
     return normalized
   }
 
+  static func dedupedNormalizedEventIDs(_ candidates: [String]) -> [String] {
+    var normalized: [String] = []
+    var seen = Set<String>()
+
+    for candidate in candidates {
+      guard let normalizedEventID = normalizedEventID(candidate) else { continue }
+      guard seen.insert(normalizedEventID).inserted else { continue }
+      normalized.append(normalizedEventID)
+    }
+
+    return normalized
+  }
+
   static func shouldApplyStateUpdate(
     currentUpdatedAt: Date?,
     currentEventID: String?,

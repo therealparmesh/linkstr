@@ -32,6 +32,45 @@ final class AppSession: ObservableObject {
     let context: LinkMetadataRefreshContext
   }
 
+  private struct PendingIncomingMessage {
+    let incoming: ReceivedDirectMessage
+    private(set) var transportEventIDs: [String]
+
+    init(_ incoming: ReceivedDirectMessage) {
+      self.incoming = incoming
+      self.transportEventIDs = Self.mergedTransportEventIDs(
+        [],
+        incoming.transportEventID.map { [$0] } ?? []
+      )
+    }
+
+    var eventID: String { incoming.eventID }
+
+    mutating func mergeDuplicate(_ duplicate: ReceivedDirectMessage) {
+      guard incoming.eventID == duplicate.eventID else { return }
+      transportEventIDs = Self.mergedTransportEventIDs(
+        transportEventIDs,
+        duplicate.transportEventID.map { [$0] } ?? []
+      )
+    }
+
+    private static func mergedTransportEventIDs(_ first: [String], _ second: [String]) -> [String] {
+      NostrValueNormalizer.dedupedNormalizedEventIDs(first + second)
+    }
+  }
+
+  private enum IncomingPersistenceOutcome {
+    case applied
+    case ignored
+    case pending
+  }
+
+  private enum InboundSessionResolution {
+    case ready(SessionEntity)
+    case pending
+    case ignored
+  }
+
   private struct RootPostDraft {
     let payload: LinkstrPayload
     let ownerPubkey: String
@@ -132,6 +171,9 @@ final class AppSession: ObservableObject {
   private var latestAppliedProfileMetadataEventID: String?
   private var currentProfileMetadataContent: String?
   private var inFlightRemoteProfilePubkeys = Set<String>()
+  private var pendingIncomingMessages: [PendingIncomingMessage] = []
+  private var pendingIncomingReconnectReplayArmed = false
+  private var isDrainingPendingIncomingMessages = false
   private var isBooting = false
   private var isRetryingIdentityLoad = false
   private var lastRegisteredPushDeviceSignature: String?
@@ -601,6 +643,25 @@ final class AppSession: ObservableObject {
 
     lastForegroundRelayRestartAt = now
     startNostrIfPossible(forceRestart: true)
+  }
+
+  private func maybeForceRestartRelaysForPendingIncomingRecovery(
+    triggeredBy status: RelayHealthStatus
+  ) {
+    switch status {
+    case .failed, .disconnected:
+      guard !pendingIncomingMessages.isEmpty else { return }
+      pendingIncomingReconnectReplayArmed = true
+    case .connected:
+      guard pendingIncomingReconnectReplayArmed else { return }
+      guard !pendingIncomingMessages.isEmpty else {
+        pendingIncomingReconnectReplayArmed = false
+        return
+      }
+      startNostrIfPossible(forceRestart: true)
+    case .connecting, .readOnly:
+      return
+    }
   }
 
   private enum RelaySendWaitState {
@@ -1083,6 +1144,9 @@ final class AppSession: ObservableObject {
     relayPersistenceFlushTask = nil
     pendingRelayPersistenceByURL.removeAll()
     nostrService.stop()
+    pendingIncomingMessages.removeAll()
+    pendingIncomingReconnectReplayArmed = false
+    isDrainingPendingIncomingMessages = false
     pendingMetadataRefreshes.removeAll()
     pendingMetadataRefreshHead = 0
     enqueuedMetadataStorageIDs.removeAll()
@@ -1143,6 +1207,7 @@ final class AppSession: ObservableObject {
     let isRunningTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
 
     if forceRestart {
+      pendingIncomingReconnectReplayArmed = false
       // iOS may suspend sockets while backgrounded; on foreground always rebuild the relay
       // session so send-gating reflects fresh connection state instead of stale sockets.
       nostrService.stop()
@@ -1220,6 +1285,7 @@ final class AppSession: ObservableObject {
             message: message
           )
           try? self.refreshRelayConnectivityAlert()
+          self.maybeForceRestartRelaysForPendingIncomingRecovery(triggeredBy: status)
           self.maybeForceRestartRelaysForForegroundRecovery(triggeredBy: status)
         }
       },
@@ -1380,6 +1446,7 @@ final class AppSession: ObservableObject {
       url: nil,
       note: nil,
       timestamp: timestamp,
+      sessionName: session.name,
       memberPubkeys: members
     )
 
@@ -1826,6 +1893,10 @@ final class AppSession: ObservableObject {
       deletedByPubkey: draft.senderPubkey,
       updatedAt: Date(timeIntervalSince1970: TimeInterval(draft.payload.timestamp)),
       eventID: eventID
+    )
+    discardPendingIncomingReactions(
+      sessionID: draft.payload.conversationID,
+      rootID: draft.rootID
     )
   }
 
@@ -2400,6 +2471,20 @@ final class AppSession: ObservableObject {
       persistIncoming(incoming)
     }
 
+    func enqueuePendingIncomingForTesting(_ incoming: ReceivedDirectMessage) {
+      enqueuePendingIncomingMessage(incoming)
+    }
+
+    func simulateRelayStatusForTesting(
+      _ status: RelayHealthStatus,
+      relayURL: String = "wss://relay.example.com",
+      message: String? = nil
+    ) {
+      _ = relayURL
+      _ = message
+      maybeForceRestartRelaysForPendingIncomingRecovery(triggeredBy: status)
+    }
+
     func ingestFollowListForTesting(_ incoming: ReceivedFollowList) {
       persistIncomingFollowList(incoming)
     }
@@ -2410,96 +2495,199 @@ final class AppSession: ObservableObject {
   #endif
 
   private func persistIncoming(_ incoming: ReceivedDirectMessage) {
-    switch incoming.payload.kind {
+    persistIncoming(
+      PendingIncomingMessage(incoming),
+      allowPendingEnqueue: true,
+      shouldDrainPending: true
+    )
+  }
+
+  private func persistIncoming(
+    _ incoming: PendingIncomingMessage,
+    allowPendingEnqueue: Bool,
+    shouldDrainPending: Bool
+  ) {
+    switch reduceIncoming(incoming) {
+    case .applied:
+      removePendingIncomingMessage(eventID: incoming.eventID)
+      if shouldDrainPending {
+        drainPendingIncomingMessagesIfNeeded()
+      }
+    case .ignored:
+      removePendingIncomingMessage(eventID: incoming.eventID)
+    case .pending:
+      guard allowPendingEnqueue else { return }
+      enqueuePendingIncomingMessage(incoming.incoming)
+    }
+  }
+
+  private func reduceIncoming(_ pending: PendingIncomingMessage) -> IncomingPersistenceOutcome {
+    switch pending.incoming.payload.kind {
     case .sessionCreate:
-      persistIncomingSessionCreate(incoming)
+      return persistIncomingSessionCreate(pending.incoming)
     case .sessionMembers:
-      persistIncomingSessionMembers(incoming)
+      return persistIncomingSessionMembers(pending.incoming)
     case .reaction:
-      persistIncomingReaction(incoming)
+      return persistIncomingReaction(pending.incoming)
     case .root:
-      persistIncomingRootPost(incoming)
+      return persistIncomingRootPost(
+        pending.incoming,
+        transportEventIDs: pending.transportEventIDs
+      )
     case .rootDelete:
-      persistIncomingRootDeletion(incoming)
+      return persistIncomingRootDeletion(pending.incoming)
     }
   }
 
-  private func persistIncomingSessionCreate(_ incoming: ReceivedDirectMessage) {
-    guard let ownerPubkey = identityService.pubkeyHex else { return }
-
-    let sessionID = incoming.payload.conversationID.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !sessionID.isEmpty else { return }
-    guard
-      let members = incoming.payload.normalizedMemberPubkeys(),
-      !members.isEmpty
-    else {
+  private func enqueuePendingIncomingMessage(_ incoming: ReceivedDirectMessage) {
+    if let index = pendingIncomingMessages.firstIndex(where: { $0.eventID == incoming.eventID }) {
+      pendingIncomingMessages[index].mergeDuplicate(incoming)
       return
     }
-    guard members.contains(incoming.senderPubkey) else { return }
-    guard members.contains(ownerPubkey) else { return }
+    pendingIncomingMessages.append(PendingIncomingMessage(incoming))
+  }
 
-    do {
-      let existing = try messageStore.session(sessionID: sessionID, ownerPubkey: ownerPubkey)
-      if let existing, existing.createdByPubkey != incoming.senderPubkey {
-        return
-      }
-
-      let incomingName = incoming.payload.sessionName?.trimmingCharacters(
-        in: .whitespacesAndNewlines)
-      let sessionName =
-        (incomingName?.isEmpty == false)
-        ? incomingName!
-        : (existing?.name ?? existingSessionName(for: sessionID, ownerPubkey: ownerPubkey))
-      let createdByPubkey = existing?.createdByPubkey ?? incoming.senderPubkey
-
-      _ = try messageStore.upsertSession(
-        ownerPubkey: ownerPubkey,
-        sessionID: sessionID,
-        name: sessionName,
-        createdByPubkey: createdByPubkey,
-        updatedAt: incoming.createdAt,
-        isArchived: existing?.isArchived
-      )
-      try applySessionMembershipSnapshot(
-        ownerPubkey: ownerPubkey,
-        sessionID: sessionID,
-        memberPubkeys: members,
-        updatedAt: incoming.createdAt,
-        eventID: incoming.eventID
-      )
-    } catch {
-      report(error: error)
+  private func removePendingIncomingMessage(eventID: String) {
+    pendingIncomingMessages.removeAll { $0.eventID == eventID }
+    if pendingIncomingMessages.isEmpty {
+      pendingIncomingReconnectReplayArmed = false
     }
   }
 
-  private func persistIncomingSessionMembers(_ incoming: ReceivedDirectMessage) {
-    guard let ownerPubkey = identityService.pubkeyHex else { return }
-
-    let sessionID = incoming.payload.conversationID.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !sessionID.isEmpty else { return }
-    guard
-      let members = incoming.payload.normalizedMemberPubkeys(),
-      !members.isEmpty
-    else {
-      return
+  private func discardPendingIncomingReactions(sessionID: String, rootID: String) {
+    pendingIncomingMessages.removeAll { pending in
+      pending.incoming.payload.kind == .reaction
+        && pending.incoming.payload.conversationID.trimmingCharacters(in: .whitespacesAndNewlines)
+          == sessionID
+        && pending.incoming.payload.rootID.trimmingCharacters(in: .whitespacesAndNewlines) == rootID
     }
+    if pendingIncomingMessages.isEmpty {
+      pendingIncomingReconnectReplayArmed = false
+    }
+  }
 
-    do {
-      let existing = try messageStore.session(sessionID: sessionID, ownerPubkey: ownerPubkey)
-      guard let existing else { return }
-      guard existing.createdByPubkey == incoming.senderPubkey else {
-        return
+  private func drainPendingIncomingMessagesIfNeeded() {
+    guard !isDrainingPendingIncomingMessages else { return }
+    guard !pendingIncomingMessages.isEmpty else { return }
+
+    isDrainingPendingIncomingMessages = true
+    defer { isDrainingPendingIncomingMessages = false }
+
+    var madeProgress = true
+    while madeProgress {
+      madeProgress = false
+      var nextPending: [PendingIncomingMessage] = []
+
+      for pending in pendingIncomingMessages {
+        switch reduceIncoming(pending) {
+        case .applied:
+          madeProgress = true
+        case .ignored:
+          continue
+        case .pending:
+          nextPending.append(pending)
+        }
       }
-      guard members.contains(existing.createdByPubkey) else { return }
 
-      _ = try messageStore.upsertSession(
+      pendingIncomingMessages = nextPending
+      if pendingIncomingMessages.isEmpty {
+        pendingIncomingReconnectReplayArmed = false
+      }
+    }
+  }
+
+  private func normalizedIncomingSessionName(_ value: String?) -> String? {
+    let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return trimmed.isEmpty ? nil : trimmed
+  }
+
+  private func upsertIncomingSessionSnapshot(
+    ownerPubkey: String,
+    sessionID: String,
+    senderPubkey: String,
+    sessionName: String?,
+    updatedAt: Date
+  ) throws -> SessionEntity? {
+    if let existing = try messageStore.session(sessionID: sessionID, ownerPubkey: ownerPubkey) {
+      guard existing.createdByPubkey == senderPubkey else { return nil }
+      return try messageStore.upsertSession(
         ownerPubkey: ownerPubkey,
         sessionID: sessionID,
         name: existing.name,
         createdByPubkey: existing.createdByPubkey,
-        updatedAt: incoming.createdAt,
+        updatedAt: updatedAt,
         isArchived: existing.isArchived
       )
+    }
+
+    guard let sessionName else { return nil }
+    return try messageStore.upsertSession(
+      ownerPubkey: ownerPubkey,
+      sessionID: sessionID,
+      name: sessionName,
+      createdByPubkey: senderPubkey,
+      updatedAt: updatedAt
+    )
+  }
+
+  private func resolveInboundSession(
+    ownerPubkey: String,
+    sessionID: String,
+    senderPubkey: String,
+    timestamp: Date,
+    source: DirectMessageIngestSource
+  ) -> InboundSessionResolution {
+    do {
+      guard let session = try messageStore.session(sessionID: sessionID, ownerPubkey: ownerPubkey)
+      else {
+        return .pending
+      }
+      guard
+        inboundMembershipIsActive(
+          sessionID: sessionID,
+          senderPubkey: senderPubkey,
+          timestamp: timestamp,
+          source: source
+        )
+      else {
+        return .ignored
+      }
+      return .ready(session)
+    } catch {
+      report(error: error)
+      return .ignored
+    }
+  }
+
+  private func persistIncomingSessionCreate(_ incoming: ReceivedDirectMessage)
+    -> IncomingPersistenceOutcome
+  {
+    guard let ownerPubkey = identityService.pubkeyHex else { return .ignored }
+
+    let sessionID = incoming.payload.conversationID.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !sessionID.isEmpty else { return .ignored }
+    guard
+      let members = incoming.payload.normalizedMemberPubkeys(),
+      !members.isEmpty
+    else {
+      return .ignored
+    }
+    guard members.contains(incoming.senderPubkey) else { return .ignored }
+    guard members.contains(ownerPubkey) else { return .ignored }
+
+    do {
+      guard
+        try upsertIncomingSessionSnapshot(
+          ownerPubkey: ownerPubkey,
+          sessionID: sessionID,
+          senderPubkey: incoming.senderPubkey,
+          sessionName: normalizedIncomingSessionName(incoming.payload.sessionName),
+          updatedAt: incoming.createdAt
+        ) != nil
+      else {
+        return .ignored
+      }
+
       try applySessionMembershipSnapshot(
         ownerPubkey: ownerPubkey,
         sessionID: sessionID,
@@ -2507,42 +2695,108 @@ final class AppSession: ObservableObject {
         updatedAt: incoming.createdAt,
         eventID: incoming.eventID
       )
+      return .applied
     } catch {
       report(error: error)
+      return .ignored
     }
   }
 
-  private func persistIncomingReaction(_ incoming: ReceivedDirectMessage) {
-    guard let ownerPubkey = identityService.pubkeyHex else { return }
-    guard let isActive = incoming.payload.reactionActive else { return }
-    let emoji = incoming.payload.emoji?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    guard !emoji.isEmpty else { return }
+  private func persistIncomingSessionMembers(_ incoming: ReceivedDirectMessage)
+    -> IncomingPersistenceOutcome
+  {
+    guard let ownerPubkey = identityService.pubkeyHex else { return .ignored }
 
     let sessionID = incoming.payload.conversationID.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !sessionID.isEmpty else { return }
-    let postID = incoming.payload.rootID.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !postID.isEmpty else { return }
+    guard !sessionID.isEmpty else { return .ignored }
     guard
-      inboundMembershipIsActive(
-        sessionID: sessionID,
-        senderPubkey: incoming.senderPubkey,
-        timestamp: incoming.createdAt,
-        source: incoming.source
-      )
+      let members = incoming.payload.normalizedMemberPubkeys(),
+      !members.isEmpty
     else {
-      return
+      return .ignored
+    }
+    guard members.contains(incoming.senderPubkey) else { return .ignored }
+
+    do {
+      let existing = try messageStore.session(sessionID: sessionID, ownerPubkey: ownerPubkey)
+      if existing == nil {
+        guard members.contains(ownerPubkey) else { return .ignored }
+      }
+
+      guard
+        let session = try upsertIncomingSessionSnapshot(
+          ownerPubkey: ownerPubkey,
+          sessionID: sessionID,
+          senderPubkey: incoming.senderPubkey,
+          sessionName: normalizedIncomingSessionName(incoming.payload.sessionName),
+          updatedAt: incoming.createdAt
+        )
+      else {
+        return .ignored
+      }
+      guard members.contains(session.createdByPubkey) else { return .ignored }
+
+      try applySessionMembershipSnapshot(
+        ownerPubkey: ownerPubkey,
+        sessionID: sessionID,
+        memberPubkeys: members,
+        updatedAt: incoming.createdAt,
+        eventID: incoming.eventID
+      )
+      return .applied
+    } catch {
+      report(error: error)
+      return .ignored
+    }
+  }
+
+  private func persistIncomingReaction(_ incoming: ReceivedDirectMessage)
+    -> IncomingPersistenceOutcome
+  {
+    guard let ownerPubkey = identityService.pubkeyHex else { return .ignored }
+    guard let isActive = incoming.payload.reactionActive else { return .ignored }
+    let emoji = incoming.payload.emoji?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    guard !emoji.isEmpty else { return .ignored }
+
+    let sessionID = incoming.payload.conversationID.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !sessionID.isEmpty else { return .ignored }
+    let postID = incoming.payload.rootID.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !postID.isEmpty else { return .ignored }
+
+    switch resolveInboundSession(
+      ownerPubkey: ownerPubkey,
+      sessionID: sessionID,
+      senderPubkey: incoming.senderPubkey,
+      timestamp: incoming.createdAt,
+      source: incoming.source
+    ) {
+    case .ready:
+      break
+    case .pending:
+      return .pending
+    case .ignored:
+      return .ignored
     }
 
     do {
       guard
-        try messageStore.rootPost(
+        let root = try messageStore.rootPost(
           ownerPubkey: ownerPubkey,
           sessionID: sessionID,
           rootID: postID
-        ) != nil
+        )
       else {
-        return
+        return .pending
       }
+      if try messageStore.hasRootDeletion(
+        ownerPubkey: ownerPubkey,
+        sessionID: sessionID,
+        rootID: postID,
+        deletedByPubkey: root.senderPubkey
+      ) {
+        return .ignored
+      }
+
       try messageStore.upsertReaction(
         ownerPubkey: ownerPubkey,
         sessionID: sessionID,
@@ -2553,30 +2807,49 @@ final class AppSession: ObservableObject {
         updatedAt: incoming.createdAt,
         eventID: incoming.eventID
       )
+      return .applied
     } catch {
       report(error: error)
-      return
+      return .ignored
     }
   }
 
-  private func persistIncomingRootDeletion(_ incoming: ReceivedDirectMessage) {
-    guard let ownerPubkey = identityService.pubkeyHex else { return }
+  private func persistIncomingRootDeletion(_ incoming: ReceivedDirectMessage)
+    -> IncomingPersistenceOutcome
+  {
+    guard let ownerPubkey = identityService.pubkeyHex else { return .ignored }
 
     let sessionID = incoming.payload.conversationID.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !sessionID.isEmpty else { return }
+    guard !sessionID.isEmpty else { return .ignored }
     let rootID = incoming.payload.rootID.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !rootID.isEmpty else { return }
+    guard !rootID.isEmpty else { return .ignored }
 
     do {
-      if let existingRoot = try messageStore.rootPost(
+      if try messageStore.hasRootDeletion(
         ownerPubkey: ownerPubkey,
         sessionID: sessionID,
-        rootID: rootID
-      ), existingRoot.senderMatches(incoming.senderPubkey) == false {
-        return
+        rootID: rootID,
+        deletedByPubkey: incoming.senderPubkey
+      ) {
+        discardPendingIncomingReactions(sessionID: sessionID, rootID: rootID)
+        return .applied
       }
 
-      try messageStore.applyRootDeletion(
+      guard
+        let existingRoot = try messageStore.rootPost(
+          ownerPubkey: ownerPubkey,
+          sessionID: sessionID,
+          rootID: rootID
+        )
+      else {
+        return .pending
+      }
+
+      guard existingRoot.senderMatches(incoming.senderPubkey) else {
+        return .ignored
+      }
+
+      _ = try messageStore.applyRootDeletion(
         ownerPubkey: ownerPubkey,
         sessionID: sessionID,
         rootID: rootID,
@@ -2584,19 +2857,64 @@ final class AppSession: ObservableObject {
         updatedAt: incoming.createdAt,
         eventID: incoming.eventID
       )
+      discardPendingIncomingReactions(sessionID: sessionID, rootID: rootID)
+      return .applied
     } catch {
       report(error: error)
+      return .ignored
     }
   }
 
-  private func persistIncomingRootPost(_ incoming: ReceivedDirectMessage) {
-    guard let ownerPubkey = identityService.pubkeyHex else { return }
+  private func persistIncomingRootPost(
+    _ incoming: ReceivedDirectMessage,
+    transportEventIDs: [String]
+  )
+    -> IncomingPersistenceOutcome
+  {
+    guard let ownerPubkey = identityService.pubkeyHex else { return .ignored }
 
     let sessionID = incoming.payload.conversationID.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !sessionID.isEmpty else { return }
-    let transportEventIDs = incoming.transportEventID.map { [$0] } ?? []
+    guard !sessionID.isEmpty else { return .ignored }
+    let payloadRootID = incoming.payload.rootID.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !payloadRootID.isEmpty, payloadRootID != incoming.eventID {
+      return .ignored
+    }
+
+    let normalizedURL: String
+    guard let payloadURL = incoming.payload.url,
+      let resolvedURL = LinkstrURLValidator.normalizedWebURL(from: payloadURL)
+    else {
+      return .ignored
+    }
+    normalizedURL = resolvedURL
+
+    let existingSession: SessionEntity
+    switch resolveInboundSession(
+      ownerPubkey: ownerPubkey,
+      sessionID: sessionID,
+      senderPubkey: incoming.senderPubkey,
+      timestamp: incoming.createdAt,
+      source: incoming.source
+    ) {
+    case .ready(let session):
+      existingSession = session
+    case .pending:
+      return .pending
+    case .ignored:
+      return .ignored
+    }
 
     do {
+      if try messageStore.hasRootDeletion(
+        ownerPubkey: ownerPubkey,
+        sessionID: sessionID,
+        rootID: incoming.eventID,
+        deletedByPubkey: incoming.senderPubkey
+      ) {
+        discardPendingIncomingReactions(sessionID: sessionID, rootID: incoming.eventID)
+        return .ignored
+      }
+
       if let existing = try messageStore.rootPost(
         ownerPubkey: ownerPubkey,
         sessionID: sessionID,
@@ -2606,60 +2924,9 @@ final class AppSession: ObservableObject {
           try modelContext.save()
         }
         enqueueMetadataRefresh(for: existing, in: .backgroundHydration)
-        return
+        return .applied
       }
-    } catch {
-      report(error: error)
-      return
-    }
 
-    guard
-      inboundMembershipIsActive(
-        sessionID: sessionID,
-        senderPubkey: incoming.senderPubkey,
-        timestamp: incoming.createdAt,
-        source: incoming.source
-      )
-    else {
-      return
-    }
-    let payloadRootID = incoming.payload.rootID.trimmingCharacters(in: .whitespacesAndNewlines)
-    if !payloadRootID.isEmpty, payloadRootID != incoming.eventID {
-      return
-    }
-    do {
-      if try messageStore.hasRootDeletion(
-        ownerPubkey: ownerPubkey,
-        sessionID: sessionID,
-        rootID: incoming.eventID,
-        deletedByPubkey: incoming.senderPubkey
-      ) {
-        return
-      }
-    } catch {
-      report(error: error)
-      return
-    }
-    guard let payloadURL = incoming.payload.url,
-      let normalizedURL = LinkstrURLValidator.normalizedWebURL(from: payloadURL)
-    else {
-      return
-    }
-
-    let isEchoedOutgoing = ownerPubkey == incoming.senderPubkey
-    let existingSession: SessionEntity
-    do {
-      guard let session = try messageStore.session(sessionID: sessionID, ownerPubkey: ownerPubkey)
-      else {
-        return
-      }
-      existingSession = session
-    } catch {
-      report(error: error)
-      return
-    }
-
-    do {
       _ = try messageStore.upsertSession(
         ownerPubkey: ownerPubkey,
         sessionID: sessionID,
@@ -2668,14 +2935,9 @@ final class AppSession: ObservableObject {
         updatedAt: incoming.createdAt,
         isArchived: existingSession.isArchived
       )
-    } catch {
-      report(error: error)
-      return
-    }
 
-    let message: SessionMessageEntity
-    do {
-      message = try SessionMessageEntity(
+      let isEchoedOutgoing = ownerPubkey == incoming.senderPubkey
+      let message = try SessionMessageEntity(
         eventID: incoming.eventID,
         ownerPubkey: ownerPubkey,
         conversationID: sessionID,
@@ -2689,19 +2951,24 @@ final class AppSession: ObservableObject {
         linkType: URLClassifier.classify(normalizedURL),
         publishedTransportEventIDs: transportEventIDs
       )
-    } catch {
-      report(error: error)
-      return
-    }
-
-    do {
       try messageStore.insert(message)
+      enqueueMetadataRefresh(for: message, in: .backgroundHydration)
+      return .applied
     } catch {
+      if let existing = try? messageStore.rootPost(
+        ownerPubkey: ownerPubkey,
+        sessionID: sessionID,
+        rootID: incoming.eventID
+      ) {
+        if existing.appendPublishedTransportEventIDs(transportEventIDs) {
+          try? modelContext.save()
+        }
+        enqueueMetadataRefresh(for: existing, in: .backgroundHydration)
+        return .applied
+      }
       report(error: error)
-      return
+      return .ignored
     }
-
-    enqueueMetadataRefresh(for: message, in: .backgroundHydration)
   }
 
   private func inboundMembershipIsActive(

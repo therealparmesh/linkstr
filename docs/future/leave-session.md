@@ -24,6 +24,7 @@ Status: Proposal only. Not implemented.
 ## Membership semantics
 
 - `session_members` remains the source of truth for full snapshots.
+- `session_members` should remain self-contained, including `session_name`, so newly added members can materialize the session without requiring an earlier event to arrive first.
 - A newer snapshot that includes a leaver reactivates membership.
 - A newer snapshot that excludes a leaver keeps them inactive.
 - Outbound posting/reactions remain blocked while inactive.

@@ -164,17 +164,7 @@ final class SessionMessageEntity {
   }
 
   private static func normalizedTransportEventIDs(_ candidates: [String]) -> [String] {
-    var normalized: [String] = []
-    var seen = Set<String>()
-
-    for candidate in candidates {
-      let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !trimmed.isEmpty else { continue }
-      guard seen.insert(trimmed).inserted else { continue }
-      normalized.append(trimmed)
-    }
-
-    return normalized
+    NostrValueNormalizer.dedupedNormalizedEventIDs(candidates)
   }
 
   private static func normalizedTransportEventIDs(fromStorage storage: String?) -> [String] {

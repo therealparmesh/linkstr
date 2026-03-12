@@ -286,19 +286,6 @@ final class SessionMessageStore {
     return try modelContext.fetch(descriptor)
   }
 
-  func postDeletions(ownerPubkey: String, sessionID: String, rootID: String) throws
-    -> [SessionPostDeletionEntity]
-  {
-    let descriptor = FetchDescriptor<SessionPostDeletionEntity>(
-      predicate: #Predicate {
-        $0.ownerPubkey == ownerPubkey
-          && $0.sessionID == sessionID
-          && $0.rootID == rootID
-      }
-    )
-    return try modelContext.fetch(descriptor)
-  }
-
   func hasRootDeletion(
     ownerPubkey: String,
     sessionID: String,
@@ -309,8 +296,16 @@ final class SessionMessageStore {
     else {
       throw NostrServiceError.invalidPubkey
     }
-    return try postDeletions(ownerPubkey: ownerPubkey, sessionID: sessionID, rootID: rootID)
-      .contains { $0.deletedByMatches(normalizedDeletedByPubkey) }
+    let storageID = SessionPostDeletionEntity.storageID(
+      ownerPubkey: ownerPubkey,
+      sessionID: sessionID,
+      rootID: rootID,
+      deletedByPubkey: normalizedDeletedByPubkey
+    )
+    let descriptor = FetchDescriptor<SessionPostDeletionEntity>(
+      predicate: #Predicate { $0.storageID == storageID }
+    )
+    return try modelContext.fetch(descriptor).first != nil
   }
 
   @discardableResult
@@ -362,20 +357,12 @@ final class SessionMessageStore {
       didChange = true
     }
 
-    let rootKindRaw = SessionMessageKind.root.rawValue
-    let messageDescriptor = FetchDescriptor<SessionMessageEntity>(
-      predicate: #Predicate {
-        $0.ownerPubkey == ownerPubkey
-          && $0.conversationID == sessionID
-          && $0.rootID == rootID
-          && $0.kindRaw == rootKindRaw
-      }
-    )
-    let messages = try modelContext.fetch(messageDescriptor)
-    let matchingMessages = messages.filter { $0.senderMatches(normalizedDeletedByPubkey) }
-    let storedFileURLs = managedStoredFileURLs(for: matchingMessages)
-    if !matchingMessages.isEmpty {
-      matchingMessages.forEach(modelContext.delete)
+    let storedRoot = try rootPost(ownerPubkey: ownerPubkey, sessionID: sessionID, rootID: rootID)
+    let matchingRootMessages =
+      storedRoot.map { $0.senderMatches(normalizedDeletedByPubkey) ? [$0] : [] } ?? []
+    let storedFileURLs = managedStoredFileURLs(for: matchingRootMessages)
+    if !matchingRootMessages.isEmpty {
+      matchingRootMessages.forEach(modelContext.delete)
       didChange = true
     }
 
@@ -464,16 +451,16 @@ final class SessionMessageStore {
   func rootPost(ownerPubkey: String, sessionID: String, rootID: String) throws
     -> SessionMessageEntity?
   {
-    let rootKindRaw = SessionMessageKind.root.rawValue
-    let descriptor = FetchDescriptor<SessionMessageEntity>(
-      predicate: #Predicate {
-        $0.ownerPubkey == ownerPubkey
-          && $0.conversationID == sessionID
-          && $0.rootID == rootID
-          && $0.kindRaw == rootKindRaw
-      }
+    let storageID = SessionMessageEntity.storageID(
+      ownerPubkey: ownerPubkey,
+      eventID: rootID
     )
-    return try modelContext.fetch(descriptor).first
+    let descriptor = FetchDescriptor<SessionMessageEntity>(
+      predicate: #Predicate { $0.storageID == storageID }
+    )
+    guard let message = try modelContext.fetch(descriptor).first else { return nil }
+    guard message.conversationID == sessionID, message.kind == .root else { return nil }
+    return message
   }
 
   func markRootPostRead(postID: String, ownerPubkey: String, myPubkey: String) throws {

@@ -653,17 +653,118 @@ final class AppSessionIngestTests: AppSessionTestCase {
     XCTAssertFalse(activeMembers.contains(where: { $0.memberPubkey == loserPubkey }))
   }
 
-  func testIngestIgnoresReactionWithoutRootPost() throws {
+  func testIngestQueuesRootUntilSessionCreateArrives() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let creatorPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-pending-root-create"
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "root-before-session-create",
+        senderPubkey: creatorPubkey,
+        createdAt: Date(timeIntervalSince1970: 905),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "root-before-session-create",
+          kind: .root,
+          url: "https://example.com/root-before-session-create",
+          note: "arrived first",
+          timestamp: 905
+        )
+      ))
+
+    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
+    XCTAssertTrue(try container.mainContext.fetch(FetchDescriptor<SessionEntity>()).isEmpty)
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-create-after-root-arrival",
+        senderPubkey: creatorPubkey,
+        createdAt: Date(timeIntervalSince1970: 900),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-create",
+          kind: .sessionCreate,
+          url: nil,
+          note: nil,
+          timestamp: 900,
+          sessionName: "Pending Root Session",
+          memberPubkeys: [creatorPubkey, myPubkey]
+        )
+      ))
+
+    let sessions = try container.mainContext.fetch(FetchDescriptor<SessionEntity>())
+    XCTAssertEqual(sessions.count, 1)
+    XCTAssertEqual(sessions.first?.name, "Pending Root Session")
+    XCTAssertEqual(
+      try fetchMessages(in: container.mainContext).map(\.eventID), ["root-before-session-create"])
+  }
+
+  func testIngestSessionMembersBootstrapsMissingSessionAndReplaysPendingRoot() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let creatorPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-bootstrap-from-members"
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "root-before-bootstrap-snapshot",
+        senderPubkey: creatorPubkey,
+        createdAt: Date(timeIntervalSince1970: 1005),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "root-before-bootstrap-snapshot",
+          kind: .root,
+          url: "https://example.com/root-before-bootstrap",
+          note: "late add root",
+          timestamp: 1005
+        )
+      ))
+
+    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-members-bootstrap",
+        senderPubkey: creatorPubkey,
+        createdAt: Date(timeIntervalSince1970: 1000),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-add",
+          kind: .sessionMembers,
+          url: nil,
+          note: nil,
+          timestamp: 1000,
+          sessionName: "Late Add Session",
+          memberPubkeys: [creatorPubkey, myPubkey]
+        )
+      ))
+
+    let sessionEntity = try XCTUnwrap(
+      container.mainContext.fetch(FetchDescriptor<SessionEntity>()).first
+    )
+    XCTAssertEqual(sessionEntity.name, "Late Add Session")
+    XCTAssertEqual(sessionEntity.createdByPubkey, creatorPubkey)
+    XCTAssertEqual(
+      try fetchMessages(in: container.mainContext).map(\.eventID),
+      ["root-before-bootstrap-snapshot"])
+  }
+
+  func testIngestQueuesReactionUntilRootArrives() throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
     let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
     let creatorPubkey = try TestKeyMaterialFactory.makePubkeyHex()
     let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
-    let sessionID = "session-orphan-reaction-guard"
+    let sessionID = "session-pending-reaction"
+    let rootEventID = "root-arrives-after-reaction"
 
     session.ingestForTesting(
       makeIncomingMessage(
-        eventID: "session-create-orphan-reaction",
+        eventID: "session-create-pending-reaction",
         senderPubkey: creatorPubkey,
         createdAt: Date(timeIntervalSince1970: 800),
         payload: LinkstrPayload(
@@ -680,12 +781,12 @@ final class AppSessionIngestTests: AppSessionTestCase {
 
     session.ingestForTesting(
       makeIncomingMessage(
-        eventID: "reaction-without-root",
+        eventID: "reaction-before-root",
         senderPubkey: peerPubkey,
         createdAt: Date(timeIntervalSince1970: 810),
         payload: LinkstrPayload(
           conversationID: sessionID,
-          rootID: "root-does-not-exist",
+          rootID: rootEventID,
           kind: .reaction,
           url: nil,
           note: nil,
@@ -696,6 +797,63 @@ final class AppSessionIngestTests: AppSessionTestCase {
       ))
 
     XCTAssertTrue(try fetchReactions(in: container.mainContext).isEmpty)
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: rootEventID,
+        senderPubkey: creatorPubkey,
+        createdAt: Date(timeIntervalSince1970: 805),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: rootEventID,
+          kind: .root,
+          url: "https://example.com/root-arrives-after-reaction",
+          note: nil,
+          timestamp: 805
+        )
+      ))
+
+    let reactions = try fetchReactions(in: container.mainContext)
+    XCTAssertEqual(reactions.count, 1)
+    let reaction = try XCTUnwrap(reactions.first)
+    XCTAssertEqual(reaction.postID, rootEventID)
+    XCTAssertEqual(reaction.senderPubkey, peerPubkey)
+    XCTAssertTrue(reaction.isActive)
+  }
+
+  func testPendingIncomingReconnectForcesFreshRelayRestartOncePerOutage() throws {
+    var nostrStartCount = 0
+    let (session, _) = try makeSession(
+      disableNostrStartup: true,
+      onNostrStart: {
+        nostrStartCount += 1
+      }
+    )
+    try session.identityService.createNewIdentity()
+
+    let creatorPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    session.enqueuePendingIncomingForTesting(
+      makeIncomingMessage(
+        eventID: "pending-root-before-reconnect-replay",
+        senderPubkey: creatorPubkey,
+        createdAt: Date(timeIntervalSince1970: 825),
+        payload: LinkstrPayload(
+          conversationID: "session-pending-reconnect-replay",
+          rootID: "pending-root-before-reconnect-replay",
+          kind: .root,
+          url: "https://example.com/pending-reconnect-replay",
+          note: nil,
+          timestamp: 825
+        )
+      ))
+    session.simulateRelayStatusForTesting(.disconnected)
+    XCTAssertEqual(nostrStartCount, 0)
+
+    session.simulateRelayStatusForTesting(.connected)
+    XCTAssertEqual(nostrStartCount, 1)
+
+    session.simulateRelayStatusForTesting(.connected)
+    XCTAssertEqual(nostrStartCount, 1)
   }
 
   func testIngestRootDeleteRemovesMatchingStoredPostAndReactions() throws {
@@ -764,13 +922,24 @@ final class AppSessionIngestTests: AppSessionTestCase {
     let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
     let senderPubkey = try TestKeyMaterialFactory.makePubkeyHex()
     let sessionID = "session-root-delete-precedes-post"
-    _ = try insertSessionFixture(
-      in: container.mainContext,
-      ownerPubkey: myPubkey,
-      createdByPubkey: senderPubkey,
-      memberPubkeys: [myPubkey, senderPubkey],
-      sessionID: sessionID
-    )
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-create-root-delete-precedes-post",
+        senderPubkey: senderPubkey,
+        createdAt: Date(timeIntervalSince1970: 1_400),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-create",
+          kind: .sessionCreate,
+          url: nil,
+          note: nil,
+          timestamp: 1_400,
+          sessionName: "Delete Precedes Post",
+          memberPubkeys: [senderPubkey, myPubkey]
+        ),
+        source: .historical
+      ))
 
     let deletionDate = Date(timeIntervalSince1970: 1_500)
     session.ingestForTesting(
@@ -810,6 +979,158 @@ final class AppSessionIngestTests: AppSessionTestCase {
     let deletions = try fetchPostDeletions(in: container.mainContext)
     XCTAssertEqual(deletions.count, 1)
     XCTAssertEqual(deletions.first?.rootID, "root-preseed")
+  }
+
+  func testIngestRootDeleteBeforeSessionSnapshotSuppressesRootAfterDependenciesArrive() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let senderPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-root-delete-before-session-snapshot"
+    let rootEventID = "root-pending-until-session-create"
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "root-delete-before-session-snapshot",
+        senderPubkey: senderPubkey,
+        createdAt: Date(timeIntervalSince1970: 2_010),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: rootEventID,
+          kind: .rootDelete,
+          url: nil,
+          note: nil,
+          timestamp: 2_010
+        ),
+        source: .historical
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: rootEventID,
+        senderPubkey: senderPubkey,
+        createdAt: Date(timeIntervalSince1970: 2_000),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: rootEventID,
+          kind: .root,
+          url: "https://example.com/root-pending-until-session-create",
+          note: nil,
+          timestamp: 2_000
+        ),
+        source: .historical
+      ))
+
+    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
+    XCTAssertTrue(try fetchPostDeletions(in: container.mainContext).isEmpty)
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-create-after-pending-delete-and-root",
+        senderPubkey: senderPubkey,
+        createdAt: Date(timeIntervalSince1970: 1_990),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-create",
+          kind: .sessionCreate,
+          url: nil,
+          note: nil,
+          timestamp: 1_990,
+          sessionName: "Pending Delete Session",
+          memberPubkeys: [senderPubkey, myPubkey]
+        ),
+        source: .historical
+      ))
+
+    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
+    let deletions = try fetchPostDeletions(in: container.mainContext)
+    XCTAssertEqual(deletions.count, 1)
+    XCTAssertEqual(deletions.first?.rootID, rootEventID)
+    XCTAssertEqual(deletions.first?.deletedByPubkey, senderPubkey)
+  }
+
+  func testIngestRootDeleteBeforeRootArrivesDiscardsPendingReaction() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let creatorPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-root-delete-discards-pending-reaction"
+    let rootEventID = "root-deleted-before-arrival"
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-create-root-delete-discards-pending-reaction",
+        senderPubkey: creatorPubkey,
+        createdAt: Date(timeIntervalSince1970: 1_520),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-create",
+          kind: .sessionCreate,
+          url: nil,
+          note: nil,
+          timestamp: 1_520,
+          sessionName: "Delete Discards Pending Reaction",
+          memberPubkeys: [creatorPubkey, myPubkey, peerPubkey]
+        )
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "reaction-pending-before-delete",
+        senderPubkey: peerPubkey,
+        createdAt: Date(timeIntervalSince1970: 1_530),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: rootEventID,
+          kind: .reaction,
+          url: nil,
+          note: nil,
+          timestamp: 1_530,
+          emoji: "🔥",
+          reactionActive: true
+        ),
+        source: .historical
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "root-delete-before-arrival-discards-reaction",
+        senderPubkey: creatorPubkey,
+        createdAt: Date(timeIntervalSince1970: 1_540),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: rootEventID,
+          kind: .rootDelete,
+          url: nil,
+          note: nil,
+          timestamp: 1_540
+        ),
+        source: .historical
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: rootEventID,
+        senderPubkey: creatorPubkey,
+        createdAt: Date(timeIntervalSince1970: 1_525),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: rootEventID,
+          kind: .root,
+          url: "https://example.com/root-deleted-before-arrival",
+          note: nil,
+          timestamp: 1_525
+        ),
+        source: .historical
+      ))
+
+    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
+    XCTAssertTrue(try fetchReactions(in: container.mainContext).isEmpty)
+    let deletions = try fetchPostDeletions(in: container.mainContext)
+    XCTAssertEqual(deletions.count, 1)
+    XCTAssertEqual(deletions.first?.rootID, rootEventID)
+    XCTAssertEqual(deletions.first?.deletedByPubkey, creatorPubkey)
   }
 
   func testIngestRootDeleteIgnoresMismatchedSender() throws {
@@ -859,6 +1180,180 @@ final class AppSessionIngestTests: AppSessionTestCase {
     XCTAssertEqual(messages.count, 1)
     XCTAssertEqual(messages.first?.rootID, rootPost.rootID)
     XCTAssertTrue(try fetchPostDeletions(in: container.mainContext).isEmpty)
+  }
+
+  func testIngestReactionSurvivesMismatchedDeleteWatermarkBeforeRootArrives() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let creatorPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let rootSenderPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let mismatchedDeleterPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-reaction-mismatched-delete-watermark"
+    let rootEventID = "root-survives-mismatched-delete"
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-create-reaction-mismatched-delete-watermark",
+        senderPubkey: creatorPubkey,
+        createdAt: Date(timeIntervalSince1970: 1_700),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-create",
+          kind: .sessionCreate,
+          url: nil,
+          note: nil,
+          timestamp: 1_700,
+          sessionName: "Reaction Mismatched Delete",
+          memberPubkeys: [creatorPubkey, myPubkey, rootSenderPubkey, mismatchedDeleterPubkey]
+        )
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "root-delete-mismatched-before-root",
+        senderPubkey: mismatchedDeleterPubkey,
+        createdAt: Date(timeIntervalSince1970: 1_710),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: rootEventID,
+          kind: .rootDelete,
+          url: nil,
+          note: nil,
+          timestamp: 1_710
+        ),
+        source: .historical
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: rootEventID,
+        senderPubkey: rootSenderPubkey,
+        createdAt: Date(timeIntervalSince1970: 1_705),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: rootEventID,
+          kind: .root,
+          url: "https://example.com/reaction-mismatched-delete-watermark",
+          note: nil,
+          timestamp: 1_705
+        ),
+        source: .historical
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "reaction-after-mismatched-delete-watermark",
+        senderPubkey: myPubkey,
+        createdAt: Date(timeIntervalSince1970: 1_715),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: rootEventID,
+          kind: .reaction,
+          url: nil,
+          note: nil,
+          timestamp: 1_715,
+          emoji: "🔥",
+          reactionActive: true
+        ),
+        source: .historical
+      ))
+
+    let messages = try fetchMessages(in: container.mainContext)
+    XCTAssertEqual(messages.count, 1)
+    XCTAssertEqual(messages.first?.rootID, rootEventID)
+
+    let reactions = try fetchReactions(in: container.mainContext)
+    XCTAssertEqual(reactions.count, 1)
+    XCTAssertEqual(reactions.first?.postID, rootEventID)
+    XCTAssertEqual(reactions.first?.senderPubkey, myPubkey)
+  }
+
+  func testIngestPendingReactionSurvivesMismatchedDeleteBeforeRootArrives() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let creatorPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let rootSenderPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let mismatchedDeleterPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-pending-reaction-mismatched-delete"
+    let rootEventID = "root-survives-pending-reaction-mismatched-delete"
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-create-pending-reaction-mismatched-delete",
+        senderPubkey: creatorPubkey,
+        createdAt: Date(timeIntervalSince1970: 1_800),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-create",
+          kind: .sessionCreate,
+          url: nil,
+          note: nil,
+          timestamp: 1_800,
+          sessionName: "Pending Reaction Mismatched Delete",
+          memberPubkeys: [creatorPubkey, myPubkey, rootSenderPubkey, mismatchedDeleterPubkey]
+        )
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "reaction-before-root-mismatched-delete",
+        senderPubkey: myPubkey,
+        createdAt: Date(timeIntervalSince1970: 1_815),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: rootEventID,
+          kind: .reaction,
+          url: nil,
+          note: nil,
+          timestamp: 1_815,
+          emoji: "🔥",
+          reactionActive: true
+        ),
+        source: .historical
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "root-delete-mismatched-before-root-pending-reaction",
+        senderPubkey: mismatchedDeleterPubkey,
+        createdAt: Date(timeIntervalSince1970: 1_810),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: rootEventID,
+          kind: .rootDelete,
+          url: nil,
+          note: nil,
+          timestamp: 1_810
+        ),
+        source: .historical
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: rootEventID,
+        senderPubkey: rootSenderPubkey,
+        createdAt: Date(timeIntervalSince1970: 1_805),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: rootEventID,
+          kind: .root,
+          url: "https://example.com/root-survives-pending-reaction-mismatched-delete",
+          note: nil,
+          timestamp: 1_805
+        ),
+        source: .historical
+      ))
+
+    let messages = try fetchMessages(in: container.mainContext)
+    XCTAssertEqual(messages.count, 1)
+    XCTAssertEqual(messages.first?.rootID, rootEventID)
+
+    let reactions = try fetchReactions(in: container.mainContext)
+    XCTAssertEqual(reactions.count, 1)
+    XCTAssertEqual(reactions.first?.postID, rootEventID)
+    XCTAssertEqual(reactions.first?.senderPubkey, myPubkey)
   }
 
   func testIngestRootPostRejectsMismatchedPayloadRootID() throws {
@@ -1102,6 +1597,76 @@ final class AppSessionIngestTests: AppSessionTestCase {
     XCTAssertEqual(
       Set(try XCTUnwrap(messages.first).publishedTransportEventIDs),
       Set(["giftwrap-root-a", "giftwrap-root-b"])
+    )
+  }
+
+  func testPendingRootMergesTransportEventIDsAcrossDuplicateWrappers() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let senderPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-pending-root-merge-wrappers"
+    let rootEventID = "root-pending-merge-wrapper"
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: rootEventID,
+        transportEventID: "giftwrap-pending-root-a",
+        senderPubkey: senderPubkey,
+        createdAt: Date(timeIntervalSince1970: 2_200),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: rootEventID,
+          kind: .root,
+          url: "https://example.com/root-pending-merge-wrapper",
+          note: nil,
+          timestamp: 2_200
+        ),
+        source: .historical
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: rootEventID,
+        transportEventID: "giftwrap-pending-root-b",
+        senderPubkey: senderPubkey,
+        createdAt: Date(timeIntervalSince1970: 2_200),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: rootEventID,
+          kind: .root,
+          url: "https://example.com/root-pending-merge-wrapper",
+          note: nil,
+          timestamp: 2_200
+        ),
+        source: .historical
+      ))
+
+    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-create-after-pending-root-wrapper-merge",
+        senderPubkey: senderPubkey,
+        createdAt: Date(timeIntervalSince1970: 2_190),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-create",
+          kind: .sessionCreate,
+          url: nil,
+          note: nil,
+          timestamp: 2_190,
+          sessionName: "Pending Root Wrapper Merge",
+          memberPubkeys: [senderPubkey, myPubkey]
+        ),
+        source: .historical
+      ))
+
+    let messages = try fetchMessages(in: container.mainContext)
+    XCTAssertEqual(messages.count, 1)
+    XCTAssertEqual(
+      Set(try XCTUnwrap(messages.first).publishedTransportEventIDs),
+      Set(["giftwrap-pending-root-a", "giftwrap-pending-root-b"])
     )
   }
 }

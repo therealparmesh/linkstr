@@ -92,6 +92,7 @@
   - The active member set becomes exactly the snapshot.
   - Missing previous members become inactive.
   - Update fanout targets both prior-active and next-active members so removed members receive the removal snapshot.
+  - Outbound snapshots authored by this client include the session name so newly added members can materialize the session from the snapshot alone.
   - Snapshot application is monotonic by `created_at`; older snapshots are ignored.
   - Equal-timestamp snapshot conflicts resolve by lexicographic event-ID tie-break.
 - Sessions can be archived/unarchived from a session-row long-press menu.
@@ -145,7 +146,7 @@
 - Session post lists expose delete for posts sent by the signed-in user via a long-press menu on the post row, matching the session-row archive interaction pattern.
 - Post delete publishes a nostr deletion request (`kind:5`) against the stored gift-wrap event IDs when available, and also sends a linkstr delete notice to known current and former session members so encrypted session feeds converge on the removal.
 - Older locally stored root posts without recorded gift-wrap IDs skip relay-side `kind:5` publication and still use the linkstr delete notice plus local tombstoning.
-- Post delete persists a local deletion watermark so historical backfill cannot resurrect a previously deleted root post.
+- Validated post delete persists a local deletion watermark so historical backfill cannot resurrect a previously deleted root post.
 
 ### Reactions
 
@@ -166,7 +167,10 @@
   - Emoji.
   - Sender pubkey.
 - Transport carries reaction active/inactive state.
-- Reactions targeting unknown root posts are ignored.
+- Reactions received before their root post are staged in memory and retried once the root arrives.
+- Reactions targeting a root that is already tombstoned by a validated delete watermark are discarded.
+- A validated matching root delete also clears any staged reactions that were still waiting on that root.
+- Mismatched or still-unvalidated delete notices do not clear staged reactions.
 - Equal-timestamp reaction conflicts resolve by lexicographic event-ID tie-break.
 - Reactions tied to a deleted post are removed with that post.
 
@@ -216,18 +220,23 @@
 - Ingest processing rules:
   - Ignore undecodable/unvalidated payloads.
   - Deduplicate by event ID.
-  - Self-authored duplicate root echoes merge additional gift-wrap transport IDs into the stored root post instead of creating duplicate posts.
+  - Self-authored duplicate root echoes merge additional gift-wrap transport IDs into the stored or staged root post instead of creating duplicate posts.
   - `session_create` requires sender and receiver inclusion in the snapshot member set.
   - `session_create` for an existing session is accepted only from the stored creator pubkey.
-  - `session_members` is accepted only from the stored creator pubkey and only when the session already exists.
+  - `session_members` is accepted only from the stored creator pubkey.
+  - `session_members` can bootstrap a missing session when the snapshot includes sender, receiver, and a non-empty session name.
   - `session_members` snapshots must include the creator pubkey.
   - Upsert sessions/member snapshots from accepted session events.
   - Live relay subscriptions use `since` filters so live ingest is new-event oriented.
-  - Persist root posts only when sender and receiver are active at the event timestamp.
-  - Live root ingest additionally requires sender and receiver to be active in the latest local membership snapshot.
-- Linkstr delete notices remove matching stored root posts only when the delete sender matches the original post sender.
-  - Upsert reaction state only when sender and receiver are active at the event timestamp and the root post exists locally.
-  - Live reaction ingest additionally requires sender and receiver to be active in the latest local membership snapshot.
+- Persist root posts only when sender and receiver are active at the event timestamp.
+- Live root ingest additionally requires sender and receiver to be active in the latest local membership snapshot.
+- Out-of-order root posts are staged in memory until a valid session snapshot arrives.
+- Out-of-order root deletes are staged in memory until the target root exists locally and the delete sender matches that root.
+- If staged dependencies remain across relay reconnects, the app restarts the relay runtime to request a fresh historical replay.
+- Linkstr delete notices remove matching stored root posts only when the delete sender matches the original post sender, and they do not persist speculative tombstones before that validation exists.
+- Upsert reaction state only when sender and receiver are active at the event timestamp and the root post exists locally.
+- Out-of-order reactions are staged in memory until the root post arrives, then retried against the same membership rules.
+- Live reaction ingest additionally requires sender and receiver to be active in the latest local membership snapshot.
 
 ### Notifications
 

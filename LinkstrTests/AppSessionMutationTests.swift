@@ -551,10 +551,12 @@ final class AppSessionMutationTests: AppSessionTestCase {
 
   func testUpdateSessionMembersAwaitingRelayBroadcastsToPriorAndNextMembers() async throws {
     var capturedRecipients: [String] = []
+    var capturedPayload: LinkstrPayload?
     let (session, container) = try makeSession(
       disableNostrStartup: false,
       hasConnectedRelays: { true },
-      sendPayload: { _, recipients in
+      sendPayload: { payload, recipients in
+        capturedPayload = payload
         capturedRecipients = recipients
         return SentPayloadReceipt(
           rumorEventID: "session-members-event",
@@ -593,6 +595,8 @@ final class AppSessionMutationTests: AppSessionTestCase {
       Set(capturedRecipients),
       Set([myPubkey, priorPubkey, removedPubkey, addedPubkey])
     )
+    XCTAssertEqual(capturedPayload?.kind, .sessionMembers)
+    XCTAssertEqual(capturedPayload?.sessionName, sessionEntity.name)
 
     let activeMembers = try container.mainContext.fetch(
       FetchDescriptor<SessionMemberEntity>(

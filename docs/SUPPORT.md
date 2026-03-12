@@ -182,6 +182,7 @@ linkstr stores posts, reactions, contacts, and caches locally on each device. to
 3. both devices must connect to relays to sync new posts and reactions
 
 note: historical posts depend on relay retention and what each device has already received locally. new posts sync when both devices reconnect to relays.
+current builds also retry out-of-order session snapshots, posts, delete notices, and reactions locally during relay sync, so a valid message that arrives before its session or root prerequisite can still be applied once the missing state shows up. delete notices wait until the matching root exists locally before they become authoritative. if reconnect happens while a dependency is still missing, linkstr requests relay history again instead of leaving the message stranded in memory.
 historical restore after a fresh sign-in does not replay old push notifications.
 
 ## contact

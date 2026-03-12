@@ -25,6 +25,7 @@ Status: Proposal only. Not implemented.
 - Persist a tombstone per deleted session.
 - Ignore older session lifecycle/content events once tombstoned.
 - Purge or suppress account-scoped session data (session row, members, roots, reactions, unread state, cached media references).
+- Discard any staged in-memory posts, delete notices, or reactions that are still waiting on that session or its roots.
 
 ## Relay behavior (best effort)
 

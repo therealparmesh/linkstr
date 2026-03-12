@@ -1,6 +1,6 @@
 # privacy policy
 
-last updated: march 11, 2026
+last updated: march 12, 2026
 
 ## overview
 
@@ -31,6 +31,8 @@ stored only on your device:
 downloaded videos are stored as device-local cache. linkstr automatically trims older cached video files with least-recently-used eviction once local video cache reaches about 1 gb.
 
 this data is encrypted at rest using device-local encryption keys and never leaves your device except as described below.
+
+during relay sync, linkstr may also hold out-of-order session, post, delete, or reaction events in temporary in-memory buffers until the missing session snapshot or root post arrives. if those dependencies are still missing after a relay reconnect, linkstr may request relay history again from the same relays. those transient buffers are not sent to the push service and are cleared when app runtime state resets.
 
 ### nostr network
 
