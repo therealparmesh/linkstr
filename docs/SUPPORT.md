@@ -170,6 +170,8 @@ Yes, but linkstr is local-first and relay-backed, so there are a couple of limit
 
 New posts and reactions should sync when both devices reconnect to relays. Historical restore depends on relay retention and what each device can replay from relay history.
 
+If you delete and reinstall the app without restoring its local app data, linkstr rebuilds what it can from relay history. Replayed older posts are treated as history, not as fresh unread posts.
+
 **Can I delete a session?**
 
 Not yet. Sessions can be archived and unarchived, but there is no shipped session-delete feature.

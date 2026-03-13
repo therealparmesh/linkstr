@@ -209,8 +209,9 @@ linkstr still does not have a durable offline outbox. If a send cannot get relay
 
 - Session rows show unread indicators when any inbound root post in that session is unread.
 - Post cards inside a session show unread indicators when that root post is unread inbound.
-- Opening a session does not auto-mark all posts as read.
-- Opening post detail marks that inbound root post as read.
+- Initial relay history restore into an empty local store treats replayed inbound posts as already read.
+- Opening a session marks visible inbound root posts as read.
+- Opening post detail also marks that inbound root post as read.
 - Reactions do not affect unread counters.
 
 ### Relay settings and runtime

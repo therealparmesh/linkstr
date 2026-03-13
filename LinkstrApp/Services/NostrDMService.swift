@@ -76,7 +76,9 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
   private var onFollowList: ((ReceivedFollowList) -> Void)?
   private var onProfileMetadata: ((ReceivedProfileMetadata) -> Void)?
   private var onRelayStatus: ((String, RelayHealthStatus, String?) -> Void)?
+  private var onInitialBackfillComplete: (() -> Void)?
   private var configuredRelayURLs = Set<String>()
+  private var didNotifyInitialBackfillCompletion = false
 
   private let recipientSubscriptionID = "linkstr-giftwrap-recipient"
   private let authorSubscriptionID = "linkstr-giftwrap-author"
@@ -114,12 +116,14 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     relayURLs: [String],
     onIncoming: @escaping (ReceivedDirectMessage) -> Void,
     onRelayStatus: @escaping (String, RelayHealthStatus, String?) -> Void,
+    onInitialBackfillComplete: (() -> Void)? = nil,
     onFollowList: ((ReceivedFollowList) -> Void)? = nil,
     onProfileMetadata: ((ReceivedProfileMetadata) -> Void)? = nil
   ) {
     if isConfigured(for: keypair, relayURLs: relayURLs) {
       self.onIncoming = onIncoming
       self.onRelayStatus = onRelayStatus
+      self.onInitialBackfillComplete = onInitialBackfillComplete
       self.onFollowList = onFollowList
       self.onProfileMetadata = onProfileMetadata
       relayPool?.connect()
@@ -132,11 +136,13 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     self.keypair = keypair
     self.onIncoming = onIncoming
     self.onRelayStatus = onRelayStatus
+    self.onInitialBackfillComplete = onInitialBackfillComplete
     self.onFollowList = onFollowList
     self.onProfileMetadata = onProfileMetadata
     configuredRelayURLs = Set(relayURLs)
     activeBackfillStates = [:]
     completedBackfillKinds = []
+    didNotifyInitialBackfillCompletion = false
     liveSubscriptionSince = Int(Date.now.timeIntervalSince1970)
 
     let parsedRelayURLs = relayURLs.map { ($0, URL(string: $0)) }
@@ -221,6 +227,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     liveSubscriptionSince = nil
     activeBackfillStates.removeAll()
     completedBackfillKinds.removeAll()
+    didNotifyInitialBackfillCompletion = false
     let pendingBatchIDs = publishAckTracker.cancelAll()
     for batchID in pendingBatchIDs {
       finishPendingPublishBatch(
@@ -233,6 +240,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     onFollowList = nil
     onProfileMetadata = nil
     onRelayStatus = nil
+    onInitialBackfillComplete = nil
     keypair = nil
     configuredRelayURLs.removeAll()
   }
@@ -587,7 +595,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     guard !expectedRelayURLs.isEmpty else { return }
     guard let relayPool, let filter = makeBackfillFilter(kind: kind, pubkey: pubkey, until: until)
     else {
-      completedBackfillKinds.insert(kind)
+      markBackfillKindCompleted(kind)
       return
     }
     let subscriptionID = backfillSubscriptionID(kind: kind, page: page, until: until)
@@ -606,28 +614,41 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     relayPool?.closeSubscription(with: subscriptionID)
 
     guard let keypair else {
-      completedBackfillKinds.insert(state.kind)
+      markBackfillKindCompleted(state.kind)
       return
     }
 
     guard state.receivedGiftWrapCount >= state.pageSize else {
-      completedBackfillKinds.insert(state.kind)
+      markBackfillKindCompleted(state.kind)
       return
     }
     guard let oldestCreatedAt = state.oldestCreatedAt, oldestCreatedAt > 0 else {
-      completedBackfillKinds.insert(state.kind)
+      markBackfillKindCompleted(state.kind)
       return
     }
 
     let nextUntil = Int(oldestCreatedAt - 1)
     if let priorUntil = state.until, nextUntil >= priorUntil {
-      completedBackfillKinds.insert(state.kind)
+      markBackfillKindCompleted(state.kind)
       return
     }
 
     state.page += 1
     beginBackfill(
       kind: state.kind, page: state.page, until: nextUntil, pubkey: keypair.publicKey.hex)
+  }
+
+  private func markBackfillKindCompleted(_ kind: BackfillSubscriptionKind) {
+    completedBackfillKinds.insert(kind)
+    notifyInitialBackfillCompletionIfNeeded()
+  }
+
+  private func notifyInitialBackfillCompletionIfNeeded() {
+    guard !didNotifyInitialBackfillCompletion else { return }
+    guard activeBackfillStates.isEmpty else { return }
+    guard completedBackfillKinds.count == 2 else { return }
+    didNotifyInitialBackfillCompletion = true
+    onInitialBackfillComplete?()
   }
 
   private func handleBackfillEOSE(relayURL: String, subscriptionID: String) {

@@ -183,6 +183,8 @@ final class AppSession: ObservableObject {
   private var isRetryingIdentityLoad = false
   private var lastRegisteredPushDeviceSignature: String?
   private var lastArchivedConversationSyncSignature: String?
+  private var shouldSuppressUnreadDuringInitialHistoricalRestore = false
+  private var hasEvaluatedInitialHistoricalUnreadPolicy = false
 
   @Published var composeError: String?
   @Published var pendingSessionNavigationID: String?
@@ -1157,6 +1159,7 @@ final class AppSession: ObservableObject {
     pendingIncomingMessages.removeAll()
     pendingIncomingReconnectReplayArmed = false
     isDrainingPendingIncomingMessages = false
+    resetInitialHistoricalUnreadPolicy()
     pendingMetadataRefreshes.removeAll()
     pendingMetadataRefreshHead = 0
     enqueuedMetadataStorageIDs.removeAll()
@@ -1299,6 +1302,11 @@ final class AppSession: ObservableObject {
           self.maybeForceRestartRelaysForForegroundRecovery(triggeredBy: status)
         }
       },
+      onInitialBackfillComplete: { [weak self] in
+        Task { @MainActor in
+          self?.finishInitialHistoricalRestore()
+        }
+      },
       onFollowList: { [weak self] followList in
         Task { @MainActor in
           self?.persistIncomingFollowList(followList)
@@ -1317,6 +1325,7 @@ final class AppSession: ObservableObject {
     relayURLs: [String],
     onIncoming: @escaping (ReceivedDirectMessage) -> Void,
     onRelayStatus: @escaping (String, RelayHealthStatus, String?) -> Void,
+    onInitialBackfillComplete: (() -> Void)? = nil,
     onFollowList: ((ReceivedFollowList) -> Void)? = nil,
     onProfileMetadata: ((ReceivedProfileMetadata) -> Void)? = nil
   ) {
@@ -1326,6 +1335,7 @@ final class AppSession: ObservableObject {
       relayURLs: relayURLs,
       onIncoming: onIncoming,
       onRelayStatus: onRelayStatus,
+      onInitialBackfillComplete: onInitialBackfillComplete,
       onFollowList: onFollowList,
       onProfileMetadata: onProfileMetadata
     )
@@ -2481,6 +2491,10 @@ final class AppSession: ObservableObject {
       persistIncoming(incoming)
     }
 
+    func completeInitialHistoricalRestoreForTesting() {
+      finishInitialHistoricalRestore()
+    }
+
     func enqueuePendingIncomingForTesting(_ incoming: ReceivedDirectMessage) {
       enqueuePendingIncomingMessage(PendingIncomingMessage(incoming))
     }
@@ -2499,6 +2513,7 @@ final class AppSession: ObservableObject {
   #endif
 
   private func persistIncoming(_ incoming: ReceivedDirectMessage) {
+    evaluateInitialHistoricalUnreadPolicyIfNeeded(for: incoming)
     let pending = PendingIncomingMessage(incoming)
     switch reduceIncoming(pending) {
     case .applied:
@@ -2589,6 +2604,31 @@ final class AppSession: ObservableObject {
   private func normalizedIncomingSessionName(_ value: String?) -> String? {
     let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     return trimmed.isEmpty ? nil : trimmed
+  }
+
+  private func resetInitialHistoricalUnreadPolicy() {
+    shouldSuppressUnreadDuringInitialHistoricalRestore = false
+    hasEvaluatedInitialHistoricalUnreadPolicy = false
+  }
+
+  private func finishInitialHistoricalRestore() {
+    shouldSuppressUnreadDuringInitialHistoricalRestore = false
+    hasEvaluatedInitialHistoricalUnreadPolicy = true
+  }
+
+  private func evaluateInitialHistoricalUnreadPolicyIfNeeded(for incoming: ReceivedDirectMessage) {
+    guard incoming.source == .historical else { return }
+    guard !hasEvaluatedInitialHistoricalUnreadPolicy else { return }
+    guard let ownerPubkey = identityService.pubkeyHex else { return }
+
+    do {
+      shouldSuppressUnreadDuringInitialHistoricalRestore =
+        !(try messageStore.hasPersistedConversationState(ownerPubkey: ownerPubkey))
+    } catch {
+      shouldSuppressUnreadDuringInitialHistoricalRestore = false
+      report(error: error)
+    }
+    hasEvaluatedInitialHistoricalUnreadPolicy = true
   }
 
   private func upsertIncomingSessionSnapshot(
@@ -2927,6 +2967,10 @@ final class AppSession: ObservableObject {
       )
 
       let isEchoedOutgoing = ownerPubkey == incoming.senderPubkey
+      let shouldMarkReadOnInsert =
+        isEchoedOutgoing
+        || (incoming.source == .historical
+          && shouldSuppressUnreadDuringInitialHistoricalRestore)
       let message = try SessionMessageEntity(
         eventID: incoming.eventID,
         ownerPubkey: ownerPubkey,
@@ -2937,7 +2981,7 @@ final class AppSession: ObservableObject {
         url: normalizedURL,
         note: incoming.payload.note,
         timestamp: incoming.createdAt,
-        readAt: isEchoedOutgoing ? incoming.createdAt : nil,
+        readAt: shouldMarkReadOnInsert ? incoming.createdAt : nil,
         linkType: URLClassifier.classify(normalizedURL),
         publishedTransportEventIDs: transportEventIDs
       )

@@ -46,6 +46,23 @@ final class SessionMessageStore {
     return try modelContext.fetch(descriptor).map(\.sessionID)
   }
 
+  func hasPersistedConversationState(ownerPubkey: String) throws -> Bool {
+    let sessionDescriptor = FetchDescriptor<SessionEntity>(
+      predicate: #Predicate { $0.ownerPubkey == ownerPubkey }
+    )
+    if !(try modelContext.fetch(sessionDescriptor)).isEmpty {
+      return true
+    }
+
+    let rootKindRaw = SessionMessageKind.root.rawValue
+    let messageDescriptor = FetchDescriptor<SessionMessageEntity>(
+      predicate: #Predicate {
+        $0.ownerPubkey == ownerPubkey && $0.kindRaw == rootKindRaw
+      }
+    )
+    return !(try modelContext.fetch(messageDescriptor)).isEmpty
+  }
+
   @discardableResult
   func upsertSession(
     ownerPubkey: String,

@@ -278,6 +278,148 @@ final class AppSessionIngestTests: AppSessionTestCase {
     XCTAssertEqual(messages.map(\.eventID), ["root-historical-from-removed-peer"])
   }
 
+  func testInitialHistoricalRestoreIntoEmptyStoreMarksInboundRootsRead() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let creatorPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-initial-historical-read"
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-create-initial-historical-read",
+        senderPubkey: creatorPubkey,
+        createdAt: Date(timeIntervalSince1970: 1900),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-create",
+          kind: .sessionCreate,
+          url: nil,
+          note: nil,
+          timestamp: 1900,
+          sessionName: "Initial Historical Read",
+          memberPubkeys: [creatorPubkey, myPubkey, peerPubkey]
+        ),
+        source: .historical
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "root-initial-historical-read",
+        senderPubkey: peerPubkey,
+        createdAt: Date(timeIntervalSince1970: 1905),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "root-initial-historical-read",
+          kind: .root,
+          url: "https://example.com/initial-historical-read",
+          note: nil,
+          timestamp: 1905
+        ),
+        source: .historical
+      ))
+
+    let message = try XCTUnwrap(fetchMessages(in: container.mainContext).first)
+    XCTAssertEqual(message.eventID, "root-initial-historical-read")
+    XCTAssertNotNil(message.readAt)
+  }
+
+  func testHistoricalReplayAfterInitialRestoreCompletionLeavesInboundRootsUnread() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let creatorPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-post-restore-historical-unread"
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-create-post-restore-historical-unread",
+        senderPubkey: creatorPubkey,
+        createdAt: Date(timeIntervalSince1970: 1910),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-create",
+          kind: .sessionCreate,
+          url: nil,
+          note: nil,
+          timestamp: 1910,
+          sessionName: "Post Restore Historical Unread",
+          memberPubkeys: [creatorPubkey, myPubkey, peerPubkey]
+        ),
+        source: .historical
+      ))
+
+    session.completeInitialHistoricalRestoreForTesting()
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "root-post-restore-historical-unread",
+        senderPubkey: peerPubkey,
+        createdAt: Date(timeIntervalSince1970: 1915),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "root-post-restore-historical-unread",
+          kind: .root,
+          url: "https://example.com/post-restore-historical-unread",
+          note: nil,
+          timestamp: 1915
+        ),
+        source: .historical
+      ))
+
+    let message = try XCTUnwrap(fetchMessages(in: container.mainContext).first)
+    XCTAssertEqual(message.eventID, "root-post-restore-historical-unread")
+    XCTAssertNil(message.readAt)
+  }
+
+  func testLiveIncomingRootDuringInitialHistoricalRestoreStillStartsUnread() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let creatorPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-live-during-initial-historical-restore"
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-create-live-during-initial-historical-restore",
+        senderPubkey: creatorPubkey,
+        createdAt: Date(timeIntervalSince1970: 1920),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-create",
+          kind: .sessionCreate,
+          url: nil,
+          note: nil,
+          timestamp: 1920,
+          sessionName: "Live During Initial Historical Restore",
+          memberPubkeys: [creatorPubkey, myPubkey, peerPubkey]
+        ),
+        source: .historical
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "root-live-during-initial-historical-restore",
+        senderPubkey: peerPubkey,
+        createdAt: Date(timeIntervalSince1970: 1925),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "root-live-during-initial-historical-restore",
+          kind: .root,
+          url: "https://example.com/live-during-initial-historical-restore",
+          note: nil,
+          timestamp: 1925
+        )
+      ))
+
+    let message = try XCTUnwrap(fetchMessages(in: container.mainContext).first)
+    XCTAssertEqual(message.eventID, "root-live-during-initial-historical-restore")
+    XCTAssertNil(message.readAt)
+  }
+
   func testIngestIgnoresBackdatedReactionFromCurrentlyInactiveMember() throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
