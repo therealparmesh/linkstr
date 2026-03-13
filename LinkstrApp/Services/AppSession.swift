@@ -310,7 +310,6 @@ final class AppSession: ObservableObject {
   }
 
   private func clearOfflineToastIfPresent() {
-    hasShownOfflineToastForCurrentOutage = false
     if composeError == relayOfflineMessage {
       composeError = nil
     }
@@ -556,6 +555,7 @@ final class AppSession: ObservableObject {
   private func resetForegroundRelayState() {
     isForeground = true
     hasObservedHealthyRelayInCurrentForeground = false
+    hasShownOfflineToastForCurrentOutage = false
     lastForegroundRelayRestartAt = nil
   }
 
@@ -2550,6 +2550,19 @@ final class AppSession: ObservableObject {
 
     func simulateRelayStatusForTesting(_ status: RelayHealthStatus) {
       maybeForceRestartRelaysForPendingIncomingRecovery(triggeredBy: status)
+    }
+
+    func beginForegroundRelayCycleForTesting() {
+      resetForegroundRelayState()
+    }
+
+    func simulateRuntimeRelayStatusForTesting(
+      relayURL: String,
+      status: RelayHealthStatus,
+      message: String? = nil
+    ) {
+      updateRuntimeRelayStatus(relayURL: relayURL, status: status, message: message)
+      try? refreshRelayConnectivityAlert()
     }
 
     func ingestFollowListForTesting(_ incoming: ReceivedFollowList) {

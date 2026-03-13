@@ -763,6 +763,60 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     XCTAssertEqual(session.connectedRelayCount(for: relays), 0)
     XCTAssertNil(session.relayErrorMessage(for: relay))
   }
+
+  func testPassiveOfflineToastDoesNotLoopAcrossForegroundRelayFlaps() throws {
+    let (session, container) = try makeSession()
+    let relay = RelayEntity(url: "wss://relay.example.com")
+    container.mainContext.insert(relay)
+    try container.mainContext.save()
+
+    session.beginForegroundRelayCycleForTesting()
+    session.simulateRuntimeRelayStatusForTesting(relayURL: relay.url, status: .connected)
+    session.simulateRuntimeRelayStatusForTesting(
+      relayURL: relay.url,
+      status: .failed,
+      message: "relay dropped"
+    )
+
+    XCTAssertEqual(session.composeError, "you're offline. waiting for a relay connection.")
+
+    session.composeError = nil
+    session.simulateRuntimeRelayStatusForTesting(relayURL: relay.url, status: .connected)
+    session.simulateRuntimeRelayStatusForTesting(
+      relayURL: relay.url,
+      status: .failed,
+      message: "relay dropped again"
+    )
+
+    XCTAssertNil(session.composeError)
+  }
+
+  func testPassiveOfflineToastRearmsOnNextForegroundCycle() throws {
+    let (session, container) = try makeSession()
+    let relay = RelayEntity(url: "wss://relay.example.com")
+    container.mainContext.insert(relay)
+    try container.mainContext.save()
+
+    session.beginForegroundRelayCycleForTesting()
+    session.simulateRuntimeRelayStatusForTesting(relayURL: relay.url, status: .connected)
+    session.simulateRuntimeRelayStatusForTesting(
+      relayURL: relay.url,
+      status: .failed,
+      message: "relay dropped"
+    )
+    XCTAssertEqual(session.composeError, "you're offline. waiting for a relay connection.")
+
+    session.composeError = nil
+    session.beginForegroundRelayCycleForTesting()
+    session.simulateRuntimeRelayStatusForTesting(relayURL: relay.url, status: .connected)
+    session.simulateRuntimeRelayStatusForTesting(
+      relayURL: relay.url,
+      status: .failed,
+      message: "relay dropped after reopen"
+    )
+
+    XCTAssertEqual(session.composeError, "you're offline. waiting for a relay connection.")
+  }
 }
 
 @MainActor
