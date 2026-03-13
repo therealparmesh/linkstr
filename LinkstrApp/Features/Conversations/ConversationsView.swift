@@ -79,7 +79,7 @@ struct ConversationsView: View {
       LinkstrCenteredEmptyStateView(
         title: "no sessions",
         systemImage: "rectangle.stack.badge.plus",
-        description: "create a session to save links."
+        description: "start a session. links you share will show up here."
       )
     } else {
       ScrollView {

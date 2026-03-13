@@ -71,7 +71,7 @@ struct ContactsView: View {
       LinkstrCenteredEmptyStateView(
         title: "no contacts",
         systemImage: "person.2.slash",
-        description: "add a contact to share links."
+        description: "add a contact. invite them when you start a session."
       )
     } else {
       ScrollView {
