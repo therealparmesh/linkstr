@@ -21,16 +21,6 @@ final class SessionMessageStore {
     return try modelContext.fetch(descriptor).first
   }
 
-  func rootMessages(ownerPubkey: String) throws -> [SessionMessageEntity] {
-    let rootKindRaw = SessionMessageKind.root.rawValue
-    let descriptor = FetchDescriptor<SessionMessageEntity>(
-      predicate: #Predicate {
-        $0.ownerPubkey == ownerPubkey && $0.kindRaw == rootKindRaw
-      }
-    )
-    return try modelContext.fetch(descriptor)
-  }
-
   func session(sessionID: String, ownerPubkey: String) throws -> SessionEntity? {
     let storageID = SessionEntity.storageID(ownerPubkey: ownerPubkey, sessionID: sessionID)
     let descriptor = FetchDescriptor<SessionEntity>(

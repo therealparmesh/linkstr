@@ -352,8 +352,7 @@ final class AppSessionIngestTests: AppSessionTestCase {
         source: .historical
       ))
 
-    session.nostrService.simulateInitialBackfillCompletionForTesting()
-    await Task.yield()
+    session.simulateInitialHistoricalRestoreCompletionForTesting()
 
     session.ingestForTesting(
       makeIncomingMessage(
@@ -1034,7 +1033,6 @@ final class AppSessionIngestTests: AppSessionTestCase {
   func testPendingIncomingReconnectForcesFreshRelayRestartOncePerOutage() throws {
     var nostrStartCount = 0
     let (session, _) = try makeSession(
-      disableNostrStartup: true,
       onNostrStart: {
         nostrStartCount += 1
       }

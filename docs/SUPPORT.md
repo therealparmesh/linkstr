@@ -236,7 +236,7 @@ Remember that historical replay depends on relay retention. linkstr can retry ou
 **A preview looks stale or wrong**
 
 1. Clear cached media and previews from Settings.
-2. Reopen the post and let linkstr rebuild the preview.
+2. Open the session or the post detail and let linkstr rebuild the preview.
 3. If the provider itself is serving bad metadata, use `open in browser`.
 
 **I can't scan a QR code**

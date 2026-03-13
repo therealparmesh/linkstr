@@ -620,9 +620,9 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
 
     XCTAssertNotNil(inboundRoot.readAt)
 
-    window.rootViewController = nil
     window.isHidden = true
     RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.01))
+    window.rootViewController = nil
   }
 
   func testRelayCRUDFlow() throws {
@@ -670,7 +670,7 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
   }
 
   func testForceRestartMarksEnabledRelaysConnectingAndClearsStaleErrors() throws {
-    let (session, container) = try makeSession()
+    let (session, container) = try makeSession(disableNostrStartup: false)
     try session.identityService.createNewIdentity()
 
     let relay = RelayEntity(

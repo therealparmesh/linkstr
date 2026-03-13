@@ -11,10 +11,6 @@ private enum RelayMutationDefaults {
   static let pollIntervalSeconds: TimeInterval = 0.35
 }
 
-private enum MetadataRefreshDefaults {
-  static let backgroundHydrationBatchLimit = 24
-}
-
 @MainActor
 final class AppSession: ObservableObject {
   enum RelayConnectivityState: Equatable {
@@ -38,7 +34,6 @@ final class AppSession: ObservableObject {
 
   private struct PendingMetadataRefresh {
     let storageID: String
-    let context: LinkMetadataRefreshContext
   }
 
   private struct PendingIncomingMessage {
@@ -260,7 +255,6 @@ final class AppSession: ObservableObject {
     didFinishBoot = true
     resetForegroundRelayState()
     await retryIdentityLoadAndRestartNostr(maxAttempts: activeIdentityRetryAttempts)
-    hydrateMissingMetadata()
   }
 
   func handleAppDidBecomeActive() {
@@ -1251,41 +1245,10 @@ final class AppSession: ObservableObject {
   func startNostrIfPossible(forceRestart: Bool = false) {
     guard let keypair = identityService.keypair else { return }
     let isRunningTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
-    let relayURLs: [String]
-    do {
-      relayURLs = try relayStore.fetchRelays().filter(\.isEnabled).map(\.url)
-    } catch {
-      report(error: error)
-      return
-    }
 
     if forceRestart {
       pendingIncomingReconnectReplayArmed = false
-      // iOS may suspend sockets while backgrounded; on foreground always rebuild the relay
-      // session so send-gating reflects fresh connection state instead of stale sockets.
-      primeRelayRuntimeStatusForRestart(relayURLs: relayURLs)
       nostrService.stop()
-    }
-
-    if isRunningTests, testingOverrides.skipNostrNetworkStartup {
-      if !forceRestart {
-        relayRuntimeStatusByURL.removeAll()
-        pendingRelayPersistenceByURL.removeAll()
-        relayPersistenceFlushTask?.cancel()
-        relayPersistenceFlushTask = nil
-      }
-      startNostrRuntime(
-        keypair: keypair,
-        relayURLs: [],
-        onIncoming: { _ in },
-        onRelayStatus: { _, _, _ in },
-        onInitialBackfillComplete: { [weak self] in
-          Task { @MainActor in
-            self?.finishInitialHistoricalRestore()
-          }
-        }
-      )
-      return
     }
 
     if shouldDisableNostrStartupForCurrentProcess() {
@@ -1296,18 +1259,47 @@ final class AppSession: ObservableObject {
         relayPersistenceFlushTask?.cancel()
         relayPersistenceFlushTask = nil
       }
+      testingOverrides.onNostrStart?()
+      return
+    }
+
+    if isRunningTests, testingOverrides.skipNostrNetworkStartup {
+      if forceRestart {
+        if testingOverrides.skipDefaultRelaySetup == false,
+          let relayURLs = try? relayStore.fetchRelays().filter(\.isEnabled).map(\.url)
+        {
+          primeRelayRuntimeStatusForRestart(relayURLs: relayURLs)
+        }
+      } else {
+        relayRuntimeStatusByURL.removeAll()
+        pendingRelayPersistenceByURL.removeAll()
+        relayPersistenceFlushTask?.cancel()
+        relayPersistenceFlushTask = nil
+      }
       startNostrRuntime(
         keypair: keypair,
         relayURLs: [],
         onIncoming: { _ in },
         onRelayStatus: { _, _, _ in },
         onInitialBackfillComplete: { [weak self] in
-          Task { @MainActor in
-            self?.finishInitialHistoricalRestore()
-          }
+          self?.finishInitialHistoricalRestore()
         }
       )
       return
+    }
+
+    let relayURLs: [String]
+    do {
+      relayURLs = try relayStore.fetchRelays().filter(\.isEnabled).map(\.url)
+    } catch {
+      report(error: error)
+      return
+    }
+
+    if forceRestart {
+      // iOS may suspend sockets while backgrounded; on foreground always rebuild the relay
+      // session so send-gating reflects fresh connection state instead of stale sockets.
+      primeRelayRuntimeStatusForRestart(relayURLs: relayURLs)
     }
     if relayURLs.isEmpty {
       nostrService.stop()
@@ -1350,9 +1342,7 @@ final class AppSession: ObservableObject {
         }
       },
       onInitialBackfillComplete: { [weak self] in
-        Task { @MainActor in
-          self?.finishInitialHistoricalRestore()
-        }
+        self?.finishInitialHistoricalRestore()
       },
       onFollowList: { [weak self] followList in
         Task { @MainActor in
@@ -1928,7 +1918,6 @@ final class AppSession: ObservableObject {
       publishedTransportEventIDs: receipt.publishedEventIDs
     )
     try messageStore.insert(message)
-    enqueueMetadataRefresh(for: message, in: .backgroundHydration)
   }
 
   private func persistReactionState(_ draft: ReactionDraft, eventID: String) throws {
@@ -2455,7 +2444,6 @@ final class AppSession: ObservableObject {
     do {
       try messageStore.clearCachedMediaAndPreviews(ownerPubkey: ownerPubkey)
       composeError = nil
-      hydrateMissingMetadata()
     } catch {
       report(error: error)
     }
@@ -2536,6 +2524,10 @@ final class AppSession: ObservableObject {
   #if DEBUG
     func ingestForTesting(_ incoming: ReceivedDirectMessage) {
       persistIncoming(incoming)
+    }
+
+    func simulateInitialHistoricalRestoreCompletionForTesting() {
+      finishInitialHistoricalRestore()
     }
 
     func enqueuePendingIncomingForTesting(_ incoming: ReceivedDirectMessage) {
@@ -2996,7 +2988,6 @@ final class AppSession: ObservableObject {
         if existing.appendPublishedTransportEventIDs(transportEventIDs) {
           try modelContext.save()
         }
-        enqueueBackgroundMetadataRefreshIfNeeded(for: existing, source: incoming.source)
         return .applied
       }
 
@@ -3029,7 +3020,6 @@ final class AppSession: ObservableObject {
         publishedTransportEventIDs: transportEventIDs
       )
       try messageStore.insert(message)
-      enqueueBackgroundMetadataRefreshIfNeeded(for: message, source: incoming.source)
       return .applied
     } catch {
       if let existing = try? messageStore.rootPost(
@@ -3040,7 +3030,6 @@ final class AppSession: ObservableObject {
         if existing.appendPublishedTransportEventIDs(transportEventIDs) {
           try? modelContext.save()
         }
-        enqueueBackgroundMetadataRefreshIfNeeded(for: existing, source: incoming.source)
         return .applied
       }
       report(error: error)
@@ -3107,50 +3096,21 @@ final class AppSession: ObservableObject {
     }
   }
 
-  private func hydrateMissingMetadata() {
-    guard shouldFetchMetadataForCurrentProcess() else { return }
-    guard let ownerPubkey = identityService.pubkeyHex else { return }
-
-    do {
-      let roots = try messageStore.rootMessages(ownerPubkey: ownerPubkey)
-      let sortedRoots = roots.sorted { $0.timestamp > $1.timestamp }
-      for message in sortedRoots.prefix(MetadataRefreshDefaults.backgroundHydrationBatchLimit)
-      where needsMetadataRefresh(message, in: .backgroundHydration) {
-        enqueueMetadataRefresh(for: message, in: .backgroundHydration)
-      }
-    } catch {
-      report(error: error)
-    }
-  }
-
-  private func enqueueMetadataRefresh(
-    for message: SessionMessageEntity,
-    in context: LinkMetadataRefreshContext
-  ) {
+  private func enqueueMetadataRefresh(for message: SessionMessageEntity) {
     guard shouldFetchMetadataForCurrentProcess() else { return }
     guard message.kind == .root else { return }
     guard message.url != nil else { return }
-    guard needsMetadataRefresh(message, in: context) else { return }
+    guard needsMetadataRefresh(message) else { return }
 
     let storageID = message.storageID
     guard !enqueuedMetadataStorageIDs.contains(storageID) else { return }
     enqueuedMetadataStorageIDs.insert(storageID)
-    pendingMetadataRefreshes.append(
-      PendingMetadataRefresh(storageID: storageID, context: context)
-    )
+    pendingMetadataRefreshes.append(PendingMetadataRefresh(storageID: storageID))
     processMetadataQueueIfNeeded()
   }
 
   func refreshMetadataForVisiblePostIfNeeded(_ message: SessionMessageEntity) {
-    enqueueMetadataRefresh(for: message, in: .visibleSession)
-  }
-
-  private func enqueueBackgroundMetadataRefreshIfNeeded(
-    for message: SessionMessageEntity,
-    source: DirectMessageIngestSource
-  ) {
-    guard source == .live else { return }
-    enqueueMetadataRefresh(for: message, in: .backgroundHydration)
+    enqueueMetadataRefresh(for: message)
   }
 
   private func processMetadataQueueIfNeeded() {
@@ -3169,7 +3129,7 @@ final class AppSession: ObservableObject {
           guard let message = try messageStore.message(storageID: request.storageID) else {
             continue
           }
-          try await refreshMetadata(for: message, in: request.context)
+          try await refreshMetadata(for: message)
         } catch {
           report(error: error)
         }
@@ -3181,12 +3141,9 @@ final class AppSession: ObservableObject {
     }
   }
 
-  private func refreshMetadata(
-    for message: SessionMessageEntity,
-    in context: LinkMetadataRefreshContext
-  ) async throws {
+  private func refreshMetadata(for message: SessionMessageEntity) async throws {
     guard let url = message.url else { return }
-    guard needsMetadataRefresh(message, in: context) else { return }
+    guard needsMetadataRefresh(message) else { return }
 
     let preview = await URLMetadataService.shared.fetchPreview(for: url)
     guard let preview else { return }
@@ -3214,14 +3171,10 @@ final class AppSession: ObservableObject {
     try modelContext.save()
   }
 
-  private func needsMetadataRefresh(
-    _ message: SessionMessageEntity,
-    in context: LinkMetadataRefreshContext
-  ) -> Bool {
+  private func needsMetadataRefresh(_ message: SessionMessageEntity) -> Bool {
     guard message.kind == .root else { return false }
     guard message.url != nil else { return false }
     return LinkMetadataRefreshPolicy.needsRefresh(
-      in: context,
       linkType: message.linkType,
       title: message.metadataTitle,
       thumbnailPath: ManagedLocalFileScope.shared.normalizedManagedPath(message.thumbnailURL)

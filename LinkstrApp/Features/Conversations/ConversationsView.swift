@@ -545,6 +545,7 @@ struct SessionPostsView: View {
     .buttonStyle(.plain)
     .onAppear {
       session.markRootPostRead(postID: row.post.rootID)
+      session.refreshMetadataForVisiblePostIfNeeded(row.post)
     }
 
     if row.isOutgoing {

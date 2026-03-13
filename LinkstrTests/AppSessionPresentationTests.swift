@@ -129,7 +129,15 @@ final class AppSessionPresentationTests: XCTestCase {
         expectedNeedsRefresh: true
       ),
       TestCase(
-        title: "twitter missing thumbnail refreshes",
+        title: "tiktok missing thumbnail refreshes lazily",
+        linkType: .tiktok,
+        metadataTitle: "some creator",
+        thumbnailPath: nil,
+        fileExists: { _ in false },
+        expectedNeedsRefresh: true
+      ),
+      TestCase(
+        title: "twitter missing thumbnail refreshes lazily",
         linkType: .twitter,
         metadataTitle: "frankie (@FrankieIsLost)",
         thumbnailPath: nil,
@@ -137,7 +145,7 @@ final class AppSessionPresentationTests: XCTestCase {
         expectedNeedsRefresh: true
       ),
       TestCase(
-        title: "generic missing thumbnail does not refresh",
+        title: "generic missing thumbnail still skips refresh",
         linkType: .generic,
         metadataTitle: "Example title",
         thumbnailPath: nil,
@@ -145,8 +153,8 @@ final class AppSessionPresentationTests: XCTestCase {
         expectedNeedsRefresh: false
       ),
       TestCase(
-        title: "missing thumbnail file refreshes",
-        linkType: .generic,
+        title: "existing missing file refreshes lazily",
+        linkType: .instagram,
         metadataTitle: "Example title",
         thumbnailPath: "/tmp/thumb.png",
         fileExists: { _ in false },
@@ -165,59 +173,6 @@ final class AppSessionPresentationTests: XCTestCase {
     for testCase in cases {
       XCTAssertEqual(
         LinkMetadataRefreshPolicy.needsRefresh(
-          in: .backgroundHydration,
-          linkType: testCase.linkType,
-          title: testCase.metadataTitle,
-          thumbnailPath: testCase.thumbnailPath,
-          fileExists: testCase.fileExists
-        ),
-        testCase.expectedNeedsRefresh,
-        testCase.title
-      )
-    }
-  }
-
-  func testVisibleSessionMetadataRefreshPolicyCases() {
-    struct TestCase {
-      let title: String
-      let linkType: LinkType
-      let metadataTitle: String?
-      let thumbnailPath: String?
-      let fileExists: (String) -> Bool
-      let expectedNeedsRefresh: Bool
-    }
-
-    let cases: [TestCase] = [
-      TestCase(
-        title: "tiktok missing thumbnail refreshes lazily in session view",
-        linkType: .tiktok,
-        metadataTitle: "some creator",
-        thumbnailPath: nil,
-        fileExists: { _ in false },
-        expectedNeedsRefresh: true
-      ),
-      TestCase(
-        title: "generic missing thumbnail still skips lazy refresh",
-        linkType: .generic,
-        metadataTitle: "Example title",
-        thumbnailPath: nil,
-        fileExists: { _ in false },
-        expectedNeedsRefresh: false
-      ),
-      TestCase(
-        title: "existing missing file refreshes lazily in session view",
-        linkType: .instagram,
-        metadataTitle: "Example title",
-        thumbnailPath: "/tmp/thumb.png",
-        fileExists: { _ in false },
-        expectedNeedsRefresh: true
-      ),
-    ]
-
-    for testCase in cases {
-      XCTAssertEqual(
-        LinkMetadataRefreshPolicy.needsRefresh(
-          in: .visibleSession,
           linkType: testCase.linkType,
           title: testCase.metadataTitle,
           thumbnailPath: testCase.thumbnailPath,

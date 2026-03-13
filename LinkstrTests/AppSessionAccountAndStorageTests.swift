@@ -217,7 +217,6 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     let keypair = try TestKeyMaterialFactory.makeKeypair()
     var loadAttempts = 0
     let (session, _) = try makeSession(
-      disableNostrStartup: true,
       loadIdentity: { identityService in
         loadAttempts += 1
         if loadAttempts == 1 {
@@ -241,7 +240,6 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
   func testBootStartsNostrWithoutWaitingForSecondForegroundEvent() async throws {
     var nostrStartCount = 0
     let (session, _) = try makeSession(
-      disableNostrStartup: true,
       skipDefaultRelaySetup: true,
       skipPersistedFollowListStateLoad: true,
       onNostrStart: {
@@ -259,7 +257,6 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
   func testCreateAccountAfterBootStartsNostr() async throws {
     var nostrStartCount = 0
     let (session, _) = try makeSession(
-      disableNostrStartup: true,
       skipDefaultRelaySetup: true,
       skipPersistedFollowListStateLoad: true,
       onNostrStart: {
@@ -286,7 +283,6 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     var loadAttempts = 0
     var shouldLoadIdentity = false
     let (session, _) = try makeSession(
-      disableNostrStartup: true,
       loadIdentity: { identityService in
         defer { loadAttempts += 1 }
         guard shouldLoadIdentity else {
@@ -317,7 +313,6 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     var loadAttempts = 0
     var shouldLoadIdentity = false
     let (session, _) = try makeSession(
-      disableNostrStartup: true,
       loadIdentity: { identityService in
         defer { loadAttempts += 1 }
         guard shouldLoadIdentity else {

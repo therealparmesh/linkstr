@@ -7,14 +7,8 @@ struct LinkPreviewData {
   let thumbnailPath: String?
 }
 
-enum LinkMetadataRefreshContext {
-  case backgroundHydration
-  case visibleSession
-}
-
 enum LinkMetadataRefreshPolicy {
   static func needsRefresh(
-    in context: LinkMetadataRefreshContext,
     linkType: LinkType,
     title: String?,
     thumbnailPath: String?,
@@ -22,7 +16,7 @@ enum LinkMetadataRefreshPolicy {
   ) -> Bool {
     guard normalizedTitle(title) != nil else { return true }
     guard let thumbnailPath else {
-      return expectsThumbnail(linkType, in: context)
+      return expectsThumbnail(linkType)
     }
     return !fileExists(thumbnailPath)
   }
@@ -33,11 +27,7 @@ enum LinkMetadataRefreshPolicy {
     return trimmed.isEmpty ? nil : trimmed
   }
 
-  private static func expectsThumbnail(
-    _ linkType: LinkType,
-    in context: LinkMetadataRefreshContext
-  ) -> Bool {
-    guard context == .visibleSession else { return linkType == .twitter }
+  private static func expectsThumbnail(_ linkType: LinkType) -> Bool {
     switch linkType {
     case .tiktok, .instagram, .facebook, .youtube, .rumble, .twitter:
       return true
