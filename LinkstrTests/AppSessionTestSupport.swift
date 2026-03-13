@@ -94,6 +94,7 @@ class AppSessionTestCase: XCTestCase {
     disableNostrStartup: Bool? = nil,
     hasConnectedRelays: (() -> Bool)? = nil,
     passiveOfflineToastGraceInterval: TimeInterval? = nil,
+    foregroundRelayRestartCooldown: TimeInterval? = nil,
     loadIdentity: ((IdentityService) -> IdentityService.LoadResult)? = nil,
     identityRetryDelayNanoseconds: UInt64? = nil,
     skipDefaultRelaySetup: Bool = false,
@@ -115,6 +116,7 @@ class AppSessionTestCase: XCTestCase {
     testingOverrides.disableNostrStartup = disableNostrStartup
     testingOverrides.hasConnectedRelays = hasConnectedRelays
     testingOverrides.passiveOfflineToastGraceInterval = passiveOfflineToastGraceInterval
+    testingOverrides.foregroundRelayRestartCooldown = foregroundRelayRestartCooldown
     testingOverrides.loadIdentity = loadIdentity
     testingOverrides.identityRetryDelayNanoseconds = identityRetryDelayNanoseconds
     testingOverrides.skipDefaultRelaySetup = skipDefaultRelaySetup

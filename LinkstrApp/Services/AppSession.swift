@@ -103,6 +103,7 @@ final class AppSession: ObservableObject {
     var disableNostrStartup: Bool?
     var hasConnectedRelays: (() -> Bool)?
     var passiveOfflineToastGraceInterval: TimeInterval?
+    var foregroundRelayRestartCooldown: TimeInterval?
     var loadIdentity: ((IdentityService) -> IdentityService.LoadResult)?
     var identityRetryDelayNanoseconds: UInt64?
     var skipDefaultRelaySetup = false
@@ -163,6 +164,7 @@ final class AppSession: ObservableObject {
   private var pendingRelayPersistenceByURL: [String: PendingRelayPersistenceState] = [:]
   private var relayPersistenceFlushTask: Task<Void, Never>?
   private var pendingOfflineToastTask: Task<Void, Never>?
+  private var foregroundRelayRecoveryTask: Task<Void, Never>?
   private let relayPersistenceDebounceNanoseconds: UInt64 = 250_000_000
   private let remoteProfileLookupRetryNanoseconds: UInt64 = 3_000_000_000
   private var hasObservedHealthyRelayInCurrentForeground = false
@@ -284,6 +286,7 @@ final class AppSession: ObservableObject {
     lastForegroundRelayRestartAt = nil
     passiveOfflineToastGraceUntil = nil
     cancelPendingOfflineToastIfNeeded()
+    cancelPendingForegroundRelayRecoveryIfNeeded()
     flushRelayPersistenceNow()
   }
 
@@ -324,6 +327,11 @@ final class AppSession: ObservableObject {
   private func cancelPendingOfflineToastIfNeeded() {
     pendingOfflineToastTask?.cancel()
     pendingOfflineToastTask = nil
+  }
+
+  private func cancelPendingForegroundRelayRecoveryIfNeeded() {
+    foregroundRelayRecoveryTask?.cancel()
+    foregroundRelayRecoveryTask = nil
   }
 
   private func showOfflineToastForCurrentOutageIfNeeded() {
@@ -487,6 +495,7 @@ final class AppSession: ObservableObject {
     if status == .connected || status == .readOnly {
       hasObservedHealthyRelayInCurrentForeground = true
       lastForegroundRelayRestartAt = nil
+      cancelPendingForegroundRelayRecoveryIfNeeded()
     }
 
     let now = Date()
@@ -528,6 +537,10 @@ final class AppSession: ObservableObject {
 
   private var configuredIdentityRetryDelayNanoseconds: UInt64 {
     testingOverrides.identityRetryDelayNanoseconds ?? identityRetryDelayNanoseconds
+  }
+
+  private var configuredForegroundRelayRestartCooldown: TimeInterval {
+    testingOverrides.foregroundRelayRestartCooldown ?? foregroundRelayRestartCooldown
   }
 
   private var isRunningTests: Bool {
@@ -614,6 +627,7 @@ final class AppSession: ObservableObject {
       testingOverrides.passiveOfflineToastGraceInterval ?? passiveOfflineToastGraceInterval
     )
     cancelPendingOfflineToastIfNeeded()
+    cancelPendingForegroundRelayRecoveryIfNeeded()
   }
 
   private func scheduleIdentityLoadAndNostrRestart(maxAttempts: Int) {
@@ -627,6 +641,55 @@ final class AppSession: ObservableObject {
       maxAttempts: maxAttempts,
       retryDelayNanoseconds: configuredIdentityRetryDelayNanoseconds
     )
+    startNostrIfPossible(forceRestart: true)
+  }
+
+  private func scheduleForegroundRelayRecoveryCheck(after delay: TimeInterval? = nil) {
+    guard foregroundRelayRecoveryTask == nil else { return }
+    let requestedDelay = delay ?? configuredForegroundRelayRestartCooldown
+    let boundedDelay = max(0.1, requestedDelay)
+    foregroundRelayRecoveryTask = Task { [weak self] in
+      try? await Task.sleep(nanoseconds: UInt64(boundedDelay * 1_000_000_000))
+      guard !Task.isCancelled else { return }
+      await MainActor.run { [weak self] in
+        guard let self else { return }
+        defer { self.foregroundRelayRecoveryTask = nil }
+        self.evaluateForegroundRelayRecoveryIfNeeded()
+      }
+    }
+  }
+
+  private func evaluateForegroundRelayRecoveryIfNeeded() {
+    guard isForeground else { return }
+    guard identityService.keypair != nil else { return }
+    guard !shouldDisableNostrStartupForCurrentProcess() else { return }
+
+    let enabledRelays: [RelayEntity]
+    do {
+      enabledRelays = try relayStore.fetchRelays().filter(\.isEnabled)
+    } catch {
+      return
+    }
+
+    switch relayConnectivityState(for: enabledRelays) {
+    case .online, .readOnly, .noEnabledRelays:
+      cancelPendingForegroundRelayRecoveryIfNeeded()
+      return
+    case .connecting, .offline:
+      break
+    }
+
+    let now = Date.now
+    let cooldown = configuredForegroundRelayRestartCooldown
+    if let lastForegroundRelayRestartAt {
+      let remainingCooldown = cooldown - now.timeIntervalSince(lastForegroundRelayRestartAt)
+      if remainingCooldown > 0 {
+        scheduleForegroundRelayRecoveryCheck(after: remainingCooldown)
+        return
+      }
+    }
+
+    lastForegroundRelayRestartAt = now
     startNostrIfPossible(forceRestart: true)
   }
 
@@ -1261,6 +1324,7 @@ final class AppSession: ObservableObject {
     relayPersistenceFlushTask?.cancel()
     relayPersistenceFlushTask = nil
     cancelPendingOfflineToastIfNeeded()
+    cancelPendingForegroundRelayRecoveryIfNeeded()
     pendingRelayPersistenceByURL.removeAll()
     nostrService.stop()
     pendingIncomingMessages.removeAll()
@@ -1342,6 +1406,7 @@ final class AppSession: ObservableObject {
         relayPersistenceFlushTask?.cancel()
         relayPersistenceFlushTask = nil
       }
+      cancelPendingForegroundRelayRecoveryIfNeeded()
       testingOverrides.onNostrStart?()
       return
     }
@@ -1352,6 +1417,10 @@ final class AppSession: ObservableObject {
           let relayURLs = try? relayStore.fetchRelays().filter(\.isEnabled).map(\.url)
         {
           primeRelayRuntimeStatusForRestart(relayURLs: relayURLs)
+        }
+        if isForeground {
+          lastForegroundRelayRestartAt = Date.now
+          scheduleForegroundRelayRecoveryCheck()
         }
       } else {
         relayRuntimeStatusByURL.removeAll()
@@ -1383,6 +1452,10 @@ final class AppSession: ObservableObject {
       // iOS may suspend sockets while backgrounded; on foreground always rebuild the relay
       // session so send-gating reflects fresh connection state instead of stale sockets.
       primeRelayRuntimeStatusForRestart(relayURLs: relayURLs)
+      if isForeground {
+        lastForegroundRelayRestartAt = Date.now
+        scheduleForegroundRelayRecoveryCheck()
+      }
     }
     if relayURLs.isEmpty {
       nostrService.stop()
@@ -1390,6 +1463,7 @@ final class AppSession: ObservableObject {
       pendingRelayPersistenceByURL.removeAll()
       relayPersistenceFlushTask?.cancel()
       relayPersistenceFlushTask = nil
+      cancelPendingForegroundRelayRecoveryIfNeeded()
       composeError = noEnabledRelaysMessage
       hasShownOfflineToastForCurrentOutage = false
       return

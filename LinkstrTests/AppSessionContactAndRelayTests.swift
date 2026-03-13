@@ -789,6 +789,36 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     XCTAssertNil(session.relayErrorMessage(for: relay))
   }
 
+  func testForegroundRecoveryRetriesHardRestartWhenNoRelayBecomesHealthy() throws {
+    var startCount = 0
+    let (session, container) = try makeSession(
+      disableNostrStartup: false,
+      foregroundRelayRestartCooldown: 0.01,
+      skipNostrNetworkStartup: true,
+      onNostrStart: {
+        startCount += 1
+      }
+    )
+    try session.identityService.createNewIdentity()
+
+    let relay = RelayEntity(url: "wss://relay.example.com")
+    container.mainContext.insert(relay)
+    try container.mainContext.save()
+
+    session.beginForegroundRelayCycleForTesting()
+    session.startNostrIfPossible(forceRestart: true)
+
+    let retryDeadline = Date(timeIntervalSinceNow: 0.2)
+    while startCount < 2, Date() < retryDeadline {
+      RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.01))
+    }
+
+    XCTAssertGreaterThanOrEqual(startCount, 2)
+    XCTAssertEqual(session.relayStatus(for: relay), .connecting)
+
+    session.handleAppDidLeaveForeground()
+  }
+
   func testPassiveOfflineToastDoesNotLoopAcrossForegroundRelayFlaps() throws {
     let (session, container) = try makeSession(passiveOfflineToastGraceInterval: 0.01)
     let relay = RelayEntity(url: "wss://relay.example.com")
