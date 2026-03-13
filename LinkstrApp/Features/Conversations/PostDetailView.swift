@@ -426,12 +426,16 @@ struct PostDetailView: View {
           .textSelection(.enabled)
       }
 
-      if let noteText {
-        accentTextBlock(label: "note", text: noteText)
-      }
+      if noteText != nil || remotePostText != nil {
+        VStack(alignment: .leading, spacing: LinkstrTheme.compactSpacing) {
+          if let noteText {
+            accentTextBlock(label: "note", text: noteText)
+          }
 
-      if let remotePostText {
-        accentTextBlock(label: "post text", text: remotePostText)
+          if let remotePostText {
+            accentTextBlock(label: "post text", text: remotePostText)
+          }
+        }
       }
 
       mediaBlock
