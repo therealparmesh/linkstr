@@ -25,16 +25,31 @@ struct ConversationsView: View {
   @Query(sort: [SortDescriptor(\SessionMessageEntity.timestamp, order: .reverse)])
   private var allMessages: [SessionMessageEntity]
 
+  private var ownerPubkey: String? {
+    session.identityService.pubkeyHex
+  }
+
+  private var ownerPubkeyHash: String? {
+    guard let ownerPubkey else { return nil }
+    return LocalDataCrypto.shared.digestHex(ownerPubkey)
+  }
+
   private var scopedSessions: [SessionEntity] {
-    OwnerScopedCollections.sessions(allSessions, ownerPubkey: session.identityService.pubkeyHex)
+    guard let ownerPubkey else { return [] }
+    return allSessions.filter { $0.ownerPubkey == ownerPubkey }
+  }
+
+  private var scopedMessages: [SessionMessageEntity] {
+    guard let ownerPubkey else { return [] }
+    return allMessages.filter { $0.ownerPubkey == ownerPubkey }
   }
 
   private var visibleSummaries: [SessionSummary] {
-    let scopedMessages = OwnerScopedCollections.messages(
-      allMessages,
-      ownerPubkey: session.identityService.pubkeyHex
+    let summaries = makeSummaries(
+      sessions: scopedSessions,
+      messages: scopedMessages,
+      ownerPubkeyHash: ownerPubkeyHash
     )
-    let summaries = makeSummaries(sessions: scopedSessions, messages: scopedMessages)
     let archiveFilteredSummaries = summaries.filter { summary in
       isShowingArchivedSessions ? summary.session.isArchived : !summary.session.isArchived
     }
@@ -120,9 +135,12 @@ struct ConversationsView: View {
     }
   }
 
-  private func hasUnreadIncomingRootPost(_ post: SessionMessageEntity) -> Bool {
-    guard let myPubkey = session.identityService.pubkeyHex else { return false }
-    return post.senderPubkey != myPubkey && post.readAt == nil
+  private func hasUnreadIncomingRootPost(
+    _ post: SessionMessageEntity,
+    ownerPubkeyHash: String?
+  ) -> Bool {
+    guard let ownerPubkeyHash else { return false }
+    return post.senderPubkeyHash != ownerPubkeyHash && post.readAt == nil
   }
 
   private func previewText(for post: SessionMessageEntity?) -> String {
@@ -144,7 +162,8 @@ struct ConversationsView: View {
 
   private func makeSummaries(
     sessions: [SessionEntity],
-    messages: [SessionMessageEntity]
+    messages: [SessionMessageEntity],
+    ownerPubkeyHash: String?
   ) -> [SessionSummary] {
     var aggregates:
       [String: (
@@ -158,16 +177,14 @@ struct ConversationsView: View {
       let key = message.conversationID
       var aggregate = aggregates[key] ?? (latestPost: nil, hasUnread: false, postCount: 0)
 
-      if let latestPost = aggregate.latestPost {
-        if message.timestamp > latestPost.timestamp {
-          aggregate.latestPost = message
-        }
-      } else {
+      if aggregate.latestPost == nil {
         aggregate.latestPost = message
       }
 
       aggregate.postCount += 1
-      aggregate.hasUnread = aggregate.hasUnread || hasUnreadIncomingRootPost(message)
+      aggregate.hasUnread =
+        aggregate.hasUnread
+        || hasUnreadIncomingRootPost(message, ownerPubkeyHash: ownerPubkeyHash)
       aggregates[key] = aggregate
     }
 
