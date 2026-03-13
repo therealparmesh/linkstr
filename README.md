@@ -352,8 +352,8 @@ linkstr still does not have a durable offline outbox. If a send cannot get relay
   - Two action buttons split width evenly with spacing.
 - Metadata hydration fetches title/thumbnail asynchronously for root posts.
 - X/Twitter status previews prefer the Twitter-specific status metadata path for author/title and media thumbnails before falling back to generic `LinkPresentation` metadata.
-- On boot, existing root posts are re-queued for metadata hydration when titles are missing, local thumbnail files are missing, or X/Twitter posts are missing thumbnails.
-- Session post rows lazily retry missing social thumbnails only as those rows appear on screen.
+- On boot, the newest existing root posts are re-queued in a bounded batch for metadata hydration when titles are missing, local thumbnail files are missing, or X/Twitter posts are missing thumbnails.
+- Opening post detail retries missing metadata for that post when needed.
 - Missing local thumbnail files are treated as stale and re-fetched.
 - Settings > Storage can clear hydrated previews and cached media for the current account without deleting posts.
 - Settings > Storage shows an estimate of how much local storage the signed-in account can clear.
