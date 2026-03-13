@@ -412,6 +412,13 @@ struct PostDetailView: View {
           .foregroundStyle(LinkstrTheme.textTertiary)
       }
 
+      if let title = post.metadataTitle, !title.isEmpty {
+        Text(title)
+          .font(LinkstrTheme.title(17, weight: .semibold))
+          .foregroundStyle(LinkstrTheme.textPrimary)
+          .lineLimit(3)
+      }
+
       if let url = post.url {
         Text(url)
           .font(LinkstrTheme.body(13))

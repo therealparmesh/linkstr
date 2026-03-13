@@ -10,7 +10,6 @@ private struct SessionSummary: Identifiable {
   let latestPreview: String
   let latestNote: String?
   let hasUnread: Bool
-  let postCount: Int
 }
 
 struct ConversationsView: View {
@@ -168,20 +167,18 @@ struct ConversationsView: View {
     var aggregates:
       [String: (
         latestPost: SessionMessageEntity?,
-        hasUnread: Bool,
-        postCount: Int
+        hasUnread: Bool
       )] = [:]
     aggregates.reserveCapacity(max(1, sessions.count))
 
     for message in messages where message.kind == .root {
       let key = message.conversationID
-      var aggregate = aggregates[key] ?? (latestPost: nil, hasUnread: false, postCount: 0)
+      var aggregate = aggregates[key] ?? (latestPost: nil, hasUnread: false)
 
       if aggregate.latestPost == nil {
         aggregate.latestPost = message
       }
 
-      aggregate.postCount += 1
       aggregate.hasUnread =
         aggregate.hasUnread
         || hasUnreadIncomingRootPost(message, ownerPubkeyHash: ownerPubkeyHash)
@@ -197,7 +194,6 @@ struct ConversationsView: View {
         let latestPreview = previewText(for: latestPost)
         let latestNote = normalizedNote(latestPost?.note)
         let hasUnread = aggregate?.hasUnread ?? false
-        let postCount = aggregate?.postCount ?? 0
 
         return SessionSummary(
           id: sessionEntity.sessionID,
@@ -205,8 +201,7 @@ struct ConversationsView: View {
           latestTimestamp: latestTimestamp,
           latestPreview: latestPreview,
           latestNote: latestNote,
-          hasUnread: hasUnread,
-          postCount: postCount
+          hasUnread: hasUnread
         )
       }
       .sorted { $0.latestTimestamp > $1.latestTimestamp }
@@ -244,12 +239,6 @@ private struct SessionRowView: View {
               .font(LinkstrTheme.body(11, weight: .medium))
               .foregroundStyle(LinkstrTheme.textTertiary)
               .lineLimit(1)
-
-            if summary.postCount > 0 {
-              Text(summary.postCount == 1 ? "1" : "\(summary.postCount)")
-                .font(LinkstrTheme.body(11, weight: .medium))
-                .foregroundStyle(LinkstrTheme.textTertiary)
-            }
           }
         }
 
@@ -429,9 +418,19 @@ struct SessionPostsView: View {
     profileLookupPubkeys.sorted().joined(separator: ",")
   }
 
+  private var postCountLabel: String {
+    posts.count == 1 ? "1 post" : "\(posts.count) posts"
+  }
+
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
+        if !posts.isEmpty {
+          Text(postCountLabel)
+            .font(LinkstrTheme.body(11, weight: .medium))
+            .foregroundStyle(LinkstrTheme.textTertiary)
+        }
+
         if timelineRows.isEmpty {
           LinkstrCenteredEmptyStateView(
             title: "no posts yet",
