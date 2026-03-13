@@ -215,6 +215,31 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     XCTAssertEqual(requestedPubkeys, [firstPubkey, secondPubkey].sorted())
   }
 
+  func testRequestRemoteProfilesIfNeededDoesNotRetainSessionAcrossRetryDelay() async throws {
+    weak var weakSession: AppSession?
+    var requestedPubkeyBatches: [[String]] = []
+    var sessionAndContainer: (AppSession, ModelContainer)? = try makeSession(
+      requestProfileMetadata: { requestedPubkeys in
+        requestedPubkeyBatches.append(requestedPubkeys.sorted())
+      }
+    )
+    weakSession = sessionAndContainer?.0
+
+    do {
+      let session = try XCTUnwrap(sessionAndContainer?.0)
+      try session.identityService.createNewIdentity()
+      let pubkey = try TestKeyMaterialFactory.makePubkeyHex()
+
+      session.requestRemoteProfilesIfNeeded(pubkeyHexes: [pubkey])
+      XCTAssertEqual(requestedPubkeyBatches, [[pubkey]])
+    }
+
+    sessionAndContainer = nil
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.01))
+
+    XCTAssertNil(weakSession)
+  }
+
   func testUpdateOwnProfileNamePublishesMergedMetadataContentAndPersistsState() async throws {
     var publishedEvent: NostrEvent?
     let (session, container) = try makeSession(
@@ -765,7 +790,7 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
   }
 
   func testPassiveOfflineToastDoesNotLoopAcrossForegroundRelayFlaps() throws {
-    let (session, container) = try makeSession()
+    let (session, container) = try makeSession(passiveOfflineToastGraceInterval: 0.01)
     let relay = RelayEntity(url: "wss://relay.example.com")
     container.mainContext.insert(relay)
     try container.mainContext.save()
@@ -777,6 +802,13 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
       status: .failed,
       message: "relay dropped"
     )
+
+    let firstToastDeadline = Date(timeIntervalSinceNow: 0.2)
+    while session.composeError != "you're offline. waiting for a relay connection.",
+      Date() < firstToastDeadline
+    {
+      RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.01))
+    }
 
     XCTAssertEqual(session.composeError, "you're offline. waiting for a relay connection.")
 
@@ -788,11 +820,16 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
       message: "relay dropped again"
     )
 
+    let secondToastDeadline = Date(timeIntervalSinceNow: 0.2)
+    while session.composeError != nil, Date() < secondToastDeadline {
+      RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.01))
+    }
+
     XCTAssertNil(session.composeError)
   }
 
   func testPassiveOfflineToastRearmsOnNextForegroundCycle() throws {
-    let (session, container) = try makeSession()
+    let (session, container) = try makeSession(passiveOfflineToastGraceInterval: 0.01)
     let relay = RelayEntity(url: "wss://relay.example.com")
     container.mainContext.insert(relay)
     try container.mainContext.save()
@@ -804,6 +841,13 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
       status: .failed,
       message: "relay dropped"
     )
+
+    let firstToastDeadline = Date(timeIntervalSinceNow: 0.2)
+    while session.composeError != "you're offline. waiting for a relay connection.",
+      Date() < firstToastDeadline
+    {
+      RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.01))
+    }
     XCTAssertEqual(session.composeError, "you're offline. waiting for a relay connection.")
 
     session.composeError = nil
@@ -815,7 +859,50 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
       message: "relay dropped after reopen"
     )
 
+    let secondToastDeadline = Date(timeIntervalSinceNow: 0.2)
+    while session.composeError != "you're offline. waiting for a relay connection.",
+      Date() < secondToastDeadline
+    {
+      RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.01))
+    }
+
     XCTAssertEqual(session.composeError, "you're offline. waiting for a relay connection.")
+  }
+
+  func testPassiveOfflineToastWaitsThroughInitialForegroundReconnectGrace() throws {
+    let (session, container) = try makeSession(passiveOfflineToastGraceInterval: 0.05)
+    let relay = RelayEntity(url: "wss://relay.example.com")
+    container.mainContext.insert(relay)
+    try container.mainContext.save()
+
+    session.beginForegroundRelayCycleForTesting()
+    session.simulateRuntimeRelayStatusForTesting(relayURL: relay.url, status: .connected)
+    session.simulateRuntimeRelayStatusForTesting(
+      relayURL: relay.url,
+      status: .failed,
+      message: "relay dropped during reconnect"
+    )
+
+    XCTAssertNil(session.composeError)
+
+    let toastDeadline = Date(timeIntervalSinceNow: 0.2)
+    while session.composeError != "you're offline. waiting for a relay connection.",
+      Date() < toastDeadline
+    {
+      RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.01))
+    }
+
+    XCTAssertEqual(session.composeError, "you're offline. waiting for a relay connection.")
+  }
+
+  func testForegroundRelayCycleClearsStaleOfflineToast() throws {
+    let (session, _) = try makeSession(passiveOfflineToastGraceInterval: 0.01)
+
+    session.composeError = "you're offline. waiting for a relay connection."
+
+    session.beginForegroundRelayCycleForTesting()
+
+    XCTAssertNil(session.composeError)
   }
 }
 

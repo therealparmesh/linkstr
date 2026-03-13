@@ -102,6 +102,7 @@ final class AppSession: ObservableObject {
   struct TestingOverrides {
     var disableNostrStartup: Bool?
     var hasConnectedRelays: (() -> Bool)?
+    var passiveOfflineToastGraceInterval: TimeInterval?
     var loadIdentity: ((IdentityService) -> IdentityService.LoadResult)?
     var identityRetryDelayNanoseconds: UInt64?
     var skipDefaultRelaySetup = false
@@ -161,9 +162,11 @@ final class AppSession: ObservableObject {
   @Published private var relayRuntimeStatusByURL: [String: RelayRuntimeStatus] = [:]
   private var pendingRelayPersistenceByURL: [String: PendingRelayPersistenceState] = [:]
   private var relayPersistenceFlushTask: Task<Void, Never>?
+  private var pendingOfflineToastTask: Task<Void, Never>?
   private let relayPersistenceDebounceNanoseconds: UInt64 = 250_000_000
   private let remoteProfileLookupRetryNanoseconds: UInt64 = 3_000_000_000
   private var hasObservedHealthyRelayInCurrentForeground = false
+  private let passiveOfflineToastGraceInterval: TimeInterval = 1.25
   private let relayDisconnectGraceInterval: TimeInterval = 1.25
   private let foregroundRelayRestartCooldown: TimeInterval = 8
   private let identityRetryDelayNanoseconds: UInt64 = 250_000_000
@@ -172,6 +175,7 @@ final class AppSession: ObservableObject {
   private let activeIdentityRetryAttempts = 2
   private let protectedDataIdentityRetryAttempts = 4
   private var lastForegroundRelayRestartAt: Date?
+  private var passiveOfflineToastGraceUntil: Date?
   private var latestAppliedFollowListCreatedAt: Date?
   private var latestAppliedFollowListEventID: String?
   private var latestAppliedProfileMetadataCreatedAt: Date?
@@ -278,6 +282,8 @@ final class AppSession: ObservableObject {
     isForeground = false
     hasObservedHealthyRelayInCurrentForeground = false
     lastForegroundRelayRestartAt = nil
+    passiveOfflineToastGraceUntil = nil
+    cancelPendingOfflineToastIfNeeded()
     flushRelayPersistenceNow()
   }
 
@@ -315,12 +321,39 @@ final class AppSession: ObservableObject {
     }
   }
 
+  private func cancelPendingOfflineToastIfNeeded() {
+    pendingOfflineToastTask?.cancel()
+    pendingOfflineToastTask = nil
+  }
+
   private func showOfflineToastForCurrentOutageIfNeeded() {
-    // Don't warn while startup/reconnect is still in the initial connection phase.
     guard hasObservedHealthyRelayInCurrentForeground else { return }
     guard !hasShownOfflineToastForCurrentOutage else { return }
+    let now = Date.now
+    if let passiveOfflineToastGraceUntil, now < passiveOfflineToastGraceUntil {
+      scheduleOfflineToastReevaluation(at: passiveOfflineToastGraceUntil)
+      return
+    }
+    cancelPendingOfflineToastIfNeeded()
     composeError = relayOfflineMessage
     hasShownOfflineToastForCurrentOutage = true
+  }
+
+  private func scheduleOfflineToastReevaluation(at deadline: Date) {
+    guard pendingOfflineToastTask == nil else { return }
+    let delay = max(0, deadline.timeIntervalSinceNow)
+    pendingOfflineToastTask = Task { [weak self] in
+      if delay > 0 {
+        try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+      }
+      guard !Task.isCancelled else { return }
+      await MainActor.run { [weak self] in
+        guard let self else { return }
+        defer { self.pendingOfflineToastTask = nil }
+        guard self.isForeground else { return }
+        try? self.refreshRelayConnectivityAlert()
+      }
+    }
   }
 
   private func clearRelaySendBlockingErrorIfPresent() {
@@ -576,6 +609,11 @@ final class AppSession: ObservableObject {
     hasObservedHealthyRelayInCurrentForeground = false
     hasShownOfflineToastForCurrentOutage = false
     lastForegroundRelayRestartAt = nil
+    clearOfflineToastIfPresent()
+    passiveOfflineToastGraceUntil = Date.now.addingTimeInterval(
+      testingOverrides.passiveOfflineToastGraceInterval ?? passiveOfflineToastGraceInterval
+    )
+    cancelPendingOfflineToastIfNeeded()
   }
 
   private func scheduleIdentityLoadAndNostrRestart(maxAttempts: Int) {
@@ -610,12 +648,15 @@ final class AppSession: ObservableObject {
 
   private func scheduleRelayPersistenceFlushIfNeeded() {
     guard relayPersistenceFlushTask == nil else { return }
-    relayPersistenceFlushTask = Task { @MainActor [weak self] in
-      guard let self else { return }
-      defer { self.relayPersistenceFlushTask = nil }
-      try? await Task.sleep(nanoseconds: self.relayPersistenceDebounceNanoseconds)
+    let debounceNanoseconds = relayPersistenceDebounceNanoseconds
+    relayPersistenceFlushTask = Task { [weak self] in
+      try? await Task.sleep(nanoseconds: debounceNanoseconds)
       guard !Task.isCancelled else { return }
-      self.flushRelayPersistenceNow()
+      await MainActor.run { [weak self] in
+        guard let self else { return }
+        defer { self.relayPersistenceFlushTask = nil }
+        self.flushRelayPersistenceNow()
+      }
     }
   }
 
@@ -669,12 +710,15 @@ final class AppSession: ObservableObject {
     let enabledRelays = try relayStore.fetchRelays().filter(\.isEnabled)
     switch relayConnectivityState(for: enabledRelays) {
     case .online, .readOnly:
+      cancelPendingOfflineToastIfNeeded()
       clearOfflineToastIfPresent()
     case .connecting:
+      cancelPendingOfflineToastIfNeeded()
       return
     case .offline:
       showOfflineToastForCurrentOutageIfNeeded()
     case .noEnabledRelays:
+      cancelPendingOfflineToastIfNeeded()
       return
     }
   }
@@ -1216,6 +1260,7 @@ final class AppSession: ObservableObject {
   private func resetRuntimeSessionState() {
     relayPersistenceFlushTask?.cancel()
     relayPersistenceFlushTask = nil
+    cancelPendingOfflineToastIfNeeded()
     pendingRelayPersistenceByURL.removeAll()
     nostrService.stop()
     pendingIncomingMessages.removeAll()
@@ -1229,6 +1274,7 @@ final class AppSession: ObservableObject {
     activeMetadataRefreshStorageID = nil
     metadataRefreshQueueGeneration = 0
     relayRuntimeStatusByURL.removeAll()
+    passiveOfflineToastGraceUntil = nil
     pendingSessionNavigationID = nil
     pendingCreatedAccountNsec = nil
   }
@@ -3394,11 +3440,14 @@ final class AppSession: ObservableObject {
     let normalizedPubkeys = NostrValueNormalizer.dedupedNormalizedPubkeyHexes(pubkeyHexes)
     guard !normalizedPubkeys.isEmpty else { return }
     inFlightRemoteProfilePubkeys.formUnion(normalizedPubkeys)
-    Task { @MainActor [weak self] in
-      guard let self else { return }
-      try? await Task.sleep(nanoseconds: self.remoteProfileLookupRetryNanoseconds)
+    let retryDelayNanoseconds = remoteProfileLookupRetryNanoseconds
+    Task { [weak self, normalizedPubkeys] in
+      try? await Task.sleep(nanoseconds: retryDelayNanoseconds)
       guard !Task.isCancelled else { return }
-      self.inFlightRemoteProfilePubkeys.subtract(normalizedPubkeys)
+      await MainActor.run { [weak self, normalizedPubkeys] in
+        guard let self else { return }
+        self.inFlightRemoteProfilePubkeys.subtract(normalizedPubkeys)
+      }
     }
   }
 

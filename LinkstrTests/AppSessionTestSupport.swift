@@ -93,6 +93,7 @@ class AppSessionTestCase: XCTestCase {
   func makeSession(
     disableNostrStartup: Bool? = nil,
     hasConnectedRelays: (() -> Bool)? = nil,
+    passiveOfflineToastGraceInterval: TimeInterval? = nil,
     loadIdentity: ((IdentityService) -> IdentityService.LoadResult)? = nil,
     identityRetryDelayNanoseconds: UInt64? = nil,
     skipDefaultRelaySetup: Bool = false,
@@ -113,6 +114,7 @@ class AppSessionTestCase: XCTestCase {
     var testingOverrides = AppSession.TestingOverrides()
     testingOverrides.disableNostrStartup = disableNostrStartup
     testingOverrides.hasConnectedRelays = hasConnectedRelays
+    testingOverrides.passiveOfflineToastGraceInterval = passiveOfflineToastGraceInterval
     testingOverrides.loadIdentity = loadIdentity
     testingOverrides.identityRetryDelayNanoseconds = identityRetryDelayNanoseconds
     testingOverrides.skipDefaultRelaySetup = skipDefaultRelaySetup
