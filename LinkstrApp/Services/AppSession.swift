@@ -2815,6 +2815,9 @@ final class AppSession: ObservableObject {
           source: source
         )
       else {
+        if source == .live, session.membershipStateUpdatedAt.map({ $0 <= timestamp }) != false {
+          return .pending
+        }
         return .ignored
       }
       return .ready(session)

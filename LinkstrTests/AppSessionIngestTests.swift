@@ -158,6 +158,85 @@ final class AppSessionIngestTests: AppSessionTestCase {
     )
   }
 
+  func testLiveRootAfterReaddWaitsForOutOfOrderMembershipSnapshot() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let creatorPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-live-readd-ordering"
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-create-live-readd-ordering",
+        senderPubkey: creatorPubkey,
+        createdAt: Date(timeIntervalSince1970: 1000),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-create",
+          kind: .sessionCreate,
+          url: nil,
+          note: nil,
+          timestamp: 1000,
+          sessionName: "Live Readd Ordering",
+          memberPubkeys: [creatorPubkey, myPubkey, peerPubkey]
+        )
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-members-remove-live-readd-ordering",
+        senderPubkey: creatorPubkey,
+        createdAt: Date(timeIntervalSince1970: 1010),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-remove",
+          kind: .sessionMembers,
+          url: nil,
+          note: nil,
+          timestamp: 1010,
+          memberPubkeys: [creatorPubkey, peerPubkey]
+        )
+      ))
+
+    let readdDate = Date(timeIntervalSince1970: 1020)
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "root-after-readd-before-membership-update",
+        senderPubkey: peerPubkey,
+        createdAt: readdDate,
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "root-after-readd-before-membership-update",
+          kind: .root,
+          url: "https://example.com/root-after-readd-before-membership-update",
+          note: nil,
+          timestamp: 1020
+        )
+      ))
+
+    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-members-readd-live-readd-ordering",
+        senderPubkey: creatorPubkey,
+        createdAt: readdDate,
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-readd",
+          kind: .sessionMembers,
+          url: nil,
+          note: nil,
+          timestamp: 1020,
+          memberPubkeys: [creatorPubkey, myPubkey, peerPubkey]
+        )
+      ))
+
+    let messages = try fetchMessages(in: container.mainContext)
+    XCTAssertEqual(messages.map(\.eventID), ["root-after-readd-before-membership-update"])
+  }
+
   func testIngestIgnoresBackdatedRootFromCurrentlyInactiveMember() throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
