@@ -667,6 +667,36 @@ final class AppSessionMutationTests: AppSessionTestCase {
     XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
   }
 
+  func testIsCurrentUserActiveMemberReflectsCurrentSessionMembership() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let activeSession = try insertSessionFixture(
+      in: container.mainContext,
+      ownerPubkey: myPubkey,
+      createdByPubkey: myPubkey,
+      memberPubkeys: [myPubkey, peerPubkey],
+      sessionID: "session-active-membership-helper"
+    )
+    let removedSession = try insertSessionFixture(
+      in: container.mainContext,
+      ownerPubkey: myPubkey,
+      createdByPubkey: peerPubkey,
+      memberPubkeys: [peerPubkey],
+      sessionID: "session-removed-membership-helper"
+    )
+
+    XCTAssertTrue(session.isCurrentUserActiveMember(of: activeSession))
+    XCTAssertFalse(session.isCurrentUserActiveMember(of: removedSession))
+    XCTAssertFalse(
+      session.isCurrentUserActiveMember(
+        sessionID: removedSession.sessionID,
+        ownerPubkey: removedSession.ownerPubkey
+      )
+    )
+  }
+
   func testToggleReactionAwaitingRelayRequiresActiveSessionMembership() async throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()

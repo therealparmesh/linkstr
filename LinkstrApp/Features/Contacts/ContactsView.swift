@@ -295,6 +295,11 @@ private struct EditContactView: View {
 }
 
 struct AddContactSheet: View {
+  private enum Field: Hashable {
+    case npub
+    case alias
+  }
+
   @Environment(\.dismiss) private var dismiss
   @EnvironmentObject private var session: AppSession
 
@@ -303,6 +308,7 @@ struct AddContactSheet: View {
   @State private var isSubmitting = false
   @State private var isPresentingScanner = false
   @State private var scannerErrorMessage: String?
+  @FocusState private var focusedField: Field?
   private let isNPubPrefilled: Bool
 
   init(prefilledNPub: String? = nil) {
@@ -321,6 +327,7 @@ struct AddContactSheet: View {
                 .font(LinkstrTheme.body(15))
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled(true)
+                .focused($focusedField, equals: .npub)
                 .disabled(isSubmitting || isNPubPrefilled)
                 .linkstrInputField()
 
@@ -368,13 +375,18 @@ struct AddContactSheet: View {
               TextField("alias", text: $alias)
                 .font(LinkstrTheme.body(15))
                 .textInputAutocapitalization(.words)
+                .focused($focusedField, equals: .alias)
                 .disabled(isSubmitting)
                 .linkstrInputField()
             }
           }
           .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
           .padding(.top, LinkstrTheme.screenTopPadding)
-          .padding(.bottom, LinkstrTheme.sheetBottomPadding)
+          .padding(
+            .bottom,
+            isKeyboardPresented ? LinkstrTheme.screenBottomPadding : LinkstrTheme.sheetBottomPadding
+          )
+          .scrollDismissesKeyboard(.interactively)
         }
       }
       .task(id: previewLookupRequestID) {
@@ -396,16 +408,29 @@ struct AddContactSheet: View {
           .tint(LinkstrTheme.textSecondary)
           .disabled(isSubmitting)
         }
+
+        if isKeyboardPresented {
+          ToolbarItemGroup(placement: .keyboard) {
+            Spacer()
+
+            Button(isSubmitting ? "adding contact..." : "add contact") {
+              submitFollow()
+            }
+            .disabled(!canSubmit)
+          }
+        }
       }
       .safeAreaInset(edge: .bottom, spacing: 0) {
-        LinkstrSheetActionFooter(
-          title: isSubmitting ? "adding contact..." : "add contact",
-          systemImage: "person.crop.circle.badge.plus",
-          isDisabled: !canSubmit,
-          message: footerMessage,
-          messageColor: footerMessageColor,
-          action: submitFollow
-        )
+        if !isKeyboardPresented {
+          LinkstrSheetActionFooter(
+            title: isSubmitting ? "adding contact..." : "add contact",
+            systemImage: "person.crop.circle.badge.plus",
+            isDisabled: !canSubmit,
+            message: footerMessage,
+            messageColor: footerMessageColor,
+            action: submitFollow
+          )
+        }
       }
       .sheet(isPresented: $isPresentingScanner) {
         LinkstrQRScannerSheet { scannedValue in
@@ -426,6 +451,10 @@ struct AddContactSheet: View {
 
   private var canSubmit: Bool {
     !isSubmitting && previewPubkeyHex != nil
+  }
+
+  private var isKeyboardPresented: Bool {
+    focusedField != nil
   }
 
   private var footerMessage: String {

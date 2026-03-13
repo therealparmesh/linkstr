@@ -6,6 +6,11 @@ import SwiftUI
 #endif
 
 struct NewPostSheet: View {
+  private enum Field: Hashable {
+    case url
+    case note
+  }
+
   @Environment(\.dismiss) private var dismiss
   @EnvironmentObject private var session: AppSession
 
@@ -14,7 +19,7 @@ struct NewPostSheet: View {
   @State private var url = ""
   @State private var note = ""
   @State private var isSending = false
-  @FocusState private var isURLFieldFocused: Bool
+  @FocusState private var focusedField: Field?
 
   var body: some View {
     NavigationStack {
@@ -29,6 +34,36 @@ struct NewPostSheet: View {
                 .linkstrInputField()
             }
 
+            if !canCreatePostInSession {
+              HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "person.crop.circle.badge.xmark")
+                  .font(LinkstrTheme.system(14, weight: .semibold))
+                  .foregroundStyle(LinkstrTheme.textSecondary)
+
+                Text("you're no longer a member. this session is read-only.")
+                  .font(LinkstrTheme.body(12))
+                  .foregroundStyle(LinkstrTheme.textSecondary)
+                  .fixedSize(horizontal: false, vertical: true)
+              }
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .padding(.horizontal, LinkstrTheme.fieldHorizontalPadding)
+              .padding(.vertical, 10)
+              .background(
+                RoundedRectangle(
+                  cornerRadius: LinkstrTheme.fieldCornerRadius,
+                  style: .continuous
+                )
+                .fill(LinkstrTheme.panelMuted)
+              )
+              .overlay {
+                RoundedRectangle(
+                  cornerRadius: LinkstrTheme.fieldCornerRadius,
+                  style: .continuous
+                )
+                .stroke(LinkstrTheme.separator.opacity(1.4), lineWidth: 1)
+              }
+            }
+
             LinkstrInsetSection(title: "link") {
               TextField("https://...", text: $url)
                 .font(LinkstrTheme.body(14))
@@ -36,7 +71,7 @@ struct NewPostSheet: View {
                 .keyboardType(.URL)
                 .autocorrectionDisabled(true)
                 .disabled(isSending)
-                .focused($isURLFieldFocused)
+                .focused($focusedField, equals: .url)
                 .lineLimit(1)
                 .linkstrInputField()
 
@@ -73,6 +108,7 @@ struct NewPostSheet: View {
                   .scrollContentBackground(.hidden)
                   .frame(minHeight: 112, maxHeight: 180)
                   .padding(4)
+                  .focused($focusedField, equals: .note)
                   .disabled(isSending)
               }
               .linkstrFieldChrome()
@@ -81,7 +117,11 @@ struct NewPostSheet: View {
         }
         .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
         .padding(.top, LinkstrTheme.screenTopPadding)
-        .padding(.bottom, LinkstrTheme.sheetBottomPadding)
+        .padding(
+          .bottom,
+          isKeyboardPresented ? LinkstrTheme.screenBottomPadding : LinkstrTheme.sheetBottomPadding
+        )
+        .scrollDismissesKeyboard(.interactively)
       }
       .navigationTitle("new post")
       .navigationBarTitleDisplayMode(.inline)
@@ -98,20 +138,33 @@ struct NewPostSheet: View {
           .tint(LinkstrTheme.textSecondary)
           .disabled(isSending)
         }
+
+        if isKeyboardPresented {
+          ToolbarItemGroup(placement: .keyboard) {
+            Spacer()
+
+            Button(isSending ? "sending..." : "send post") {
+              sendPost()
+            }
+            .disabled(!canSend)
+          }
+        }
       }
       .safeAreaInset(edge: .bottom, spacing: 0) {
-        LinkstrSheetActionFooter(
-          title: isSending ? "sending..." : "send post",
-          systemImage: "paperplane.fill",
-          isDisabled: !canSend,
-          message: isSending
-            ? "waiting for relay reconnect before sending..."
-            : (urlValidationHint ?? ""),
-          action: sendPost
-        )
+        if !isKeyboardPresented {
+          LinkstrSheetActionFooter(
+            title: isSending ? "sending..." : "send post",
+            systemImage: "paperplane.fill",
+            isDisabled: !canSend,
+            message: isSending
+              ? "waiting for relay reconnect before sending..."
+              : footerMessage,
+            action: sendPost
+          )
+        }
       }
-      .onChange(of: isURLFieldFocused) { _, isFocused in
-        guard isFocused else { return }
+      .onChange(of: focusedField) { _, focusedField in
+        guard focusedField == .url else { return }
         let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
           url = "https://"
@@ -124,8 +177,16 @@ struct NewPostSheet: View {
     LinkstrURLValidator.normalizedWebURL(from: url)
   }
 
+  private var isKeyboardPresented: Bool {
+    focusedField != nil
+  }
+
+  private var canCreatePostInSession: Bool {
+    session.isCurrentUserActiveMember(of: sessionEntity)
+  }
+
   private var canSend: Bool {
-    !isSending && normalizedURL != nil
+    !isSending && canCreatePostInSession && normalizedURL != nil
   }
 
   private var urlValidationHint: String? {
@@ -134,7 +195,15 @@ struct NewPostSheet: View {
     return normalizedURL == nil ? "enter a valid link." : nil
   }
 
+  private var footerMessage: String {
+    if !canCreatePostInSession {
+      return "you're no longer a member of this session."
+    }
+    return urlValidationHint ?? ""
+  }
+
   private func sendPost() {
+    guard canCreatePostInSession else { return }
     guard let normalizedURL else { return }
     guard !isSending else { return }
 

@@ -370,6 +370,32 @@ final class AppSession: ObservableObject {
     return session.createdByPubkey == myPubkey
   }
 
+  func isCurrentUserActiveMember(of session: SessionEntity, at timestamp: Date = .now) -> Bool {
+    isCurrentUserActiveMember(
+      sessionID: session.sessionID,
+      ownerPubkey: session.ownerPubkey,
+      at: timestamp
+    )
+  }
+
+  func isCurrentUserActiveMember(
+    sessionID: String,
+    ownerPubkey: String,
+    at timestamp: Date = .now
+  ) -> Bool {
+    guard let myPubkey = identityService.pubkeyHex else { return false }
+    do {
+      return try messageStore.isMemberActive(
+        sessionID: sessionID,
+        ownerPubkey: ownerPubkey,
+        memberPubkey: myPubkey,
+        at: timestamp
+      )
+    } catch {
+      return false
+    }
+  }
+
   func clearProfileNameError() {
     profileNameErrorMessage = nil
   }

@@ -144,6 +144,8 @@ Adding someone sends a new session snapshot with the full member list. That pers
 
 Removing someone sends another full snapshot. They stop receiving future posts and reactions, but anything they already received remains theirs.
 
+If you are removed on this device, linkstr keeps the session as local history. The session becomes read-only, so you can still view prior posts and reactions but not send new ones.
+
 **Why can't I send a post or reaction?**
 
 Most send failures come down to one of these:

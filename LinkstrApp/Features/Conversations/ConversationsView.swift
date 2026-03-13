@@ -330,6 +330,10 @@ struct SessionPostsView: View {
     session.canManageMembers(for: sessionEntity)
   }
 
+  private var canCreatePosts: Bool {
+    session.isCurrentUserActiveMember(of: sessionEntity)
+  }
+
   private var posts: [SessionMessageEntity] {
     scopedMessages
       .filter { $0.conversationID == sessionEntity.sessionID && $0.kind == .root }
@@ -431,11 +435,43 @@ struct SessionPostsView: View {
             .foregroundStyle(LinkstrTheme.textTertiary)
         }
 
+        if !canCreatePosts {
+          HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "person.crop.circle.badge.xmark")
+              .font(LinkstrTheme.system(14, weight: .semibold))
+              .foregroundStyle(LinkstrTheme.textSecondary)
+
+            Text("you're no longer a member. this session is read-only.")
+              .font(LinkstrTheme.body(12))
+              .foregroundStyle(LinkstrTheme.textSecondary)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .padding(.horizontal, LinkstrTheme.fieldHorizontalPadding)
+          .padding(.vertical, 10)
+          .background(
+            RoundedRectangle(
+              cornerRadius: LinkstrTheme.fieldCornerRadius,
+              style: .continuous
+            )
+            .fill(LinkstrTheme.panelMuted)
+          )
+          .overlay {
+            RoundedRectangle(
+              cornerRadius: LinkstrTheme.fieldCornerRadius,
+              style: .continuous
+            )
+            .stroke(LinkstrTheme.separator.opacity(1.4), lineWidth: 1)
+          }
+        }
+
         if timelineRows.isEmpty {
           LinkstrCenteredEmptyStateView(
             title: "no posts yet",
             systemImage: "link.badge.plus",
-            description: "send a link to this session."
+            description: canCreatePosts
+              ? "send a link to this session."
+              : "you're no longer a member of this session."
           )
           .frame(maxWidth: .infinity, minHeight: 260)
         } else {
@@ -467,14 +503,16 @@ struct SessionPostsView: View {
         .accessibilityLabel(canManageMembers ? "manage members" : "members")
         .tint(LinkstrTheme.accent)
 
-        Button {
-          isPresentingNewPost = true
-        } label: {
-          Image(systemName: "square.and.pencil")
-            .linkstrToolbarIconLabel()
+        if canCreatePosts {
+          Button {
+            isPresentingNewPost = true
+          } label: {
+            Image(systemName: "square.and.pencil")
+              .linkstrToolbarIconLabel()
+          }
+          .accessibilityLabel("new post")
+          .tint(LinkstrTheme.accent)
         }
-        .accessibilityLabel("new post")
-        .tint(LinkstrTheme.accent)
       }
     }
     .sheet(isPresented: $isPresentingNewPost) {
@@ -914,6 +952,11 @@ enum SessionMembershipTimelineBuilder {
 }
 
 struct NewSessionSheet: View {
+  private enum Field: Hashable {
+    case sessionName
+    case search
+  }
+
   @Environment(\.dismiss) private var dismiss
   @EnvironmentObject private var session: AppSession
 
@@ -923,6 +966,7 @@ struct NewSessionSheet: View {
   @State private var query = ""
   @State private var selectedNPubs = Set<String>()
   @State private var isCreating = false
+  @FocusState private var focusedField: Field?
 
   private var canCreateSession: Bool {
     !sessionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -945,6 +989,7 @@ struct NewSessionSheet: View {
             LinkstrInsetSection(title: "session details") {
               TextField("session name", text: $sessionName)
                 .font(LinkstrTheme.body(15))
+                .focused($focusedField, equals: .sessionName)
                 .textInputAutocapitalization(.words)
                 .linkstrInputField()
             }
@@ -954,6 +999,7 @@ struct NewSessionSheet: View {
               accessory: "\(selectedNPubs.count + 1)"
             ) {
               LinkstrSearchField(prompt: "search contacts", text: $query)
+                .focused($focusedField, equals: .search)
 
               if contacts.isEmpty {
                 Text("no contacts yet. solo still works.")
@@ -1004,7 +1050,11 @@ struct NewSessionSheet: View {
           }
           .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
           .padding(.top, LinkstrTheme.screenTopPadding)
-          .padding(.bottom, LinkstrTheme.sheetBottomPadding)
+          .padding(
+            .bottom,
+            isKeyboardPresented ? LinkstrTheme.screenBottomPadding : LinkstrTheme.sheetBottomPadding
+          )
+          .scrollDismissesKeyboard(.interactively)
         }
       }
       .navigationTitle("new session")
@@ -1022,22 +1072,39 @@ struct NewSessionSheet: View {
           .tint(LinkstrTheme.textSecondary)
           .disabled(isCreating)
         }
+
+        if isKeyboardPresented {
+          ToolbarItemGroup(placement: .keyboard) {
+            Spacer()
+
+            Button(isCreating ? "creating..." : "create session") {
+              createSession()
+            }
+            .disabled(isCreating || !canCreateSession)
+          }
+        }
       }
       .safeAreaInset(edge: .bottom, spacing: 0) {
-        LinkstrSheetActionFooter(
-          title: isCreating ? "creating..." : "create session",
-          systemImage: "plus.circle.fill",
-          isDisabled: isCreating || !canCreateSession,
-          message: isCreating
-            ? "waiting for relay reconnect before creating..."
-            : "session name required.",
-          action: createSession
-        )
+        if !isKeyboardPresented {
+          LinkstrSheetActionFooter(
+            title: isCreating ? "creating..." : "create session",
+            systemImage: "plus.circle.fill",
+            isDisabled: isCreating || !canCreateSession,
+            message: isCreating
+              ? "waiting for relay reconnect before creating..."
+              : "session name required.",
+            action: createSession
+          )
+        }
       }
       .task(id: profileLookupRequestID) {
         session.requestRemoteProfilesIfNeeded(pubkeyHexes: profileLookupPubkeys)
       }
     }
+  }
+
+  private var isKeyboardPresented: Bool {
+    focusedField != nil
   }
 
   private var filteredContacts: [ContactEntity] {

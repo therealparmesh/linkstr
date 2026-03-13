@@ -370,6 +370,13 @@ struct PostDetailView: View {
     profileLookupPubkeys.sorted().joined(separator: ",")
   }
 
+  private var canReactToPost: Bool {
+    session.isCurrentUserActiveMember(
+      sessionID: post.conversationID,
+      ownerPubkey: post.ownerPubkey
+    )
+  }
+
   private var shareDeepLinkURL: URL? {
     LinkstrDeepLinkCodec.makeAppDeepLink(
       url: post.url,
@@ -468,15 +475,24 @@ struct PostDetailView: View {
 
       mediaBlock
 
+      if !canReactToPost {
+        Text("you're no longer a member of this session. reactions are read-only.")
+          .font(LinkstrTheme.body(12))
+          .foregroundStyle(LinkstrTheme.textSecondary)
+          .frame(maxWidth: .infinity, alignment: .leading)
+      }
+
       LinkstrReactionRow(
         summaries: reactionSummaries,
-        mode: .interactive,
-        onToggleEmoji: { emoji in
-          toggleReaction(emoji)
-        },
-        onAddReaction: {
-          isPresentingEmojiPicker = true
-        }
+        mode: canReactToPost ? .interactive : .readOnly,
+        onToggleEmoji: canReactToPost
+          ? { emoji in
+            toggleReaction(emoji)
+          } : nil,
+        onAddReaction: canReactToPost
+          ? {
+            isPresentingEmojiPicker = true
+          } : nil
       )
 
       if !reactionBreakdown.isEmpty {
