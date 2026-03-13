@@ -332,13 +332,6 @@ final class AppSession: ObservableObject {
     }
   }
 
-  private func hasConnectedRelays() -> Bool {
-    if let hasConnectedRelaysOverride = testingOverrides.hasConnectedRelays {
-      return hasConnectedRelaysOverride()
-    }
-    return nostrService.hasConnectedRelays()
-  }
-
   func relayStatus(for relay: RelayEntity) -> RelayHealthStatus {
     if relay.isEnabled == false {
       return .disconnected
@@ -717,10 +710,6 @@ final class AppSession: ObservableObject {
       return .ready
     }
 
-    if hasConnectedRelays() {
-      return .ready
-    }
-
     let enabledRelays: [RelayEntity]
     do {
       enabledRelays = try relayStore.fetchRelays().filter(\.isEnabled)
@@ -730,10 +719,22 @@ final class AppSession: ObservableObject {
 
     switch relayConnectivityState(for: enabledRelays) {
     case .noEnabledRelays:
+      if let hasConnectedRelaysOverride = testingOverrides.hasConnectedRelays,
+        hasConnectedRelaysOverride()
+      {
+        return .ready
+      }
       return .blocked(message: noEnabledRelaysMessage)
     case .readOnly:
       return .blocked(message: relayReadOnlyMessage)
-    case .online, .connecting, .offline:
+    case .online:
+      return .ready
+    case .connecting, .offline:
+      if let hasConnectedRelaysOverride = testingOverrides.hasConnectedRelays,
+        hasConnectedRelaysOverride()
+      {
+        return .ready
+      }
       return .waitingForConnection
     }
   }

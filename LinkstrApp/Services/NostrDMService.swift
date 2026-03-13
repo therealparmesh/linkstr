@@ -96,14 +96,6 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
   // App-specific rumor kind carried inside NIP-59 gift wrap events.
   private let linkstrRumorKind = EventKind.unknown(44_001)
 
-  func hasConnectedRelays() -> Bool {
-    guard let relayPool else { return false }
-    return relayPool.relays.contains { relay in
-      if case .connected = relay.state { return true }
-      return false
-    }
-  }
-
   func isConfigured(
     for keypair: Keypair,
     relayURLs: [String]

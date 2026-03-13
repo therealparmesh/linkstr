@@ -122,6 +122,40 @@ final class AppSessionMutationTests: AppSessionTestCase {
     XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
   }
 
+  func testCreateSessionPostAwaitingRelayWithLiveReadOnlyRelaysStillBlocksSend() async throws {
+    let (session, container) = try makeSession(
+      disableNostrStartup: false,
+      hasConnectedRelays: { true }
+    )
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionEntity = try insertSessionFixture(
+      in: container.mainContext,
+      ownerPubkey: myPubkey,
+      createdByPubkey: myPubkey,
+      memberPubkeys: [myPubkey, peerPubkey]
+    )
+
+    container.mainContext.insert(RelayEntity(url: "wss://relay.example.com", status: .readOnly))
+    try container.mainContext.save()
+
+    let didCreate = await session.createSessionPostAwaitingRelay(
+      url: "https://example.com/path",
+      note: nil,
+      session: sessionEntity,
+      timeoutSeconds: shortRelayMutationTimeoutSeconds,
+      pollIntervalSeconds: shortRelayMutationPollIntervalSeconds
+    )
+
+    XCTAssertFalse(didCreate)
+    XCTAssertEqual(
+      session.composeError,
+      "connected relays are read-only. add a writable relay to send."
+    )
+    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
+  }
+
   func testCreateSessionPostAwaitingRelayWithNoEnabledRelaysShowsNoEnabledRelaysMessage()
     async throws
   {
