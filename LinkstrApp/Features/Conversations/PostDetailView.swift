@@ -376,7 +376,7 @@ struct PostDetailView: View {
         postCardContent
       }
       .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-      .padding(.top, LinkstrTheme.screenTopPadding)
+      .padding(.top, LinkstrTheme.compactSpacing)
       .padding(.bottom, LinkstrTheme.screenBottomPadding)
     }
     .linkstrTabBarContentInset()
@@ -389,6 +389,7 @@ struct PostDetailView: View {
     .linkstrBarChrome()
     .task {
       session.markRootPostRead(postID: post.rootID)
+      session.refreshMetadataForVisiblePostIfNeeded(post)
     }
     .task(id: remotePostTextRequestID) {
       remotePostText = await resolvedRemotePostText()
@@ -411,12 +412,6 @@ struct PostDetailView: View {
           .foregroundStyle(LinkstrTheme.textTertiary)
       }
 
-      if let title = post.metadataTitle, !title.isEmpty {
-        Text(title)
-          .font(LinkstrTheme.title(22, weight: .bold))
-          .foregroundStyle(LinkstrTheme.textPrimary)
-      }
-
       if let url = post.url {
         Text(url)
           .font(LinkstrTheme.body(13))
@@ -433,7 +428,13 @@ struct PostDetailView: View {
           }
 
           if let remotePostText {
-            accentTextBlock(label: "post text", text: remotePostText)
+            Text(remotePostText)
+              .font(LinkstrTheme.body(13))
+              .foregroundStyle(LinkstrTheme.textSecondary)
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .multilineTextAlignment(.leading)
+              .fixedSize(horizontal: false, vertical: true)
+              .textSelection(.enabled)
           }
         }
       }
@@ -452,11 +453,8 @@ struct PostDetailView: View {
       )
 
       if !reactionBreakdown.isEmpty {
-        VStack(alignment: .leading, spacing: 8) {
-          Text("who reacted")
-            .font(LinkstrTheme.body(11, weight: .medium))
-            .foregroundStyle(LinkstrTheme.textSecondary)
-
+        VStack(alignment: .leading, spacing: 10) {
+          LinkstrListRowDivider(leadingInset: 0)
           VStack(alignment: .leading, spacing: 10) {
             ForEach(reactionBreakdown) { entry in
               HStack(alignment: .center, spacing: 8) {

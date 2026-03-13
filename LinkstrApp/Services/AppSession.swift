@@ -11,6 +11,10 @@ private enum RelayMutationDefaults {
   static let pollIntervalSeconds: TimeInterval = 0.35
 }
 
+private enum MetadataRefreshDefaults {
+  static let backgroundHydrationBatchLimit = 24
+}
+
 @MainActor
 final class AppSession: ObservableObject {
   enum RelayConnectivityState: Equatable {
@@ -2959,7 +2963,7 @@ final class AppSession: ObservableObject {
         if existing.appendPublishedTransportEventIDs(transportEventIDs) {
           try modelContext.save()
         }
-        enqueueMetadataRefresh(for: existing, in: .backgroundHydration)
+        enqueueBackgroundMetadataRefreshIfNeeded(for: existing, source: incoming.source)
         return .applied
       }
 
@@ -2992,7 +2996,7 @@ final class AppSession: ObservableObject {
         publishedTransportEventIDs: transportEventIDs
       )
       try messageStore.insert(message)
-      enqueueMetadataRefresh(for: message, in: .backgroundHydration)
+      enqueueBackgroundMetadataRefreshIfNeeded(for: message, source: incoming.source)
       return .applied
     } catch {
       if let existing = try? messageStore.rootPost(
@@ -3003,7 +3007,7 @@ final class AppSession: ObservableObject {
         if existing.appendPublishedTransportEventIDs(transportEventIDs) {
           try? modelContext.save()
         }
-        enqueueMetadataRefresh(for: existing, in: .backgroundHydration)
+        enqueueBackgroundMetadataRefreshIfNeeded(for: existing, source: incoming.source)
         return .applied
       }
       report(error: error)
@@ -3077,7 +3081,8 @@ final class AppSession: ObservableObject {
     do {
       let roots = try messageStore.rootMessages(ownerPubkey: ownerPubkey)
       let sortedRoots = roots.sorted { $0.timestamp > $1.timestamp }
-      for message in sortedRoots where needsMetadataRefresh(message, in: .backgroundHydration) {
+      for message in sortedRoots.prefix(MetadataRefreshDefaults.backgroundHydrationBatchLimit)
+      where needsMetadataRefresh(message, in: .backgroundHydration) {
         enqueueMetadataRefresh(for: message, in: .backgroundHydration)
       }
     } catch {
@@ -3105,6 +3110,14 @@ final class AppSession: ObservableObject {
 
   func refreshMetadataForVisiblePostIfNeeded(_ message: SessionMessageEntity) {
     enqueueMetadataRefresh(for: message, in: .visibleSession)
+  }
+
+  private func enqueueBackgroundMetadataRefreshIfNeeded(
+    for message: SessionMessageEntity,
+    source: DirectMessageIngestSource
+  ) {
+    guard source == .live else { return }
+    enqueueMetadataRefresh(for: message, in: .backgroundHydration)
   }
 
   private func processMetadataQueueIfNeeded() {
