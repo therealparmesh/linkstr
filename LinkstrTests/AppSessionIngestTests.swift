@@ -325,9 +325,10 @@ final class AppSessionIngestTests: AppSessionTestCase {
     XCTAssertNotNil(message.readAt)
   }
 
-  func testHistoricalReplayAfterInitialRestoreCompletionLeavesInboundRootsUnread() throws {
+  func testHistoricalReplayAfterInitialRestoreCompletionLeavesInboundRootsUnread() async throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
+    session.startNostrIfPossible()
     let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
     let creatorPubkey = try TestKeyMaterialFactory.makePubkeyHex()
     let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
@@ -351,7 +352,8 @@ final class AppSessionIngestTests: AppSessionTestCase {
         source: .historical
       ))
 
-    session.completeInitialHistoricalRestoreForTesting()
+    session.nostrService.simulateInitialBackfillCompletionForTesting()
+    await Task.yield()
 
     session.ingestForTesting(
       makeIncomingMessage(
@@ -372,6 +374,72 @@ final class AppSessionIngestTests: AppSessionTestCase {
     let message = try XCTUnwrap(fetchMessages(in: container.mainContext).first)
     XCTAssertEqual(message.eventID, "root-post-restore-historical-unread")
     XCTAssertNil(message.readAt)
+  }
+
+  func testIngestReactionDoesNotAffectRootReadState() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let creatorPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-reaction-read-state"
+    let rootID = "root-reaction-read-state"
+    let expectedReadAt = Date(timeIntervalSince1970: 1930)
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-create-reaction-read-state",
+        senderPubkey: creatorPubkey,
+        createdAt: Date(timeIntervalSince1970: 1928),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-create",
+          kind: .sessionCreate,
+          url: nil,
+          note: nil,
+          timestamp: 1928,
+          sessionName: "Reaction Read State",
+          memberPubkeys: [creatorPubkey, myPubkey, peerPubkey]
+        )
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: rootID,
+        senderPubkey: peerPubkey,
+        createdAt: Date(timeIntervalSince1970: 1929),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: rootID,
+          kind: .root,
+          url: "https://example.com/reaction-read-state",
+          note: nil,
+          timestamp: 1929
+        )
+      ))
+
+    let root = try XCTUnwrap(fetchMessages(in: container.mainContext).first)
+    root.readAt = expectedReadAt
+    try container.mainContext.save()
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "reaction-read-state",
+        senderPubkey: creatorPubkey,
+        createdAt: Date(timeIntervalSince1970: 1931),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: rootID,
+          kind: .reaction,
+          url: nil,
+          note: nil,
+          timestamp: 1931,
+          emoji: "🔥",
+          reactionActive: true
+        )
+      ))
+
+    XCTAssertEqual(root.readAt, expectedReadAt)
   }
 
   func testLiveIncomingRootDuringInitialHistoricalRestoreStillStartsUnread() throws {

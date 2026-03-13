@@ -1235,7 +1235,12 @@ final class AppSession: ObservableObject {
         keypair: keypair,
         relayURLs: [],
         onIncoming: { _ in },
-        onRelayStatus: { _, _, _ in }
+        onRelayStatus: { _, _, _ in },
+        onInitialBackfillComplete: { [weak self] in
+          Task { @MainActor in
+            self?.finishInitialHistoricalRestore()
+          }
+        }
       )
       return
     }
@@ -1250,7 +1255,12 @@ final class AppSession: ObservableObject {
         keypair: keypair,
         relayURLs: [],
         onIncoming: { _ in },
-        onRelayStatus: { _, _, _ in }
+        onRelayStatus: { _, _, _ in },
+        onInitialBackfillComplete: { [weak self] in
+          Task { @MainActor in
+            self?.finishInitialHistoricalRestore()
+          }
+        }
       )
       return
     }
@@ -2489,10 +2499,6 @@ final class AppSession: ObservableObject {
   #if DEBUG
     func ingestForTesting(_ incoming: ReceivedDirectMessage) {
       persistIncoming(incoming)
-    }
-
-    func completeInitialHistoricalRestoreForTesting() {
-      finishInitialHistoricalRestore()
     }
 
     func enqueuePendingIncomingForTesting(_ incoming: ReceivedDirectMessage) {

@@ -1,5 +1,7 @@
 import NostrSDK
 import SwiftData
+import SwiftUI
+import UIKit
 import XCTest
 
 @testable import Linkstr
@@ -574,6 +576,53 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     XCTAssertNotNil(inboundTargetRoot.readAt)
     XCTAssertNil(outboundTargetRoot.readAt)
     XCTAssertNil(inboundOtherRoot.readAt)
+  }
+
+  func testVisibleSessionPostMarksInboundRootReadOnAppear() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionEntity = try insertSessionFixture(
+      in: container.mainContext,
+      ownerPubkey: myPubkey,
+      createdByPubkey: myPubkey,
+      memberPubkeys: [myPubkey, peerPubkey],
+      sessionID: "session-visible-read"
+    )
+
+    let inboundRoot = makeMessage(
+      eventID: "root-visible-read",
+      conversationID: sessionEntity.sessionID,
+      rootID: "root-visible-read",
+      kind: .root,
+      senderPubkey: peerPubkey,
+      receiverPubkey: myPubkey,
+      ownerPubkey: myPubkey
+    )
+    container.mainContext.insert(inboundRoot)
+    try container.mainContext.save()
+
+    let rootView = NavigationStack {
+      SessionPostsView(sessionEntity: sessionEntity)
+        .environmentObject(session)
+    }
+    .modelContainer(container)
+
+    let hostingController = UIHostingController(rootView: rootView)
+    let window = UIWindow(frame: UIScreen.main.bounds)
+    window.rootViewController = hostingController
+    window.makeKeyAndVisible()
+    let deadline = Date(timeIntervalSinceNow: 1)
+    while inboundRoot.readAt == nil, Date() < deadline {
+      RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.01))
+    }
+
+    XCTAssertNotNil(inboundRoot.readAt)
+
+    window.rootViewController = nil
+    window.isHidden = true
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.01))
   }
 
   func testRelayCRUDFlow() throws {

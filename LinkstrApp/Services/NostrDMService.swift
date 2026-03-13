@@ -207,6 +207,15 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     }
   }
 
+  #if DEBUG
+    func simulateInitialBackfillCompletionForTesting() {
+      activeBackfillStates.removeAll()
+      completedBackfillKinds = [.recipient, .author]
+      didNotifyInitialBackfillCompletion = false
+      notifyInitialBackfillCompletionIfNeeded()
+    }
+  #endif
+
   func stop() {
     shouldMaintainConnection = false
     reconnectTask?.cancel()
