@@ -515,6 +515,9 @@ struct SessionPostsView: View {
     .task(id: profileLookupRequestID) {
       session.requestRemoteProfilesIfNeeded(pubkeyHexes: profileLookupPubkeys)
     }
+    .onDisappear {
+      session.cancelPendingMetadataRefreshesForHiddenSession()
+    }
   }
 
   @ViewBuilder

@@ -117,6 +117,7 @@ final class AppSession: ObservableObject {
     var unregisterPushDevice: ((String) async throws -> Void)?
     var syncArchivedConversationIDs: (([String]) async throws -> Void)?
     var enqueuePushNotification: ((PushEnqueueRequest) async throws -> Void)?
+    var fetchLinkPreview: ((String) async -> LinkPreviewData?)?
   }
 
   private enum MutationPreparationError: Error {
@@ -155,6 +156,8 @@ final class AppSession: ObservableObject {
   private var pendingMetadataRefreshHead = 0
   private var enqueuedMetadataStorageIDs = Set<String>()
   private var isProcessingMetadataQueue = false
+  private var activeMetadataRefreshStorageID: String?
+  private var metadataRefreshQueueGeneration = 0
   @Published private var relayRuntimeStatusByURL: [String: RelayRuntimeStatus] = [:]
   private var pendingRelayPersistenceByURL: [String: PendingRelayPersistenceState] = [:]
   private var relayPersistenceFlushTask: Task<Void, Never>?
@@ -814,6 +817,11 @@ final class AppSession: ObservableObject {
     return isEnvironmentFlagEnabled("LINKSTR_ENABLE_METADATA_IN_TESTS")
   }
 
+  private func shouldFetchLinkMetadataForCurrentProcess() -> Bool {
+    if testingOverrides.fetchLinkPreview != nil { return true }
+    return shouldFetchMetadataForCurrentProcess()
+  }
+
   private func resetPushSyncState() {
     lastRegisteredPushDeviceSignature = nil
     lastArchivedConversationSyncSignature = nil
@@ -1191,6 +1199,8 @@ final class AppSession: ObservableObject {
     pendingMetadataRefreshHead = 0
     enqueuedMetadataStorageIDs.removeAll()
     isProcessingMetadataQueue = false
+    activeMetadataRefreshStorageID = nil
+    metadataRefreshQueueGeneration = 0
     relayRuntimeStatusByURL.removeAll()
     pendingSessionNavigationID = nil
     pendingCreatedAccountNsec = nil
@@ -2530,6 +2540,10 @@ final class AppSession: ObservableObject {
       finishInitialHistoricalRestore()
     }
 
+    var testingPendingMetadataRefreshCount: Int {
+      pendingMetadataRefreshes.count
+    }
+
     func enqueuePendingIncomingForTesting(_ incoming: ReceivedDirectMessage) {
       enqueuePendingIncomingMessage(PendingIncomingMessage(incoming))
     }
@@ -3097,7 +3111,7 @@ final class AppSession: ObservableObject {
   }
 
   private func enqueueMetadataRefresh(for message: SessionMessageEntity) {
-    guard shouldFetchMetadataForCurrentProcess() else { return }
+    guard shouldFetchLinkMetadataForCurrentProcess() else { return }
     guard message.kind == .root else { return }
     guard message.url != nil else { return }
     guard needsMetadataRefresh(message) else { return }
@@ -3113,31 +3127,53 @@ final class AppSession: ObservableObject {
     enqueueMetadataRefresh(for: message)
   }
 
+  func cancelPendingMetadataRefreshesForHiddenSession() {
+    metadataRefreshQueueGeneration += 1
+    pendingMetadataRefreshes.removeAll(keepingCapacity: true)
+    pendingMetadataRefreshHead = 0
+    if let activeMetadataRefreshStorageID {
+      enqueuedMetadataStorageIDs = [activeMetadataRefreshStorageID]
+    } else {
+      enqueuedMetadataStorageIDs.removeAll()
+      isProcessingMetadataQueue = false
+    }
+  }
+
   private func processMetadataQueueIfNeeded() {
     guard !isProcessingMetadataQueue else { return }
     isProcessingMetadataQueue = true
+    let generation = metadataRefreshQueueGeneration
 
     Task { @MainActor in
-      while pendingMetadataRefreshHead < pendingMetadataRefreshes.count {
+      while generation == metadataRefreshQueueGeneration,
+        pendingMetadataRefreshHead < pendingMetadataRefreshes.count
+      {
         let request = pendingMetadataRefreshes[pendingMetadataRefreshHead]
         pendingMetadataRefreshHead += 1
-        defer {
-          enqueuedMetadataStorageIDs.remove(request.storageID)
-        }
+        activeMetadataRefreshStorageID = request.storageID
 
         do {
           guard let message = try messageStore.message(storageID: request.storageID) else {
+            enqueuedMetadataStorageIDs.remove(request.storageID)
+            activeMetadataRefreshStorageID = nil
             continue
           }
           try await refreshMetadata(for: message)
         } catch {
           report(error: error)
         }
+        enqueuedMetadataStorageIDs.remove(request.storageID)
+        activeMetadataRefreshStorageID = nil
       }
 
-      pendingMetadataRefreshes.removeAll(keepingCapacity: true)
-      pendingMetadataRefreshHead = 0
+      if generation == metadataRefreshQueueGeneration {
+        pendingMetadataRefreshes.removeAll(keepingCapacity: true)
+        pendingMetadataRefreshHead = 0
+      }
       isProcessingMetadataQueue = false
+      if generation != metadataRefreshQueueGeneration, !pendingMetadataRefreshes.isEmpty {
+        processMetadataQueueIfNeeded()
+      }
     }
   }
 
@@ -3145,7 +3181,12 @@ final class AppSession: ObservableObject {
     guard let url = message.url else { return }
     guard needsMetadataRefresh(message) else { return }
 
-    let preview = await URLMetadataService.shared.fetchPreview(for: url)
+    let preview: LinkPreviewData?
+    if let fetchLinkPreview = testingOverrides.fetchLinkPreview {
+      preview = await fetchLinkPreview(url)
+    } else {
+      preview = await URLMetadataService.shared.fetchPreview(for: url)
+    }
     guard let preview else { return }
 
     let currentTitle = LinkMetadataRefreshPolicy.normalizedTitle(message.metadataTitle)

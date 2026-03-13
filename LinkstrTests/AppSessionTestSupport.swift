@@ -107,7 +107,8 @@ class AppSessionTestCase: XCTestCase {
     registerPushDevice: ((PushDeviceRegistration) async throws -> Void)? = nil,
     unregisterPushDevice: ((String) async throws -> Void)? = nil,
     syncArchivedConversationIDs: (([String]) async throws -> Void)? = nil,
-    enqueuePushNotification: ((PushEnqueueRequest) async throws -> Void)? = nil
+    enqueuePushNotification: ((PushEnqueueRequest) async throws -> Void)? = nil,
+    fetchLinkPreview: ((String) async -> LinkPreviewData?)? = nil
   ) throws -> (AppSession, ModelContainer) {
     var testingOverrides = AppSession.TestingOverrides()
     testingOverrides.disableNostrStartup = disableNostrStartup
@@ -127,6 +128,7 @@ class AppSessionTestCase: XCTestCase {
     testingOverrides.unregisterPushDevice = unregisterPushDevice
     testingOverrides.syncArchivedConversationIDs = syncArchivedConversationIDs
     testingOverrides.enqueuePushNotification = enqueuePushNotification
+    testingOverrides.fetchLinkPreview = fetchLinkPreview
     return try makeSession(testingOverrides: testingOverrides)
   }
 

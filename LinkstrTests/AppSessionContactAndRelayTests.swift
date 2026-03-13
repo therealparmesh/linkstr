@@ -625,6 +625,81 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     window.rootViewController = nil
   }
 
+  func testCancelPendingMetadataRefreshesForHiddenSessionDropsStaleQueuedWork() async throws {
+    actor PreviewRecorder {
+      var requestedURLs: [String] = []
+
+      func record(_ url: String) {
+        requestedURLs.append(url)
+      }
+
+      func snapshot() -> [String] {
+        requestedURLs
+      }
+    }
+
+    let recorder = PreviewRecorder()
+    let (session, container) = try makeSession(
+      fetchLinkPreview: { url in
+        await recorder.record(url)
+        if url.contains("first") {
+          try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+        return LinkPreviewData(title: "preview for \(url)", thumbnailPath: nil)
+      }
+    )
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+
+    func makeRoot(eventID: String, url: String) throws -> SessionMessageEntity {
+      try SessionMessageEntity(
+        eventID: eventID,
+        ownerPubkey: myPubkey,
+        conversationID: "session-visible-metadata-cancel",
+        rootID: eventID,
+        kind: .root,
+        senderPubkey: myPubkey,
+        url: url,
+        note: nil,
+        timestamp: .now,
+        linkType: .twitter
+      )
+    }
+
+    let first = try makeRoot(eventID: "first", url: "metadata-test-first")
+    let second = try makeRoot(eventID: "second", url: "metadata-test-second")
+    let third = try makeRoot(eventID: "third", url: "metadata-test-third")
+    container.mainContext.insert(first)
+    container.mainContext.insert(second)
+    container.mainContext.insert(third)
+    try container.mainContext.save()
+
+    session.refreshMetadataForVisiblePostIfNeeded(first)
+    session.refreshMetadataForVisiblePostIfNeeded(second)
+
+    let firstRequestDeadline = Date(timeIntervalSinceNow: 1)
+    while (await recorder.snapshot()).isEmpty, Date() < firstRequestDeadline {
+      try? await Task.sleep(nanoseconds: 10_000_000)
+    }
+
+    let firstSnapshot = await recorder.snapshot()
+    XCTAssertEqual(firstSnapshot, ["metadata-test-first"])
+    XCTAssertEqual(session.testingPendingMetadataRefreshCount, 2)
+
+    session.cancelPendingMetadataRefreshesForHiddenSession()
+    session.refreshMetadataForVisiblePostIfNeeded(third)
+
+    let thirdRequestDeadline = Date(timeIntervalSinceNow: 1)
+    while third.metadataTitle == nil, Date() < thirdRequestDeadline {
+      try? await Task.sleep(nanoseconds: 10_000_000)
+    }
+
+    let finalSnapshot = await recorder.snapshot()
+    XCTAssertEqual(finalSnapshot, ["metadata-test-first", "metadata-test-third"])
+    XCTAssertNil(second.metadataTitle)
+    XCTAssertEqual(third.metadataTitle, "preview for metadata-test-third")
+  }
+
   func testRelayCRUDFlow() throws {
     let (session, container) = try makeSession()
 
