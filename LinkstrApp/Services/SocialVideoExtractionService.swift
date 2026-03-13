@@ -777,6 +777,7 @@ struct TwitterStatusMediaSummary: Equatable {
 
 struct TwitterStatusPreview: Equatable {
   let title: String?
+  let bodyText: String?
   let imageURL: URL?
 }
 
@@ -1232,9 +1233,10 @@ enum TwitterStatusResponseParser {
 
   private static func preview(from json: [String: Any]) -> TwitterStatusPreview? {
     let title = previewTitle(from: json)
+    let bodyText = previewBodyText(from: json)
     let imageURL = previewImageURL(from: json)
-    guard title != nil || imageURL != nil else { return nil }
-    return TwitterStatusPreview(title: title, imageURL: imageURL)
+    guard title != nil || bodyText != nil || imageURL != nil else { return nil }
+    return TwitterStatusPreview(title: title, bodyText: bodyText, imageURL: imageURL)
   }
 
   private static func previewTitle(from json: [String: Any]) -> String? {
@@ -1294,6 +1296,24 @@ enum TwitterStatusResponseParser {
         if let url = validatedPreviewURL(from: rawURL) {
           return url
         }
+      }
+    }
+
+    return nil
+  }
+
+  private static func previewBodyText(from json: [String: Any]) -> String? {
+    if let tweet = json["tweet"] as? [String: Any] {
+      for key in ["text", "full_text", "content"] {
+        if let value = normalizedText(tweet[key] as? String) {
+          return value
+        }
+      }
+    }
+
+    for key in ["text", "full_text", "tweetText"] {
+      if let value = normalizedText(json[key] as? String) {
+        return value
       }
     }
 

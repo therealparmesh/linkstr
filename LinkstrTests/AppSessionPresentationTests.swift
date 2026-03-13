@@ -51,6 +51,7 @@ final class AppSessionPresentationTests: XCTestCase {
         {
           "user_name": "frankie",
           "user_screen_name": "FrankieIsLost",
+          "text": "watching the skyline drift by",
           "mediaURLs": ["https://pbs.twimg.com/media/HCsD9p5XwAAANE6.jpg"],
           "media_extended": [
             {
@@ -66,6 +67,7 @@ final class AppSessionPresentationTests: XCTestCase {
     let summary = TwitterStatusResponseParser.mediaSummary(from: json)
     XCTAssertFalse(summary.hasVideo)
     XCTAssertEqual(summary.preview?.title, "frankie (@FrankieIsLost)")
+    XCTAssertEqual(summary.preview?.bodyText, "watching the skyline drift by")
     XCTAssertEqual(
       summary.preview?.imageURL?.absoluteString,
       "https://pbs.twimg.com/media/HCsD9p5XwAAANE6.jpg"
@@ -77,6 +79,7 @@ final class AppSessionPresentationTests: XCTestCase {
       from: """
         {
           "tweet": {
+            "text": "rainy night drive",
             "author": {
               "name": "AlphaFox",
               "screen_name": "alphafox"
@@ -99,6 +102,7 @@ final class AppSessionPresentationTests: XCTestCase {
     let summary = TwitterStatusResponseParser.mediaSummary(from: json)
     XCTAssertFalse(summary.hasVideo)
     XCTAssertEqual(summary.preview?.title, "AlphaFox (@alphafox)")
+    XCTAssertEqual(summary.preview?.bodyText, "rainy night drive")
     XCTAssertEqual(
       summary.preview?.imageURL?.absoluteString,
       "https://pbs.twimg.com/media/example-photo.jpg?name=orig"

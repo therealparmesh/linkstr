@@ -307,6 +307,7 @@ struct PostDetailView: View {
   private var allReactions: [SessionReactionEntity]
 
   @State private var isPresentingEmojiPicker = false
+  @State private var remotePostText: String?
 
   private var scopedContacts: [ContactEntity] {
     OwnerScopedCollections.contacts(contacts, ownerPubkey: session.identityService.pubkeyHex)
@@ -389,6 +390,9 @@ struct PostDetailView: View {
     .task {
       session.markRootPostRead(postID: post.rootID)
     }
+    .task(id: remotePostTextRequestID) {
+      remotePostText = await resolvedRemotePostText()
+    }
     .sheet(isPresented: $isPresentingEmojiPicker) {
       LinkstrEmojiPickerSheet { emoji in
         toggleReaction(emoji)
@@ -423,24 +427,11 @@ struct PostDetailView: View {
       }
 
       if let noteText {
-        HStack(alignment: .top, spacing: 12) {
-          Capsule(style: .continuous)
-            .fill(LinkstrTheme.accent)
-            .frame(width: 4)
+        accentTextBlock(label: "note", text: noteText)
+      }
 
-          VStack(alignment: .leading, spacing: LinkstrTheme.metaSpacing) {
-            Text("note")
-              .font(LinkstrTheme.body(11, weight: .semibold))
-              .foregroundStyle(LinkstrTheme.accent)
-
-            Text(noteText)
-              .font(LinkstrTheme.body(13))
-              .foregroundStyle(LinkstrTheme.textSecondary)
-              .fixedSize(horizontal: false, vertical: true)
-          }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.leading, 2)
+      if let remotePostText {
+        accentTextBlock(label: "post text", text: remotePostText)
       }
 
       mediaBlock
@@ -536,5 +527,43 @@ struct PostDetailView: View {
     guard let note = post.note else { return nil }
     let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
     return trimmed.isEmpty ? nil : trimmed
+  }
+
+  private var remotePostTextRequestID: String? {
+    guard let urlString = post.url else { return nil }
+    return shouldLoadRemotePostText(for: urlString) ? urlString : nil
+  }
+
+  private func shouldLoadRemotePostText(for urlString: String) -> Bool {
+    guard let url = URL(string: urlString) else { return false }
+    guard URLClassifier.classify(url) == .twitter else { return false }
+    return URLClassifier.mediaStrategy(for: url).allowsLocalPlaybackToggle
+  }
+
+  private func resolvedRemotePostText() async -> String? {
+    guard let urlString = post.url, shouldLoadRemotePostText(for: urlString) else { return nil }
+    guard let url = URL(string: urlString) else { return nil }
+    return await TwitterStatusResolutionService.shared.preview(for: url)?.bodyText
+  }
+
+  private func accentTextBlock(label: String, text: String) -> some View {
+    HStack(alignment: .top, spacing: 12) {
+      Capsule(style: .continuous)
+        .fill(LinkstrTheme.accent)
+        .frame(width: 4)
+
+      VStack(alignment: .leading, spacing: LinkstrTheme.metaSpacing) {
+        Text(label)
+          .font(LinkstrTheme.body(11, weight: .semibold))
+          .foregroundStyle(LinkstrTheme.accent)
+
+        Text(text)
+          .font(LinkstrTheme.body(13))
+          .foregroundStyle(LinkstrTheme.textSecondary)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(.leading, 2)
   }
 }
