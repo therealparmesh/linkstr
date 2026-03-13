@@ -19,6 +19,24 @@ enum LinkstrDeepLinkCodec {
     return components.url
   }
 
+  static func makeAppDeepLink(
+    url: String?,
+    timestamp: Date,
+    messageGUID: String
+  ) -> URL? {
+    guard let url, let normalizedURL = LinkstrURLValidator.normalizedWebURL(from: url) else {
+      return nil
+    }
+
+    return makeAppDeepLink(
+      payload: LinkstrDeepLinkPayload(
+        url: normalizedURL,
+        timestamp: Int64(timestamp.timeIntervalSince1970),
+        messageGUID: messageGUID
+      )
+    )
+  }
+
   static func parsePayload(fromAppDeepLink url: URL) -> LinkstrDeepLinkPayload? {
     guard url.scheme?.lowercased() == appDeepLinkScheme else {
       return nil

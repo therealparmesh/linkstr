@@ -370,6 +370,14 @@ struct PostDetailView: View {
     profileLookupPubkeys.sorted().joined(separator: ",")
   }
 
+  private var shareDeepLinkURL: URL? {
+    LinkstrDeepLinkCodec.makeAppDeepLink(
+      url: post.url,
+      timestamp: post.timestamp,
+      messageGUID: post.rootID
+    )
+  }
+
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
@@ -387,6 +395,18 @@ struct PostDetailView: View {
     .navigationTitle(sessionName)
     .navigationBarTitleDisplayMode(.inline)
     .linkstrBarChrome()
+    .toolbar {
+      if let shareDeepLinkURL {
+        ToolbarItem(placement: .topBarTrailing) {
+          ShareLink(item: shareDeepLinkURL) {
+            Image(systemName: "square.and.arrow.up")
+              .linkstrToolbarIconLabel()
+          }
+          .accessibilityLabel("share deep link")
+          .tint(LinkstrTheme.accent)
+        }
+      }
+    }
     .task {
       session.markRootPostRead(postID: post.rootID)
       session.refreshMetadataForVisiblePostIfNeeded(post)

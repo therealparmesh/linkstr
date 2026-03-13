@@ -1,8 +1,8 @@
 # linkstr
 
-Last updated: March 12, 2026
+Last updated: March 13, 2026
 
-`linkstr` is an iOS app for private link sharing on nostr. You create private sessions, share links with people you trust, react with emoji, and open supported video inside the app when a provider allows it.
+`linkstr` is an iOS app for private link sharing on nostr. You create private sessions, share links with people you trust, react with emojis, and open supported video inside the app when a provider allows it.
 
 This repo contains the app plus the small Go push service used for APNs routing.
 
@@ -161,6 +161,7 @@ linkstr still does not have a durable offline outbox. If a send cannot get relay
 - Unsupported schemes are rejected.
 - Note text is trimmed and persisted only when non-empty.
 - In post detail, the raw link text supports the standard ios copy menu via text selection.
+- In post detail, the top-right share action exports a `linkstr://open?p=...` deep link for the current post URL.
 - Browser handoff uses the `open in browser` action.
 - In post detail, note text is rendered as an accented note callout for visual separation and media/metadata sit inside grouped detail surfaces.
 - Send behavior is reconnect-and-timeout:
@@ -391,6 +392,7 @@ linkstr still does not have a durable offline outbox. If a send cannot get relay
 
 - Deep link format is `linkstr://open?p=...`.
 - Valid deep links open a full-screen playback surface.
+- Post detail can share the current post as a deep link through the native iOS share sheet.
 - Deep-link playback reuses the same adaptive local/embed controls as in post detail.
 - Dismissing deep link playback clears pending deep-link state.
 

@@ -1,6 +1,6 @@
 # linkstr support
 
-Last updated: March 12, 2026
+Last updated: March 13, 2026
 
 linkstr is a private link-sharing app built on nostr. You create or join private sessions, share links inside those sessions, and react with emoji. This page describes the current shipped behavior in plain language.
 
@@ -54,6 +54,7 @@ Generic web URLs are valid posts too. In-app playback, local caching, and save/e
 ### React, delete, archive, and manage members
 
 - Reactions: open a post and tap `👍`, `👎`, `👀`, or `...` for the emoji picker.
+- Share a deep link to a post: open post detail and tap the share button in the top-right corner.
 - Remove your reaction: tap the same emoji again.
 - Delete your own post: long-press the post row in the session view.
 - Archive a session: long-press the session row.

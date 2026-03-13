@@ -43,6 +43,21 @@ final class DeepLinkCodecTests: XCTestCase {
     let deepLink = try XCTUnwrap(LinkstrDeepLinkCodec.makeAppDeepLink(payload: payload))
     XCTAssertNil(LinkstrDeepLinkCodec.parsePayload(fromAppDeepLink: deepLink))
   }
+
+  func testAppDeepLinkConvenienceBuilderUsesValidatedURL() throws {
+    let deepLink = try XCTUnwrap(
+      LinkstrDeepLinkCodec.makeAppDeepLink(
+        url: "https://example.com/video",
+        timestamp: Date(timeIntervalSince1970: 1_739_877_900),
+        messageGUID: "post-guid"
+      )
+    )
+
+    let parsed = try XCTUnwrap(LinkstrDeepLinkCodec.parsePayload(fromAppDeepLink: deepLink))
+    XCTAssertEqual(parsed.url, "https://example.com/video")
+    XCTAssertEqual(parsed.timestamp, 1_739_877_900)
+    XCTAssertEqual(parsed.messageGUID, "post-guid")
+  }
 }
 
 @MainActor
