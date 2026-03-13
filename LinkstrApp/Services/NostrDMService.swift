@@ -89,6 +89,8 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
   private let profileLookupTimeoutNanoseconds: UInt64 = 3_000_000_000
   private var activeBackfillStates: [String: BackfillState] = [:]
   private var completedBackfillKinds = Set<BackfillSubscriptionKind>()
+  private var currentBackfillRelayURLs = Set<String>()
+  private var completedBackfillRelayURLs = Set<String>()
   private var followListFilter: Filter?
   private let payloadDecoder = JSONDecoder()
   // App-specific rumor kind carried inside NIP-59 gift wrap events.
@@ -142,6 +144,8 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     configuredRelayURLs = Set(relayURLs)
     activeBackfillStates = [:]
     completedBackfillKinds = []
+    currentBackfillRelayURLs = []
+    completedBackfillRelayURLs = []
     didNotifyInitialBackfillCompletion = false
     liveSubscriptionSince = Int(Date.now.timeIntervalSince1970)
 
@@ -211,8 +215,66 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     func simulateInitialBackfillCompletionForTesting() {
       activeBackfillStates.removeAll()
       completedBackfillKinds = [.recipient, .author]
+      completedBackfillRelayURLs = configuredRelayURLs
+      currentBackfillRelayURLs.removeAll()
       didNotifyInitialBackfillCompletion = false
       notifyInitialBackfillCompletionIfNeeded()
+    }
+
+    func seedBackfillCoverageForTesting(
+      activeRelayURLs: [String] = [],
+      completedRelayURLs: [String] = [],
+      hasActiveBackfill: Bool,
+      isCompleted: Bool
+    ) {
+      currentBackfillRelayURLs = Set(activeRelayURLs)
+      completedBackfillRelayURLs = Set(completedRelayURLs)
+      completedBackfillKinds = isCompleted ? [.recipient, .author] : []
+      if hasActiveBackfill {
+        activeBackfillStates = [
+          "test-backfill": BackfillState(
+            kind: .recipient,
+            page: 0,
+            until: nil,
+            pageSize: backfillPageSize,
+            expectedRelayURLs: Set(activeRelayURLs)
+          )
+        ]
+      } else {
+        activeBackfillStates.removeAll()
+      }
+    }
+
+    func simulateLateRelayConnectionForTesting(_ relayURL: String) {
+      maybeRestartBackfillForLateRelay(relayURL: relayURL)
+    }
+
+    func simulateBackfillCoverageFinalizationForTesting(
+      relayURLs: [String],
+      initialCompletionAlreadyNotified: Bool
+    ) {
+      currentBackfillRelayURLs = Set(relayURLs)
+      activeBackfillStates.removeAll()
+      completedBackfillKinds = [.recipient, .author]
+      didNotifyInitialBackfillCompletion = initialCompletionAlreadyNotified
+      finalizeBackfillCoverageIfNeeded()
+      notifyInitialBackfillCompletionIfNeeded()
+    }
+
+    var testingCurrentBackfillRelayURLs: Set<String> {
+      currentBackfillRelayURLs
+    }
+
+    var testingCompletedBackfillRelayURLs: Set<String> {
+      completedBackfillRelayURLs
+    }
+
+    var testingActiveBackfillCount: Int {
+      activeBackfillStates.count
+    }
+
+    var testingCompletedBackfillKindCount: Int {
+      completedBackfillKinds.count
     }
   #endif
 
@@ -236,6 +298,8 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     liveSubscriptionSince = nil
     activeBackfillStates.removeAll()
     completedBackfillKinds.removeAll()
+    currentBackfillRelayURLs.removeAll()
+    completedBackfillRelayURLs.removeAll()
     didNotifyInitialBackfillCompletion = false
     let pendingBatchIDs = publishAckTracker.cancelAll()
     for batchID in pendingBatchIDs {
@@ -586,6 +650,9 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     guard let keypair else { return }
     guard activeBackfillStates.isEmpty else { return }
     guard completedBackfillKinds.count < 2 else { return }
+    let expectedRelayURLs = connectedRelayURLs()
+    guard !expectedRelayURLs.isEmpty else { return }
+    currentBackfillRelayURLs = expectedRelayURLs
     if !completedBackfillKinds.contains(.recipient) {
       beginBackfill(kind: .recipient, page: 0, until: nil, pubkey: keypair.publicKey.hex)
     }
@@ -600,7 +667,13 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     until: Int?,
     pubkey: String
   ) {
-    let expectedRelayURLs = connectedRelayURLs()
+    let currentlyConnectedRelayURLs = connectedRelayURLs()
+    let expectedRelayURLs: Set<String>
+    if currentBackfillRelayURLs.isEmpty {
+      expectedRelayURLs = currentlyConnectedRelayURLs
+    } else {
+      expectedRelayURLs = currentBackfillRelayURLs.intersection(currentlyConnectedRelayURLs)
+    }
     guard !expectedRelayURLs.isEmpty else { return }
     guard let relayPool, let filter = makeBackfillFilter(kind: kind, pubkey: pubkey, until: until)
     else {
@@ -649,7 +722,15 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
 
   private func markBackfillKindCompleted(_ kind: BackfillSubscriptionKind) {
     completedBackfillKinds.insert(kind)
+    finalizeBackfillCoverageIfNeeded()
     notifyInitialBackfillCompletionIfNeeded()
+  }
+
+  private func finalizeBackfillCoverageIfNeeded() {
+    guard activeBackfillStates.isEmpty else { return }
+    guard completedBackfillKinds.count == 2 else { return }
+    completedBackfillRelayURLs = currentBackfillRelayURLs
+    currentBackfillRelayURLs.removeAll()
   }
 
   private func notifyInitialBackfillCompletionIfNeeded() {
@@ -679,6 +760,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
   }
 
   private func pruneRelayFromBackfillWaitlists(relayURL: String) {
+    currentBackfillRelayURLs.remove(relayURL)
     for key in Array(activeBackfillStates.keys) {
       guard var state = activeBackfillStates[key] else { continue }
       guard state.expectedRelayURLs.remove(relayURL) != nil else { continue }
@@ -687,6 +769,29 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
         completeBackfillPage(subscriptionID: key)
       }
     }
+  }
+
+  private func resetBackfillProgressForLateRelay() {
+    for subscriptionID in activeBackfillStates.keys {
+      relayPool?.closeSubscription(with: subscriptionID)
+    }
+    activeBackfillStates.removeAll()
+    completedBackfillKinds.removeAll()
+    currentBackfillRelayURLs.removeAll()
+    completedBackfillRelayURLs.removeAll()
+  }
+
+  private func maybeRestartBackfillForLateRelay(relayURL: String) {
+    if !activeBackfillStates.isEmpty {
+      guard !currentBackfillRelayURLs.isEmpty else { return }
+      guard !currentBackfillRelayURLs.contains(relayURL) else { return }
+      resetBackfillProgressForLateRelay()
+      return
+    }
+
+    guard completedBackfillKinds.count == 2 else { return }
+    guard !completedBackfillRelayURLs.contains(relayURL) else { return }
+    resetBackfillProgressForLateRelay()
   }
 
   private func installSubscriptions() {
@@ -858,6 +963,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
       reconnectTask?.cancel()
       reconnectTask = nil
       installSubscriptions()
+      maybeRestartBackfillForLateRelay(relayURL: relayURL)
       startBackfillIfNeeded()
       onRelayStatus?(relayURL, .connected, nil)
     case .connecting:

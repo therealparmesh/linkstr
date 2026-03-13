@@ -668,4 +668,85 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     XCTAssertEqual(relays.count, RelayDefaults.urls.count)
     XCTAssertTrue(relays.allSatisfy(\.isEnabled))
   }
+
+  func testForceRestartMarksEnabledRelaysConnectingAndClearsStaleErrors() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+
+    let relay = RelayEntity(
+      url: "wss://relay.example.com",
+      status: .connected,
+      lastError: "stale relay failure"
+    )
+    container.mainContext.insert(relay)
+    try container.mainContext.save()
+
+    session.startNostrIfPossible(forceRestart: true)
+
+    let relays = try fetchRelays(in: container.mainContext)
+    XCTAssertEqual(session.relayStatus(for: relay), .connecting)
+    XCTAssertEqual(session.connectedRelayCount(for: relays), 0)
+    XCTAssertNil(session.relayErrorMessage(for: relay))
+  }
+}
+
+@MainActor
+final class NostrDMServiceTests: XCTestCase {
+  func testLateRelayConnectAfterCompletedBackfillResetsCoverage() {
+    let service = NostrDMService()
+    service.seedBackfillCoverageForTesting(
+      completedRelayURLs: ["wss://relay-a.example.com"],
+      hasActiveBackfill: false,
+      isCompleted: true
+    )
+
+    service.simulateLateRelayConnectionForTesting("wss://relay-b.example.com")
+
+    XCTAssertEqual(service.testingCompletedBackfillKindCount, 0)
+    XCTAssertTrue(service.testingCompletedBackfillRelayURLs.isEmpty)
+    XCTAssertTrue(service.testingCurrentBackfillRelayURLs.isEmpty)
+    XCTAssertEqual(service.testingActiveBackfillCount, 0)
+  }
+
+  func testCoveredRelayConnectDoesNotResetCompletedBackfillCoverage() {
+    let service = NostrDMService()
+    service.seedBackfillCoverageForTesting(
+      completedRelayURLs: ["wss://relay-a.example.com"],
+      hasActiveBackfill: false,
+      isCompleted: true
+    )
+
+    service.simulateLateRelayConnectionForTesting("wss://relay-a.example.com")
+
+    XCTAssertEqual(service.testingCompletedBackfillKindCount, 2)
+    XCTAssertEqual(service.testingCompletedBackfillRelayURLs, ["wss://relay-a.example.com"])
+  }
+
+  func testLateRelayConnectDuringActiveBackfillResetsInFlightCoverage() {
+    let service = NostrDMService()
+    service.seedBackfillCoverageForTesting(
+      activeRelayURLs: ["wss://relay-a.example.com"],
+      hasActiveBackfill: true,
+      isCompleted: false
+    )
+
+    service.simulateLateRelayConnectionForTesting("wss://relay-b.example.com")
+
+    XCTAssertEqual(service.testingCompletedBackfillKindCount, 0)
+    XCTAssertEqual(service.testingActiveBackfillCount, 0)
+    XCTAssertTrue(service.testingCurrentBackfillRelayURLs.isEmpty)
+  }
+
+  func testBackfillCoverageRefreshesAfterInitialCompletionWasAlreadyNotified() {
+    let service = NostrDMService()
+
+    service.simulateBackfillCoverageFinalizationForTesting(
+      relayURLs: ["wss://relay-b.example.com"],
+      initialCompletionAlreadyNotified: true
+    )
+
+    XCTAssertEqual(service.testingCompletedBackfillKindCount, 2)
+    XCTAssertEqual(service.testingCompletedBackfillRelayURLs, ["wss://relay-b.example.com"])
+    XCTAssertTrue(service.testingCurrentBackfillRelayURLs.isEmpty)
+  }
 }

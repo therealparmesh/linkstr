@@ -352,10 +352,18 @@ final class AppSession: ObservableObject {
 
   func relayErrorMessage(for relay: RelayEntity) -> String? {
     guard relay.isEnabled else { return nil }
-    let runtime = relayRuntimeStatusByURL[relay.url]?.message
-    let trimmedRuntime = runtime?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    if !trimmedRuntime.isEmpty {
-      return trimmedRuntime
+    if let runtimeStatus = relayRuntimeStatusByURL[relay.url] {
+      let trimmedRuntime =
+        runtimeStatus.message?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      if !trimmedRuntime.isEmpty {
+        return trimmedRuntime
+      }
+      switch runtimeStatus.status {
+      case .connecting, .connected, .readOnly:
+        return nil
+      case .failed, .disconnected:
+        break
+      }
     }
     let persisted = relay.lastError?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     return persisted.isEmpty ? nil : persisted
@@ -525,6 +533,27 @@ final class AppSession: ObservableObject {
     guard let message else { return nil }
     let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
     return trimmed.isEmpty ? nil : trimmed
+  }
+
+  private func primeRelayRuntimeStatusForRestart(relayURLs: [String]) {
+    let enabledRelayURLs = Set(relayURLs)
+    relayRuntimeStatusByURL = relayRuntimeStatusByURL.filter { enabledRelayURLs.contains($0.key) }
+    for relayURL in relayURLs {
+      pendingRelayPersistenceByURL.removeValue(forKey: relayURL)
+    }
+    if pendingRelayPersistenceByURL.isEmpty {
+      relayPersistenceFlushTask?.cancel()
+      relayPersistenceFlushTask = nil
+    }
+
+    let now = Date()
+    for relayURL in relayURLs {
+      relayRuntimeStatusByURL[relayURL] = RelayRuntimeStatus(
+        status: .connecting,
+        message: nil,
+        updatedAt: now
+      )
+    }
   }
 
   private func resetForegroundRelayState() {
@@ -1222,19 +1251,29 @@ final class AppSession: ObservableObject {
   func startNostrIfPossible(forceRestart: Bool = false) {
     guard let keypair = identityService.keypair else { return }
     let isRunningTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    let relayURLs: [String]
+    do {
+      relayURLs = try relayStore.fetchRelays().filter(\.isEnabled).map(\.url)
+    } catch {
+      report(error: error)
+      return
+    }
 
     if forceRestart {
       pendingIncomingReconnectReplayArmed = false
       // iOS may suspend sockets while backgrounded; on foreground always rebuild the relay
       // session so send-gating reflects fresh connection state instead of stale sockets.
+      primeRelayRuntimeStatusForRestart(relayURLs: relayURLs)
       nostrService.stop()
     }
 
     if isRunningTests, testingOverrides.skipNostrNetworkStartup {
-      relayRuntimeStatusByURL.removeAll()
-      pendingRelayPersistenceByURL.removeAll()
-      relayPersistenceFlushTask?.cancel()
-      relayPersistenceFlushTask = nil
+      if !forceRestart {
+        relayRuntimeStatusByURL.removeAll()
+        pendingRelayPersistenceByURL.removeAll()
+        relayPersistenceFlushTask?.cancel()
+        relayPersistenceFlushTask = nil
+      }
       startNostrRuntime(
         keypair: keypair,
         relayURLs: [],
@@ -1251,10 +1290,12 @@ final class AppSession: ObservableObject {
 
     if shouldDisableNostrStartupForCurrentProcess() {
       // Keep local send paths available in tests without opening relay connections.
-      relayRuntimeStatusByURL.removeAll()
-      pendingRelayPersistenceByURL.removeAll()
-      relayPersistenceFlushTask?.cancel()
-      relayPersistenceFlushTask = nil
+      if !forceRestart {
+        relayRuntimeStatusByURL.removeAll()
+        pendingRelayPersistenceByURL.removeAll()
+        relayPersistenceFlushTask?.cancel()
+        relayPersistenceFlushTask = nil
+      }
       startNostrRuntime(
         keypair: keypair,
         relayURLs: [],
@@ -1266,14 +1307,6 @@ final class AppSession: ObservableObject {
           }
         }
       )
-      return
-    }
-
-    let relayURLs: [String]
-    do {
-      relayURLs = try relayStore.fetchRelays().filter(\.isEnabled).map(\.url)
-    } catch {
-      report(error: error)
       return
     }
     if relayURLs.isEmpty {
