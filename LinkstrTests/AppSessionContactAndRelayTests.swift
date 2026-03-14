@@ -820,6 +820,15 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     let stableStartCount = startCount
     try? await Task.sleep(for: .milliseconds(150))
     XCTAssertEqual(startCount, stableStartCount)
+
+    session.handleAppDidBecomeActive()
+
+    let resumedRetryDeadline = Date(timeIntervalSinceNow: 0.2)
+    while startCount == stableStartCount, Date() < resumedRetryDeadline {
+      try? await Task.sleep(for: .milliseconds(10))
+    }
+
+    XCTAssertGreaterThan(startCount, stableStartCount)
   }
 
   func testPassiveOfflineToastDoesNotLoopAcrossForegroundRelayFlaps() throws {

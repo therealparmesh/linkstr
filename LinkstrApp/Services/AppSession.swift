@@ -170,7 +170,7 @@ final class AppSession: ObservableObject {
   private var hasObservedHealthyRelayInCurrentForeground = false
   private let passiveOfflineToastGraceInterval: TimeInterval = 1.25
   private let relayDisconnectGraceInterval: TimeInterval = 1.25
-  private let foregroundRelayRestartCooldown: TimeInterval = 8
+  private let foregroundRelayRestartCooldown: TimeInterval = 3
   private let identityRetryDelayNanoseconds: UInt64 = 250_000_000
   private let bootIdentityRetryAttempts = 2
   private let protectedDataUnavailableBootIdentityRetryAttempts = 6
@@ -287,6 +287,7 @@ final class AppSession: ObservableObject {
     passiveOfflineToastGraceUntil = nil
     cancelPendingOfflineToastIfNeeded()
     cancelPendingForegroundRelayRecoveryIfNeeded()
+    nostrService.stop()
     flushRelayPersistenceNow()
   }
 
