@@ -217,7 +217,8 @@ Archived sessions do not send notifications.
 1. Confirm your internet connection works.
 2. Open Settings and check that at least one relay is enabled.
 3. If needed, use `Reset defaults` in the relays section.
-4. Force-quit and reopen the app.
+4. Bring the app to the foreground and leave it open for a few seconds. linkstr keeps retrying relay runtime while no relay is healthy.
+5. If it still does not recover, force-quit and reopen the app.
 
 **My posts are not syncing across devices**
 

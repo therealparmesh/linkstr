@@ -641,7 +641,9 @@ final class AppSession: ObservableObject {
       maxAttempts: maxAttempts,
       retryDelayNanoseconds: configuredIdentityRetryDelayNanoseconds
     )
+    let restartAt = Date.now
     startNostrIfPossible(forceRestart: true)
+    armForegroundRelayRecoveryLoopIfNeeded(markingRestartAt: restartAt)
   }
 
   private func scheduleForegroundRelayRecoveryCheck(after delay: TimeInterval? = nil) {
@@ -653,10 +655,36 @@ final class AppSession: ObservableObject {
       guard !Task.isCancelled else { return }
       await MainActor.run { [weak self] in
         guard let self else { return }
-        defer { self.foregroundRelayRecoveryTask = nil }
+        self.foregroundRelayRecoveryTask = nil
         self.evaluateForegroundRelayRecoveryIfNeeded()
       }
     }
+  }
+
+  private func armForegroundRelayRecoveryLoopIfNeeded(markingRestartAt restartAt: Date? = nil) {
+    guard isForeground else { return }
+    guard identityService.keypair != nil else { return }
+    guard !shouldDisableNostrStartupForCurrentProcess() else { return }
+
+    let enabledRelays: [RelayEntity]
+    do {
+      enabledRelays = try relayStore.fetchRelays().filter(\.isEnabled)
+    } catch {
+      return
+    }
+
+    switch relayConnectivityState(for: enabledRelays) {
+    case .online, .readOnly, .noEnabledRelays:
+      cancelPendingForegroundRelayRecoveryIfNeeded()
+      return
+    case .connecting, .offline:
+      break
+    }
+
+    if let restartAt {
+      lastForegroundRelayRestartAt = restartAt
+    }
+    scheduleForegroundRelayRecoveryCheck()
   }
 
   private func evaluateForegroundRelayRecoveryIfNeeded() {
@@ -691,6 +719,7 @@ final class AppSession: ObservableObject {
 
     lastForegroundRelayRestartAt = now
     startNostrIfPossible(forceRestart: true)
+    scheduleForegroundRelayRecoveryCheck()
   }
 
   private func enqueueRelayPersistence(
@@ -784,33 +813,6 @@ final class AppSession: ObservableObject {
       cancelPendingOfflineToastIfNeeded()
       return
     }
-  }
-
-  private func maybeForceRestartRelaysForForegroundRecovery(triggeredBy status: RelayHealthStatus) {
-    guard isForeground else { return }
-    guard status == .failed || status == .disconnected else { return }
-    guard identityService.keypair != nil else { return }
-    guard !shouldDisableNostrStartupForCurrentProcess() else { return }
-
-    let enabledRelays: [RelayEntity]
-    do {
-      enabledRelays = try relayStore.fetchRelays().filter(\.isEnabled)
-    } catch {
-      return
-    }
-
-    guard !enabledRelays.isEmpty else { return }
-    guard relayConnectivityState(for: enabledRelays) == .offline else { return }
-
-    let now = Date()
-    if let lastForegroundRelayRestartAt,
-      now.timeIntervalSince(lastForegroundRelayRestartAt) < foregroundRelayRestartCooldown
-    {
-      return
-    }
-
-    lastForegroundRelayRestartAt = now
-    startNostrIfPossible(forceRestart: true)
   }
 
   private func maybeForceRestartRelaysForPendingIncomingRecovery(
@@ -1418,10 +1420,6 @@ final class AppSession: ObservableObject {
         {
           primeRelayRuntimeStatusForRestart(relayURLs: relayURLs)
         }
-        if isForeground {
-          lastForegroundRelayRestartAt = Date.now
-          scheduleForegroundRelayRecoveryCheck()
-        }
       } else {
         relayRuntimeStatusByURL.removeAll()
         pendingRelayPersistenceByURL.removeAll()
@@ -1452,10 +1450,6 @@ final class AppSession: ObservableObject {
       // iOS may suspend sockets while backgrounded; on foreground always rebuild the relay
       // session so send-gating reflects fresh connection state instead of stale sockets.
       primeRelayRuntimeStatusForRestart(relayURLs: relayURLs)
-      if isForeground {
-        lastForegroundRelayRestartAt = Date.now
-        scheduleForegroundRelayRecoveryCheck()
-      }
     }
     if relayURLs.isEmpty {
       nostrService.stop()
@@ -1495,7 +1489,6 @@ final class AppSession: ObservableObject {
           )
           try? self.refreshRelayConnectivityAlert()
           self.maybeForceRestartRelaysForPendingIncomingRecovery(triggeredBy: status)
-          self.maybeForceRestartRelaysForForegroundRecovery(triggeredBy: status)
         }
       },
       onInitialBackfillComplete: { [weak self] in

@@ -234,6 +234,7 @@ linkstr still does not have a durable offline outbox. If a send cannot get relay
 
 - Relay runtime starts when identity exists and app is active.
 - Foreground re-entry force-restarts runtime to avoid stale sockets.
+- If the app stays foregrounded with zero healthy relays after that restart, linkstr keeps a foreground recovery loop armed and hard-restarts relay runtime again on cooldown until a relay becomes healthy or the app leaves foreground.
 - Send gating behavior:
   - Immediate block when no enabled relays.
   - Immediate block when only read-only relays are available.

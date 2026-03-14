@@ -789,34 +789,37 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     XCTAssertNil(session.relayErrorMessage(for: relay))
   }
 
-  func testForegroundRecoveryRetriesHardRestartWhenNoRelayBecomesHealthy() throws {
+  func testForegroundRecoveryLoopKeepsRetryingWhenNoRelayBecomesHealthy() async throws {
     var startCount = 0
-    let (session, container) = try makeSession(
-      disableNostrStartup: false,
-      foregroundRelayRestartCooldown: 0.01,
-      skipNostrNetworkStartup: true,
-      onNostrStart: {
-        startCount += 1
-      }
-    )
+    var testingOverrides = AppSession.TestingOverrides()
+    testingOverrides.disableNostrStartup = false
+    testingOverrides.foregroundRelayRestartCooldown = 0.01
+    testingOverrides.skipNostrNetworkStartup = true
+    testingOverrides.onNostrStart = {
+      startCount += 1
+    }
+    let (session, container) = try makeSession(testingOverrides: testingOverrides)
     try session.identityService.createNewIdentity()
 
     let relay = RelayEntity(url: "wss://relay.example.com")
     container.mainContext.insert(relay)
     try container.mainContext.save()
 
-    session.beginForegroundRelayCycleForTesting()
-    session.startNostrIfPossible(forceRestart: true)
+    await session.boot()
 
-    let retryDeadline = Date(timeIntervalSinceNow: 0.2)
-    while startCount < 2, Date() < retryDeadline {
-      RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.01))
+    let retryDeadline = Date(timeIntervalSinceNow: 0.35)
+    while startCount < 3, Date() < retryDeadline {
+      try? await Task.sleep(for: .milliseconds(10))
     }
 
-    XCTAssertGreaterThanOrEqual(startCount, 2)
+    XCTAssertGreaterThanOrEqual(startCount, 3)
     XCTAssertEqual(session.relayStatus(for: relay), .connecting)
 
     session.handleAppDidLeaveForeground()
+
+    let stableStartCount = startCount
+    try? await Task.sleep(for: .milliseconds(150))
+    XCTAssertEqual(startCount, stableStartCount)
   }
 
   func testPassiveOfflineToastDoesNotLoopAcrossForegroundRelayFlaps() throws {
