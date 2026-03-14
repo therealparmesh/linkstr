@@ -63,7 +63,25 @@ struct RootView: View {
       )
     ) {
       if let urlString = deepLinkHandler.pendingURLString {
-        DeepLinkContainerView(urlString: urlString)
+        NavigationStack {
+          DeepLinkDetailView(urlString: urlString)
+            .navigationTitle("shared link")
+            .navigationBarTitleDisplayMode(.inline)
+            .linkstrBarChrome()
+            .toolbar {
+              ToolbarItem(placement: .topBarLeading) {
+                Button {
+                  deepLinkHandler.clear()
+                } label: {
+                  Image(systemName: "xmark")
+                    .linkstrToolbarIconLabel()
+                }
+                .accessibilityLabel("close shared link")
+                .tint(LinkstrTheme.textSecondary)
+              }
+            }
+        }
+        .preferredColorScheme(.dark)
       } else {
         EmptyView()
       }

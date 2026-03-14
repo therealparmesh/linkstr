@@ -9,7 +9,6 @@
 /* Begin PBXBuildFile section */
 		0095E6B8DCE9DAA9C0782E61 /* ManagedLocalFileScope.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5203B23AAB0DDCE6CFEA9FDD /* ManagedLocalFileScope.swift */; };
 		0628828BC98793B4ABE23DA5 /* AppSessionTestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1228C6F84C85528F73807B22 /* AppSessionTestSupport.swift */; };
-		0B0B738D8A0BF9E1A725E38C /* DeepLinkContainerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A337208561EE745583B8225D /* DeepLinkContainerView.swift */; };
 		0DB741B1FF4F5E48E9A3795F /* SessionMessageEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9DE3286769E2B99896B67D7 /* SessionMessageEntity.swift */; };
 		108940D9B4C66BAF3C41DAF9 /* ContactKeyParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3E55FD1E2DA44178AA72B96 /* ContactKeyParserTests.swift */; };
 		110617B94A972E6B8EE939C0 /* NewPostSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 520A1C73A4134BAD043097AB /* NewPostSheet.swift */; };
@@ -154,7 +153,6 @@
 		9E751D8B61D7D30F3D4F6543 /* AppSessionIngestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSessionIngestTests.swift; sourceTree = "<group>"; };
 		9F0C1843FF391DE67E57D3A0 /* SessionMembershipTimelineBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionMembershipTimelineBuilderTests.swift; sourceTree = "<group>"; };
 		9FED3B5DF5A048969C4C2153 /* IdentityServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentityServiceTests.swift; sourceTree = "<group>"; };
-		A337208561EE745583B8225D /* DeepLinkContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLinkContainerView.swift; sourceTree = "<group>"; };
 		AE9431738F7A0B23E194B322 /* RelayEntity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayEntity.swift; sourceTree = "<group>"; };
 		B09547E4A4B6A981A7FF4FD0 /* ContactsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactsView.swift; sourceTree = "<group>"; };
 		B1C28CC3039BF25BB1CE6C6A /* AccountStateEntity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountStateEntity.swift; sourceTree = "<group>"; };
@@ -293,7 +291,6 @@
 		82DE99308AF56960BC9CACB0 /* DeepLink */ = {
 			isa = PBXGroup;
 			children = (
-				A337208561EE745583B8225D /* DeepLinkContainerView.swift */,
 				9B086DB984B1E32A78F02858 /* DeepLinkDetailView.swift */,
 			);
 			path = DeepLink;
@@ -516,7 +513,6 @@
 				E22AEE4691F666C0ED852DFE /* ContactsView.swift in Sources */,
 				E98F8AD0477C0287BF9663F8 /* ConversationsView.swift in Sources */,
 				9E483E07CCE87E18F46F283D /* DateLabelFormatter.swift in Sources */,
-				0B0B738D8A0BF9E1A725E38C /* DeepLinkContainerView.swift in Sources */,
 				AAA287E1271ED6F51214D802 /* DeepLinkHandler.swift in Sources */,
 				11F887A872ACDC7C396A291F /* DeepLinkDetailView.swift in Sources */,
 				9CC0DB1E8F036EE4ED1E6687 /* EmbeddedWebView.swift in Sources */,

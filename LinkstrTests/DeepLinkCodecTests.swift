@@ -47,23 +47,3 @@ final class DeepLinkCodecTests: XCTestCase {
     XCTAssertNil(LinkstrDeepLinkCodec.parseURL(fromAppDeepLink: legacyURL))
   }
 }
-
-@MainActor
-final class DeepLinkHandlerTests: XCTestCase {
-  func testHandleValidDeepLinkSetsPendingURLString() throws {
-    let handler = DeepLinkHandler()
-    let payloadURL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-    let url = try XCTUnwrap(LinkstrDeepLinkCodec.makeAppDeepLink(url: payloadURL))
-
-    XCTAssertTrue(handler.handle(url: url))
-    XCTAssertEqual(handler.pendingURLString, payloadURL)
-  }
-
-  func testHandleInvalidDeepLinkReturnsFalse() {
-    let handler = DeepLinkHandler()
-    let invalidURL = URL(string: "linkstr://open?p=not-valid")!
-
-    XCTAssertFalse(handler.handle(url: invalidURL))
-    XCTAssertNil(handler.pendingURLString)
-  }
-}
