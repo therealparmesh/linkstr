@@ -1315,9 +1315,13 @@ private struct SessionMembersSheet: View {
         }
         if canManageMembers {
           ToolbarItem(placement: .confirmationAction) {
-            Button(isSaving ? "saving..." : "save") {
+            Button {
               saveMembers()
+            } label: {
+              Image(systemName: "checkmark")
+                .linkstrToolbarIconLabel()
             }
+            .accessibilityLabel(isSaving ? "saving members" : "save members")
             .disabled(isSaving)
             .tint(LinkstrTheme.accent)
           }
