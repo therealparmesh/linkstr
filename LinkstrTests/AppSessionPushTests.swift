@@ -35,9 +35,6 @@ final class AppSessionPushTests: AppSessionTestCase {
       memberPubkeys: [myPubkey, peerPubkey]
     )
 
-    container.mainContext.insert(RelayEntity(url: "wss://relay.example.com", status: .connected))
-    try container.mainContext.save()
-
     let didCreate = await session.createSessionPostAwaitingRelay(
       url: "https://example.com/path",
       note: "hello",
@@ -95,9 +92,6 @@ final class AppSessionPushTests: AppSessionTestCase {
       ownerPubkey: myPubkey
     )
     container.mainContext.insert(post)
-    container.mainContext.insert(RelayEntity(url: "wss://relay.example.com", status: .connected))
-    try container.mainContext.save()
-
     let didActivate = await session.toggleReactionAwaitingRelay(emoji: "🔥", post: post)
 
     XCTAssertTrue(didActivate)

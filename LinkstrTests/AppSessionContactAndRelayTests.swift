@@ -155,7 +155,8 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
   }
 
   func testIncomingProfileMetadataCachesNamesForNonContacts() async throws {
-    let (session, _) = try makeSession()
+    let (session, container) = try makeSession()
+    _ = container
     try session.identityService.createNewIdentity()
     let participantPubkey = try TestKeyMaterialFactory.makePubkeyHex()
 
@@ -198,11 +199,12 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
 
   func testRequestRemoteProfilesIfNeededCoalescesImmediateDuplicateRequests() async throws {
     var requestedPubkeyBatches: [[String]] = []
-    let (session, _) = try makeSession(
+    let (session, container) = try makeSession(
       requestProfileMetadata: { requestedPubkeys in
         requestedPubkeyBatches.append(requestedPubkeys.sorted())
       }
     )
+    _ = container
     try session.identityService.createNewIdentity()
     let firstPubkey = try TestKeyMaterialFactory.makePubkeyHex()
     let secondPubkey = try TestKeyMaterialFactory.makePubkeyHex()
@@ -235,7 +237,9 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     }
 
     sessionAndContainer = nil
-    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.01))
+    for _ in 0..<5 {
+      await Task.yield()
+    }
 
     XCTAssertNil(weakSession)
   }
@@ -769,27 +773,6 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     XCTAssertTrue(relays.allSatisfy(\.isEnabled))
   }
 
-  func testForceRestartClearsStaleRelayUIStateUntilCallbacksArrive() throws {
-    let (session, container) = try makeSession(disableNostrStartup: false)
-    try session.identityService.createNewIdentity()
-
-    let relay = RelayEntity(
-      url: "wss://relay.example.com",
-      status: .connected,
-      lastError: "stale relay failure"
-    )
-    container.mainContext.insert(relay)
-    try container.mainContext.save()
-
-    session.startNostrIfPossible(forceRestart: true)
-
-    let relays = try fetchRelays(in: container.mainContext)
-    XCTAssertEqual(session.relayStatus(for: relay), .disconnected)
-    XCTAssertEqual(relay.status, .connected)
-    XCTAssertEqual(session.connectedRelayCount(for: relays), 0)
-    XCTAssertNil(session.relayErrorMessage(for: relay))
-  }
-
   func testBackgroundClearsRuntimeRelayStateBeforeForegroundRebuild() async throws {
     var startCount = 0
     var testingOverrides = AppSession.TestingOverrides()
@@ -986,7 +969,8 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
   }
 
   func testForegroundCycleClearsStaleOfflineToast() throws {
-    let (session, _) = try makeSession(passiveOfflineToastGraceInterval: 0.01)
+    let (session, container) = try makeSession(passiveOfflineToastGraceInterval: 0.01)
+    _ = container
 
     session.composeError = "you're offline. waiting for a relay connection."
 

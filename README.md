@@ -22,7 +22,7 @@ The important rule is that membership changes are snapshot-based. When the sessi
 
 Adding someone later does not retroactively share older posts with them. Removing someone stops future delivery, but it cannot claw back content they already received while they were a valid member.
 
-Relays do not guarantee delivery order. A post can arrive before the session snapshot that makes it valid, and a reaction can arrive before the root post it belongs to. linkstr handles that by staging valid-but-early events in memory, retrying them when the missing session or root shows up, and asking relays for history again after reconnect if something is still waiting.
+Relays do not guarantee delivery order. A post can arrive before the session snapshot that makes it valid, and a reaction can arrive before the root post it belongs to. linkstr handles that by staging valid-but-early events in memory, retrying them when the missing session or root shows up, and letting late relay connections widen historical backfill coverage if more history is still needed.
 
 Deletes are intentionally stricter. A delete notice does not become authoritative until linkstr can match it to the original root post and verify that the delete sender is the same account that sent that root. That prevents bad delete notices from silently wiping out posts or reactions just because they arrived first.
 
@@ -268,7 +268,7 @@ linkstr still does not have a durable offline outbox. If a send cannot get relay
 - Live root ingest additionally requires sender and receiver to be active in the latest local membership snapshot.
 - Out-of-order root posts are staged in memory until a valid session snapshot arrives.
 - Out-of-order root deletes are staged in memory until the target root exists locally and the delete sender matches that root.
-- If staged dependencies remain across relay reconnects, the app restarts the relay runtime to request a fresh historical replay.
+- If a relay connects late, the live relay session resets backfill coverage and tries that history pass again without tearing down the whole app-level relay lifecycle.
 - linkstr delete notices remove matching stored root posts only when the delete sender matches the original post sender, and they do not persist speculative tombstones before that validation exists.
 - Upsert reaction state only when sender and receiver are active at the event timestamp and the root post exists locally.
 - Out-of-order reactions are staged in memory until the root post arrives, then retried against the same membership rules.

@@ -18,7 +18,7 @@ final class AppSessionMutationTests: AppSessionTestCase {
       memberPubkeys: [myPubkey, peerPubkey]
     )
 
-    container.mainContext.insert(RelayEntity(url: "wss://relay.example.com", status: .disconnected))
+    container.mainContext.insert(RelayEntity(url: "wss://relay.example.com"))
     try container.mainContext.save()
 
     let didCreate = await session.createSessionPostAwaitingRelay(
@@ -75,9 +75,6 @@ final class AppSessionMutationTests: AppSessionTestCase {
       memberPubkeys: [myPubkey, peerPubkey]
     )
 
-    container.mainContext.insert(RelayEntity(url: "wss://relay.example.com", status: .failed))
-    try container.mainContext.save()
-
     let didCreate = await session.createSessionPostAwaitingRelay(
       url: "https://example.com/path",
       note: nil,
@@ -103,8 +100,10 @@ final class AppSessionMutationTests: AppSessionTestCase {
       memberPubkeys: [myPubkey, peerPubkey]
     )
 
-    container.mainContext.insert(RelayEntity(url: "wss://relay.example.com", status: .readOnly))
+    let relay = RelayEntity(url: "wss://relay.example.com")
+    container.mainContext.insert(relay)
     try container.mainContext.save()
+    session.simulateRuntimeRelayStatusForTesting(relayURL: relay.url, status: .readOnly)
 
     let didCreate = await session.createSessionPostAwaitingRelay(
       url: "https://example.com/path",
@@ -137,8 +136,10 @@ final class AppSessionMutationTests: AppSessionTestCase {
       memberPubkeys: [myPubkey, peerPubkey]
     )
 
-    container.mainContext.insert(RelayEntity(url: "wss://relay.example.com", status: .readOnly))
+    let relay = RelayEntity(url: "wss://relay.example.com")
+    container.mainContext.insert(relay)
     try container.mainContext.save()
+    session.simulateRuntimeRelayStatusForTesting(relayURL: relay.url, status: .readOnly)
 
     let didCreate = await session.createSessionPostAwaitingRelay(
       url: "https://example.com/path",
@@ -615,10 +616,6 @@ final class AppSessionMutationTests: AppSessionTestCase {
       sessionID: sessionID
     )
 
-    let relay = RelayEntity(url: "wss://relay.example.com", status: .connected)
-    container.mainContext.insert(relay)
-    try container.mainContext.save()
-
     let didUpdate = await session.updateSessionMembersAwaitingRelay(
       session: sessionEntity,
       memberNPubs: [priorNPub, addedNPub]
@@ -748,10 +745,6 @@ final class AppSessionMutationTests: AppSessionTestCase {
       createdByPubkey: myPubkey,
       memberPubkeys: [myPubkey, peerPubkey]
     )
-
-    let relay = RelayEntity(url: "wss://relay.example.com", status: .connected)
-    container.mainContext.insert(relay)
-    try container.mainContext.save()
 
     let didCreate = await session.createSessionPostAwaitingRelay(
       url: "https://example.com/path",

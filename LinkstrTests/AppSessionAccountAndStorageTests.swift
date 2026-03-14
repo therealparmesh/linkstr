@@ -6,6 +6,12 @@ import XCTest
 
 @MainActor
 final class AppSessionAccountAndStorageTests: AppSessionTestCase {
+  private struct CleanupFailure: LocalizedError {
+    var errorDescription: String? {
+      "couldn't remove account keys from this device."
+    }
+  }
+
   func testLogOutClearLocalDataRemovesContactsAndMessages() async throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
@@ -216,7 +222,7 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
   func testBootRetriesIdentityLoadBeforeShowingOnboarding() async throws {
     let keypair = try TestKeyMaterialFactory.makeKeypair()
     var loadAttempts = 0
-    let (session, _) = try makeSession(
+    let (session, container) = try makeSession(
       loadIdentity: { identityService in
         loadAttempts += 1
         if loadAttempts == 1 {
@@ -229,6 +235,7 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
       skipDefaultRelaySetup: true,
       skipPersistedFollowListStateLoad: true
     )
+    _ = container
 
     await session.boot()
 
@@ -239,13 +246,14 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
 
   func testBootStartsNostrWithoutWaitingForSecondForegroundEvent() async throws {
     var nostrStartCount = 0
-    let (session, _) = try makeSession(
+    let (session, container) = try makeSession(
       skipDefaultRelaySetup: true,
       skipPersistedFollowListStateLoad: true,
       onNostrStart: {
         nostrStartCount += 1
       }
     )
+    _ = container
     try session.identityService.createNewIdentity()
 
     await session.boot()
@@ -260,13 +268,14 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
 
   func testCreateAccountAfterBootStartsNostr() async throws {
     var nostrStartCount = 0
-    let (session, _) = try makeSession(
+    let (session, container) = try makeSession(
       skipDefaultRelaySetup: true,
       skipPersistedFollowListStateLoad: true,
       onNostrStart: {
         nostrStartCount += 1
       }
     )
+    _ = container
 
     await session.boot()
 
@@ -286,7 +295,7 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     let keypair = try TestKeyMaterialFactory.makeKeypair()
     var loadAttempts = 0
     var shouldLoadIdentity = false
-    let (session, _) = try makeSession(
+    let (session, container) = try makeSession(
       loadIdentity: { identityService in
         defer { loadAttempts += 1 }
         guard shouldLoadIdentity else {
@@ -299,6 +308,7 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
       skipDefaultRelaySetup: true,
       skipPersistedFollowListStateLoad: true
     )
+    _ = container
 
     await session.boot()
     XCTAssertFalse(session.hasIdentity)
@@ -316,7 +326,7 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     let keypair = try TestKeyMaterialFactory.makeKeypair()
     var loadAttempts = 0
     var shouldLoadIdentity = false
-    let (session, _) = try makeSession(
+    let (session, container) = try makeSession(
       loadIdentity: { identityService in
         defer { loadAttempts += 1 }
         guard shouldLoadIdentity else {
@@ -329,6 +339,7 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
       skipDefaultRelaySetup: true,
       skipPersistedFollowListStateLoad: true
     )
+    _ = container
 
     await session.boot()
     XCTAssertFalse(session.hasIdentity)
@@ -343,11 +354,12 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
   }
 
   func testLogOutClearLocalDataSurfacesCleanupFailure() throws {
-    let (session, _) = try makeSession(
+    let (session, container) = try makeSession(
       clearLocalAccountData: { _ in
-        throw KeychainStoreError.deleteFailed(errSecNotAvailable)
+        throw CleanupFailure()
       }
     )
+    _ = container
     try session.identityService.createNewIdentity()
 
     session.logOut(clearLocalData: true)
@@ -360,11 +372,12 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
   }
 
   func testDeleteAccountAwaitingRelaySurfacesCleanupFailureAfterIdentityClears() async throws {
-    let (session, _) = try makeSession(
+    let (session, container) = try makeSession(
       clearLocalAccountData: { _ in
-        throw KeychainStoreError.deleteFailed(errSecNotAvailable)
+        throw CleanupFailure()
       }
     )
+    _ = container
     try session.identityService.createNewIdentity()
 
     let didDelete = await session.deleteAccountAwaitingRelay()

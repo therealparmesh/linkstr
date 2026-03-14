@@ -27,11 +27,6 @@ final class AppSession: ObservableObject {
     var updatedAt: Date
   }
 
-  private struct PendingRelayPersistenceState: Equatable {
-    let status: RelayHealthStatus
-    let message: String?
-  }
-
   private struct PendingMetadataRefresh {
     let storageID: String
   }
@@ -160,11 +155,8 @@ final class AppSession: ObservableObject {
   private var activeMetadataRefreshStorageID: String?
   private var metadataRefreshQueueGeneration = 0
   @Published private var relayRuntimeStatusByURL: [String: RelayRuntimeStatus] = [:]
-  private var pendingRelayPersistenceByURL: [String: PendingRelayPersistenceState] = [:]
-  private var relayPersistenceFlushTask: Task<Void, Never>?
   private var pendingOfflineToastTask: Task<Void, Never>?
   private var nostrStartupTask: Task<Void, Never>?
-  private let relayPersistenceDebounceNanoseconds: UInt64 = 250_000_000
   private let remoteProfileLookupRetryNanoseconds: UInt64 = 3_000_000_000
   private var hasObservedHealthyRelayInCurrentForeground = false
   private let passiveOfflineToastGraceInterval: TimeInterval = 1.25
@@ -381,21 +373,10 @@ final class AppSession: ObservableObject {
 
   func relayErrorMessage(for relay: RelayEntity) -> String? {
     guard relay.isEnabled else { return nil }
-    if let runtimeStatus = relayRuntimeStatusByURL[relay.url] {
-      let trimmedRuntime =
-        runtimeStatus.message?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-      if !trimmedRuntime.isEmpty {
-        return trimmedRuntime
-      }
-      switch runtimeStatus.status {
-      case .connecting, .connected, .readOnly, .disconnected:
-        return nil
-      case .failed:
-        break
-      }
-    }
-    let persisted = relay.lastError?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    return persisted.isEmpty ? nil : persisted
+    let trimmedRuntime =
+      relayRuntimeStatusByURL[relay.url]?.message?.trimmingCharacters(in: .whitespacesAndNewlines)
+      ?? ""
+    return trimmedRuntime.isEmpty ? nil : trimmedRuntime
   }
 
   func connectedRelayCount(for relays: [RelayEntity]) -> Int {
@@ -480,10 +461,7 @@ final class AppSession: ObservableObject {
   }
 
   private func effectiveRelayStatus(for relay: RelayEntity) -> RelayHealthStatus {
-    if let runtimeStatus = relayRuntimeStatusByURL[relay.url]?.status {
-      return runtimeStatus
-    }
-    return relay.status
+    relayRuntimeStatusByURL[relay.url]?.status ?? .disconnected
   }
 
   private func updateRuntimeRelayStatus(
@@ -520,11 +498,6 @@ final class AppSession: ObservableObject {
       status: status,
       message: normalizedMessage,
       updatedAt: now
-    )
-    enqueueRelayPersistence(
-      relayURL: relayURL,
-      status: status,
-      message: normalizedMessage
     )
   }
 
@@ -596,9 +569,6 @@ final class AppSession: ObservableObject {
 
   private func clearRelayRuntimeTracking() {
     relayRuntimeStatusByURL.removeAll()
-    pendingRelayPersistenceByURL.removeAll()
-    relayPersistenceFlushTask?.cancel()
-    relayPersistenceFlushTask = nil
   }
 
   private func replaceNostrService() {
@@ -664,80 +634,10 @@ final class AppSession: ObservableObject {
     }
   }
 
-  private func enqueueRelayPersistence(
-    relayURL: String,
-    status: RelayHealthStatus,
-    message: String?
-  ) {
-    let nextState = PendingRelayPersistenceState(
-      status: status,
-      message: message
-    )
-    if pendingRelayPersistenceByURL[relayURL] == nextState {
-      return
-    }
-    pendingRelayPersistenceByURL[relayURL] = nextState
-    scheduleRelayPersistenceFlushIfNeeded()
-  }
-
-  private func scheduleRelayPersistenceFlushIfNeeded() {
-    guard relayPersistenceFlushTask == nil else { return }
-    let debounceNanoseconds = relayPersistenceDebounceNanoseconds
-    relayPersistenceFlushTask = Task { [weak self] in
-      try? await Task.sleep(nanoseconds: debounceNanoseconds)
-      guard !Task.isCancelled else { return }
-      await MainActor.run { [weak self] in
-        guard let self else { return }
-        defer { self.relayPersistenceFlushTask = nil }
-        self.flushRelayPersistenceNow()
-      }
-    }
-  }
-
-  private func flushRelayPersistenceNow() {
-    relayPersistenceFlushTask?.cancel()
-    relayPersistenceFlushTask = nil
-
-    guard !pendingRelayPersistenceByURL.isEmpty else { return }
-    let pending = pendingRelayPersistenceByURL
-    pendingRelayPersistenceByURL.removeAll(keepingCapacity: true)
-
-    do {
-      let relays = try relayStore.fetchRelays()
-      let relaysByURL = Dictionary(uniqueKeysWithValues: relays.map { ($0.url, $0) })
-      var didChange = false
-
-      for (relayURL, pendingState) in pending {
-        guard let relay = relaysByURL[relayURL] else { continue }
-        if relay.status != pendingState.status {
-          relay.status = pendingState.status
-          didChange = true
-        }
-        if relay.lastError != pendingState.message {
-          relay.lastError = pendingState.message
-          didChange = true
-        }
-      }
-
-      if didChange {
-        try modelContext.save()
-      }
-    } catch {
-      // Keep runtime relay updates resilient even if local persistence fails.
-      for (relayURL, state) in pending {
-        pendingRelayPersistenceByURL[relayURL] = state
-      }
-      scheduleRelayPersistenceFlushIfNeeded()
-    }
-  }
-
   private func pruneRuntimeRelayStatusCache() {
     let relays = (try? relayStore.fetchRelays()) ?? []
     let enabledURLs = Set(relays.filter(\.isEnabled).map(\.url))
     relayRuntimeStatusByURL = relayRuntimeStatusByURL.filter { enabledURLs.contains($0.key) }
-    pendingRelayPersistenceByURL = pendingRelayPersistenceByURL.filter {
-      enabledURLs.contains($0.key)
-    }
   }
 
   private func refreshRelayConnectivityAlert() throws {
@@ -1369,9 +1269,6 @@ final class AppSession: ObservableObject {
       composeError = nil
     }
     relayRuntimeStatusByURL = relayRuntimeStatusByURL.filter { relayURLs.contains($0.key) }
-    pendingRelayPersistenceByURL = pendingRelayPersistenceByURL.filter {
-      relayURLs.contains($0.key)
-    }
 
     startNostrRuntime(
       keypair: keypair,

@@ -40,10 +40,6 @@ final class RelayStore {
 
   func toggleRelay(_ relay: RelayEntity) throws {
     relay.isEnabled.toggle()
-    if relay.isEnabled == false {
-      relay.status = .disconnected
-      relay.lastError = nil
-    }
     try modelContext.save()
   }
 

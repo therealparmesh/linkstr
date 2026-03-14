@@ -99,7 +99,7 @@ Posts, reactions, and deletes are validated against session state before they ar
 
 Relays can deliver messages out of order. A post may arrive before the session snapshot that makes it valid, and a reaction may arrive before the root it belongs to. linkstr handles that by temporarily staging those events in memory and retrying them when the missing session or root shows up.
 
-If reconnect happens while something is still waiting on missing history, linkstr asks relays for history again instead of leaving that event stranded in memory. If you fully reset runtime state before the missing history comes back, recovery still depends on whether the relays can replay those events.
+If something is still waiting on missing history, linkstr keeps that event staged in memory. When another relay connects later in the same live session, linkstr widens backfill coverage and retries once the missing history arrives. Recovery still depends on whether your relays can replay that history.
 
 Duplicate relay delivery is normal. linkstr deduplicates by event ID, so reconnects and backfill should not create duplicate posts or reactions in the app.
 
@@ -217,7 +217,7 @@ Archived sessions do not send notifications.
 1. Confirm your internet connection works.
 2. Open Settings and check that at least one relay is enabled.
 3. If needed, use `Reset defaults` in the relays section.
-4. Bring the app back to the foreground and leave it open for a few seconds. linkstr stops relay runtime whenever it leaves foreground and does one clean rebuild from a disconnected baseline when it becomes active again.
+4. Bring the app back to the foreground and leave it open for a few seconds. linkstr treats that like a light reopen: it stops relay runtime whenever the app leaves foreground and does one clean rebuild from a disconnected baseline when it becomes active again.
 5. If it still does not recover, force-quit and reopen the app.
 
 **My posts are not syncing across devices**
