@@ -769,7 +769,7 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     XCTAssertTrue(relays.allSatisfy(\.isEnabled))
   }
 
-  func testForceRestartMarksEnabledRelaysConnectingAndClearsStaleErrors() throws {
+  func testForceRestartClearsStaleRelayUIStateUntilCallbacksArrive() throws {
     let (session, container) = try makeSession(disableNostrStartup: false)
     try session.identityService.createNewIdentity()
 
@@ -784,16 +784,16 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     session.startNostrIfPossible(forceRestart: true)
 
     let relays = try fetchRelays(in: container.mainContext)
-    XCTAssertEqual(session.relayStatus(for: relay), .connecting)
+    XCTAssertEqual(session.relayStatus(for: relay), .disconnected)
+    XCTAssertEqual(relay.status, .connected)
     XCTAssertEqual(session.connectedRelayCount(for: relays), 0)
     XCTAssertNil(session.relayErrorMessage(for: relay))
   }
 
-  func testForegroundRecoveryLoopKeepsRetryingWhenNoRelayBecomesHealthy() async throws {
+  func testBackgroundClearsRuntimeRelayStateBeforeForegroundRebuild() async throws {
     var startCount = 0
     var testingOverrides = AppSession.TestingOverrides()
     testingOverrides.disableNostrStartup = false
-    testingOverrides.foregroundRelayRestartCooldown = 0.01
     testingOverrides.skipNostrNetworkStartup = true
     testingOverrides.onNostrStart = {
       startCount += 1
@@ -807,13 +807,59 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
 
     await session.boot()
 
-    let retryDeadline = Date(timeIntervalSinceNow: 0.35)
-    while startCount < 3, Date() < retryDeadline {
+    let initialStartupDeadline = Date(timeIntervalSinceNow: 0.2)
+    while startCount < 1, Date() < initialStartupDeadline {
       try? await Task.sleep(for: .milliseconds(10))
     }
 
-    XCTAssertGreaterThanOrEqual(startCount, 3)
-    XCTAssertEqual(session.relayStatus(for: relay), .connecting)
+    XCTAssertEqual(startCount, 1)
+
+    session.simulateRuntimeRelayStatusForTesting(relayURL: relay.url, status: .connected)
+    XCTAssertEqual(session.relayStatus(for: relay), .connected)
+
+    session.handleAppDidLeaveForeground()
+    XCTAssertEqual(session.relayStatus(for: relay), .disconnected)
+
+    session.handleAppDidBecomeActive()
+
+    let restartDeadline = Date(timeIntervalSinceNow: 0.2)
+    while startCount < 2, Date() < restartDeadline {
+      try? await Task.sleep(for: .milliseconds(10))
+    }
+
+    XCTAssertGreaterThanOrEqual(startCount, 2)
+    XCTAssertEqual(session.relayStatus(for: relay), .disconnected)
+  }
+
+  func testForegroundStartupOnlyStartsOncePerForegroundEntryWhenNoRelayBecomesHealthy()
+    async throws
+  {
+    var startCount = 0
+    var testingOverrides = AppSession.TestingOverrides()
+    testingOverrides.disableNostrStartup = false
+    testingOverrides.skipNostrNetworkStartup = true
+    testingOverrides.onNostrStart = {
+      startCount += 1
+    }
+    let (session, container) = try makeSession(testingOverrides: testingOverrides)
+    try session.identityService.createNewIdentity()
+
+    let relay = RelayEntity(url: "wss://relay.example.com")
+    container.mainContext.insert(relay)
+    try container.mainContext.save()
+
+    await session.boot()
+
+    let startupDeadline = Date(timeIntervalSinceNow: 0.2)
+    while startCount < 1, Date() < startupDeadline {
+      try? await Task.sleep(for: .milliseconds(10))
+    }
+
+    XCTAssertEqual(startCount, 1)
+    XCTAssertEqual(session.relayStatus(for: relay), .disconnected)
+
+    try? await Task.sleep(for: .milliseconds(150))
+    XCTAssertEqual(startCount, 1)
 
     session.handleAppDidLeaveForeground()
 
@@ -823,12 +869,14 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
 
     session.handleAppDidBecomeActive()
 
-    let resumedRetryDeadline = Date(timeIntervalSinceNow: 0.2)
-    while startCount == stableStartCount, Date() < resumedRetryDeadline {
+    let resumedStartupDeadline = Date(timeIntervalSinceNow: 0.2)
+    while startCount == stableStartCount, Date() < resumedStartupDeadline {
       try? await Task.sleep(for: .milliseconds(10))
     }
 
-    XCTAssertGreaterThan(startCount, stableStartCount)
+    XCTAssertEqual(startCount, stableStartCount + 1)
+    try? await Task.sleep(for: .milliseconds(150))
+    XCTAssertEqual(startCount, stableStartCount + 1)
   }
 
   func testPassiveOfflineToastDoesNotLoopAcrossForegroundRelayFlaps() throws {
@@ -837,7 +885,7 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     container.mainContext.insert(relay)
     try container.mainContext.save()
 
-    session.beginForegroundRelayCycleForTesting()
+    session.beginForegroundCycleForTesting()
     session.simulateRuntimeRelayStatusForTesting(relayURL: relay.url, status: .connected)
     session.simulateRuntimeRelayStatusForTesting(
       relayURL: relay.url,
@@ -876,7 +924,7 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     container.mainContext.insert(relay)
     try container.mainContext.save()
 
-    session.beginForegroundRelayCycleForTesting()
+    session.beginForegroundCycleForTesting()
     session.simulateRuntimeRelayStatusForTesting(relayURL: relay.url, status: .connected)
     session.simulateRuntimeRelayStatusForTesting(
       relayURL: relay.url,
@@ -893,7 +941,7 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     XCTAssertEqual(session.composeError, "you're offline. waiting for a relay connection.")
 
     session.composeError = nil
-    session.beginForegroundRelayCycleForTesting()
+    session.beginForegroundCycleForTesting()
     session.simulateRuntimeRelayStatusForTesting(relayURL: relay.url, status: .connected)
     session.simulateRuntimeRelayStatusForTesting(
       relayURL: relay.url,
@@ -917,7 +965,7 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     container.mainContext.insert(relay)
     try container.mainContext.save()
 
-    session.beginForegroundRelayCycleForTesting()
+    session.beginForegroundCycleForTesting()
     session.simulateRuntimeRelayStatusForTesting(relayURL: relay.url, status: .connected)
     session.simulateRuntimeRelayStatusForTesting(
       relayURL: relay.url,
@@ -937,12 +985,12 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     XCTAssertEqual(session.composeError, "you're offline. waiting for a relay connection.")
   }
 
-  func testForegroundRelayCycleClearsStaleOfflineToast() throws {
+  func testForegroundCycleClearsStaleOfflineToast() throws {
     let (session, _) = try makeSession(passiveOfflineToastGraceInterval: 0.01)
 
     session.composeError = "you're offline. waiting for a relay connection."
 
-    session.beginForegroundRelayCycleForTesting()
+    session.beginForegroundCycleForTesting()
 
     XCTAssertNil(session.composeError)
   }

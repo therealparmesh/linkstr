@@ -250,6 +250,10 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
 
     await session.boot()
 
+    for _ in 0..<10 where nostrStartCount == 0 {
+      await Task.yield()
+    }
+
     XCTAssertTrue(session.didFinishBoot)
     XCTAssertEqual(nostrStartCount, 1)
   }

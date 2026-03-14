@@ -1109,40 +1109,6 @@ final class AppSessionIngestTests: AppSessionTestCase {
     XCTAssertTrue(reaction.isActive)
   }
 
-  func testPendingIncomingReconnectForcesFreshRelayRestartOncePerOutage() throws {
-    var nostrStartCount = 0
-    let (session, _) = try makeSession(
-      onNostrStart: {
-        nostrStartCount += 1
-      }
-    )
-    try session.identityService.createNewIdentity()
-
-    let creatorPubkey = try TestKeyMaterialFactory.makePubkeyHex()
-    session.enqueuePendingIncomingForTesting(
-      makeIncomingMessage(
-        eventID: "pending-root-before-reconnect-replay",
-        senderPubkey: creatorPubkey,
-        createdAt: Date(timeIntervalSince1970: 825),
-        payload: LinkstrPayload(
-          conversationID: "session-pending-reconnect-replay",
-          rootID: "pending-root-before-reconnect-replay",
-          kind: .root,
-          url: "https://example.com/pending-reconnect-replay",
-          note: nil,
-          timestamp: 825
-        )
-      ))
-    session.simulateRelayStatusForTesting(.disconnected)
-    XCTAssertEqual(nostrStartCount, 0)
-
-    session.simulateRelayStatusForTesting(.connected)
-    XCTAssertEqual(nostrStartCount, 1)
-
-    session.simulateRelayStatusForTesting(.connected)
-    XCTAssertEqual(nostrStartCount, 1)
-  }
-
   func testIngestRootDeleteRemovesMatchingStoredPostAndReactions() throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()

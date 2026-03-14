@@ -125,10 +125,8 @@ struct LinkstrAppMain: App {
                 switch newValue {
                 case .active:
                   readyContext.session.handleAppDidBecomeActive()
-                case .background:
+                case .inactive, .background:
                   readyContext.session.handleAppDidLeaveForeground()
-                case .inactive:
-                  break
                 @unknown default:
                   break
                 }
