@@ -283,10 +283,15 @@ struct LinkstrEmojiPickerSheet: View {
       .linkstrBarChrome()
       .searchable(text: $query, prompt: "search emoji")
       .toolbar {
-        ToolbarItem(placement: .cancellationAction) {
-          Button("cancel") {
+        ToolbarItem(placement: .topBarLeading) {
+          Button {
             dismiss()
+          } label: {
+            Image(systemName: "xmark")
+              .linkstrToolbarIconLabel()
           }
+          .accessibilityLabel("close emoji picker")
+          .tint(LinkstrTheme.textSecondary)
         }
       }
     }
@@ -378,11 +383,7 @@ struct PostDetailView: View {
   }
 
   private var shareDeepLinkURL: URL? {
-    LinkstrDeepLinkCodec.makeAppDeepLink(
-      url: post.url,
-      timestamp: post.timestamp,
-      messageGUID: post.rootID
-    )
+    LinkstrDeepLinkCodec.makeAppDeepLink(url: post.url)
   }
 
   var body: some View {

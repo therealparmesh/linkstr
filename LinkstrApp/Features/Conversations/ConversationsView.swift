@@ -1302,10 +1302,15 @@ private struct SessionMembersSheet: View {
       .navigationBarTitleDisplayMode(.inline)
       .linkstrBarChrome()
       .toolbar {
-        ToolbarItem(placement: .cancellationAction) {
-          Button(canManageMembers ? "cancel" : "done") {
+        ToolbarItem(placement: .topBarLeading) {
+          Button {
             dismiss()
+          } label: {
+            Image(systemName: "xmark")
+              .linkstrToolbarIconLabel()
           }
+          .accessibilityLabel(canManageMembers ? "cancel" : "close")
+          .tint(LinkstrTheme.textSecondary)
           .disabled(isSaving)
         }
         if canManageMembers {

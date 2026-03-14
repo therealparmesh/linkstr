@@ -1,6 +1,6 @@
 # linkstr
 
-Last updated: March 13, 2026
+Last updated: March 14, 2026
 
 `linkstr` is an iOS app for private link sharing on nostr. You create private sessions, share links with people you trust, react with emojis, and open supported video inside the app when a provider allows it.
 
@@ -162,7 +162,8 @@ linkstr still does not have a durable offline outbox. If a send cannot get relay
 - Unsupported schemes are rejected.
 - Note text is trimmed and persisted only when non-empty.
 - In post detail, the raw link text supports the standard ios copy menu via text selection.
-- In post detail, the top-right share action exports a `linkstr://open?p=...` deep link for the current post URL.
+- In post detail, the top-right share action exports a `linkstr://open?url=...` deep link for the current post URL.
+- Shared deep links carry only the normalized web URL; title, thumbnail, and provider-specific preview text are fetched when the recipient opens the link.
 - Browser handoff uses the `open in browser` action.
 - In post detail, note text is rendered as an accented note callout for visual separation and media/metadata sit inside grouped detail surfaces.
 - Send behavior is reconnect-and-timeout:
@@ -323,7 +324,7 @@ linkstr still does not have a durable offline outbox. If a send cannot get relay
 #### Playback behavior
 
 - For extraction-capable providers, local playback is attempted first with explicit controls to switch to embed mode.
-- Local/embed action rows are normalized across post detail and deep-link playback surfaces.
+- Local/embed action rows are normalized across post detail and shared-link detail surfaces.
 - Media playback surfaces temporarily acquire an `AVAudioSession` playback category while onscreen, so audio still plays when the iphone silent switch is enabled.
 - In local playback mode with a locally cached media file, users can export via `save...`:
   - `save to photos` (requests photos add-only permission).
@@ -392,11 +393,12 @@ linkstr still does not have a durable offline outbox. If a send cannot get relay
 
 ### Deep links
 
-- Deep link format is `linkstr://open?p=...`.
-- Valid deep links open a full-screen playback surface.
+- Deep link format is `linkstr://open?url=...`.
+- Valid deep links open a full-screen shared-link detail surface.
 - Post detail can share the current post as a deep link through the native iOS share sheet.
-- Deep-link playback reuses the same adaptive local/embed controls as in post detail.
-- Dismissing deep link playback clears pending deep-link state.
+- Shared deep links re-fetch title, thumbnail, and provider-specific preview text when opened.
+- Shared-link detail reuses the same adaptive local/embed controls as post detail when the URL supports in-app playback.
+- Dismissing shared-link detail clears pending deep-link state.
 
 ### Local data and security
 

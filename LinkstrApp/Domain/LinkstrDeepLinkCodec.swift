@@ -1,12 +1,12 @@
 import Foundation
 
 enum LinkstrDeepLinkCodec {
-  private static let payloadQueryKey = "p"
+  private static let urlQueryKey = "url"
   private static let appDeepLinkScheme = "linkstr"
   private static let appDeepLinkHost = "open"
 
-  static func makeAppDeepLink(payload: LinkstrDeepLinkPayload) -> URL? {
-    guard let token = encode(payload) else {
+  static func makeAppDeepLink(url: String?) -> URL? {
+    guard let url, let normalizedURL = LinkstrURLValidator.normalizedWebURL(from: url) else {
       return nil
     }
 
@@ -14,30 +14,12 @@ enum LinkstrDeepLinkCodec {
     components.scheme = appDeepLinkScheme
     components.host = appDeepLinkHost
     components.queryItems = [
-      URLQueryItem(name: payloadQueryKey, value: token)
+      URLQueryItem(name: urlQueryKey, value: normalizedURL)
     ]
     return components.url
   }
 
-  static func makeAppDeepLink(
-    url: String?,
-    timestamp: Date,
-    messageGUID: String
-  ) -> URL? {
-    guard let url, let normalizedURL = LinkstrURLValidator.normalizedWebURL(from: url) else {
-      return nil
-    }
-
-    return makeAppDeepLink(
-      payload: LinkstrDeepLinkPayload(
-        url: normalizedURL,
-        timestamp: Int64(timestamp.timeIntervalSince1970),
-        messageGUID: messageGUID
-      )
-    )
-  }
-
-  static func parsePayload(fromAppDeepLink url: URL) -> LinkstrDeepLinkPayload? {
+  static func parseURL(fromAppDeepLink url: URL) -> String? {
     guard url.scheme?.lowercased() == appDeepLinkScheme else {
       return nil
     }
@@ -52,54 +34,11 @@ enum LinkstrDeepLinkCodec {
 
     guard
       let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-      let token = components.queryItems?.first(where: { $0.name == payloadQueryKey })?.value
+      let encodedURL = components.queryItems?.first(where: { $0.name == urlQueryKey })?.value
     else {
       return nil
     }
 
-    guard let payload = decode(token) else {
-      return nil
-    }
-
-    guard let normalizedURL = LinkstrURLValidator.normalizedWebURL(from: payload.url) else {
-      return nil
-    }
-
-    return LinkstrDeepLinkPayload(
-      url: normalizedURL,
-      timestamp: payload.timestamp,
-      messageGUID: payload.messageGUID
-    )
-  }
-
-  private static func encode(_ payload: LinkstrDeepLinkPayload) -> String? {
-    guard let data = try? JSONEncoder().encode(payload) else {
-      return nil
-    }
-
-    return
-      data
-      .base64EncodedString()
-      .replacingOccurrences(of: "+", with: "-")
-      .replacingOccurrences(of: "/", with: "_")
-      .replacingOccurrences(of: "=", with: "")
-  }
-
-  private static func decode(_ token: String) -> LinkstrDeepLinkPayload? {
-    var base64 =
-      token
-      .replacingOccurrences(of: "-", with: "+")
-      .replacingOccurrences(of: "_", with: "/")
-
-    let remainder = base64.count % 4
-    if remainder != 0 {
-      base64 += String(repeating: "=", count: 4 - remainder)
-    }
-
-    guard let data = Data(base64Encoded: base64) else {
-      return nil
-    }
-
-    return try? JSONDecoder().decode(LinkstrDeepLinkPayload.self, from: data)
+    return LinkstrURLValidator.normalizedWebURL(from: encodedURL)
   }
 }

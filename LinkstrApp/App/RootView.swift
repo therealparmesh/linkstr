@@ -54,7 +54,7 @@ struct RootView: View {
     }
     .fullScreenCover(
       isPresented: Binding(
-        get: { deepLinkHandler.pendingPayload != nil },
+        get: { deepLinkHandler.pendingURLString != nil },
         set: { isPresented in
           if !isPresented {
             deepLinkHandler.clear()
@@ -62,8 +62,8 @@ struct RootView: View {
         }
       )
     ) {
-      if let payload = deepLinkHandler.pendingPayload {
-        DeepLinkContainerView(payload: payload)
+      if let urlString = deepLinkHandler.pendingURLString {
+        DeepLinkContainerView(urlString: urlString)
       } else {
         EmptyView()
       }

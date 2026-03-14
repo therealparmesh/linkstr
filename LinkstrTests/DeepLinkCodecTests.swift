@@ -4,75 +4,59 @@ import XCTest
 
 final class DeepLinkCodecTests: XCTestCase {
   func testAppDeepLinkRoundtrip() throws {
-    let payload = LinkstrDeepLinkPayload(
-      url: "https://www.tiktok.com/@acct/video/7596114833477537054",
-      timestamp: 1_739_877_200,
-      messageGUID: UUID().uuidString
-    )
+    let urlString = "https://www.tiktok.com/@acct/video/7596114833477537054"
 
-    let deepLink = try XCTUnwrap(LinkstrDeepLinkCodec.makeAppDeepLink(payload: payload))
-    let parsed = try XCTUnwrap(LinkstrDeepLinkCodec.parsePayload(fromAppDeepLink: deepLink))
-    XCTAssertEqual(parsed, payload)
+    let deepLink = try XCTUnwrap(LinkstrDeepLinkCodec.makeAppDeepLink(url: urlString))
+    let parsed = try XCTUnwrap(LinkstrDeepLinkCodec.parseURL(fromAppDeepLink: deepLink))
+    XCTAssertEqual(parsed, urlString)
   }
 
   func testAppDeepLinkRejectsUnexpectedSchemeOrHost() throws {
-    let validPayload = LinkstrDeepLinkPayload(
-      url: "https://x.com/jack/status/20",
-      timestamp: 1_739_877_400,
-      messageGUID: UUID().uuidString
-    )
-    let url = try XCTUnwrap(LinkstrDeepLinkCodec.makeAppDeepLink(payload: validPayload))
+    let url = try XCTUnwrap(
+      LinkstrDeepLinkCodec.makeAppDeepLink(url: "https://x.com/jack/status/20"))
     let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.percentEncodedQuery ?? ""
 
     let wrongScheme = URL(string: "https://open?\(query)")!
-    XCTAssertNil(LinkstrDeepLinkCodec.parsePayload(fromAppDeepLink: wrongScheme))
+    XCTAssertNil(LinkstrDeepLinkCodec.parseURL(fromAppDeepLink: wrongScheme))
 
     let wrongHost = URL(string: "linkstr://watch?\(query)")!
-    XCTAssertNil(LinkstrDeepLinkCodec.parsePayload(fromAppDeepLink: wrongHost))
+    XCTAssertNil(LinkstrDeepLinkCodec.parseURL(fromAppDeepLink: wrongHost))
 
     let wrongPath = URL(string: "linkstr://open/deep?\(query)")!
-    XCTAssertNil(LinkstrDeepLinkCodec.parsePayload(fromAppDeepLink: wrongPath))
+    XCTAssertNil(LinkstrDeepLinkCodec.parseURL(fromAppDeepLink: wrongPath))
   }
 
   func testAppDeepLinkRejectsNonWebPayloadURL() throws {
-    let payload = LinkstrDeepLinkPayload(
-      url: "javascript:alert('xss')",
-      timestamp: 1_739_877_800,
-      messageGUID: UUID().uuidString
-    )
-    let deepLink = try XCTUnwrap(LinkstrDeepLinkCodec.makeAppDeepLink(payload: payload))
-    XCTAssertNil(LinkstrDeepLinkCodec.parsePayload(fromAppDeepLink: deepLink))
+    XCTAssertNil(LinkstrDeepLinkCodec.makeAppDeepLink(url: "javascript:alert('xss')"))
   }
 
-  func testAppDeepLinkConvenienceBuilderUsesValidatedURL() throws {
+  func testAppDeepLinkBuilderUsesValidatedURL() throws {
     let deepLink = try XCTUnwrap(
-      LinkstrDeepLinkCodec.makeAppDeepLink(
-        url: "https://example.com/video",
-        timestamp: Date(timeIntervalSince1970: 1_739_877_900),
-        messageGUID: "post-guid"
-      )
-    )
+      LinkstrDeepLinkCodec.makeAppDeepLink(url: "https://example.com/video"))
 
-    let parsed = try XCTUnwrap(LinkstrDeepLinkCodec.parsePayload(fromAppDeepLink: deepLink))
-    XCTAssertEqual(parsed.url, "https://example.com/video")
-    XCTAssertEqual(parsed.timestamp, 1_739_877_900)
-    XCTAssertEqual(parsed.messageGUID, "post-guid")
+    let parsed = try XCTUnwrap(LinkstrDeepLinkCodec.parseURL(fromAppDeepLink: deepLink))
+    XCTAssertEqual(parsed, "https://example.com/video")
+  }
+
+  func testAppDeepLinkRejectsRemovedPayloadFormat() {
+    let legacyURL = URL(
+      string:
+        "linkstr://open?p=eyJ1cmwiOiJodHRwczovL2V4YW1wbGUuY29tL3ZpZGVvIiwidGltZXN0YW1wIjoxLCJtZXNzYWdlR1VJRCI6ImFiYyJ9"
+    )!
+
+    XCTAssertNil(LinkstrDeepLinkCodec.parseURL(fromAppDeepLink: legacyURL))
   }
 }
 
 @MainActor
 final class DeepLinkHandlerTests: XCTestCase {
-  func testHandleValidDeepLinkSetsPendingPayload() throws {
+  func testHandleValidDeepLinkSetsPendingURLString() throws {
     let handler = DeepLinkHandler()
-    let payload = LinkstrDeepLinkPayload(
-      url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-      timestamp: 1_739_877_500,
-      messageGUID: "deep-link-guid"
-    )
-    let url = try XCTUnwrap(LinkstrDeepLinkCodec.makeAppDeepLink(payload: payload))
+    let payloadURL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    let url = try XCTUnwrap(LinkstrDeepLinkCodec.makeAppDeepLink(url: payloadURL))
 
     XCTAssertTrue(handler.handle(url: url))
-    XCTAssertEqual(handler.pendingPayload, payload)
+    XCTAssertEqual(handler.pendingURLString, payloadURL)
   }
 
   func testHandleInvalidDeepLinkReturnsFalse() {
@@ -80,6 +64,6 @@ final class DeepLinkHandlerTests: XCTestCase {
     let invalidURL = URL(string: "linkstr://open?p=not-valid")!
 
     XCTAssertFalse(handler.handle(url: invalidURL))
-    XCTAssertNil(handler.pendingPayload)
+    XCTAssertNil(handler.pendingURLString)
   }
 }

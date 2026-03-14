@@ -1,6 +1,6 @@
 # linkstr support
 
-Last updated: March 13, 2026
+Last updated: March 14, 2026
 
 linkstr is a private link-sharing app built on nostr. You create or join private sessions, share links inside those sessions, and react with emoji. This page describes the current shipped behavior in plain language.
 
@@ -54,7 +54,7 @@ Generic web URLs are valid posts too. In-app playback, local caching, and save/e
 ### React, delete, archive, and manage members
 
 - Reactions: open a post and tap `👍`, `👎`, `👀`, or `...` for the emoji picker.
-- Share a deep link to a post: open post detail and tap the share button in the top-right corner.
+- Share a deep link to a post: open post detail and tap the share button in the top-right corner. The shared link carries only the normalized URL, and linkstr fetches preview metadata again when the recipient opens it.
 - Remove your reaction: tap the same emoji again.
 - Delete your own post: long-press the post row in the session view.
 - Archive a session: long-press the session row.
@@ -239,7 +239,7 @@ Remember that historical replay depends on relay retention. linkstr can retry ou
 **A preview looks stale or wrong**
 
 1. Clear cached media and previews from Settings.
-2. Open the session or the post detail and let linkstr rebuild the preview.
+2. Open the session, the post detail, or the shared-link screen and let linkstr rebuild the preview.
 3. If the provider itself is serving bad metadata, use `open in browser`.
 
 **I can't scan a QR code**

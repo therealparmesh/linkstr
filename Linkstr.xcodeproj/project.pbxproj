@@ -11,11 +11,10 @@
 		0628828BC98793B4ABE23DA5 /* AppSessionTestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1228C6F84C85528F73807B22 /* AppSessionTestSupport.swift */; };
 		0B0B738D8A0BF9E1A725E38C /* DeepLinkContainerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A337208561EE745583B8225D /* DeepLinkContainerView.swift */; };
 		0DB741B1FF4F5E48E9A3795F /* SessionMessageEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9DE3286769E2B99896B67D7 /* SessionMessageEntity.swift */; };
-		1082085B9DC4220811F39FE6 /* LinkstrDeepLinkPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 625540CCCEBE62ADD237D4C4 /* LinkstrDeepLinkPayload.swift */; };
 		108940D9B4C66BAF3C41DAF9 /* ContactKeyParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3E55FD1E2DA44178AA72B96 /* ContactKeyParserTests.swift */; };
 		110617B94A972E6B8EE939C0 /* NewPostSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 520A1C73A4134BAD043097AB /* NewPostSheet.swift */; };
 		114A9CC19804FF785F2DC976 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 338EDAA43F42292E8BCA9349 /* KeychainStore.swift */; };
-		11F887A872ACDC7C396A291F /* DeepLinkVideoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B086DB984B1E32A78F02858 /* DeepLinkVideoView.swift */; };
+		11F887A872ACDC7C396A291F /* DeepLinkDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B086DB984B1E32A78F02858 /* DeepLinkDetailView.swift */; };
 		134ACA05E431DD04BB5CC815 /* VideoCacheService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FA7CAC32E21ED5228B4B505 /* VideoCacheService.swift */; };
 		174D122D4BFF611B86109347 /* PublishAckTrackerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B64A54E14E870212628FF284 /* PublishAckTrackerTests.swift */; };
 		1956EBD013DF5C302F70763D /* RelayDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DBA0BC7B47AFD11179DB175 /* RelayDefaults.swift */; };
@@ -134,7 +133,6 @@
 		554F594CDF599B92E9E94AD8 /* NostrProfileMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NostrProfileMetadata.swift; sourceTree = "<group>"; };
 		572F5BEA562DB0F3E6DB2188 /* ContactEntity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactEntity.swift; sourceTree = "<group>"; };
 		5B94E88691277DCC6F6DE7E3 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
-		625540CCCEBE62ADD237D4C4 /* LinkstrDeepLinkPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkstrDeepLinkPayload.swift; sourceTree = "<group>"; };
 		6674045F6FA738EEC6059105 /* AppSessionContactAndRelayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSessionContactAndRelayTests.swift; sourceTree = "<group>"; };
 		68350273DCA0FBB994BE216F /* URLClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = URLClassifier.swift; sourceTree = "<group>"; };
 		6EE663FE430C958339CB80F1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -152,7 +150,7 @@
 		935D6B1E62FE8CF07B35A850 /* Linkstr.Debug.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Linkstr.Debug.entitlements; sourceTree = "<group>"; };
 		95580D1A253B06E366D6DC27 /* LinkstrResolvedIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkstrResolvedIdentity.swift; sourceTree = "<group>"; };
 		98061D30E4BEE3032B31F59D /* PushNotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushNotificationService.swift; sourceTree = "<group>"; };
-		9B086DB984B1E32A78F02858 /* DeepLinkVideoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLinkVideoView.swift; sourceTree = "<group>"; };
+		9B086DB984B1E32A78F02858 /* DeepLinkDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLinkDetailView.swift; sourceTree = "<group>"; };
 		9E751D8B61D7D30F3D4F6543 /* AppSessionIngestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSessionIngestTests.swift; sourceTree = "<group>"; };
 		9F0C1843FF391DE67E57D3A0 /* SessionMembershipTimelineBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionMembershipTimelineBuilderTests.swift; sourceTree = "<group>"; };
 		9FED3B5DF5A048969C4C2153 /* IdentityServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentityServiceTests.swift; sourceTree = "<group>"; };
@@ -296,7 +294,7 @@
 			isa = PBXGroup;
 			children = (
 				A337208561EE745583B8225D /* DeepLinkContainerView.swift */,
-				9B086DB984B1E32A78F02858 /* DeepLinkVideoView.swift */,
+				9B086DB984B1E32A78F02858 /* DeepLinkDetailView.swift */,
 			);
 			path = DeepLink;
 			sourceTree = "<group>";
@@ -381,7 +379,6 @@
 			isa = PBXGroup;
 			children = (
 				473FCEDF05A41F46037CA0A3 /* LinkstrDeepLinkCodec.swift */,
-				625540CCCEBE62ADD237D4C4 /* LinkstrDeepLinkPayload.swift */,
 				24DA8D8D914B2A19EC637310 /* LinkstrPayload.swift */,
 				0163E69486343F16E6BDF160 /* LinkstrURLValidator.swift */,
 				0A117E36B63F21A3C556B224 /* LinkType.swift */,
@@ -521,7 +518,7 @@
 				9E483E07CCE87E18F46F283D /* DateLabelFormatter.swift in Sources */,
 				0B0B738D8A0BF9E1A725E38C /* DeepLinkContainerView.swift in Sources */,
 				AAA287E1271ED6F51214D802 /* DeepLinkHandler.swift in Sources */,
-				11F887A872ACDC7C396A291F /* DeepLinkVideoView.swift in Sources */,
+				11F887A872ACDC7C396A291F /* DeepLinkDetailView.swift in Sources */,
 				9CC0DB1E8F036EE4ED1E6687 /* EmbeddedWebView.swift in Sources */,
 				6EB7676D56763E9FED69A718 /* HLSDownloadManager.swift in Sources */,
 				CABAAF73A10AD588AD2A5486 /* IdentityService.swift in Sources */,
@@ -531,7 +528,6 @@
 				24629555B44DBF5E0273B1B6 /* LinkstrApp.swift in Sources */,
 				305C2DF0444F783FD47302F0 /* LinkstrContactIdentityView.swift in Sources */,
 				938970AFBB34DA8F985E727B /* LinkstrDeepLinkCodec.swift in Sources */,
-				1082085B9DC4220811F39FE6 /* LinkstrDeepLinkPayload.swift in Sources */,
 				44CF9CF4B0623913AB1F02F2 /* LinkstrErrorToast.swift in Sources */,
 				EE247329EA1C2DFB3640EF85 /* LinkstrPayload.swift in Sources */,
 				6F57AE370A13B31084A504A2 /* LinkstrResolvedIdentity.swift in Sources */,

@@ -1,0 +1,155 @@
+import SwiftUI
+import UIKit
+
+struct DeepLinkDetailView: View {
+  let urlString: String
+
+  @Environment(\.openURL) private var openURL
+
+  @State private var previewTitle: String?
+  @State private var previewThumbnailPath: String?
+  @State private var remotePostText: String?
+
+  private var normalizedURLString: String? {
+    LinkstrURLValidator.normalizedWebURL(from: urlString)
+  }
+
+  private var sourceURL: URL? {
+    guard let normalizedURLString else { return nil }
+    return URL(string: normalizedURLString)
+  }
+
+  private var mediaStrategy: URLClassifier.MediaStrategy {
+    URLClassifier.mediaStrategy(for: normalizedURLString)
+  }
+
+  private var resolvedThumbnailImage: UIImage? {
+    guard
+      let thumbnailFileURL = ManagedLocalFileScope.shared.managedFileURL(
+        fromPath: previewThumbnailPath)
+    else {
+      return nil
+    }
+    return UIImage(contentsOfFile: thumbnailFileURL.path)
+  }
+
+  var body: some View {
+    ScrollView {
+      VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
+        linkCard
+      }
+      .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+      .padding(.top, LinkstrTheme.compactSpacing)
+      .padding(.bottom, LinkstrTheme.screenBottomPadding)
+    }
+    .background(LinkstrBackgroundView())
+    .task(id: normalizedURLString) {
+      await loadPreviewIfNeeded()
+    }
+  }
+
+  private var linkCard: some View {
+    VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
+      if let previewTitle {
+        Text(previewTitle)
+          .font(LinkstrTheme.title(17, weight: .semibold))
+          .foregroundStyle(LinkstrTheme.textPrimary)
+          .lineLimit(3)
+      }
+
+      Text(normalizedURLString ?? urlString)
+        .font(LinkstrTheme.body(13))
+        .foregroundStyle(LinkstrTheme.textSecondary)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .multilineTextAlignment(.leading)
+        .textSelection(.enabled)
+
+      if let remotePostText {
+        Text(remotePostText)
+          .font(LinkstrTheme.body(13))
+          .foregroundStyle(LinkstrTheme.textSecondary)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .multilineTextAlignment(.leading)
+          .fixedSize(horizontal: false, vertical: true)
+          .textSelection(.enabled)
+      }
+
+      mediaBlock
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(.horizontal, LinkstrTheme.fieldHorizontalPadding)
+    .padding(.vertical, 14)
+    .contentShape(Rectangle())
+    .linkstrSurfaceCard()
+  }
+
+  @ViewBuilder
+  private var mediaBlock: some View {
+    if let sourceURL {
+      switch mediaStrategy {
+      case .extractionPreferred, .embedOnly:
+        AdaptiveVideoPlaybackView(
+          sourceURL: sourceURL,
+          showOpenSourceButtonInEmbedMode: true,
+          openSourceAction: { openURL(sourceURL) }
+        )
+      case .link:
+        VStack(alignment: .leading, spacing: LinkstrTheme.rowSpacing) {
+          if let resolvedThumbnailImage {
+            Image(uiImage: resolvedThumbnailImage)
+              .resizable()
+              .scaledToFit()
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+              .overlay {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                  .stroke(LinkstrTheme.separator, lineWidth: 1)
+              }
+          }
+
+          Button("open in browser") {
+            openURL(sourceURL)
+          }
+          .frame(maxWidth: .infinity)
+          .linkstrSecondaryButton()
+        }
+      }
+    } else {
+      Text("invalid shared link")
+        .font(LinkstrTheme.body(13))
+        .foregroundStyle(LinkstrTheme.textSecondary)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+  }
+
+  private func loadPreviewIfNeeded() async {
+    guard let normalizedURLString else {
+      previewTitle = nil
+      previewThumbnailPath = nil
+      remotePostText = nil
+      return
+    }
+
+    async let preview = URLMetadataService.shared.fetchPreview(for: normalizedURLString)
+    async let remotePostText = resolvedRemotePostText(for: normalizedURLString)
+
+    let resolvedPreview = await preview
+    previewTitle = LinkMetadataRefreshPolicy.normalizedTitle(resolvedPreview?.title)
+    previewThumbnailPath = ManagedLocalFileScope.shared.normalizedManagedPath(
+      resolvedPreview?.thumbnailPath
+    )
+    self.remotePostText = await remotePostText
+  }
+
+  private func shouldLoadRemotePostText(for urlString: String) -> Bool {
+    guard let url = URL(string: urlString) else { return false }
+    guard URLClassifier.classify(url) == .twitter else { return false }
+    return URLClassifier.mediaStrategy(for: url).allowsLocalPlaybackToggle
+  }
+
+  private func resolvedRemotePostText(for urlString: String) async -> String? {
+    guard shouldLoadRemotePostText(for: urlString) else { return nil }
+    guard let url = URL(string: urlString) else { return nil }
+    return await TwitterStatusResolutionService.shared.preview(for: url)?.bodyText
+  }
+}

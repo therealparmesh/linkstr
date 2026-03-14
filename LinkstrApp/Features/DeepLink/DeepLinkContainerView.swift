@@ -1,21 +1,26 @@
 import SwiftUI
 
 struct DeepLinkContainerView: View {
-  let payload: LinkstrDeepLinkPayload
+  let urlString: String
 
   @EnvironmentObject private var deepLinkHandler: DeepLinkHandler
 
   var body: some View {
     NavigationStack {
-      DeepLinkVideoView(payload: payload)
-        .navigationTitle("watch video")
+      DeepLinkDetailView(urlString: urlString)
+        .navigationTitle("shared link")
         .navigationBarTitleDisplayMode(.inline)
         .linkstrBarChrome()
         .toolbar {
-          ToolbarItem(placement: .topBarTrailing) {
-            Button("done") {
+          ToolbarItem(placement: .topBarLeading) {
+            Button {
               deepLinkHandler.clear()
+            } label: {
+              Image(systemName: "xmark")
+                .linkstrToolbarIconLabel()
             }
+            .accessibilityLabel("close shared link")
+            .tint(LinkstrTheme.textSecondary)
           }
         }
     }
