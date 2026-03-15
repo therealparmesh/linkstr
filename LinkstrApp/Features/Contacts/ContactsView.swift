@@ -413,8 +413,13 @@ struct AddContactSheet: View {
           ToolbarItemGroup(placement: .keyboard) {
             Spacer()
 
-            Button(isSubmitting ? "adding contact..." : "add contact") {
+            Button {
               submitFollow()
+            } label: {
+              Label(
+                isSubmitting ? "adding contact..." : "add contact",
+                systemImage: "person.crop.circle.badge.plus"
+              )
             }
             .disabled(!canSubmit)
           }

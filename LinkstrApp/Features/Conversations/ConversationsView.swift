@@ -1077,8 +1077,13 @@ struct NewSessionSheet: View {
           ToolbarItemGroup(placement: .keyboard) {
             Spacer()
 
-            Button(isCreating ? "creating..." : "create session") {
+            Button {
               createSession()
+            } label: {
+              Label(
+                isCreating ? "creating..." : "create session",
+                systemImage: "plus.circle.fill"
+              )
             }
             .disabled(isCreating || !canCreateSession)
           }

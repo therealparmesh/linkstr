@@ -143,8 +143,10 @@ struct NewPostSheet: View {
           ToolbarItemGroup(placement: .keyboard) {
             Spacer()
 
-            Button(isSending ? "sending..." : "send post") {
+            Button {
               sendPost()
+            } label: {
+              Label(isSending ? "sending..." : "send post", systemImage: "paperplane.fill")
             }
             .disabled(!canSend)
           }
