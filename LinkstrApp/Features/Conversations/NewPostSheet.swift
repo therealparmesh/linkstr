@@ -73,6 +73,10 @@ struct NewPostSheet: View {
                 .disabled(isSending)
                 .focused($focusedField, equals: .url)
                 .lineLimit(1)
+                .submitLabel(.next)
+                .onSubmit {
+                  focusedField = .note
+                }
                 .linkstrInputField()
 
               LinkstrInputAssistRow(
@@ -137,6 +141,18 @@ struct NewPostSheet: View {
           .accessibilityLabel("cancel")
           .tint(LinkstrTheme.textSecondary)
           .disabled(isSending)
+        }
+
+        ToolbarItem(placement: .topBarTrailing) {
+          Button {
+            sendPost()
+          } label: {
+            Text(isSending ? "sending..." : "send")
+              .font(LinkstrTheme.body(15, weight: .semibold))
+          }
+          .accessibilityLabel("send post")
+          .tint(LinkstrTheme.accent)
+          .disabled(!canSend)
         }
 
         if isKeyboardPresented {
@@ -208,6 +224,7 @@ struct NewPostSheet: View {
     guard canCreatePostInSession else { return }
     guard let normalizedURL else { return }
     guard !isSending else { return }
+    focusedField = nil
 
     let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
     isSending = true

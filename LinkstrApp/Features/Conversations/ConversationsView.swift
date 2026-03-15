@@ -418,10 +418,6 @@ struct SessionPostsView: View {
     return NostrValueNormalizer.dedupedNormalizedPubkeyHexes(pubkeys)
   }
 
-  private var profileLookupRequestID: String {
-    profileLookupPubkeys.sorted().joined(separator: ",")
-  }
-
   private var postCountLabel: String {
     posts.count == 1 ? "1 post" : "\(posts.count) posts"
   }
@@ -517,16 +513,9 @@ struct SessionPostsView: View {
     }
     .sheet(isPresented: $isPresentingNewPost) {
       NewPostSheet(sessionEntity: sessionEntity)
-        .environmentObject(session)
     }
     .sheet(isPresented: $isPresentingMembers) {
-      SessionMembersSheet(
-        sessionEntity: sessionEntity,
-        contacts: scopedContacts,
-        activeMembers: scopedMembers,
-        canManageMembers: canManageMembers
-      )
-      .environmentObject(session)
+      SessionMembersSheet(sessionEntity: sessionEntity)
     }
     .alert("delete post", isPresented: $isPresentingDeleteConfirmation) {
       Button("delete post", role: .destructive) {
@@ -550,7 +539,7 @@ struct SessionPostsView: View {
         "this permanently removes the post from your session feed and sends a nostr deletion request."
       )
     }
-    .task(id: profileLookupRequestID) {
+    .task(id: profileLookupPubkeys.sorted()) {
       session.requestRemoteProfilesIfNeeded(pubkeyHexes: profileLookupPubkeys)
     }
     .onDisappear {
@@ -959,8 +948,8 @@ struct NewSessionSheet: View {
 
   @Environment(\.dismiss) private var dismiss
   @EnvironmentObject private var session: AppSession
-
-  let contacts: [ContactEntity]
+  @Query(sort: [SortDescriptor(\ContactEntity.createdAt)])
+  private var allContacts: [ContactEntity]
 
   @State private var sessionName = ""
   @State private var query = ""
@@ -972,12 +961,12 @@ struct NewSessionSheet: View {
     !sessionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
   }
 
-  private var profileLookupPubkeys: [String] {
-    contacts.map(\.targetPubkey)
+  private var scopedContacts: [ContactEntity] {
+    OwnerScopedCollections.contacts(allContacts, ownerPubkey: session.identityService.pubkeyHex)
   }
 
-  private var profileLookupRequestID: String {
-    profileLookupPubkeys.sorted().joined(separator: ",")
+  private var profileLookupPubkeys: [String] {
+    scopedContacts.map(\.targetPubkey)
   }
 
   var body: some View {
@@ -991,6 +980,8 @@ struct NewSessionSheet: View {
                 .font(LinkstrTheme.body(15))
                 .focused($focusedField, equals: .sessionName)
                 .textInputAutocapitalization(.words)
+                .submitLabel(scopedContacts.isEmpty ? .done : .next)
+                .onSubmit(handleSessionNameSubmit)
                 .linkstrInputField()
             }
 
@@ -998,10 +989,15 @@ struct NewSessionSheet: View {
               title: "members",
               accessory: "\(selectedNPubs.count + 1)"
             ) {
-              LinkstrSearchField(prompt: "search contacts", text: $query)
-                .focused($focusedField, equals: .search)
+              LinkstrSearchField(
+                prompt: "search contacts",
+                text: $query,
+                submitLabel: .done,
+                onSubmit: dismissKeyboard
+              )
+              .focused($focusedField, equals: .search)
 
-              if contacts.isEmpty {
+              if scopedContacts.isEmpty {
                 Text("no contacts yet. solo still works.")
                   .font(LinkstrTheme.body(13))
                   .foregroundStyle(LinkstrTheme.textSecondary)
@@ -1073,6 +1069,18 @@ struct NewSessionSheet: View {
           .disabled(isCreating)
         }
 
+        ToolbarItem(placement: .topBarTrailing) {
+          Button {
+            createSession()
+          } label: {
+            Text(isCreating ? "creating..." : "create")
+              .font(LinkstrTheme.body(15, weight: .semibold))
+          }
+          .accessibilityLabel("create session")
+          .tint(LinkstrTheme.accent)
+          .disabled(isCreating || !canCreateSession)
+        }
+
         if isKeyboardPresented {
           ToolbarItemGroup(placement: .keyboard) {
             Spacer()
@@ -1102,7 +1110,7 @@ struct NewSessionSheet: View {
           )
         }
       }
-      .task(id: profileLookupRequestID) {
+      .task(id: profileLookupPubkeys.sorted()) {
         session.requestRemoteProfilesIfNeeded(pubkeyHexes: profileLookupPubkeys)
       }
     }
@@ -1114,7 +1122,7 @@ struct NewSessionSheet: View {
 
   private var filteredContacts: [ContactEntity] {
     RecipientSearchLogic.filteredContacts(
-      contacts,
+      scopedContacts,
       query: query,
       displayName: { session.resolvedIdentity(for: $0).displayName },
       npub: \.npub,
@@ -1133,6 +1141,7 @@ struct NewSessionSheet: View {
   private func createSession() {
     guard !isCreating else { return }
     guard canCreateSession else { return }
+    dismissKeyboard()
     let selected = Array(selectedNPubs)
     isCreating = true
 
@@ -1147,34 +1156,33 @@ struct NewSessionSheet: View {
       }
     }
   }
+
+  private func handleSessionNameSubmit() {
+    if scopedContacts.isEmpty {
+      createSession()
+    } else {
+      focusedField = .search
+    }
+  }
+
+  private func dismissKeyboard() {
+    focusedField = nil
+  }
 }
 
 private struct SessionMembersSheet: View {
   @Environment(\.dismiss) private var dismiss
   @EnvironmentObject private var session: AppSession
+  @Query(sort: [SortDescriptor(\ContactEntity.createdAt)])
+  private var allContacts: [ContactEntity]
+  @Query(sort: [SortDescriptor(\SessionMemberEntity.createdAt)])
+  private var allMembers: [SessionMemberEntity]
 
   let sessionEntity: SessionEntity
-  let contacts: [ContactEntity]
-  let activeMembers: [SessionMemberEntity]
-  let canManageMembers: Bool
 
-  @State private var includedMemberHexes: Set<String>
+  @State private var includedMemberHexes = Set<String>()
   @State private var query = ""
   @State private var isSaving = false
-
-  init(
-    sessionEntity: SessionEntity,
-    contacts: [ContactEntity],
-    activeMembers: [SessionMemberEntity],
-    canManageMembers: Bool
-  ) {
-    self.sessionEntity = sessionEntity
-    self.contacts = contacts
-    self.activeMembers = activeMembers
-    self.canManageMembers = canManageMembers
-    let initialMembers = activeMembers.map(\.memberPubkey)
-    _includedMemberHexes = State(initialValue: Set(initialMembers))
-  }
 
   var body: some View {
     NavigationStack {
@@ -1239,7 +1247,7 @@ private struct SessionMembersSheet: View {
               LinkstrInsetSection(title: "add from contacts") {
                 LinkstrSearchField(prompt: "search contacts", text: $query)
 
-                if contacts.isEmpty {
+                if scopedContacts.isEmpty {
                   Text("no contacts yet.")
                     .font(LinkstrTheme.body(13))
                     .foregroundStyle(LinkstrTheme.textSecondary)
@@ -1332,10 +1340,32 @@ private struct SessionMembersSheet: View {
           }
         }
       }
-      .task(id: profileLookupRequestID) {
+      .task(id: profileLookupPubkeys.sorted()) {
         session.requestRemoteProfilesIfNeeded(pubkeyHexes: profileLookupPubkeys)
       }
+      .onAppear(perform: syncIncludedMembersIfNeeded)
+      .onChange(of: activeMembers.map(\.memberPubkey).sorted()) { _, _ in
+        syncIncludedMembersIfNeeded()
+      }
     }
+  }
+
+  private var scopedContacts: [ContactEntity] {
+    OwnerScopedCollections.contacts(allContacts, ownerPubkey: session.identityService.pubkeyHex)
+      .sorted {
+        session.resolvedIdentity(for: $0).displayName.localizedCaseInsensitiveCompare(
+          session.resolvedIdentity(for: $1).displayName
+        ) == .orderedAscending
+      }
+  }
+
+  private var activeMembers: [SessionMemberEntity] {
+    OwnerScopedCollections.members(allMembers, ownerPubkey: session.identityService.pubkeyHex)
+      .filter { $0.sessionID == sessionEntity.sessionID && $0.isActive }
+  }
+
+  private var canManageMembers: Bool {
+    session.canManageMembers(for: sessionEntity)
   }
 
   private var visibleCurrentMembers: [String] {
@@ -1347,15 +1377,15 @@ private struct SessionMembersSheet: View {
         return memberHex != myPubkey
       }
       .sorted {
-        session.displayName(for: $0, contacts: contacts).localizedCaseInsensitiveCompare(
-          session.displayName(for: $1, contacts: contacts)
+        session.displayName(for: $0, contacts: scopedContacts).localizedCaseInsensitiveCompare(
+          session.displayName(for: $1, contacts: scopedContacts)
         ) == .orderedAscending
       }
   }
 
   private var filteredContacts: [ContactEntity] {
     RecipientSearchLogic.filteredContacts(
-      contacts,
+      scopedContacts,
       query: query,
       displayName: { session.resolvedIdentity(for: $0).displayName },
       npub: \.npub,
@@ -1364,18 +1394,14 @@ private struct SessionMembersSheet: View {
   }
 
   private var profileLookupPubkeys: [String] {
-    var pubkeys = contacts.map(\.targetPubkey)
+    var pubkeys = scopedContacts.map(\.targetPubkey)
     pubkeys.append(contentsOf: visibleCurrentMembers)
     return NostrValueNormalizer.dedupedNormalizedPubkeyHexes(pubkeys)
   }
 
-  private var profileLookupRequestID: String {
-    profileLookupPubkeys.sorted().joined(separator: ",")
-  }
-
   private func memberIdentity(for pubkeyHex: String) -> LinkstrResolvedIdentity? {
     guard pubkeyHex != session.identityService.pubkeyHex else { return nil }
-    return session.resolvedIdentity(for: pubkeyHex, contacts: contacts)
+    return session.resolvedIdentity(for: pubkeyHex, contacts: scopedContacts)
   }
 
   private func saveMembers() {
@@ -1402,5 +1428,10 @@ private struct SessionMembersSheet: View {
 
   private func composeCreatorOnlyError() {
     session.composeError = "only the session creator can manage members."
+  }
+
+  private func syncIncludedMembersIfNeeded() {
+    guard includedMemberHexes.isEmpty else { return }
+    includedMemberHexes = Set(activeMembers.map(\.memberPubkey))
   }
 }

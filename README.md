@@ -109,7 +109,10 @@ linkstr still does not have a durable offline outbox. If a send cannot get relay
   - Archive flag.
 - Users create sessions from the sessions tab compose action in the top-right corner.
 - Session list includes inline search and uses full-width chat-list rows with solid-color avatars, timestamps, and unread markers.
-- Session creation uses grouped sections for session details and member selection, plus a persistent bottom action footer.
+- Session creation uses grouped sections for session details and member selection.
+- Session creation exposes a top-right `create` action while the sheet is open.
+- Session creation keeps the bottom action footer available when the keyboard is dismissed.
+- The keyboard `return` key advances from the session name into member search, or submits immediately when no contacts exist.
 - Session creation requires a non-empty name.
 - `create session` stays disabled (with disabled styling) until name is non-empty.
 - Member selection at creation is optional.
@@ -149,7 +152,10 @@ linkstr still does not have a durable offline outbox. If a send cannot get relay
 ### Posts (root links)
 
 - Posting is session-scoped.
-- Post composer uses grouped sections for session, link, and note, with a bottom action footer.
+- Post composer uses grouped sections for session, link, and note.
+- Post composer exposes a top-right `send` action while the sheet is open.
+- Post composer keeps the bottom action footer available when the keyboard is dismissed.
+- The keyboard `return` key advances from the link field into the note field.
 - Compose fields are:
   - session name (read-only).
   - link (required).
@@ -372,7 +378,10 @@ linkstr still does not have a durable offline outbox. If a send cannot get relay
 - Remote nostr profile names are fetched lazily by pubkey and are used only when no local alias exists.
 - When both exist, contact UI shows the local alias as primary and the published nostr name as secondary.
 - Contact management supports add, long-press remove contact, and alias edit.
-- Add-contact sheet uses grouped sections for key entry, identity preview, and alias entry, plus a bottom action footer.
+- Add-contact sheet uses grouped sections for key entry, identity preview, and alias entry.
+- Add-contact sheet exposes a top-right `add` action while the sheet is open.
+- Add-contact sheet keeps the bottom action footer available when the keyboard is dismissed.
+- The keyboard `return` key advances from the public key field into alias and submits from alias.
 - Add-contact input supports manual entry, paste, and qr scan.
 - Add-contact input previews the resolved identity for a valid public key (`npub`) and lazily looks up the published nostr name.
 - Public-key helper controls render directly below the field in the same compact control row pattern used by post compose.

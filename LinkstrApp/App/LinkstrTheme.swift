@@ -307,6 +307,8 @@ struct LinkstrInsetSection<Content: View>: View {
 struct LinkstrSearchField: View {
   let prompt: String
   @Binding var text: String
+  var submitLabel: SubmitLabel = .search
+  var onSubmit: (() -> Void)? = nil
   private let clearButtonSize: CGFloat = 18
 
   var body: some View {
@@ -319,6 +321,10 @@ struct LinkstrSearchField: View {
         .font(LinkstrTheme.body(13))
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled(true)
+        .submitLabel(submitLabel)
+        .onSubmit {
+          onSubmit?()
+        }
 
       Button {
         text = ""

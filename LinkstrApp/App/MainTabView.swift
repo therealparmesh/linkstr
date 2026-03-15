@@ -33,15 +33,6 @@ struct MainTabView: View {
       case .settings: return "gearshape.fill"
       }
     }
-
-    var navigationTitle: String {
-      switch self {
-      case .sessions: return "sessions"
-      case .contacts: return "contacts"
-      case .you: return "you"
-      case .settings: return "settings"
-      }
-    }
   }
 
   @State private var selectedTab: AppTab = .sessions
@@ -50,15 +41,8 @@ struct MainTabView: View {
   @State private var isShowingArchivedSessions = false
   @State private var selectedSessionTarget: SessionNavigationTarget?
 
-  @Query(sort: [SortDescriptor(\ContactEntity.createdAt)])
-  private var contacts: [ContactEntity]
-
   @Query(sort: [SortDescriptor(\SessionEntity.updatedAt, order: .reverse)])
   private var allSessions: [SessionEntity]
-
-  private var scopedContacts: [ContactEntity] {
-    OwnerScopedCollections.contacts(contacts, ownerPubkey: session.identityService.pubkeyHex)
-  }
 
   private var scopedSessions: [SessionEntity] {
     OwnerScopedCollections.sessions(allSessions, ownerPubkey: session.identityService.pubkeyHex)
@@ -97,7 +81,7 @@ struct MainTabView: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     .navigationTitle(
       selectedTab == .sessions && isShowingArchivedSessions
-        ? "archived" : selectedTab.navigationTitle
+        ? "archived" : selectedTab.title
     )
     .navigationBarTitleDisplayMode(.inline)
     .navigationDestination(item: $selectedSessionTarget) { target in
@@ -140,7 +124,7 @@ struct MainTabView: View {
       navigateToPendingSessionIfNeeded()
     }
     .sheet(isPresented: $isPresentingNewSession) {
-      NewSessionSheet(contacts: scopedContacts)
+      NewSessionSheet()
     }
     .sheet(isPresented: $isPresentingAddContact) {
       AddContactSheet()

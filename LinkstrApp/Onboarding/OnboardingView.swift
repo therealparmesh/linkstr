@@ -55,6 +55,8 @@ struct OnboardingView: View {
           .font(LinkstrTheme.body(15))
           .textInputAutocapitalization(.never)
           .autocorrectionDisabled(true)
+          .submitLabel(.go)
+          .onSubmit(submitSecretKey)
           .linkstrInputField()
 
         LinkstrInputAssistRow(
@@ -128,6 +130,8 @@ struct OnboardingView: View {
           .font(LinkstrTheme.body(15))
           .textInputAutocapitalization(.words)
           .autocorrectionDisabled(true)
+          .submitLabel(.done)
+          .onSubmit(completePendingAccountCreation)
           .linkstrInputField()
 
         if let profileNameErrorMessage = session.profileNameErrorMessage {
@@ -156,6 +160,11 @@ struct OnboardingView: View {
         secretKey = clipboardText.trimmingCharacters(in: .whitespacesAndNewlines)
       }
     #endif
+  }
+
+  private func submitSecretKey() {
+    guard !secretKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+    session.importNsec(secretKey)
   }
 
   private var normalizedCreatedProfileName: String? {

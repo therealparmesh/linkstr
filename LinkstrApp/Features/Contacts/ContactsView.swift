@@ -39,10 +39,6 @@ struct ContactsView: View {
     scopedContacts.map(\.targetPubkey)
   }
 
-  private var profileLookupRequestID: String {
-    profileLookupPubkeys.sorted().joined(separator: ",")
-  }
-
   var body: some View {
     ZStack {
       LinkstrBackgroundView()
@@ -57,7 +53,7 @@ struct ContactsView: View {
     } message: {
       Text(removeContactConfirmationMessage)
     }
-    .task(id: profileLookupRequestID) {
+    .task(id: profileLookupPubkeys.sorted()) {
       session.requestRemoteProfilesIfNeeded(pubkeyHexes: profileLookupPubkeys)
     }
     .navigationDestination(item: $selectedContact) { contact in
@@ -212,6 +208,8 @@ private struct EditContactView: View {
             TextField("alias", text: $alias)
               .font(LinkstrTheme.body(15))
               .textInputAutocapitalization(.words)
+              .submitLabel(.done)
+              .onSubmit(saveAlias)
               .linkstrInputField()
           }
 
@@ -329,6 +327,10 @@ struct AddContactSheet: View {
                 .autocorrectionDisabled(true)
                 .focused($focusedField, equals: .npub)
                 .disabled(isSubmitting || isNPubPrefilled)
+                .submitLabel(.next)
+                .onSubmit {
+                  focusedField = .alias
+                }
                 .linkstrInputField()
 
               if !isNPubPrefilled {
@@ -377,6 +379,8 @@ struct AddContactSheet: View {
                 .textInputAutocapitalization(.words)
                 .focused($focusedField, equals: .alias)
                 .disabled(isSubmitting)
+                .submitLabel(.done)
+                .onSubmit(submitFollow)
                 .linkstrInputField()
             }
           }
@@ -389,7 +393,7 @@ struct AddContactSheet: View {
           .scrollDismissesKeyboard(.interactively)
         }
       }
-      .task(id: previewLookupRequestID) {
+      .task(id: previewPubkeyHex) {
         guard let previewPubkeyHex else { return }
         session.requestRemoteProfilesIfNeeded(pubkeyHexes: [previewPubkeyHex])
       }
@@ -407,6 +411,18 @@ struct AddContactSheet: View {
           .accessibilityLabel("cancel")
           .tint(LinkstrTheme.textSecondary)
           .disabled(isSubmitting)
+        }
+
+        ToolbarItem(placement: .topBarTrailing) {
+          Button {
+            submitFollow()
+          } label: {
+            Text(isSubmitting ? "adding..." : "add")
+              .font(LinkstrTheme.body(15, weight: .semibold))
+          }
+          .accessibilityLabel("add contact")
+          .tint(LinkstrTheme.accent)
+          .disabled(!canSubmit)
         }
 
         if isKeyboardPresented {
@@ -502,6 +518,7 @@ struct AddContactSheet: View {
 
   private func submitFollow() {
     guard canSubmit else { return }
+    focusedField = nil
     isSubmitting = true
     Task { @MainActor in
       let didAdd = await session.addContact(npub: npub, alias: alias)
@@ -525,10 +542,6 @@ struct AddContactSheet: View {
   private var previewPubkeyHex: String? {
     let candidate = ContactKeyParser.extractNPub(from: npub) ?? npub
     return NostrValueNormalizer.normalizedPubkeyHex(fromAnyPublicKeyString: candidate)
-  }
-
-  private var previewLookupRequestID: String {
-    previewPubkeyHex ?? ""
   }
 
   private var previewIdentity: LinkstrResolvedIdentity? {

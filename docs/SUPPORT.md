@@ -1,6 +1,6 @@
 # linkstr support
 
-Last updated: March 14, 2026
+Last updated: March 15, 2026
 
 linkstr is a private link-sharing app built on nostr. You create or join private sessions, share links inside those sessions, and react with emoji. This page describes the current shipped behavior in plain language.
 
@@ -24,6 +24,7 @@ Your active account is stored in the device keychain. If you use iCloud Keychain
 5. Tap `add contact`.
 
 Adding the same contact again updates the saved alias instead of creating a duplicate. To edit an alias later, tap the contact row.
+You can also use the top-right `add` action immediately, or dismiss the keyboard and use the footer button. The keyboard `return` key moves from the public key field into alias and submits from alias.
 
 ### Create a session
 
@@ -34,6 +35,7 @@ Adding the same contact again updates the saved alias instead of creating a dupl
 5. Tap `create session`.
 
 After creation, linkstr opens the session for you immediately.
+You can also use the top-right `create` action immediately, or dismiss the keyboard and use the footer button. The keyboard `return` key moves from the name field into member search and submits immediately when there are no contacts yet.
 
 ### Use the You tab
 
@@ -50,6 +52,7 @@ Profile name changes can be submitted with either the keyboard return key or the
 5. Tap `send post`.
 
 Generic web URLs are valid posts too. In-app playback, local caching, and save/export options depend on the provider and the specific URL.
+You can also use the top-right `send` action immediately, or dismiss the keyboard and use the footer button. The keyboard `return` key on the link field moves into the note field.
 
 ### React, delete, archive, and manage members
 

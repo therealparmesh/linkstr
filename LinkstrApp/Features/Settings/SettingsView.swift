@@ -125,13 +125,13 @@ struct SettingsView: View {
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled(true)
         .lineLimit(1)
+        .submitLabel(.done)
+        .onSubmit(addRelayFromDraft)
         .linkstrInputField()
 
       HStack(spacing: LinkstrTheme.buttonRowSpacing) {
         Button {
-          if session.addRelay(url: relayURL) {
-            relayURL = ""
-          }
+          addRelayFromDraft()
         } label: {
           LinkstrActionButtonLabel(title: "add relay")
         }
@@ -203,6 +203,12 @@ struct SettingsView: View {
       }
     }
     .padding(.vertical, LinkstrTheme.listRowVerticalPadding)
+  }
+
+  private func addRelayFromDraft() {
+    if session.addRelay(url: relayURL) {
+      relayURL = ""
+    }
   }
 
   private var storageSection: some View {

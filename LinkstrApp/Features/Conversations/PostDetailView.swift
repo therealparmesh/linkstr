@@ -371,10 +371,6 @@ struct PostDetailView: View {
     return NostrValueNormalizer.dedupedNormalizedPubkeyHexes(pubkeys)
   }
 
-  private var profileLookupRequestID: String {
-    profileLookupPubkeys.sorted().joined(separator: ",")
-  }
-
   private var canReactToPost: Bool {
     session.isCurrentUserActiveMember(
       sessionID: post.conversationID,
@@ -396,7 +392,7 @@ struct PostDetailView: View {
       .padding(.bottom, LinkstrTheme.screenBottomPadding)
     }
     .linkstrTabBarContentInset()
-    .task(id: profileLookupRequestID) {
+    .task(id: profileLookupPubkeys.sorted()) {
       session.requestRemoteProfilesIfNeeded(pubkeyHexes: profileLookupPubkeys)
     }
     .background(LinkstrBackgroundView())
