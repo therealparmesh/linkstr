@@ -454,6 +454,7 @@ linkstr still does not have a durable offline outbox. If a send cannot get relay
 - Proposal docs are directional/high-level and can change before implementation.
 - Delete session: [docs/future/delete-session.md](docs/future/delete-session.md)
 - Leave session: [docs/future/leave-session.md](docs/future/leave-session.md)
+- Rename session: [docs/future/rename-session.md](docs/future/rename-session.md)
 
 ## Development
 
