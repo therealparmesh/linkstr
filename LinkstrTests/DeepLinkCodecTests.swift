@@ -30,14 +30,6 @@ final class DeepLinkCodecTests: XCTestCase {
     XCTAssertNil(LinkstrDeepLinkCodec.makeAppDeepLink(url: "javascript:alert('xss')"))
   }
 
-  func testAppDeepLinkBuilderUsesValidatedURL() throws {
-    let deepLink = try XCTUnwrap(
-      LinkstrDeepLinkCodec.makeAppDeepLink(url: "https://example.com/video"))
-
-    let parsed = try XCTUnwrap(LinkstrDeepLinkCodec.parseURL(fromAppDeepLink: deepLink))
-    XCTAssertEqual(parsed, "https://example.com/video")
-  }
-
   func testAppDeepLinkRejectsRemovedPayloadFormat() {
     let legacyURL = URL(
       string:

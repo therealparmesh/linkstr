@@ -3,26 +3,19 @@ import XCTest
 @testable import Linkstr
 
 final class ContactKeyParserTests: XCTestCase {
-  func testExtractNPubFromRawValue() throws {
+  func testExtractNPubFromSupportedInputShapes() throws {
     let npub = try TestKeyMaterialFactory.makeNPub()
-    XCTAssertEqual(ContactKeyParser.extractNPub(from: npub), npub)
-  }
 
-  func testExtractNPubFromNostrPrefix() throws {
-    let npub = try TestKeyMaterialFactory.makeNPub()
-    XCTAssertEqual(ContactKeyParser.extractNPub(from: "nostr:\(npub)"), npub)
-  }
+    let cases = [
+      ("raw value", npub),
+      ("nostr prefix", "nostr:\(npub)"),
+      ("query item", "https://example.com/add?npub=\(npub)"),
+      ("freeform text", "Add this contact: \(npub) thanks"),
+    ]
 
-  func testExtractNPubFromQueryItem() throws {
-    let npub = try TestKeyMaterialFactory.makeNPub()
-    let url = "https://example.com/add?npub=\(npub)"
-    XCTAssertEqual(ContactKeyParser.extractNPub(from: url), npub)
-  }
-
-  func testExtractNPubFromFreeformText() throws {
-    let npub = try TestKeyMaterialFactory.makeNPub()
-    let text = "Add this contact: \(npub) thanks"
-    XCTAssertEqual(ContactKeyParser.extractNPub(from: text), npub)
+    for (label, input) in cases {
+      XCTAssertEqual(ContactKeyParser.extractNPub(from: input), npub, label)
+    }
   }
 
   func testExtractNPubRejectsInvalidInput() {
