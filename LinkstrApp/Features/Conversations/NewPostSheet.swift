@@ -19,6 +19,7 @@ struct NewPostSheet: View {
   @State private var url = ""
   @State private var note = ""
   @State private var isSending = false
+  @State private var mutationFeedback = LinkstrSheetMutationFeedback()
   @FocusState private var focusedField: Field?
 
   var body: some View {
@@ -121,10 +122,7 @@ struct NewPostSheet: View {
         }
         .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
         .padding(.top, LinkstrTheme.screenTopPadding)
-        .padding(
-          .bottom,
-          isKeyboardPresented ? LinkstrTheme.screenBottomPadding : LinkstrTheme.sheetBottomPadding
-        )
+        .padding(.bottom, LinkstrTheme.screenBottomPadding)
         .scrollDismissesKeyboard(.interactively)
       }
       .navigationTitle("new post")
@@ -147,37 +145,24 @@ struct NewPostSheet: View {
           Button {
             sendPost()
           } label: {
-            Text(isSending ? "sending..." : "send")
-              .font(LinkstrTheme.body(15, weight: .semibold))
+            if isSending {
+              ProgressView()
+                .frame(width: 30, height: 30, alignment: .center)
+            } else {
+              Image(systemName: "paperplane.fill")
+                .linkstrToolbarIconLabel()
+            }
           }
           .accessibilityLabel("send post")
           .tint(LinkstrTheme.accent)
           .disabled(!canSend)
         }
-
-        if isKeyboardPresented {
-          ToolbarItemGroup(placement: .keyboard) {
-            Spacer()
-
-            Button {
-              sendPost()
-            } label: {
-              Label(isSending ? "sending..." : "send post", systemImage: "paperplane.fill")
-            }
-            .disabled(!canSend)
-          }
-        }
       }
       .safeAreaInset(edge: .bottom, spacing: 0) {
-        if !isKeyboardPresented {
-          LinkstrSheetActionFooter(
-            title: isSending ? "sending..." : "send post",
-            systemImage: "paperplane.fill",
-            isDisabled: !canSend,
-            message: isSending
-              ? "waiting for relay reconnect before sending..."
-              : footerMessage,
-            action: sendPost
+        if let footerStatus {
+          LinkstrSheetStatusFooter(
+            message: footerStatus.message,
+            messageColor: footerStatus.color
           )
         }
       }
@@ -188,15 +173,17 @@ struct NewPostSheet: View {
           url = "https://"
         }
       }
+      .onChange(of: url) { _, _ in
+        mutationFeedback.clear()
+      }
+      .onChange(of: note) { _, _ in
+        mutationFeedback.clear()
+      }
     }
   }
 
   private var normalizedURL: String? {
     LinkstrURLValidator.normalizedWebURL(from: url)
-  }
-
-  private var isKeyboardPresented: Bool {
-    focusedField != nil
   }
 
   private var canCreatePostInSession: Bool {
@@ -213,11 +200,20 @@ struct NewPostSheet: View {
     return normalizedURL == nil ? "enter a valid link." : nil
   }
 
-  private var footerMessage: String {
+  private var validationMessage: String? {
     if !canCreatePostInSession {
       return "you're no longer a member of this session."
     }
-    return urlValidationHint ?? ""
+    return urlValidationHint
+  }
+
+  private var footerStatus: LinkstrSheetFooterStatus? {
+    mutationFeedback.footerStatus(
+      isRunning: isSending,
+      progressMessage: "waiting for relay reconnect before sending...",
+      validationMessage: validationMessage,
+      validationColor: LinkstrTheme.destructive.opacity(0.9)
+    )
   }
 
   private func sendPost() {
@@ -225,19 +221,24 @@ struct NewPostSheet: View {
     guard let normalizedURL else { return }
     guard !isSending else { return }
     focusedField = nil
+    mutationFeedback.clear()
 
     let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
     isSending = true
 
     Task { @MainActor in
-      let didCreate = await session.createSessionPostAwaitingRelay(
-        url: normalizedURL,
-        note: trimmedNote.isEmpty ? nil : trimmedNote,
-        session: sessionEntity
-      )
+      let result = await session.performFormMutation {
+        await session.createSessionPostAwaitingRelay(
+          url: normalizedURL,
+          note: trimmedNote.isEmpty ? nil : trimmedNote,
+          session: sessionEntity
+        )
+      }
       isSending = false
-      if didCreate {
+      if result.didSucceed {
         dismiss()
+      } else {
+        mutationFeedback.record(errorMessage: result.errorMessage)
       }
     }
   }

@@ -110,11 +110,11 @@ linkstr still does not have a durable offline outbox. If a send cannot get relay
 - Users create sessions from the sessions tab compose action in the top-right corner.
 - Session list includes inline search and uses full-width chat-list rows with solid-color avatars, timestamps, and unread markers.
 - Session creation uses grouped sections for session details and member selection.
-- Session creation exposes a top-right `create` action while the sheet is open.
-- Session creation keeps the bottom action footer available when the keyboard is dismissed.
+- Session creation exposes a top-right create icon while the sheet is open.
+- Session creation uses the bottom footer only for status and validation messaging; it does not duplicate the action button.
 - The keyboard `return` key advances from the session name into member search, or submits immediately when no contacts exist.
 - Session creation requires a non-empty name.
-- `create session` stays disabled (with disabled styling) until name is non-empty.
+- The top-right create icon stays disabled (with disabled styling) until name is non-empty.
 - Member selection at creation is optional.
 - Session creation can be solo (creator only).
 - After successful session creation, the app navigates directly into that session.
@@ -153,8 +153,8 @@ linkstr still does not have a durable offline outbox. If a send cannot get relay
 
 - Posting is session-scoped.
 - Post composer uses grouped sections for session, link, and note.
-- Post composer exposes a top-right `send` action while the sheet is open.
-- Post composer keeps the bottom action footer available when the keyboard is dismissed.
+- Post composer exposes a top-right send icon while the sheet is open.
+- Post composer uses the bottom footer only for status and validation messaging; it does not duplicate the action button.
 - The keyboard `return` key advances from the link field into the note field.
 - Compose fields are:
   - session name (read-only).
@@ -379,13 +379,13 @@ linkstr still does not have a durable offline outbox. If a send cannot get relay
 - When both exist, contact UI shows the local alias as primary and the published nostr name as secondary.
 - Contact management supports add, long-press remove contact, and alias edit.
 - Add-contact sheet uses grouped sections for key entry, identity preview, and alias entry.
-- Add-contact sheet exposes a top-right `add` action while the sheet is open.
-- Add-contact sheet keeps the bottom action footer available when the keyboard is dismissed.
+- Add-contact sheet exposes a top-right add icon while the sheet is open.
+- Add-contact sheet uses the bottom footer only for status and validation messaging; it does not duplicate the action button.
 - The keyboard `return` key advances from the public key field into alias and submits from alias.
 - Add-contact input supports manual entry, paste, and qr scan.
 - Add-contact input previews the resolved identity for a valid public key (`npub`) and lazily looks up the published nostr name.
 - Public-key helper controls render directly below the field in the same compact control row pattern used by post compose.
-- `add contact` stays disabled until the public key normalizes to a valid `npub`.
+- The top-right add icon stays disabled until the public key normalizes to a valid `npub`.
 - Re-adding the same contact updates the saved alias for that contact; it does not create a duplicate or republish the follow list.
 
 ### You tab

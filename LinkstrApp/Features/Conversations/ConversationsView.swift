@@ -955,6 +955,7 @@ struct NewSessionSheet: View {
   @State private var query = ""
   @State private var selectedNPubs = Set<String>()
   @State private var isCreating = false
+  @State private var mutationFeedback = LinkstrSheetMutationFeedback()
   @FocusState private var focusedField: Field?
 
   private var canCreateSession: Bool {
@@ -1046,10 +1047,7 @@ struct NewSessionSheet: View {
           }
           .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
           .padding(.top, LinkstrTheme.screenTopPadding)
-          .padding(
-            .bottom,
-            isKeyboardPresented ? LinkstrTheme.screenBottomPadding : LinkstrTheme.sheetBottomPadding
-          )
+          .padding(.bottom, LinkstrTheme.screenBottomPadding)
           .scrollDismissesKeyboard(.interactively)
         }
       }
@@ -1073,51 +1071,42 @@ struct NewSessionSheet: View {
           Button {
             createSession()
           } label: {
-            Text(isCreating ? "creating..." : "create")
-              .font(LinkstrTheme.body(15, weight: .semibold))
+            if isCreating {
+              ProgressView()
+                .frame(width: 30, height: 30, alignment: .center)
+            } else {
+              Image(systemName: "plus.circle.fill")
+                .linkstrToolbarIconLabel()
+            }
           }
           .accessibilityLabel("create session")
           .tint(LinkstrTheme.accent)
           .disabled(isCreating || !canCreateSession)
         }
-
-        if isKeyboardPresented {
-          ToolbarItemGroup(placement: .keyboard) {
-            Spacer()
-
-            Button {
-              createSession()
-            } label: {
-              Label(
-                isCreating ? "creating..." : "create session",
-                systemImage: "plus.circle.fill"
-              )
-            }
-            .disabled(isCreating || !canCreateSession)
-          }
-        }
       }
       .safeAreaInset(edge: .bottom, spacing: 0) {
-        if !isKeyboardPresented {
-          LinkstrSheetActionFooter(
-            title: isCreating ? "creating..." : "create session",
-            systemImage: "plus.circle.fill",
-            isDisabled: isCreating || !canCreateSession,
-            message: isCreating
-              ? "waiting for relay reconnect before creating..."
-              : "session name required.",
-            action: createSession
+        if let footerStatus {
+          LinkstrSheetStatusFooter(
+            message: footerStatus.message,
+            messageColor: footerStatus.color
           )
         }
       }
       .task(id: profileLookupPubkeys.sorted()) {
         session.requestRemoteProfilesIfNeeded(pubkeyHexes: profileLookupPubkeys)
       }
+      .onChange(of: sessionName) { _, _ in
+        mutationFeedback.clear()
+      }
     }
   }
 
-  private var isKeyboardPresented: Bool {
-    focusedField != nil
+  private var footerStatus: LinkstrSheetFooterStatus? {
+    mutationFeedback.footerStatus(
+      isRunning: isCreating,
+      progressMessage: "waiting for relay reconnect before creating...",
+      validationMessage: canCreateSession ? nil : "session name required."
+    )
   }
 
   private var filteredContacts: [ContactEntity] {
@@ -1131,6 +1120,7 @@ struct NewSessionSheet: View {
   }
 
   private func toggle(_ npub: String) {
+    mutationFeedback.clear()
     if selectedNPubs.contains(npub) {
       selectedNPubs.remove(npub)
     } else {
@@ -1142,17 +1132,22 @@ struct NewSessionSheet: View {
     guard !isCreating else { return }
     guard canCreateSession else { return }
     dismissKeyboard()
+    mutationFeedback.clear()
     let selected = Array(selectedNPubs)
     isCreating = true
 
     Task { @MainActor in
-      let didCreate = await session.createSessionAwaitingRelay(
-        name: sessionName,
-        memberNPubs: selected
-      )
+      let result = await session.performFormMutation {
+        await session.createSessionAwaitingRelay(
+          name: sessionName,
+          memberNPubs: selected
+        )
+      }
       isCreating = false
-      if didCreate {
+      if result.didSucceed {
         dismiss()
+      } else {
+        mutationFeedback.record(errorMessage: result.errorMessage)
       }
     }
   }

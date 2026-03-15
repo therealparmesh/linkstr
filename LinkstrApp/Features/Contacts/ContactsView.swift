@@ -306,6 +306,7 @@ struct AddContactSheet: View {
   @State private var isSubmitting = false
   @State private var isPresentingScanner = false
   @State private var scannerErrorMessage: String?
+  @State private var mutationFeedback = LinkstrSheetMutationFeedback()
   @FocusState private var focusedField: Field?
   private let isNPubPrefilled: Bool
 
@@ -386,10 +387,7 @@ struct AddContactSheet: View {
           }
           .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
           .padding(.top, LinkstrTheme.screenTopPadding)
-          .padding(
-            .bottom,
-            isKeyboardPresented ? LinkstrTheme.screenBottomPadding : LinkstrTheme.sheetBottomPadding
-          )
+          .padding(.bottom, LinkstrTheme.screenBottomPadding)
           .scrollDismissesKeyboard(.interactively)
         }
       }
@@ -417,39 +415,24 @@ struct AddContactSheet: View {
           Button {
             submitFollow()
           } label: {
-            Text(isSubmitting ? "adding..." : "add")
-              .font(LinkstrTheme.body(15, weight: .semibold))
+            if isSubmitting {
+              ProgressView()
+                .frame(width: 30, height: 30, alignment: .center)
+            } else {
+              Image(systemName: "person.crop.circle.badge.plus")
+                .linkstrToolbarIconLabel()
+            }
           }
           .accessibilityLabel("add contact")
           .tint(LinkstrTheme.accent)
           .disabled(!canSubmit)
         }
-
-        if isKeyboardPresented {
-          ToolbarItemGroup(placement: .keyboard) {
-            Spacer()
-
-            Button {
-              submitFollow()
-            } label: {
-              Label(
-                isSubmitting ? "adding contact..." : "add contact",
-                systemImage: "person.crop.circle.badge.plus"
-              )
-            }
-            .disabled(!canSubmit)
-          }
-        }
       }
       .safeAreaInset(edge: .bottom, spacing: 0) {
-        if !isKeyboardPresented {
-          LinkstrSheetActionFooter(
-            title: isSubmitting ? "adding contact..." : "add contact",
-            systemImage: "person.crop.circle.badge.plus",
-            isDisabled: !canSubmit,
-            message: footerMessage,
-            messageColor: footerMessageColor,
-            action: submitFollow
+        if let footerStatus {
+          LinkstrSheetStatusFooter(
+            message: footerStatus.message,
+            messageColor: footerStatus.color
           )
         }
       }
@@ -464,8 +447,12 @@ struct AddContactSheet: View {
         }
       }
       .onChange(of: npub) { _, _ in
+        mutationFeedback.clear()
         guard normalizedScannerErrorMessage.isEmpty == false else { return }
         scannerErrorMessage = nil
+      }
+      .onChange(of: alias) { _, _ in
+        mutationFeedback.clear()
       }
     }
   }
@@ -474,40 +461,24 @@ struct AddContactSheet: View {
     !isSubmitting && previewPubkeyHex != nil
   }
 
-  private var isKeyboardPresented: Bool {
-    focusedField != nil
-  }
-
-  private var footerMessage: String {
-    if isSubmitting {
-      return "waiting for relay reconnect before adding..."
-    }
-
+  private var validationMessage: String? {
     if normalizedScannerErrorMessage.isEmpty == false {
       return normalizedScannerErrorMessage
     }
-
     let trimmedNPub = npub.trimmingCharacters(in: .whitespacesAndNewlines)
     if trimmedNPub.isEmpty == false && previewPubkeyHex == nil {
       return "enter a valid public key."
     }
-
-    return ""
+    return nil
   }
 
-  private var footerMessageColor: Color {
-    if isSubmitting {
-      return LinkstrTheme.textSecondary
-    }
-
-    let trimmedNPub = npub.trimmingCharacters(in: .whitespacesAndNewlines)
-    if normalizedScannerErrorMessage.isEmpty == false
-      || (!trimmedNPub.isEmpty && previewPubkeyHex == nil)
-    {
-      return LinkstrTheme.destructive.opacity(0.9)
-    }
-
-    return LinkstrTheme.textSecondary
+  private var footerStatus: LinkstrSheetFooterStatus? {
+    mutationFeedback.footerStatus(
+      isRunning: isSubmitting,
+      progressMessage: "waiting for relay reconnect before adding...",
+      validationMessage: validationMessage,
+      validationColor: LinkstrTheme.destructive.opacity(0.9)
+    )
   }
 
   private func pasteFromClipboard() {
@@ -519,12 +490,17 @@ struct AddContactSheet: View {
   private func submitFollow() {
     guard canSubmit else { return }
     focusedField = nil
+    mutationFeedback.clear()
     isSubmitting = true
     Task { @MainActor in
-      let didAdd = await session.addContact(npub: npub, alias: alias)
+      let result = await session.performFormMutation {
+        await session.addContact(npub: npub, alias: alias)
+      }
       isSubmitting = false
-      if didAdd {
+      if result.didSucceed {
         dismiss()
+      } else {
+        mutationFeedback.record(errorMessage: result.errorMessage)
       }
     }
   }

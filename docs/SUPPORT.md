@@ -21,10 +21,10 @@ Your active account is stored in the device keychain. If you use iCloud Keychain
 2. Tap the add contact button.
 3. Paste an `npub` or scan a QR code.
 4. Optionally save a private alias.
-5. Tap `add contact`.
+5. Tap the top-right add icon.
 
 Adding the same contact again updates the saved alias instead of creating a duplicate. To edit an alias later, tap the contact row.
-You can also use the top-right `add` action immediately, or dismiss the keyboard and use the footer button. The keyboard `return` key moves from the public key field into alias and submits from alias.
+The bottom footer shows validation and relay status only. The keyboard `return` key moves from the public key field into alias and submits from alias.
 
 ### Create a session
 
@@ -32,10 +32,10 @@ You can also use the top-right `add` action immediately, or dismiss the keyboard
 2. Tap the compose button in the top-right corner.
 3. Enter a session name.
 4. Optionally add contacts now, or start solo and add them later.
-5. Tap `create session`.
+5. Tap the top-right create icon.
 
 After creation, linkstr opens the session for you immediately.
-You can also use the top-right `create` action immediately, or dismiss the keyboard and use the footer button. The keyboard `return` key moves from the name field into member search and submits immediately when there are no contacts yet.
+The bottom footer shows validation and relay status only. The keyboard `return` key moves from the name field into member search and submits immediately when there are no contacts yet.
 
 ### Use the You tab
 
@@ -49,10 +49,10 @@ Profile name changes can be submitted with either the keyboard return key or the
 2. Tap the compose button in the top-right corner.
 3. Paste a link.
 4. Optionally add a note.
-5. Tap `send post`.
+5. Tap the top-right send icon.
 
 Generic web URLs are valid posts too. In-app playback, local caching, and save/export options depend on the provider and the specific URL.
-You can also use the top-right `send` action immediately, or dismiss the keyboard and use the footer button. The keyboard `return` key on the link field moves into the note field.
+The bottom footer shows validation and relay status only. The keyboard `return` key on the link field moves into the note field.
 
 ### React, delete, archive, and manage members
 

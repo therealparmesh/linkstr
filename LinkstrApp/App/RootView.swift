@@ -44,6 +44,7 @@ struct RootView: View {
     .tint(LinkstrTheme.accent)
     .onChange(of: session.composeError) { _, newValue in
       guard let newValue, !newValue.isEmpty else { return }
+      guard session.shouldPresentComposeErrorToast else { return }
       withAnimation(.easeIn(duration: RootViewTimingDefaults.toastAnimationDuration)) {
         toastMessage = newValue
       }

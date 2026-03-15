@@ -6,6 +6,21 @@ import XCTest
 
 @MainActor
 final class AppSessionMutationTests: AppSessionTestCase {
+  func testPerformFormMutationCapturesErrorAndRestoresGlobalToastPresentation() async throws {
+    let (session, _) = try makeSession()
+
+    let result = await session.performFormMutation {
+      XCTAssertFalse(session.shouldPresentComposeErrorToast)
+      session.composeError = "blocked: policy"
+      return false
+    }
+
+    XCTAssertFalse(result.didSucceed)
+    XCTAssertEqual(result.errorMessage, "blocked: policy")
+    XCTAssertNil(session.composeError)
+    XCTAssertTrue(session.shouldPresentComposeErrorToast)
+  }
+
   func testCreateSessionPostAwaitingRelayTimesOutWhenRelayNeverConnects() async throws {
     let (session, container) = try makeSession(disableNostrStartup: false)
     try session.identityService.createNewIdentity()

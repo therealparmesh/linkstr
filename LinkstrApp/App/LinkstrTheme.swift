@@ -29,7 +29,6 @@ enum LinkstrTheme {
   static let screenHorizontalPadding: CGFloat = 16
   static let screenTopPadding: CGFloat = 16
   static let screenBottomPadding: CGFloat = 24
-  static let sheetBottomPadding: CGFloat = 120
   static let panelPadding: CGFloat = 18
   static let toastTopPadding: CGFloat = 10
   static let fieldHorizontalPadding: CGFloat = 14
@@ -393,38 +392,67 @@ struct LinkstrInputAssistRow: View {
   }
 }
 
-struct LinkstrSheetActionFooter: View {
-  let title: String
-  let systemImage: String
-  let isDisabled: Bool
-  let message: String?
+struct LinkstrSheetStatusFooter: View {
+  let message: String
   var messageColor: Color = LinkstrTheme.textSecondary
-  let action: () -> Void
 
   var body: some View {
-    VStack(spacing: LinkstrTheme.buttonRowSpacing) {
-      Button(action: action) {
-        LinkstrActionButtonLabel(title: title, systemImage: systemImage)
+    Text(message)
+      .font(LinkstrTheme.body(12))
+      .foregroundStyle(messageColor)
+      .frame(maxWidth: .infinity, minHeight: 14, alignment: .center)
+      .multilineTextAlignment(.center)
+      .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+      .padding(.top, LinkstrTheme.fieldVerticalPadding)
+      .padding(.bottom, LinkstrTheme.fieldVerticalPadding)
+      .background(.ultraThinMaterial)
+      .overlay(alignment: .top) {
+        Rectangle()
+          .fill(LinkstrTheme.separator)
+          .frame(height: 1)
       }
-      .linkstrPrimaryButton()
-      .disabled(isDisabled)
+  }
+}
 
-      Text(message ?? " ")
-        .font(LinkstrTheme.body(12))
-        .foregroundStyle(messageColor)
-        .frame(maxWidth: .infinity, minHeight: 14, alignment: .center)
-        .opacity((message ?? "").isEmpty ? 0 : 1)
-        .accessibilityHidden((message ?? "").isEmpty)
+struct LinkstrSheetFooterStatus {
+  let message: String
+  let color: Color
+}
+
+struct LinkstrSheetMutationFeedback {
+  private(set) var errorMessage: String?
+
+  mutating func clear() {
+    errorMessage = nil
+  }
+
+  mutating func record(errorMessage: String?) {
+    let trimmed = errorMessage?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    self.errorMessage = trimmed.isEmpty ? nil : trimmed
+  }
+
+  func footerStatus(
+    isRunning: Bool,
+    progressMessage: String,
+    validationMessage: String? = nil,
+    validationColor: Color = LinkstrTheme.textSecondary
+  ) -> LinkstrSheetFooterStatus? {
+    if isRunning {
+      return LinkstrSheetFooterStatus(
+        message: progressMessage,
+        color: LinkstrTheme.textSecondary
+      )
     }
-    .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-    .padding(.top, LinkstrTheme.fieldVerticalPadding)
-    .padding(.bottom, LinkstrTheme.fieldVerticalPadding)
-    .background(.ultraThinMaterial)
-    .overlay(alignment: .top) {
-      Rectangle()
-        .fill(LinkstrTheme.separator)
-        .frame(height: 1)
+
+    if let errorMessage {
+      return LinkstrSheetFooterStatus(
+        message: errorMessage,
+        color: LinkstrTheme.destructive.opacity(0.9)
+      )
     }
+
+    guard let validationMessage, !validationMessage.isEmpty else { return nil }
+    return LinkstrSheetFooterStatus(message: validationMessage, color: validationColor)
   }
 }
 

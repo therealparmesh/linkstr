@@ -27,6 +27,11 @@ private enum IdentityLoadRetryDefaults {
 
 @MainActor
 final class AppSession: ObservableObject {
+  struct FormMutationResult {
+    let didSucceed: Bool
+    let errorMessage: String?
+  }
+
   enum RelayConnectivityState: Equatable {
     case noEnabledRelays
     case online
@@ -173,6 +178,7 @@ final class AppSession: ObservableObject {
   private var pendingOfflineToastTask: Task<Void, Never>?
   private var nostrStartupTask: Task<Void, Never>?
   private var hasObservedHealthyRelayInCurrentForeground = false
+  private var suppressedComposeErrorPresentationCount = 0
   private var nostrStartupGeneration = 0
   private var passiveOfflineToastGraceUntil: Date?
   private var latestAppliedFollowListCreatedAt: Date?
@@ -299,6 +305,26 @@ final class AppSession: ObservableObject {
 
   private func report(error: Error) {
     composeError = error.localizedDescription
+  }
+
+  var shouldPresentComposeErrorToast: Bool {
+    suppressedComposeErrorPresentationCount == 0
+  }
+
+  func performFormMutation(_ operation: () async -> Bool) async -> FormMutationResult {
+    suppressedComposeErrorPresentationCount += 1
+    defer { suppressedComposeErrorPresentationCount -= 1 }
+
+    let didSucceed = await operation()
+    let errorMessage = didSucceed ? nil : takeComposeError()
+    return FormMutationResult(didSucceed: didSucceed, errorMessage: errorMessage)
+  }
+
+  private func takeComposeError() -> String? {
+    let message = composeError?.trimmingCharacters(in: .whitespacesAndNewlines)
+    composeError = nil
+    guard let message, !message.isEmpty else { return nil }
+    return message
   }
 
   func relayConnectivityState(for enabledRelays: [RelayEntity]) -> RelayConnectivityState {
