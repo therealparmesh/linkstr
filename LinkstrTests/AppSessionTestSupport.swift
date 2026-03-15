@@ -8,6 +8,7 @@ import XCTest
 class AppSessionTestCase: XCTestCase {
   let shortRelayMutationTimeoutSeconds: TimeInterval = 0.05
   let shortRelayMutationPollIntervalSeconds: TimeInterval = 0.01
+  let shortRemoteProfileLookupRetryNanoseconds: UInt64 = 50_000_000
   let asyncExpectationTimeoutSeconds: TimeInterval = 1.0
 
   override func setUpWithError() throws {
@@ -103,7 +104,8 @@ class AppSessionTestCase: XCTestCase {
     sendPayload: ((LinkstrPayload, [String]) async throws -> SentPayloadReceipt)? = nil,
     skipNostrNetworkStartup: Bool = true,
     onNostrStart: (() -> Void)? = nil,
-    requestProfileMetadata: (([String]) -> Void)? = nil,
+    requestProfileMetadata: (([String]) -> Bool)? = nil,
+    remoteProfileLookupRetryNanoseconds: UInt64? = nil,
     clearLocalAccountData: ((String) throws -> Void)? = nil,
     registerPushDevice: ((PushDeviceRegistration) async throws -> Void)? = nil,
     unregisterPushDevice: ((String) async throws -> Void)? = nil,
@@ -125,6 +127,7 @@ class AppSessionTestCase: XCTestCase {
     testingOverrides.skipNostrNetworkStartup = skipNostrNetworkStartup
     testingOverrides.onNostrStart = onNostrStart
     testingOverrides.requestProfileMetadata = requestProfileMetadata
+    testingOverrides.remoteProfileLookupRetryNanoseconds = remoteProfileLookupRetryNanoseconds
     testingOverrides.clearLocalAccountData = clearLocalAccountData
     testingOverrides.registerPushDevice = registerPushDevice
     testingOverrides.unregisterPushDevice = unregisterPushDevice

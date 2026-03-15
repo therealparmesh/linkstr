@@ -80,7 +80,6 @@ struct DeepLinkDetailView: View {
     .padding(.horizontal, LinkstrTheme.fieldHorizontalPadding)
     .padding(.vertical, 14)
     .contentShape(Rectangle())
-    .linkstrSurfaceCard()
   }
 
   @ViewBuilder

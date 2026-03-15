@@ -11,6 +11,20 @@ private enum RelayMutationDefaults {
   static let pollIntervalSeconds: TimeInterval = 0.35
 }
 
+private enum AppSessionTimingDefaults {
+  static let remoteProfileLookupRetryNanoseconds: UInt64 = 3_000_000_000
+  static let passiveOfflineToastGraceInterval: TimeInterval = 1.25
+  static let relayDisconnectGraceInterval: TimeInterval = 1.25
+  static let identityRetryDelayNanoseconds: UInt64 = 250_000_000
+}
+
+private enum IdentityLoadRetryDefaults {
+  static let bootAttempts = 2
+  static let protectedDataUnavailableBootAttempts = 6
+  static let activeAttempts = 2
+  static let protectedDataAttempts = 4
+}
+
 @MainActor
 final class AppSession: ObservableObject {
   enum RelayConnectivityState: Equatable {
@@ -107,7 +121,8 @@ final class AppSession: ObservableObject {
     var sendPayload: ((LinkstrPayload, [String]) async throws -> SentPayloadReceipt)?
     var skipNostrNetworkStartup = false
     var onNostrStart: (() -> Void)?
-    var requestProfileMetadata: (([String]) -> Void)?
+    var requestProfileMetadata: (([String]) -> Bool)?
+    var remoteProfileLookupRetryNanoseconds: UInt64?
     var clearLocalAccountData: ((String) throws -> Void)?
     var registerPushDevice: ((PushDeviceRegistration) async throws -> Void)?
     var unregisterPushDevice: ((String) async throws -> Void)?
@@ -157,15 +172,7 @@ final class AppSession: ObservableObject {
   @Published private var relayRuntimeStatusByURL: [String: RelayRuntimeStatus] = [:]
   private var pendingOfflineToastTask: Task<Void, Never>?
   private var nostrStartupTask: Task<Void, Never>?
-  private let remoteProfileLookupRetryNanoseconds: UInt64 = 3_000_000_000
   private var hasObservedHealthyRelayInCurrentForeground = false
-  private let passiveOfflineToastGraceInterval: TimeInterval = 1.25
-  private let relayDisconnectGraceInterval: TimeInterval = 1.25
-  private let identityRetryDelayNanoseconds: UInt64 = 250_000_000
-  private let bootIdentityRetryAttempts = 2
-  private let protectedDataUnavailableBootIdentityRetryAttempts = 6
-  private let activeIdentityRetryAttempts = 2
-  private let protectedDataIdentityRetryAttempts = 4
   private var nostrStartupGeneration = 0
   private var passiveOfflineToastGraceUntil: Date?
   private var latestAppliedFollowListCreatedAt: Date?
@@ -174,6 +181,7 @@ final class AppSession: ObservableObject {
   private var latestAppliedProfileMetadataEventID: String?
   private var currentProfileMetadataContent: String?
   private var inFlightRemoteProfilePubkeys = Set<String>()
+  private var pendingRemoteProfilePubkeys = Set<String>()
   private var pendingIncomingMessages: [PendingIncomingMessage] = []
   private var isDrainingPendingIncomingMessages = false
   private var isBooting = false
@@ -252,7 +260,7 @@ final class AppSession: ObservableObject {
     bootStatusMessage = "starting session…"
     didFinishBoot = true
     beginForegroundCycle()
-    scheduleNostrStartup(maxAttempts: activeIdentityRetryAttempts)
+    scheduleNostrStartup(maxAttempts: IdentityLoadRetryDefaults.activeAttempts)
   }
 
   func handleAppDidBecomeActive() {
@@ -266,7 +274,7 @@ final class AppSession: ObservableObject {
       // sync, especially after transient network failures that did not change local signatures.
       schedulePushStateSync()
     }
-    scheduleNostrStartup(maxAttempts: activeIdentityRetryAttempts)
+    scheduleNostrStartup(maxAttempts: IdentityLoadRetryDefaults.activeAttempts)
   }
 
   func handleAppDidLeaveForeground() {
@@ -282,7 +290,7 @@ final class AppSession: ObservableObject {
 
   func handleProtectedDataDidBecomeAvailable() {
     guard didFinishBoot, isForeground else { return }
-    scheduleNostrStartup(maxAttempts: protectedDataIdentityRetryAttempts)
+    scheduleNostrStartup(maxAttempts: IdentityLoadRetryDefaults.protectedDataAttempts)
   }
 
   func handlePushDeviceTokenDidChange() {
@@ -472,6 +480,7 @@ final class AppSession: ObservableObject {
     if status == .connected || status == .readOnly {
       hasObservedHealthyRelayInCurrentForeground = true
       drainPendingIncomingMessagesIfNeeded()
+      retryPendingRemoteProfileRequestsIfNeeded()
     }
 
     let now = Date()
@@ -480,7 +489,8 @@ final class AppSession: ObservableObject {
       existing.status == .connected || existing.status == .readOnly,
       status == .disconnected,
       normalizedMessage == nil,
-      now.timeIntervalSince(existing.updatedAt) < relayDisconnectGraceInterval
+      now.timeIntervalSince(existing.updatedAt)
+        < AppSessionTimingDefaults.relayDisconnectGraceInterval
     {
       // Keep healthy status briefly while relay pool restarts to avoid flicker.
       return
@@ -503,11 +513,18 @@ final class AppSession: ObservableObject {
 
   private var bootIdentityRetryAttemptCount: Int {
     isProtectedDataCurrentlyAvailable
-      ? bootIdentityRetryAttempts : protectedDataUnavailableBootIdentityRetryAttempts
+      ? IdentityLoadRetryDefaults.bootAttempts
+      : IdentityLoadRetryDefaults.protectedDataUnavailableBootAttempts
   }
 
   private var configuredIdentityRetryDelayNanoseconds: UInt64 {
-    testingOverrides.identityRetryDelayNanoseconds ?? identityRetryDelayNanoseconds
+    testingOverrides.identityRetryDelayNanoseconds
+      ?? AppSessionTimingDefaults.identityRetryDelayNanoseconds
+  }
+
+  private var configuredRemoteProfileLookupRetryNanoseconds: UInt64 {
+    testingOverrides.remoteProfileLookupRetryNanoseconds
+      ?? AppSessionTimingDefaults.remoteProfileLookupRetryNanoseconds
   }
 
   private var isRunningTests: Bool {
@@ -604,7 +621,8 @@ final class AppSession: ObservableObject {
     hasShownOfflineToastForCurrentOutage = false
     clearOfflineToastIfPresent()
     passiveOfflineToastGraceUntil = Date.now.addingTimeInterval(
-      testingOverrides.passiveOfflineToastGraceInterval ?? passiveOfflineToastGraceInterval
+      testingOverrides.passiveOfflineToastGraceInterval
+        ?? AppSessionTimingDefaults.passiveOfflineToastGraceInterval
     )
     cancelPendingOfflineToastIfNeeded()
     cancelPendingNostrStartupIfNeeded()
@@ -919,7 +937,7 @@ final class AppSession: ObservableObject {
       refreshIdentityState()
       profileNameErrorMessage = nil
       composeError = nil
-      scheduleNostrStartup(maxAttempts: activeIdentityRetryAttempts)
+      scheduleNostrStartup(maxAttempts: IdentityLoadRetryDefaults.activeAttempts)
     } catch {
       pendingCreatedAccountNsec = nil
       composeError = error.localizedDescription
@@ -964,7 +982,7 @@ final class AppSession: ObservableObject {
       refreshIdentityState()
       profileNameErrorMessage = nil
       composeError = nil
-      scheduleNostrStartup(maxAttempts: activeIdentityRetryAttempts)
+      scheduleNostrStartup(maxAttempts: IdentityLoadRetryDefaults.activeAttempts)
     } catch {
       composeError = error.localizedDescription
     }
@@ -2377,7 +2395,7 @@ final class AppSession: ObservableObject {
       return false
     }
     pruneRuntimeRelayStatusCache()
-    scheduleNostrStartup(maxAttempts: activeIdentityRetryAttempts)
+    scheduleNostrStartup(maxAttempts: IdentityLoadRetryDefaults.activeAttempts)
     return true
   }
 
@@ -3173,6 +3191,7 @@ final class AppSession: ObservableObject {
   private func resetRemoteProfileStateInMemory() {
     remoteProfilesByPubkey = [:]
     inFlightRemoteProfilePubkeys.removeAll()
+    pendingRemoteProfilePubkeys.removeAll()
   }
 
   private func resetProfileMetadataStateInMemory() {
@@ -3274,6 +3293,8 @@ final class AppSession: ObservableObject {
       updatedAt: createdAt,
       eventID: normalizedEventID
     )
+    inFlightRemoteProfilePubkeys.remove(normalizedPubkey)
+    pendingRemoteProfilePubkeys.remove(normalizedPubkey)
   }
 
   func requestRemoteProfilesIfNeeded(pubkeyHexes: [String]) {
@@ -3281,31 +3302,61 @@ final class AppSession: ObservableObject {
       remoteProfilesByPubkey[$0] == nil && inFlightRemoteProfilePubkeys.contains($0) == false
     }
     guard !missingPubkeys.isEmpty else { return }
-
-    if let requestProfileMetadata = testingOverrides.requestProfileMetadata {
-      markRemoteProfilesInFlight(missingPubkeys)
-      requestProfileMetadata(missingPubkeys)
-      return
-    }
-
-    guard shouldFetchMetadataForCurrentProcess() else { return }
-    guard nostrService.requestProfileMetadata(pubkeyHexes: missingPubkeys) else { return }
-    markRemoteProfilesInFlight(missingPubkeys)
+    guard canFetchRemoteProfilesInCurrentProcess else { return }
+    submitRemoteProfileLookupIfPossible(missingPubkeys)
   }
 
   private func markRemoteProfilesInFlight(_ pubkeyHexes: [String]) {
     let normalizedPubkeys = NostrValueNormalizer.dedupedNormalizedPubkeyHexes(pubkeyHexes)
     guard !normalizedPubkeys.isEmpty else { return }
     inFlightRemoteProfilePubkeys.formUnion(normalizedPubkeys)
-    let retryDelayNanoseconds = remoteProfileLookupRetryNanoseconds
+    let retryDelayNanoseconds = configuredRemoteProfileLookupRetryNanoseconds
     Task { [weak self, normalizedPubkeys] in
       try? await Task.sleep(nanoseconds: retryDelayNanoseconds)
       guard !Task.isCancelled else { return }
       await MainActor.run { [weak self, normalizedPubkeys] in
         guard let self else { return }
         self.inFlightRemoteProfilePubkeys.subtract(normalizedPubkeys)
+        let unresolvedPubkeys = normalizedPubkeys.filter { self.remoteProfilesByPubkey[$0] == nil }
+        guard !unresolvedPubkeys.isEmpty else { return }
+        self.pendingRemoteProfilePubkeys.formUnion(unresolvedPubkeys)
+        self.retryPendingRemoteProfileRequestsIfNeeded()
       }
     }
+  }
+
+  private var canFetchRemoteProfilesInCurrentProcess: Bool {
+    testingOverrides.requestProfileMetadata != nil || shouldFetchMetadataForCurrentProcess()
+  }
+
+  private func submitRemoteProfileLookupIfPossible(_ pubkeyHexes: [String]) {
+    let normalizedPubkeys = NostrValueNormalizer.dedupedNormalizedPubkeyHexes(pubkeyHexes).filter {
+      remoteProfilesByPubkey[$0] == nil
+    }
+    guard !normalizedPubkeys.isEmpty else { return }
+
+    let didRequest: Bool
+    if let requestProfileMetadata = testingOverrides.requestProfileMetadata {
+      didRequest = requestProfileMetadata(normalizedPubkeys)
+    } else {
+      didRequest = nostrService.requestProfileMetadata(pubkeyHexes: normalizedPubkeys)
+    }
+
+    if didRequest {
+      pendingRemoteProfilePubkeys.subtract(normalizedPubkeys)
+      markRemoteProfilesInFlight(normalizedPubkeys)
+    } else {
+      pendingRemoteProfilePubkeys.formUnion(normalizedPubkeys)
+    }
+  }
+
+  private func retryPendingRemoteProfileRequestsIfNeeded() {
+    guard canFetchRemoteProfilesInCurrentProcess else { return }
+    let pendingPubkeys = pendingRemoteProfilePubkeys.filter {
+      remoteProfilesByPubkey[$0] == nil && inFlightRemoteProfilePubkeys.contains($0) == false
+    }
+    guard !pendingPubkeys.isEmpty else { return }
+    submitRemoteProfileLookupIfPossible(Array(pendingPubkeys))
   }
 
   private func normalizedRelayURL(from raw: String) -> URL? {

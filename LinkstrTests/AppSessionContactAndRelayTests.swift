@@ -202,6 +202,7 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     let (session, container) = try makeSession(
       requestProfileMetadata: { requestedPubkeys in
         requestedPubkeyBatches.append(requestedPubkeys.sorted())
+        return true
       }
     )
     _ = container
@@ -223,6 +224,7 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     var sessionAndContainer: (AppSession, ModelContainer)? = try makeSession(
       requestProfileMetadata: { requestedPubkeys in
         requestedPubkeyBatches.append(requestedPubkeys.sorted())
+        return true
       }
     )
     weakSession = sessionAndContainer?.0
@@ -242,6 +244,31 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     }
 
     XCTAssertNil(weakSession)
+  }
+
+  func testRequestRemoteProfilesIfNeededRetriesWhenLookupPathBecomesAvailable() async throws {
+    var allowRequests = false
+    var requestedPubkeyBatches: [[String]] = []
+    let (session, container) = try makeSession(
+      requestProfileMetadata: { requestedPubkeys in
+        guard allowRequests else { return false }
+        requestedPubkeyBatches.append(requestedPubkeys.sorted())
+        return true
+      },
+      remoteProfileLookupRetryNanoseconds: shortRemoteProfileLookupRetryNanoseconds
+    )
+    _ = container
+    try session.identityService.createNewIdentity()
+    let pubkey = try TestKeyMaterialFactory.makePubkeyHex()
+
+    session.requestRemoteProfilesIfNeeded(pubkeyHexes: [pubkey])
+    XCTAssertTrue(requestedPubkeyBatches.isEmpty)
+
+    allowRequests = true
+    session.simulateRuntimeRelayStatusForTesting(
+      relayURL: "wss://relay.example", status: .connected)
+
+    XCTAssertEqual(requestedPubkeyBatches, [[pubkey]])
   }
 
   func testUpdateOwnProfileNamePublishesMergedMetadataContentAndPersistsState() async throws {
