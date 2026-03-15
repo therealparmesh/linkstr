@@ -26,6 +26,10 @@ enum EmbeddedWebSource: Equatable {
   }
 }
 
+private enum EmbeddedWebViewTimingDefaults {
+  static let metricPollDelays: [TimeInterval] = [0.05, 0.18, 0.4, 0.9, 1.6]
+}
+
 struct EmbeddedWebView: UIViewRepresentable {
   let source: EmbeddedWebSource
   var onIntrinsicHeightChange: ((CGFloat) -> Void)? = nil
@@ -33,7 +37,6 @@ struct EmbeddedWebView: UIViewRepresentable {
 
   final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler, WKUIDelegate {
     static let metricsHandlerName = "linkstrEmbedMetrics"
-    private static let metricPollDelays: [TimeInterval] = [0.05, 0.18, 0.4, 0.9, 1.6]
 
     var loadedSourceKey: String?
     var source: EmbeddedWebSource?
@@ -113,7 +116,7 @@ struct EmbeddedWebView: UIViewRepresentable {
     private func scheduleMetricPolling(for webView: WKWebView) {
       cancelPendingMetricPolls()
 
-      for delay in Self.metricPollDelays {
+      for delay in EmbeddedWebViewTimingDefaults.metricPollDelays {
         let workItem = DispatchWorkItem { [weak self, weak webView] in
           guard let self, let webView else { return }
           self.pollMetrics(from: webView)

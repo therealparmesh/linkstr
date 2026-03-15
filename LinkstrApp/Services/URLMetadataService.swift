@@ -7,6 +7,10 @@ struct LinkPreviewData {
   let thumbnailPath: String?
 }
 
+private enum URLMetadataTimingDefaults {
+  static let providerTimeout: TimeInterval = 6
+}
+
 enum LinkMetadataRefreshPolicy {
   static func needsRefresh(
     linkType: LinkType,
@@ -39,7 +43,6 @@ enum LinkMetadataRefreshPolicy {
 
 final class URLMetadataService {
   static let shared = URLMetadataService()
-  private static let providerTimeout: TimeInterval = 6.0
   private init() {}
 
   func fetchPreview(for urlString: String) async -> LinkPreviewData? {
@@ -66,7 +69,7 @@ final class URLMetadataService {
 
   private func genericPreview(for url: URL) async -> LinkPreviewData? {
     let provider = LPMetadataProvider()
-    provider.timeout = Self.providerTimeout
+    provider.timeout = URLMetadataTimingDefaults.providerTimeout
     do {
       let metadata = try await provider.startFetchingMetadata(for: url)
       let title = metadata.title

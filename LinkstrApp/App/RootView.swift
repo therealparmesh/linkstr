@@ -1,5 +1,10 @@
 import SwiftUI
 
+private enum RootViewTimingDefaults {
+  static let toastAnimationDuration: TimeInterval = 0.18
+  static let toastDisplayDuration: TimeInterval = 2.2
+}
+
 struct RootView: View {
   @EnvironmentObject private var session: AppSession
   @EnvironmentObject private var deepLinkHandler: DeepLinkHandler
@@ -28,7 +33,7 @@ struct RootView: View {
           .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
           .transition(.move(edge: .top).combined(with: .opacity))
           .onTapGesture {
-            withAnimation(.easeOut(duration: 0.18)) {
+            withAnimation(.easeOut(duration: RootViewTimingDefaults.toastAnimationDuration)) {
               self.toastMessage = nil
             }
           }
@@ -39,7 +44,7 @@ struct RootView: View {
     .tint(LinkstrTheme.accent)
     .onChange(of: session.composeError) { _, newValue in
       guard let newValue, !newValue.isEmpty else { return }
-      withAnimation(.easeIn(duration: 0.18)) {
+      withAnimation(.easeIn(duration: RootViewTimingDefaults.toastAnimationDuration)) {
         toastMessage = newValue
       }
       session.composeError = nil
@@ -47,8 +52,8 @@ struct RootView: View {
     }
     .task(id: toastDisplayID) {
       guard toastMessage != nil else { return }
-      try? await Task.sleep(for: .seconds(2.2))
-      withAnimation(.easeOut(duration: 0.18)) {
+      try? await Task.sleep(for: .seconds(RootViewTimingDefaults.toastDisplayDuration))
+      withAnimation(.easeOut(duration: RootViewTimingDefaults.toastAnimationDuration)) {
         toastMessage = nil
       }
     }

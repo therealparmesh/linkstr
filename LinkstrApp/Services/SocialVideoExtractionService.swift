@@ -13,6 +13,24 @@ enum ExtractionState {
   case cannotExtract(String)
 }
 
+private enum SocialVideoTimingDefaults {
+  static let tikTokAPITimeout: TimeInterval = 15
+  static let mediaCandidateCollectionTimeout: TimeInterval = 12
+  static let twitterStatusRequestTimeout: TimeInterval = 8
+  static let urlCanonicalizationRequestTimeout: TimeInterval = 6
+}
+
+private enum TwitterEmbedTimingDefaults {
+  static let readyTransitionDurationSeconds: TimeInterval = 0.18
+  static let postRenderRefreshDelaysMilliseconds = [40, 120, 260, 520, 1000, 1800]
+  static let bootstrapRefreshDelaysMilliseconds = [80, 220, 480, 900, 1600]
+  static let fallbackDelayMilliseconds = 3_200
+
+  static func javascriptArray(for values: [Int]) -> String {
+    "[\(values.map(String.init).joined(separator: ", "))]"
+  }
+}
+
 final class SocialVideoExtractionService: NSObject {
   static let shared = SocialVideoExtractionService()
 
@@ -203,7 +221,7 @@ final class SocialVideoExtractionService: NSObject {
     request.httpMethod = "OPTIONS"
     request.setValue(Self.tikTokAPIUserAgent, forHTTPHeaderField: "User-Agent")
     request.setValue("application/json", forHTTPHeaderField: "Accept")
-    request.timeoutInterval = 15
+    request.timeoutInterval = SocialVideoTimingDefaults.tikTokAPITimeout
 
     do {
       let (data, response) = try await URLSession.shared.data(for: request)
@@ -690,7 +708,8 @@ private final class MediaCandidateCollector: NSObject, WKNavigationDelegate, WKS
     let urls = await withCheckedContinuation { (continuation: CheckedContinuation<[URL], Never>) in
       self.continuation = continuation
       timeoutTask = Task { [weak self] in
-        try? await Task.sleep(for: .seconds(12))
+        try? await Task.sleep(
+          for: .seconds(SocialVideoTimingDefaults.mediaCandidateCollectionTimeout))
         guard let self else { return }
         await MainActor.run {
           self.finish()
@@ -789,7 +808,6 @@ struct TwitterStatusResolvedPresentation: Equatable {
 actor TwitterStatusResolutionService {
   static let shared = TwitterStatusResolutionService()
 
-  private let requestTimeout: TimeInterval = 8
   private let userAgent =
     "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15"
     + " (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
@@ -892,7 +910,7 @@ actor TwitterStatusResolutionService {
   private func fetchMediaSummary(from endpoint: URL) async -> TwitterStatusMediaSummary? {
     var request = URLRequest(url: endpoint)
     request.httpMethod = "GET"
-    request.timeoutInterval = requestTimeout
+    request.timeoutInterval = SocialVideoTimingDefaults.twitterStatusRequestTimeout
     request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
     request.setValue("application/json", forHTTPHeaderField: "Accept")
 
@@ -930,7 +948,7 @@ actor TwitterStatusResolutionService {
 
     var request = URLRequest(url: endpoint)
     request.httpMethod = "GET"
-    request.timeoutInterval = requestTimeout
+    request.timeoutInterval = SocialVideoTimingDefaults.twitterStatusRequestTimeout
     request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
     request.setValue("application/json", forHTTPHeaderField: "Accept")
 
@@ -955,216 +973,222 @@ actor TwitterStatusResolutionService {
 
 enum TwitterEmbedDocumentBuilder {
   static func documentHTML(tweetID: String) -> String {
-    """
-    <!doctype html>
-    <html>
-      <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-        <style>
-          html, body {
-            margin: 0;
-            padding: 0;
-            background: transparent;
-            color-scheme: dark;
-            overflow: hidden;
-          }
+    let postRenderRefreshDelays = TwitterEmbedTimingDefaults.javascriptArray(
+      for: TwitterEmbedTimingDefaults.postRenderRefreshDelaysMilliseconds
+    )
+    let bootstrapRefreshDelays = TwitterEmbedTimingDefaults.javascriptArray(
+      for: TwitterEmbedTimingDefaults.bootstrapRefreshDelaysMilliseconds
+    )
+    return """
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+          <style>
+            html, body {
+              margin: 0;
+              padding: 0;
+              background: transparent;
+              color-scheme: dark;
+              overflow: hidden;
+            }
 
-          body {
-            opacity: 0;
-            transition: opacity 0.18s ease;
-          }
+            body {
+              opacity: 0;
+              transition: opacity \(TwitterEmbedTimingDefaults.readyTransitionDurationSeconds)s ease;
+            }
 
-          body.linkstr-embed-ready {
-            opacity: 1;
-          }
+            body.linkstr-embed-ready {
+              opacity: 1;
+            }
 
-          #tweet-container {
-            width: 100%;
-            min-height: 220px;
-            display: flex;
-            justify-content: center;
-          }
+            #tweet-container {
+              width: 100%;
+              min-height: 220px;
+              display: flex;
+              justify-content: center;
+            }
 
-          #tweet-container > * {
-            width: 100% !important;
-            max-width: 100% !important;
-            margin: 0 auto !important;
-          }
+            #tweet-container > * {
+              width: 100% !important;
+              max-width: 100% !important;
+              margin: 0 auto !important;
+            }
 
-          #tweet-container iframe {
-            width: 100% !important;
-            max-width: 100% !important;
-          }
+            #tweet-container iframe {
+              width: 100% !important;
+              max-width: 100% !important;
+            }
 
-          .linkstr-embed-fallback {
-            min-height: 220px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 24px;
-            color: rgba(255, 255, 255, 0.74);
-            text-align: center;
-            font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
-            font-size: 15px;
-            line-height: 1.4;
-          }
-        </style>
-      </head>
-      <body>
-        <div id="tweet-container"></div>
-        <script>
-          (() => {
-            const tweetID = "\(tweetID)";
-            const readyClass = "linkstr-embed-ready";
-            const body = document.body;
-            const root = document.documentElement;
-            const container = document.getElementById("tweet-container");
-            const metricsHandler = window.webkit?.messageHandlers?.linkstrEmbedMetrics;
+            .linkstr-embed-fallback {
+              min-height: 220px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              padding: 24px;
+              color: rgba(255, 255, 255, 0.74);
+              text-align: center;
+              font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+              font-size: 15px;
+              line-height: 1.4;
+            }
+          </style>
+        </head>
+        <body>
+          <div id="tweet-container"></div>
+          <script>
+            (() => {
+              const tweetID = "\(tweetID)";
+              const readyClass = "linkstr-embed-ready";
+              const body = document.body;
+              const root = document.documentElement;
+              const container = document.getElementById("tweet-container");
+              const metricsHandler = window.webkit?.messageHandlers?.linkstrEmbedMetrics;
 
-            const height = () => Math.max(
-              root?.scrollHeight ?? 0,
-              body?.scrollHeight ?? 0,
-              container?.scrollHeight ?? 0,
-              root?.offsetHeight ?? 0,
-              body?.offsetHeight ?? 0,
-              container?.offsetHeight ?? 0,
-              root?.clientHeight ?? 0,
-              body?.clientHeight ?? 0,
-              container?.clientHeight ?? 0
-            );
-
-            const postMetrics = (readyOverride) => {
-              metricsHandler?.postMessage({
-                height: Math.ceil(height()),
-                ready: readyOverride ?? body.classList.contains(readyClass)
-              });
-            };
-
-            const markReady = () => {
-              if (body.classList.contains(readyClass) === false) {
-                body.classList.add(readyClass);
-              }
-              postMetrics(true);
-            };
-
-            const hasRenderedTweet = () =>
-              container?.querySelector("iframe[src*='platform.twitter.com']") ||
-              container?.querySelector("iframe[src*='syndication.twitter.com']") ||
-              container?.querySelector("twitter-widget") ||
-              container?.querySelector(".twitter-tweet-rendered");
-
-            const sizeRenderedTweet = () => {
-              const rootElement = container?.firstElementChild;
-              if (rootElement) {
-                rootElement.style.width = "100%";
-                rootElement.style.maxWidth = "100%";
-                rootElement.style.margin = "0 auto";
-              }
-
-              const iframe = container?.querySelector("iframe");
-              if (iframe) {
-                iframe.style.width = "100%";
-                iframe.style.maxWidth = "100%";
-              }
-            };
-
-            const showFallback = () => {
-              if (!container || container.children.length > 0) {
-                markReady();
-                return;
-              }
-
-              container.innerHTML =
-                '<div class="linkstr-embed-fallback">couldn\\'t load this post preview. use open in browser.</div>';
-              markReady();
-            };
-
-            const refresh = () => {
-              sizeRenderedTweet();
-              postMetrics(false);
-              if (hasRenderedTweet()) {
-                markReady();
-              }
-            };
-
-            const renderTweet = () => {
-              const widgetAPI = window.twttr?.widgets;
-              if (!widgetAPI?.createTweet || !container) {
-                showFallback();
-                return;
-              }
-
-              container.innerHTML = "";
-
-              const width = Math.min(
-                550,
-                Math.max(
-                  220,
-                  Math.floor(
-                    container.clientWidth ||
-                    root?.clientWidth ||
-                    window.innerWidth ||
-                    550
-                  )
-                )
+              const height = () => Math.max(
+                root?.scrollHeight ?? 0,
+                body?.scrollHeight ?? 0,
+                container?.scrollHeight ?? 0,
+                root?.offsetHeight ?? 0,
+                body?.offsetHeight ?? 0,
+                container?.offsetHeight ?? 0,
+                root?.clientHeight ?? 0,
+                body?.clientHeight ?? 0,
+                container?.clientHeight ?? 0
               );
 
-              widgetAPI.createTweet(tweetID, container, {
-                align: "center",
-                dnt: true,
-                theme: "dark",
-                width
-              }).then((element) => {
-                if (!element) {
+              const postMetrics = (readyOverride) => {
+                metricsHandler?.postMessage({
+                  height: Math.ceil(height()),
+                  ready: readyOverride ?? body.classList.contains(readyClass)
+                });
+              };
+
+              const markReady = () => {
+                if (body.classList.contains(readyClass) === false) {
+                  body.classList.add(readyClass);
+                }
+                postMetrics(true);
+              };
+
+              const hasRenderedTweet = () =>
+                container?.querySelector("iframe[src*='platform.twitter.com']") ||
+                container?.querySelector("iframe[src*='syndication.twitter.com']") ||
+                container?.querySelector("twitter-widget") ||
+                container?.querySelector(".twitter-tweet-rendered");
+
+              const sizeRenderedTweet = () => {
+                const rootElement = container?.firstElementChild;
+                if (rootElement) {
+                  rootElement.style.width = "100%";
+                  rootElement.style.maxWidth = "100%";
+                  rootElement.style.margin = "0 auto";
+                }
+
+                const iframe = container?.querySelector("iframe");
+                if (iframe) {
+                  iframe.style.width = "100%";
+                  iframe.style.maxWidth = "100%";
+                }
+              };
+
+              const showFallback = () => {
+                if (!container || container.children.length > 0) {
+                  markReady();
+                  return;
+                }
+
+                container.innerHTML =
+                  '<div class="linkstr-embed-fallback">couldn\\'t load this post preview. use open in browser.</div>';
+                markReady();
+              };
+
+              const refresh = () => {
+                sizeRenderedTweet();
+                postMetrics(false);
+                if (hasRenderedTweet()) {
+                  markReady();
+                }
+              };
+
+              const renderTweet = () => {
+                const widgetAPI = window.twttr?.widgets;
+                if (!widgetAPI?.createTweet || !container) {
                   showFallback();
                   return;
                 }
 
-                refresh();
-                [40, 120, 260, 520, 1000, 1800].forEach((delay) => {
-                  window.setTimeout(refresh, delay);
-                });
-              }).catch(showFallback);
-            };
+                container.innerHTML = "";
 
-            const script = document.createElement("script");
-            script.src = "https://platform.twitter.com/widgets.js";
-            script.async = true;
-            script.onload = () => {
-              if (window.twttr?.ready) {
-                window.twttr.ready(renderTweet);
-              } else {
-                renderTweet();
+                const width = Math.min(
+                  550,
+                  Math.max(
+                    220,
+                    Math.floor(
+                      container.clientWidth ||
+                      root?.clientWidth ||
+                      window.innerWidth ||
+                      550
+                    )
+                  )
+                );
+
+                widgetAPI.createTweet(tweetID, container, {
+                  align: "center",
+                  dnt: true,
+                  theme: "dark",
+                  width
+                }).then((element) => {
+                  if (!element) {
+                    showFallback();
+                    return;
+                  }
+
+                  refresh();
+                  \(postRenderRefreshDelays).forEach((delay) => {
+                    window.setTimeout(refresh, delay);
+                  });
+                }).catch(showFallback);
+              };
+
+              const script = document.createElement("script");
+              script.src = "https://platform.twitter.com/widgets.js";
+              script.async = true;
+              script.onload = () => {
+                if (window.twttr?.ready) {
+                  window.twttr.ready(renderTweet);
+                } else {
+                  renderTweet();
+                }
+              };
+              script.onerror = showFallback;
+              document.head.appendChild(script);
+
+              window.addEventListener("resize", refresh);
+              window.addEventListener("message", refresh);
+
+              new MutationObserver(refresh).observe(body, {
+                subtree: true,
+                childList: true,
+                attributes: true
+              });
+
+              if (window.ResizeObserver) {
+                new ResizeObserver(refresh).observe(body);
               }
-            };
-            script.onerror = showFallback;
-            document.head.appendChild(script);
 
-            window.addEventListener("resize", refresh);
-            window.addEventListener("message", refresh);
-
-            new MutationObserver(refresh).observe(body, {
-              subtree: true,
-              childList: true,
-              attributes: true
-            });
-
-            if (window.ResizeObserver) {
-              new ResizeObserver(refresh).observe(body);
-            }
-
-            window.setTimeout(showFallback, 3200);
-            [80, 220, 480, 900, 1600].forEach((delay) => {
-              window.setTimeout(() => {
-                refresh();
-              }, delay);
-            });
-          })();
-        </script>
-      </body>
-    </html>
-    """
+              window.setTimeout(showFallback, \(TwitterEmbedTimingDefaults.fallbackDelayMilliseconds));
+              \(bootstrapRefreshDelays).forEach((delay) => {
+                window.setTimeout(() => {
+                  refresh();
+                }, delay);
+              });
+            })();
+          </script>
+        </body>
+      </html>
+      """
   }
 }
 
@@ -1379,7 +1403,6 @@ enum TwitterStatusResponseParser {
 actor URLCanonicalizationService {
   static let shared = URLCanonicalizationService()
 
-  private let requestTimeout: TimeInterval = 6
   private var cache: [String: URL] = [:]
   private var embedURLCache: [String: URL] = [:]
 
@@ -1447,8 +1470,11 @@ actor URLCanonicalizationService {
         + " (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
       forHTTPHeaderField: "User-Agent"
     )
-    request.timeoutInterval = requestTimeout
-    return await FirstRedirectResolver.resolve(request: request, timeout: requestTimeout)
+    request.timeoutInterval = SocialVideoTimingDefaults.urlCanonicalizationRequestTimeout
+    return await FirstRedirectResolver.resolve(
+      request: request,
+      timeout: SocialVideoTimingDefaults.urlCanonicalizationRequestTimeout
+    )
   }
 
   private func canonicalFacebookURLFromPage(_ sourceURL: URL) async -> URL? {
@@ -1463,7 +1489,7 @@ actor URLCanonicalizationService {
       "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
       forHTTPHeaderField: "Accept"
     )
-    request.timeoutInterval = requestTimeout
+    request.timeoutInterval = SocialVideoTimingDefaults.urlCanonicalizationRequestTimeout
 
     do {
       let (data, response) = try await URLSession.shared.data(for: request)
@@ -1578,7 +1604,7 @@ actor URLCanonicalizationService {
       forHTTPHeaderField: "User-Agent"
     )
     request.setValue("application/json", forHTTPHeaderField: "Accept")
-    request.timeoutInterval = requestTimeout
+    request.timeoutInterval = SocialVideoTimingDefaults.urlCanonicalizationRequestTimeout
 
     do {
       let (data, response) = try await URLSession.shared.data(for: request)

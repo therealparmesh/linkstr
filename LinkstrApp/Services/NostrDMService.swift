@@ -36,6 +36,13 @@ struct ReceivedProfileMetadata {
   let createdAt: Date
 }
 
+private enum NostrDMTimingDefaults {
+  static let reconnectDelayNanoseconds: UInt64 = 2_000_000_000
+  static let profileLookupTimeoutNanoseconds: UInt64 = 3_000_000_000
+  static let relayAcceptanceTimeoutSeconds: TimeInterval = 8
+  static let minimumRelayAcceptanceTimeoutSeconds: TimeInterval = 0.1
+}
+
 @MainActor
 final class NostrDMService: NSObject, ObservableObject, EventCreating {
   private enum BackfillSubscriptionKind: String {
@@ -85,8 +92,6 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
   private let followListSubscriptionID = "linkstr-follow-list-self"
   private let backfillPageSize = 500
   private let processedEventIDLimit = 10_000
-  private let reconnectDelayNanoseconds: UInt64 = 2_000_000_000
-  private let profileLookupTimeoutNanoseconds: UInt64 = 3_000_000_000
   private var activeBackfillStates: [String: BackfillState] = [:]
   private var completedBackfillKinds = Set<BackfillSubscriptionKind>()
   private var currentBackfillRelayURLs = Set<String>()
@@ -317,7 +322,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     reconnectTask = Task { @MainActor [weak self] in
       guard let self else { return }
       defer { self.reconnectTask = nil }
-      try? await Task.sleep(nanoseconds: self.reconnectDelayNanoseconds)
+      try? await Task.sleep(nanoseconds: NostrDMTimingDefaults.reconnectDelayNanoseconds)
       guard !Task.isCancelled else { return }
       guard self.shouldMaintainConnection else { return }
       self.relayPool?.connect()
@@ -327,7 +332,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
   func sendAwaitingRelayAcceptance(
     payload: LinkstrPayload,
     toMany recipientPubkeyHexes: [String],
-    timeoutSeconds: TimeInterval = 8
+    timeoutSeconds: TimeInterval = NostrDMTimingDefaults.relayAcceptanceTimeoutSeconds
   ) async throws -> SentPayloadReceipt {
     guard relayPool != nil else {
       throw NostrServiceError.relayUnavailable
@@ -354,7 +359,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
 
   func publishFollowListAwaitingRelayAcceptance(
     followedPubkeyHexes: [String],
-    timeoutSeconds: TimeInterval = 8
+    timeoutSeconds: TimeInterval = NostrDMTimingDefaults.relayAcceptanceTimeoutSeconds
   ) async throws -> String {
     guard relayPool != nil else {
       throw NostrServiceError.relayUnavailable
@@ -375,7 +380,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
 
   func publishEventAwaitingRelayAcceptance(
     _ event: NostrEvent,
-    timeoutSeconds: TimeInterval = 8
+    timeoutSeconds: TimeInterval = NostrDMTimingDefaults.relayAcceptanceTimeoutSeconds
   ) async throws -> String {
     guard relayPool != nil else {
       throw NostrServiceError.relayUnavailable
@@ -409,7 +414,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     _ = relayPool.subscribe(with: filter, subscriptionId: subscriptionID)
     Task { @MainActor [weak self] in
       guard let self else { return }
-      try? await Task.sleep(nanoseconds: self.profileLookupTimeoutNanoseconds)
+      try? await Task.sleep(nanoseconds: NostrDMTimingDefaults.profileLookupTimeoutNanoseconds)
       guard !Task.isCancelled else { return }
       self.relayPool?.closeSubscription(with: subscriptionID)
     }
@@ -534,7 +539,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
 
   private func publishEventsAwaitingRelayAcceptance(
     _ events: [NostrEvent],
-    timeoutSeconds: TimeInterval = 8
+    timeoutSeconds: TimeInterval = NostrDMTimingDefaults.relayAcceptanceTimeoutSeconds
   ) async throws -> [String] {
     let eventIDs = events.map(\.id)
     guard !eventIDs.isEmpty else {
@@ -555,7 +560,14 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
       pendingPublishContinuations[batchID] = continuation
       pendingPublishBatchTimeoutTasks[batchID] = Task { @MainActor [weak self] in
         guard let self else { return }
-        try? await Task.sleep(for: .seconds(max(0.1, timeoutSeconds)))
+        try? await Task.sleep(
+          for: .seconds(
+            max(
+              NostrDMTimingDefaults.minimumRelayAcceptanceTimeoutSeconds,
+              timeoutSeconds
+            )
+          )
+        )
         guard !Task.isCancelled else { return }
         self.finishPendingPublishBatch(
           batchID: batchID,
