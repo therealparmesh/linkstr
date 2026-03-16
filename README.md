@@ -162,10 +162,11 @@ linkstr still does not have a durable offline outbox. If a send cannot get relay
   - note (optional).
 - Link field supports `paste` and `clear` helpers.
 - Link helper controls render directly below the field in a compact, consistent control row.
-- Entering the link field pre-fills `https://` when the field is empty.
 - `paste` replaces the entire link field value.
-- URL input is normalized and must be valid `http`/`https`.
+- Links without a scheme are normalized to `https://`.
+- URL input is normalized and must be a valid web `http`/`https` URL.
 - Unsupported schemes are rejected.
+- Recognized media links surface inline hints about whether they should play in app or open in the browser.
 - Note text is trimmed and persisted only when non-empty.
 - In post detail, the raw link text supports the standard ios copy menu via text selection.
 - In post detail, the top-right share action exports a `linkstr://open?url=...` deep link for the current post URL.

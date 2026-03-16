@@ -54,7 +54,7 @@ final class LinkstrPayloadTests: XCTestCase {
     XCTAssertEqual(payload.url, "https://example.com")
   }
 
-  func testNormalizedWebURLAcceptsHTTPAndHTTPS() {
+  func testNormalizedWebURLAcceptsHTTPHTTPSAndMissingScheme() {
     XCTAssertEqual(
       LinkstrURLValidator.normalizedWebURL(from: " https://example.com/path?q=1 "),
       "https://example.com/path?q=1"
@@ -63,12 +63,22 @@ final class LinkstrPayloadTests: XCTestCase {
       LinkstrURLValidator.normalizedWebURL(from: "http://example.com"),
       "http://example.com"
     )
+    XCTAssertEqual(
+      LinkstrURLValidator.normalizedWebURL(from: "example.com/path?q=1"),
+      "https://example.com/path?q=1"
+    )
+    XCTAssertEqual(
+      LinkstrURLValidator.normalizedWebURL(from: "x.com/i/status/20"),
+      "https://x.com/i/status/20"
+    )
   }
 
   func testNormalizedWebURLRejectsUnsupportedOrMalformedValues() {
     XCTAssertNil(LinkstrURLValidator.normalizedWebURL(from: "ftp://example.com/file"))
     XCTAssertNil(LinkstrURLValidator.normalizedWebURL(from: "mailto:test@example.com"))
     XCTAssertNil(LinkstrURLValidator.normalizedWebURL(from: "https://"))
+    XCTAssertNil(LinkstrURLValidator.normalizedWebURL(from: "https://https://example.com"))
+    XCTAssertNil(LinkstrURLValidator.normalizedWebURL(from: "https://foo"))
     XCTAssertNil(LinkstrURLValidator.normalizedWebURL(from: "not-a-url"))
     XCTAssertNil(LinkstrURLValidator.normalizedWebURL(from: ""))
   }

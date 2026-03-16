@@ -66,7 +66,7 @@ struct NewPostSheet: View {
             }
 
             LinkstrInsetSection(title: "link") {
-              TextField("https://...", text: $url)
+              TextField("example.com", text: $url)
                 .font(LinkstrTheme.body(14))
                 .textInputAutocapitalization(.never)
                 .keyboardType(.URL)
@@ -88,12 +88,12 @@ struct NewPostSheet: View {
                 onClear: { url = "" }
               )
 
-              Text(urlValidationHint ?? " ")
+              Text(urlFieldHint ?? " ")
                 .font(LinkstrTheme.body(12))
-                .foregroundStyle(LinkstrTheme.destructive.opacity(0.92))
+                .foregroundStyle(urlFieldHintColor)
                 .frame(maxWidth: .infinity, minHeight: 14, alignment: .leading)
-                .opacity(urlValidationHint == nil ? 0 : 1)
-                .accessibilityHidden(urlValidationHint == nil)
+                .opacity(urlFieldHint == nil ? 0 : 1)
+                .accessibilityHidden(urlFieldHint == nil)
             }
 
             LinkstrInsetSection(title: "note") {
@@ -166,12 +166,10 @@ struct NewPostSheet: View {
           )
         }
       }
-      .onChange(of: focusedField) { _, focusedField in
-        guard focusedField == .url else { return }
-        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
-          url = "https://"
-        }
+      .onChange(of: focusedField) { previousField, focusedField in
+        guard previousField == .url, focusedField != .url else { return }
+        guard let normalizedURL else { return }
+        url = normalizedURL
       }
       .onChange(of: url) { _, _ in
         mutationFeedback.clear()
@@ -200,6 +198,30 @@ struct NewPostSheet: View {
     return normalizedURL == nil ? "enter a valid link." : nil
   }
 
+  private var urlFieldHint: String? {
+    if let urlValidationHint {
+      return urlValidationHint
+    }
+
+    guard let normalizedURL else { return nil }
+
+    switch URLClassifier.mediaStrategy(for: normalizedURL) {
+    case .extractionPreferred:
+      return "plays in app. may save."
+    case .embedOnly:
+      return "plays in app."
+    case .link:
+      return "opens in browser."
+    }
+  }
+
+  private var urlFieldHintColor: Color {
+    if urlValidationHint != nil {
+      return LinkstrTheme.destructive.opacity(0.92)
+    }
+    return LinkstrTheme.accent.opacity(0.92)
+  }
+
   private var validationMessage: String? {
     if !canCreatePostInSession {
       return "you're no longer a member of this session."
@@ -220,6 +242,7 @@ struct NewPostSheet: View {
     guard canCreatePostInSession else { return }
     guard let normalizedURL else { return }
     guard !isSending else { return }
+    url = normalizedURL
     focusedField = nil
     mutationFeedback.clear()
 

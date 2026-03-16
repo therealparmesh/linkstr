@@ -1,6 +1,6 @@
 # linkstr support
 
-Last updated: March 15, 2026
+Last updated: March 16, 2026
 
 linkstr is a private link-sharing app built on nostr. You create or join private sessions, share links inside those sessions, and react with emoji. This page describes the current shipped behavior in plain language.
 
@@ -52,6 +52,7 @@ Profile name changes can be submitted with either the keyboard return key or the
 5. Tap the top-right send icon.
 
 Generic web URLs are valid posts too. In-app playback, local caching, and save/export options depend on the provider and the specific URL.
+The composer shows whether a link should play in the app or open in the browser.
 The bottom footer shows validation and relay status only. The keyboard `return` key on the link field moves into the note field.
 
 ### React, delete, archive, and manage members
