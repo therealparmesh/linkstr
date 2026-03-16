@@ -18,7 +18,7 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.1.1</string>
+	<string>1.1.2</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -31,7 +31,7 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>5</string>
+	<string>6</string>
 	<key>LinkstrPushServiceBaseURL</key>
 	<string>$(LINKSTR_PUSH_SERVICE_BASE_URL)</string>
 	<key>NSAppTransportSecurity</key>

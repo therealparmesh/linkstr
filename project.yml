@@ -62,8 +62,8 @@ targets:
       path: LinkstrApp/Info.plist
       properties:
         CFBundleDisplayName: linkstr
-        CFBundleShortVersionString: "1.1.1"
-        CFBundleVersion: "5"
+        CFBundleShortVersionString: "1.1.2"
+        CFBundleVersion: "6"
         LinkstrPushServiceBaseURL: $(LINKSTR_PUSH_SERVICE_BASE_URL)
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
