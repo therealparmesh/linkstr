@@ -166,7 +166,7 @@ linkstr still does not have a durable offline outbox. If a send cannot get relay
 - Links without a scheme are normalized to `https://`.
 - URL input is normalized and must be a valid web `http`/`https` URL.
 - Unsupported schemes are rejected.
-- Recognized media links surface inline hints about whether they should play in app or open in the browser.
+- Recognized media links can surface an inline hint when an in-app view is available.
 - Note text is trimmed and persisted only when non-empty.
 - In post detail, the raw link text supports the standard ios copy menu via text selection.
 - In post detail, the top-right share action exports a `linkstr://open?url=...` deep link for the current post URL.

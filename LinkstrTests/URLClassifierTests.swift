@@ -65,6 +65,26 @@ final class URLClassifierTests: XCTestCase {
     )
   }
 
+  func testComposerAvailabilityHintMatchesMediaStrategy() {
+    XCTAssertEqual(
+      NewPostSheet.composerAvailabilityHint(
+        for: URLClassifier.MediaStrategy.extractionPreferred(
+          embedURL: URL(string: "https://www.tiktok.com/embed/v3/7596114833477537054")!
+        )
+      ),
+      "viewable in-app. may be saveable."
+    )
+    XCTAssertEqual(
+      NewPostSheet.composerAvailabilityHint(
+        for: URLClassifier.MediaStrategy.embedOnly(
+          embedURL: URL(string: "https://www.youtube.com/embed/dQw4w9WgXcQ")!
+        )
+      ),
+      "viewable in-app."
+    )
+    XCTAssertNil(NewPostSheet.composerAvailabilityHint(for: .link))
+  }
+
   func testFacebookShareURLHeuristic() {
     XCTAssertTrue(
       SocialURLHeuristics.isFacebookShareURL(

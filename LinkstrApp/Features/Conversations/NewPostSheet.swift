@@ -204,15 +204,7 @@ struct NewPostSheet: View {
     }
 
     guard let normalizedURL else { return nil }
-
-    switch URLClassifier.mediaStrategy(for: normalizedURL) {
-    case .extractionPreferred:
-      return "plays in app. may save."
-    case .embedOnly:
-      return "plays in app."
-    case .link:
-      return "opens in browser."
-    }
+    return Self.composerAvailabilityHint(for: URLClassifier.mediaStrategy(for: normalizedURL))
   }
 
   private var urlFieldHintColor: Color {
@@ -236,6 +228,16 @@ struct NewPostSheet: View {
       validationMessage: validationMessage,
       validationColor: LinkstrTheme.destructive.opacity(0.9)
     )
+  }
+
+  static func composerAvailabilityHint(for strategy: URLClassifier.MediaStrategy) -> String? {
+    if strategy.allowsLocalPlaybackToggle {
+      return "viewable in-app. may be saveable."
+    }
+    if case .embedOnly = strategy {
+      return "viewable in-app."
+    }
+    return nil
   }
 
   private func sendPost() {
