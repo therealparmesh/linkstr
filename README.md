@@ -293,6 +293,7 @@ linkstr still does not have a durable offline outbox. If a send cannot get relay
 - Self-echoed events do not trigger notifications.
 - Historical relay restore/backfill does not trigger catch-up notifications.
 - Foreground presentation remains enabled (`banner`, `list`, `sound`).
+- Tapping a notification navigates to the relevant session.
 - Push alerts use generic text; encrypted session content is still fetched and decrypted on-device.
 
 ### Media and link behavior

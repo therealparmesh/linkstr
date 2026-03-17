@@ -123,6 +123,15 @@ struct LinkstrAppMain: App {
               ) { _ in
                 readyContext.session.handlePushDeviceTokenDidChange()
               }
+              .onReceive(
+                NotificationCenter.default.publisher(
+                  for: .linkstrPushNotificationTapped
+                )
+              ) { notification in
+                if let conversationID = notification.userInfo?["conversation_id"] as? String {
+                  readyContext.session.pendingSessionNavigationID = conversationID
+                }
+              }
               .onChange(of: scenePhase) { _, newValue in
                 switch newValue {
                 case .active:

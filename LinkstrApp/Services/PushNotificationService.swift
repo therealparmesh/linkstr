@@ -6,6 +6,9 @@ extension Notification.Name {
   static let linkstrPushDeviceTokenDidChange = Notification.Name(
     "linkstr.pushDeviceTokenDidChange"
   )
+  static let linkstrPushNotificationTapped = Notification.Name(
+    "linkstr.pushNotificationTapped"
+  )
 }
 
 @MainActor
@@ -89,9 +92,35 @@ extension PushNotificationService: UNUserNotificationCenterDelegate {
   ) {
     completionHandler([.banner, .list, .sound])
   }
+
+  nonisolated func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    didReceive response: UNNotificationResponse,
+    withCompletionHandler completionHandler: @escaping () -> Void
+  ) {
+    let userInfo = response.notification.request.content.userInfo
+    if let conversationID = userInfo["conversation_id"] as? String,
+      !conversationID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    {
+      NotificationCenter.default.post(
+        name: .linkstrPushNotificationTapped,
+        object: nil,
+        userInfo: ["conversation_id": conversationID]
+      )
+    }
+    completionHandler()
+  }
 }
 
 final class LinkstrAppDelegate: NSObject, UIApplicationDelegate {
+  func application(
+    _ application: UIApplication,
+    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+  ) -> Bool {
+    PushNotificationService.shared.configure()
+    return true
+  }
+
   func application(
     _ application: UIApplication,
     didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data

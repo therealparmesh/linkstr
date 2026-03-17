@@ -240,7 +240,6 @@ final class AppSession: ObservableObject {
       maxAttempts: bootIdentityRetryAttemptCount,
       retryDelayNanoseconds: configuredIdentityRetryDelayNanoseconds
     )
-    PushNotificationService.shared.configure()
     if !isRunningTests && !isEnvironmentFlagEnabled("LINKSTR_SKIP_NOTIFICATION_PROMPT") {
       PushNotificationService.shared.requestAuthorizationIfNeeded()
     }
