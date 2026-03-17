@@ -271,7 +271,7 @@ linkstr still does not have a durable offline outbox. If a send cannot get relay
   - `session_members` can bootstrap a missing session when the snapshot includes sender, receiver, and a non-empty session name.
   - `session_members` snapshots must include the creator pubkey.
   - Accepted session events update the stored session row and membership snapshot.
-  - Live relay subscriptions use `since` filters so live ingest stays focused on new events.
+  - Live relay subscriptions use `since` filters so live ingest stays focused on new events. The `since` value accounts for the NIP-59 gift-wrap timestamp obfuscation window (up to 2 days) so that newly published gift-wraps with randomized backdated `created_at` are not filtered out by the relay.
 - Persist root posts only when sender and receiver are active at the event timestamp.
 - Live root ingest additionally requires sender and receiver to be active in the latest local membership snapshot.
 - Out-of-order root posts are staged in memory until a valid session snapshot arrives.

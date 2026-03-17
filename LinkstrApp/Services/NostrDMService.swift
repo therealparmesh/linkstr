@@ -41,6 +41,9 @@ private enum NostrDMTimingDefaults {
   static let profileLookupTimeoutNanoseconds: UInt64 = 3_000_000_000
   static let relayAcceptanceTimeoutSeconds: TimeInterval = 8
   static let minimumRelayAcceptanceTimeoutSeconds: TimeInterval = 0.1
+  /// NIP-59 gift-wrap `created_at` is randomized up to 2 days in the past.
+  /// Live subscription `since` must account for this to avoid filtering out new messages.
+  static let giftWrapTimestampObfuscationSeconds: Int = 172800
 }
 
 @MainActor
@@ -144,7 +147,9 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     currentBackfillRelayURLs = []
     completedBackfillRelayURLs = []
     didNotifyInitialBackfillCompletion = false
-    liveSubscriptionSince = Int(Date.now.timeIntervalSince1970)
+    liveSubscriptionSince =
+      Int(Date.now.timeIntervalSince1970)
+      - NostrDMTimingDefaults.giftWrapTimestampObfuscationSeconds
 
     let parsedRelayURLs = relayURLs.map { ($0, URL(string: $0)) }
     let validRelayURLs = Set(parsedRelayURLs.compactMap(\.1))
