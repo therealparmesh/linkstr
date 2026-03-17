@@ -3132,6 +3132,7 @@ final class AppSession: ObservableObject {
     let generation = metadataRefreshQueueGeneration
 
     Task { @MainActor in
+      var hasPendingSave = false
       while generation == metadataRefreshQueueGeneration,
         pendingMetadataRefreshHead < pendingMetadataRefreshes.count
       {
@@ -3145,12 +3146,17 @@ final class AppSession: ObservableObject {
             activeMetadataRefreshStorageID = nil
             continue
           }
-          try await refreshMetadata(for: message)
+          let didChange = try await refreshMetadata(for: message)
+          if didChange { hasPendingSave = true }
         } catch {
           report(error: error)
         }
         enqueuedMetadataStorageIDs.remove(request.storageID)
         activeMetadataRefreshStorageID = nil
+      }
+
+      if hasPendingSave {
+        try? modelContext.save()
       }
 
       if generation == metadataRefreshQueueGeneration {
@@ -3164,9 +3170,9 @@ final class AppSession: ObservableObject {
     }
   }
 
-  private func refreshMetadata(for message: SessionMessageEntity) async throws {
-    guard let url = message.url else { return }
-    guard needsMetadataRefresh(message) else { return }
+  private func refreshMetadata(for message: SessionMessageEntity) async throws -> Bool {
+    guard let url = message.url else { return false }
+    guard needsMetadataRefresh(message) else { return false }
 
     let preview: LinkPreviewData?
     if let fetchLinkPreview = testingOverrides.fetchLinkPreview {
@@ -3174,7 +3180,7 @@ final class AppSession: ObservableObject {
     } else {
       preview = await URLMetadataService.shared.fetchPreview(for: url)
     }
-    guard let preview else { return }
+    guard let preview else { return false }
 
     let currentTitle = LinkMetadataRefreshPolicy.normalizedTitle(message.metadataTitle)
     let previewTitle = LinkMetadataRefreshPolicy.normalizedTitle(preview.title)
@@ -3192,11 +3198,11 @@ final class AppSession: ObservableObject {
     }
 
     guard resolvedTitle != currentTitle || resolvedThumbnail != currentThumbnail else {
-      return
+      return false
     }
 
     try message.setMetadata(title: resolvedTitle, thumbnailURL: resolvedThumbnail)
-    try modelContext.save()
+    return true
   }
 
   private func needsMetadataRefresh(_ message: SessionMessageEntity) -> Bool {

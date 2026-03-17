@@ -9,6 +9,7 @@ struct DeepLinkDetailView: View {
   @State private var previewTitle: String?
   @State private var previewThumbnailPath: String?
   @State private var remotePostText: String?
+  @State private var thumbnailImage: UIImage?
 
   private var normalizedURLString: String? {
     LinkstrURLValidator.normalizedWebURL(from: urlString)
@@ -21,16 +22,6 @@ struct DeepLinkDetailView: View {
 
   private var mediaStrategy: URLClassifier.MediaStrategy {
     URLClassifier.mediaStrategy(for: normalizedURLString)
-  }
-
-  private var resolvedThumbnailImage: UIImage? {
-    guard
-      let thumbnailFileURL = ManagedLocalFileScope.shared.managedFileURL(
-        fromPath: previewThumbnailPath)
-    else {
-      return nil
-    }
-    return UIImage(contentsOfFile: thumbnailFileURL.path)
   }
 
   var body: some View {
@@ -94,8 +85,8 @@ struct DeepLinkDetailView: View {
         )
       case .link:
         VStack(alignment: .leading, spacing: LinkstrTheme.rowSpacing) {
-          if let resolvedThumbnailImage {
-            Image(uiImage: resolvedThumbnailImage)
+          if let thumbnailImage {
+            Image(uiImage: thumbnailImage)
               .resizable()
               .scaledToFit()
               .frame(maxWidth: .infinity, alignment: .leading)
@@ -137,6 +128,12 @@ struct DeepLinkDetailView: View {
     previewThumbnailPath = ManagedLocalFileScope.shared.normalizedManagedPath(
       resolvedPreview?.thumbnailPath
     )
+    if let path = ManagedLocalFileScope.shared.managedFileURL(fromPath: previewThumbnailPath)?.path
+    {
+      thumbnailImage = ThumbnailImageCache.shared.loadImage(at: path)
+    } else {
+      thumbnailImage = nil
+    }
     self.remotePostText = await remotePostText
   }
 

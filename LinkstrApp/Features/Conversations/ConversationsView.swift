@@ -729,6 +729,8 @@ private struct PostCardView: View {
   let hasUnreadPost: Bool
   let reactionSummaries: [ReactionSummary]
 
+  @State private var thumbnailImage: UIImage?
+
   var body: some View {
     HStack(alignment: .top, spacing: LinkstrTheme.rowSpacing) {
       thumbnailView
@@ -782,6 +784,15 @@ private struct PostCardView: View {
         .stroke(
           isOutgoing ? LinkstrTheme.accent.opacity(0.22) : LinkstrTheme.separator, lineWidth: 1)
     }
+    .task(id: post.encryptedThumbnailURL) {
+      guard
+        let path = ManagedLocalFileScope.shared.managedFileURL(fromPath: post.thumbnailURL)?.path
+      else {
+        thumbnailImage = nil
+        return
+      }
+      thumbnailImage = ThumbnailImageCache.shared.loadImage(at: path)
+    }
   }
 
   private var primaryText: String {
@@ -802,7 +813,7 @@ private struct PostCardView: View {
 
   @ViewBuilder
   private var thumbnailView: some View {
-    if let thumbnailImage = resolvedThumbnailImage {
+    if let thumbnailImage {
       Image(uiImage: thumbnailImage)
         .resizable()
         .scaledToFill()
@@ -811,15 +822,6 @@ private struct PostCardView: View {
     } else {
       thumbnailPlaceholder
     }
-  }
-
-  private var resolvedThumbnailImage: UIImage? {
-    guard
-      let thumbnailURL = ManagedLocalFileScope.shared.managedFileURL(fromPath: post.thumbnailURL)
-    else {
-      return nil
-    }
-    return UIImage(contentsOfFile: thumbnailURL.path)
   }
 
   private var thumbnailPlaceholder: some View {
