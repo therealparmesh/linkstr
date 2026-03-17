@@ -190,6 +190,8 @@ final class AppSession: ObservableObject {
   private var pendingRemoteProfilePubkeys = Set<String>()
   private var pendingIncomingMessages: [PendingIncomingMessage] = []
   private var isDrainingPendingIncomingMessages = false
+  private var memberIntervalCache: [String: [SessionMemberIntervalEntity]] = [:]
+  private var memberIntervalCacheLegacy: [String: SessionMemberEntity?] = [:]
   private var isBooting = false
   private var isRetryingIdentityLoad = false
   private var lastRegisteredPushDeviceSignature: String?
@@ -1189,6 +1191,97 @@ final class AppSession: ObservableObject {
     schedulePushStateSync()
   }
 
+  private func invalidateMemberIntervalCache() {
+    memberIntervalCache.removeAll()
+    memberIntervalCacheLegacy.removeAll()
+  }
+
+  private func invalidateMemberIntervalCache(sessionID: String) {
+    let keysToRemove = memberIntervalCache.keys.filter { $0.hasPrefix("\(sessionID):") }
+    for key in keysToRemove { memberIntervalCache.removeValue(forKey: key) }
+    let legacyKeysToRemove = memberIntervalCacheLegacy.keys.filter {
+      $0.hasPrefix("\(sessionID):")
+    }
+    for key in legacyKeysToRemove { memberIntervalCacheLegacy.removeValue(forKey: key) }
+  }
+
+  private func cachedMemberIntervals(
+    sessionID: String,
+    ownerPubkey: String,
+    memberPubkeyHash: String
+  ) throws -> [SessionMemberIntervalEntity] {
+    let cacheKey = "\(sessionID):\(memberPubkeyHash)"
+    if let cached = memberIntervalCache[cacheKey] {
+      return cached
+    }
+    let intervals = try messageStore.memberIntervals(
+      sessionID: sessionID,
+      ownerPubkey: ownerPubkey,
+      memberPubkeyHash: memberPubkeyHash
+    )
+    memberIntervalCache[cacheKey] = intervals
+    return intervals
+  }
+
+  private func cachedLegacyMember(
+    sessionID: String,
+    ownerPubkey: String,
+    memberPubkeyHash: String
+  ) throws -> SessionMemberEntity? {
+    let cacheKey = "\(sessionID):\(memberPubkeyHash)"
+    if let cached = memberIntervalCacheLegacy[cacheKey] {
+      return cached
+    }
+    let allMembers = try messageStore.members(
+      sessionID: sessionID,
+      ownerPubkey: ownerPubkey,
+      activeOnly: false
+    )
+    // Cache every member for this session in one fetch.
+    for member in allMembers {
+      let memberKey = "\(sessionID):\(member.memberPubkeyHash)"
+      memberIntervalCacheLegacy[memberKey] = member
+    }
+    // Also cache nil for the requested key if not found.
+    if memberIntervalCacheLegacy[cacheKey] == nil {
+      memberIntervalCacheLegacy[cacheKey] = .some(nil)
+    }
+    return memberIntervalCacheLegacy[cacheKey] ?? nil
+  }
+
+  private func cachedIsMemberActive(
+    sessionID: String,
+    ownerPubkey: String,
+    memberPubkey: String,
+    at timestamp: Date
+  ) throws -> Bool {
+    guard let normalizedMemberPubkey = NostrValueNormalizer.normalizedPubkeyHex(memberPubkey) else {
+      throw NostrServiceError.invalidPubkey
+    }
+    let memberHash = LocalDataCrypto.shared.digestHex(normalizedMemberPubkey)
+    let intervals = try cachedMemberIntervals(
+      sessionID: sessionID,
+      ownerPubkey: ownerPubkey,
+      memberPubkeyHash: memberHash
+    )
+    if let matchingInterval = intervals.last(where: { $0.contains(timestamp) }) {
+      return matchingInterval.memberPubkey == normalizedMemberPubkey
+    }
+
+    // Backward-compat fallback for legacy rows created before interval tracking.
+    guard
+      let legacyMember = try cachedLegacyMember(
+        sessionID: sessionID,
+        ownerPubkey: ownerPubkey,
+        memberPubkeyHash: memberHash
+      )
+    else {
+      return false
+    }
+    guard legacyMember.updatedAt <= timestamp else { return false }
+    return legacyMember.isActive
+  }
+
   private func resetRuntimeSessionState() {
     let relayURLs = enabledRelayURLsSnapshot()
     stopRelayRuntime()
@@ -1197,6 +1290,7 @@ final class AppSession: ObservableObject {
     cancelPendingNostrStartupIfNeeded()
     pendingIncomingMessages.removeAll()
     isDrainingPendingIncomingMessages = false
+    invalidateMemberIntervalCache()
     resetInitialHistoricalUnreadPolicy()
     pendingMetadataRefreshes.removeAll()
     pendingMetadataRefreshHead = 0
@@ -1228,6 +1322,7 @@ final class AppSession: ObservableObject {
 
     do {
       try messageStore.clearAllSessionData(ownerPubkey: ownerPubkey)
+      ThumbnailImageCache.shared.clear()
     } catch {
       failures.append("couldn't remove local sessions and posts.")
     }
@@ -2193,6 +2288,7 @@ final class AppSession: ObservableObject {
       updatedAt: updatedAt,
       eventID: eventID
     )
+    invalidateMemberIntervalCache(sessionID: sessionID)
   }
 
   @discardableResult
@@ -2436,6 +2532,7 @@ final class AppSession: ObservableObject {
   private func clearCachedMediaAndPreviews(ownerPubkey: String) {
     do {
       try messageStore.clearCachedMediaAndPreviews(ownerPubkey: ownerPubkey)
+      ThumbnailImageCache.shared.clear()
       composeError = nil
     } catch {
       report(error: error)
@@ -2559,11 +2656,79 @@ final class AppSession: ObservableObject {
     switch reduceIncoming(pending) {
     case .applied:
       removePendingIncomingMessage(eventID: pending.eventID)
+      drainTargetedPendingMessages(for: incoming)
       drainPendingIncomingMessagesIfNeeded()
     case .ignored:
       removePendingIncomingMessage(eventID: pending.eventID)
     case .pending:
       enqueuePendingIncomingMessage(pending)
+    }
+  }
+
+  private func drainTargetedPendingMessages(for incoming: ReceivedDirectMessage) {
+    guard !pendingIncomingMessages.isEmpty else { return }
+    let sessionID = incoming.payload.conversationID.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !sessionID.isEmpty else { return }
+
+    switch incoming.payload.kind {
+    case .root:
+      // A root post just landed — try resolving pending reactions for this root.
+      let rootID = incoming.eventID
+      drainPendingMessages { pending in
+        pending.incoming.payload.kind == .reaction
+          && pending.incoming.payload.conversationID.trimmingCharacters(
+            in: .whitespacesAndNewlines) == sessionID
+          && pending.incoming.payload.rootID.trimmingCharacters(in: .whitespacesAndNewlines)
+            == rootID
+      }
+    case .sessionCreate, .sessionMembers:
+      // Session state just landed — try resolving pending roots/reactions/deletions for this session.
+      drainPendingMessages { pending in
+        let kind = pending.incoming.payload.kind
+        guard kind == .root || kind == .reaction || kind == .rootDelete else { return false }
+        return pending.incoming.payload.conversationID.trimmingCharacters(
+          in: .whitespacesAndNewlines) == sessionID
+      }
+    default:
+      break
+    }
+  }
+
+  private func drainPendingMessages(matching predicate: (PendingIncomingMessage) -> Bool) {
+    guard !isDrainingPendingIncomingMessages else { return }
+    var candidates: [(Int, PendingIncomingMessage)] = []
+    for (index, pending) in pendingIncomingMessages.enumerated() where predicate(pending) {
+      candidates.append((index, pending))
+    }
+    guard !candidates.isEmpty else { return }
+
+    isDrainingPendingIncomingMessages = true
+    defer { isDrainingPendingIncomingMessages = false }
+
+    var indicesToRemove = IndexSet()
+    var madeProgress = true
+    while madeProgress {
+      madeProgress = false
+      var stillPending: [(Int, PendingIncomingMessage)] = []
+      for (originalIndex, pending) in candidates {
+        guard !indicesToRemove.contains(originalIndex) else { continue }
+        switch reduceIncoming(pending) {
+        case .applied:
+          indicesToRemove.insert(originalIndex)
+          madeProgress = true
+        case .ignored:
+          indicesToRemove.insert(originalIndex)
+        case .pending:
+          stillPending.append((originalIndex, pending))
+        }
+      }
+      candidates = stillPending
+    }
+
+    if !indicesToRemove.isEmpty {
+      pendingIncomingMessages = pendingIncomingMessages.enumerated().compactMap { index, msg in
+        indicesToRemove.contains(index) ? nil : msg
+      }
     }
   }
 
@@ -3050,7 +3215,7 @@ final class AppSession: ObservableObject {
     do {
       if source == .live {
         guard
-          try messageStore.isMemberActive(
+          try cachedIsMemberActive(
             sessionID: sessionID,
             ownerPubkey: ownerPubkey,
             memberPubkey: senderPubkey,
@@ -3060,7 +3225,7 @@ final class AppSession: ObservableObject {
           return false
         }
         guard
-          try messageStore.isMemberActive(
+          try cachedIsMemberActive(
             sessionID: sessionID,
             ownerPubkey: ownerPubkey,
             memberPubkey: myPubkey,
@@ -3071,7 +3236,7 @@ final class AppSession: ObservableObject {
         }
       }
       guard
-        try messageStore.isMemberActive(
+        try cachedIsMemberActive(
           sessionID: sessionID,
           ownerPubkey: ownerPubkey,
           memberPubkey: senderPubkey,
@@ -3081,7 +3246,7 @@ final class AppSession: ObservableObject {
         return false
       }
       guard
-        try messageStore.isMemberActive(
+        try cachedIsMemberActive(
           sessionID: sessionID,
           ownerPubkey: ownerPubkey,
           memberPubkey: myPubkey,

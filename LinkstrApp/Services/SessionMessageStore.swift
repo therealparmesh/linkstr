@@ -592,7 +592,7 @@ final class SessionMessageStore {
     NostrValueNormalizer.dedupedNormalizedPubkeyHexes(candidates)
   }
 
-  private func memberIntervals(
+  func memberIntervals(
     sessionID: String,
     ownerPubkey: String,
     memberPubkeyHash: String

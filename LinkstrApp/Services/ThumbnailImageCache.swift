@@ -8,10 +8,6 @@ final class ThumbnailImageCache: @unchecked Sendable {
     cache.countLimit = 120
   }
 
-  func image(for path: String) -> UIImage? {
-    cache.object(forKey: path as NSString)
-  }
-
   func loadImage(at path: String) -> UIImage? {
     if let cached = cache.object(forKey: path as NSString) {
       return cached
