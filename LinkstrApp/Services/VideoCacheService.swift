@@ -94,6 +94,7 @@ actor VideoCacheService {
   private let thumbnailDirectory: URL
   private let videoDirectory: URL
   private let maxVideoCacheBytes: Int64
+  private var runningVideoBytes: Int64?
 
   init(
     thumbnailDirectory: URL,
@@ -119,7 +120,8 @@ actor VideoCacheService {
   func registerCachedMedia(at fileURL: URL) {
     guard let normalizedURL = normalizedVideoCacheURL(fileURL) else { return }
     LocalFileMetrics.touch(normalizedURL, fileManager: fileManager)
-    enforceVideoCacheLimit(preserving: normalizedURL)
+    runningVideoBytes = nil
+    enforceVideoCacheLimitIfNeeded(preserving: normalizedURL)
   }
 
   func touchCachedMedia(at fileURL: URL) {
@@ -128,7 +130,7 @@ actor VideoCacheService {
   }
 
   func enforceVideoCacheLimit() {
-    enforceVideoCacheLimit(preserving: nil)
+    enforceVideoCacheLimitIfNeeded(preserving: nil)
   }
 
   private func cachedFileURL(for remoteURL: URL, preferredExtension: String) -> URL {
@@ -162,11 +164,16 @@ actor VideoCacheService {
     return destination
   }
 
-  private func enforceVideoCacheLimit(preserving preservedURL: URL?) {
+  private func enforceVideoCacheLimitIfNeeded(preserving preservedURL: URL?) {
+    if let cached = runningVideoBytes, cached <= maxVideoCacheBytes {
+      return
+    }
+
     let entries = cachedVideoEntriesSortedByLastAccess()
     guard !entries.isEmpty else { return }
 
     var totalBytes = entries.reduce(into: Int64(0)) { $0 += $1.bytes }
+    runningVideoBytes = totalBytes
     guard totalBytes > maxVideoCacheBytes else { return }
 
     let preservedPath = preservedURL.map { Self.normalized(url: $0).path }
@@ -182,6 +189,7 @@ actor VideoCacheService {
         break
       }
     }
+    runningVideoBytes = totalBytes
   }
 
   private func cachedVideoEntriesSortedByLastAccess() -> [CachedVideoEntry] {

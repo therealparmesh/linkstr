@@ -29,28 +29,56 @@ final class SessionMessageEntity {
   var cachedMediaSourceURL: String?
   var publishedTransportEventIDsStorage: String?
 
+  @Transient private var _senderPubkey: String?
   var senderPubkey: String {
-    LocalDataCrypto.shared.decryptString(encryptedSenderPubkey, ownerPubkey: ownerPubkey) ?? ""
+    if let cached = _senderPubkey { return cached }
+    let value =
+      LocalDataCrypto.shared.decryptString(encryptedSenderPubkey, ownerPubkey: ownerPubkey) ?? ""
+    _senderPubkey = value
+    return value
   }
 
+  @Transient private var _receiverPubkey: String?
   var receiverPubkey: String {
-    LocalDataCrypto.shared.decryptString(encryptedReceiverPubkey, ownerPubkey: ownerPubkey) ?? ""
+    if let cached = _receiverPubkey { return cached }
+    let value =
+      LocalDataCrypto.shared.decryptString(encryptedReceiverPubkey, ownerPubkey: ownerPubkey) ?? ""
+    _receiverPubkey = value
+    return value
   }
 
+  @Transient private var _url: String??
   var url: String? {
-    LocalDataCrypto.shared.decryptString(encryptedURL, ownerPubkey: ownerPubkey)
+    if let cached = _url { return cached }
+    let value = LocalDataCrypto.shared.decryptString(encryptedURL, ownerPubkey: ownerPubkey)
+    _url = .some(value)
+    return value
   }
 
+  @Transient private var _note: String??
   var note: String? {
-    LocalDataCrypto.shared.decryptString(encryptedNote, ownerPubkey: ownerPubkey)
+    if let cached = _note { return cached }
+    let value = LocalDataCrypto.shared.decryptString(encryptedNote, ownerPubkey: ownerPubkey)
+    _note = .some(value)
+    return value
   }
 
+  @Transient private var _thumbnailURL: String??
   var thumbnailURL: String? {
-    LocalDataCrypto.shared.decryptString(encryptedThumbnailURL, ownerPubkey: ownerPubkey)
+    if let cached = _thumbnailURL { return cached }
+    let value = LocalDataCrypto.shared.decryptString(
+      encryptedThumbnailURL, ownerPubkey: ownerPubkey)
+    _thumbnailURL = .some(value)
+    return value
   }
 
+  @Transient private var _metadataTitle: String??
   var metadataTitle: String? {
-    LocalDataCrypto.shared.decryptString(encryptedMetadataTitle, ownerPubkey: ownerPubkey)
+    if let cached = _metadataTitle { return cached }
+    let value = LocalDataCrypto.shared.decryptString(
+      encryptedMetadataTitle, ownerPubkey: ownerPubkey)
+    _metadataTitle = .some(value)
+    return value
   }
 
   var publishedTransportEventIDs: [String] {
@@ -136,6 +164,8 @@ final class SessionMessageEntity {
         thumbnailURL,
         ownerPubkey: ownerPubkey
       )
+      _metadataTitle = nil
+      _thumbnailURL = nil
     } catch {
       encryptedMetadataTitle = previousEncryptedTitle
       encryptedThumbnailURL = previousEncryptedThumbnailURL
@@ -187,12 +217,21 @@ final class SessionEntity {
   var membershipStateUpdatedAt: Date?
   var membershipStateEventID: String?
 
+  @Transient private var _name: String?
   var name: String {
-    LocalDataCrypto.shared.decryptString(encryptedName, ownerPubkey: ownerPubkey) ?? ""
+    if let cached = _name { return cached }
+    let value = LocalDataCrypto.shared.decryptString(encryptedName, ownerPubkey: ownerPubkey) ?? ""
+    _name = value
+    return value
   }
 
+  @Transient private var _createdByPubkey: String?
   var createdByPubkey: String {
-    LocalDataCrypto.shared.decryptString(encryptedCreatedByPubkey, ownerPubkey: ownerPubkey) ?? ""
+    if let cached = _createdByPubkey { return cached }
+    let value =
+      LocalDataCrypto.shared.decryptString(encryptedCreatedByPubkey, ownerPubkey: ownerPubkey) ?? ""
+    _createdByPubkey = value
+    return value
   }
 
   init(
@@ -229,6 +268,7 @@ final class SessionEntity {
     let previousEncryptedName = encryptedName
     do {
       encryptedName = try LocalDataCrypto.shared.encryptString(name, ownerPubkey: ownerPubkey) ?? ""
+      _name = nil
       self.updatedAt = updatedAt
     } catch {
       encryptedName = previousEncryptedName
@@ -248,8 +288,13 @@ final class SessionMemberEntity {
   var updatedAt: Date
   var createdAt: Date
 
+  @Transient private var _memberPubkey: String?
   var memberPubkey: String {
-    LocalDataCrypto.shared.decryptString(encryptedMemberPubkey, ownerPubkey: ownerPubkey) ?? ""
+    if let cached = _memberPubkey { return cached }
+    let value =
+      LocalDataCrypto.shared.decryptString(encryptedMemberPubkey, ownerPubkey: ownerPubkey) ?? ""
+    _memberPubkey = value
+    return value
   }
 
   init(
@@ -300,8 +345,13 @@ final class SessionMemberIntervalEntity {
   var startAt: Date
   var endAt: Date?
 
+  @Transient private var _memberPubkey: String?
   var memberPubkey: String {
-    LocalDataCrypto.shared.decryptString(encryptedMemberPubkey, ownerPubkey: ownerPubkey) ?? ""
+    if let cached = _memberPubkey { return cached }
+    let value =
+      LocalDataCrypto.shared.decryptString(encryptedMemberPubkey, ownerPubkey: ownerPubkey) ?? ""
+    _memberPubkey = value
+    return value
   }
 
   init(
@@ -347,8 +397,13 @@ final class SessionReactionEntity {
   var updatedAt: Date
   var lastEventID: String = ""
 
+  @Transient private var _senderPubkey: String?
   var senderPubkey: String {
-    LocalDataCrypto.shared.decryptString(encryptedSenderPubkey, ownerPubkey: ownerPubkey) ?? ""
+    if let cached = _senderPubkey { return cached }
+    let value =
+      LocalDataCrypto.shared.decryptString(encryptedSenderPubkey, ownerPubkey: ownerPubkey) ?? ""
+    _senderPubkey = value
+    return value
   }
 
   init(
@@ -407,8 +462,13 @@ final class SessionPostDeletionEntity {
   var updatedAt: Date
   var lastEventID: String = ""
 
+  @Transient private var _deletedByPubkey: String?
   var deletedByPubkey: String {
-    LocalDataCrypto.shared.decryptString(encryptedDeletedByPubkey, ownerPubkey: ownerPubkey) ?? ""
+    if let cached = _deletedByPubkey { return cached }
+    let value =
+      LocalDataCrypto.shared.decryptString(encryptedDeletedByPubkey, ownerPubkey: ownerPubkey) ?? ""
+    _deletedByPubkey = value
+    return value
   }
 
   init(

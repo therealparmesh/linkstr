@@ -2,8 +2,9 @@ import CoreImage.CIFilterBuiltins
 import SwiftUI
 
 enum QRCodeGenerator {
+  private static let context = CIContext()
+
   static func image(for string: String) -> UIImage? {
-    let context = CIContext()
     let qrFilter = CIFilter.qrCodeGenerator()
     qrFilter.message = Data(string.utf8)
     qrFilter.correctionLevel = "M"
@@ -15,7 +16,7 @@ enum QRCodeGenerator {
 
     guard
       let output = colorFilter.outputImage?.transformed(by: CGAffineTransform(scaleX: 12, y: 12)),
-      let cgImage = context.createCGImage(output, from: output.extent)
+      let cgImage = Self.context.createCGImage(output, from: output.extent)
     else {
       return nil
     }

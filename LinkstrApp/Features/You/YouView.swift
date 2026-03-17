@@ -3,6 +3,7 @@ import UIKit
 
 struct YouView: View {
   @EnvironmentObject private var session: AppSession
+  @State private var qrImage: UIImage?
   @State private var profileNameDraft = ""
   @State private var isSavingProfileName = false
   @FocusState private var isProfileNameFieldFocused: Bool
@@ -39,6 +40,9 @@ struct YouView: View {
         .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
         .padding(.top, LinkstrTheme.screenTopPadding)
         .padding(.bottom, LinkstrTheme.screenBottomPadding)
+      }
+      .task(id: npub) {
+        qrImage = QRCodeGenerator.image(for: npub)
       }
       .linkstrTabBarContentInset()
     } else {
@@ -86,7 +90,7 @@ struct YouView: View {
           .frame(maxWidth: .infinity, alignment: .center)
       }
 
-      if let qrImage = QRCodeGenerator.image(for: npub) {
+      if let qrImage {
         Image(uiImage: qrImage)
           .interpolation(.none)
           .resizable()

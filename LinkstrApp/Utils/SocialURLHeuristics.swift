@@ -1,6 +1,24 @@
 import Foundation
 
 enum SocialURLHeuristics {
+  // MARK: - Cached regex patterns
+
+  private static let tikTokVideoPatterns: [NSRegularExpression] = [
+    try! NSRegularExpression(pattern: #"/video/(\d{8,})"#),
+    try! NSRegularExpression(pattern: #"(?:aweme_id|item_id|group_id|video_id)=(\d{8,})"#),
+  ]
+
+  private static let igCacheKeyPattern = try! NSRegularExpression(
+    pattern: #"([A-Za-z0-9_-]{5,})"#
+  )
+
+  private static let instagramPostPattern = try! NSRegularExpression(
+    pattern: #"/(?:reel|reels|p|tv)/([A-Za-z0-9_-]{5,})"#
+  )
+
+  private static let facebookVideoPattern = try! NSRegularExpression(
+    pattern: #"/(?:reel|videos)/(\d{6,})"#
+  )
   static func isTikTokHost(_ url: URL) -> Bool {
     hostMatches(url, domain: "tiktok.com")
   }
@@ -171,13 +189,8 @@ enum SocialURLHeuristics {
     }
 
     let raw = url.absoluteString
-    let patterns = [
-      #"/video/(\d{8,})"#,
-      #"(?:aweme_id|item_id|group_id|video_id)=(\d{8,})"#,
-    ]
 
-    for pattern in patterns {
-      guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+    for regex in tikTokVideoPatterns {
       let nsRange = NSRange(raw.startIndex..<raw.endIndex, in: raw)
       guard let match = regex.firstMatch(in: raw, range: nsRange), match.numberOfRanges > 1,
         let range = Range(match.range(at: 1), in: raw)
@@ -232,7 +245,7 @@ enum SocialURLHeuristics {
         }
 
         if key == "ig_cache_key" {
-          if let token = tokenFromRegex(#"([A-Za-z0-9_-]{5,})"#, in: raw) {
+          if let token = tokenFromRegex(igCacheKeyPattern, in: raw) {
             return token.lowercased()
           }
           continue
@@ -245,7 +258,7 @@ enum SocialURLHeuristics {
     }
 
     if let token = tokenFromRegex(
-      #"/(?:reel|reels|p|tv)/([A-Za-z0-9_-]{5,})"#,
+      instagramPostPattern,
       in: url.absoluteString
     ) {
       return token.lowercased()
@@ -301,7 +314,7 @@ enum SocialURLHeuristics {
       }
     }
 
-    if let id = tokenFromRegex(#"/(?:reel|videos)/(\d{6,})"#, in: url.absoluteString) {
+    if let id = tokenFromRegex(facebookVideoPattern, in: url.absoluteString) {
       return id
     }
 
@@ -376,8 +389,7 @@ enum SocialURLHeuristics {
     return cleaned
   }
 
-  private static func tokenFromRegex(_ pattern: String, in value: String) -> String? {
-    guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+  private static func tokenFromRegex(_ regex: NSRegularExpression, in value: String) -> String? {
     let nsRange = NSRange(value.startIndex..<value.endIndex, in: value)
     guard let match = regex.firstMatch(in: value, range: nsRange), match.numberOfRanges > 1,
       let range = Range(match.range(at: 1), in: value)

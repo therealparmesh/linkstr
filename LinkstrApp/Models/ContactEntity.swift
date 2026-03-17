@@ -9,14 +9,22 @@ final class ContactEntity {
   var encryptedAlias: String
   var createdAt: Date
 
+  @Transient private var _localAlias: String?? = nil
   var localAlias: String? {
+    if let cached = _localAlias { return cached }
     let decrypted = LocalDataCrypto.shared.decryptString(encryptedAlias, ownerPubkey: ownerPubkey)
     let trimmed = decrypted?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    return trimmed.isEmpty ? nil : trimmed
+    let value: String? = trimmed.isEmpty ? nil : trimmed
+    _localAlias = .some(value)
+    return value
   }
 
+  @Transient private var _npub: String?
   var npub: String {
-    PublicKey(hex: targetPubkey)?.npub ?? targetPubkey
+    if let cached = _npub { return cached }
+    let value = PublicKey(hex: targetPubkey)?.npub ?? targetPubkey
+    _npub = value
+    return value
   }
 
   var displayName: String {
@@ -42,9 +50,11 @@ final class ContactEntity {
     let trimmed = alias?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     if trimmed.isEmpty {
       encryptedAlias = ""
+      _localAlias = nil
       return
     }
     encryptedAlias =
       try LocalDataCrypto.shared.encryptString(trimmed, ownerPubkey: ownerPubkey) ?? ""
+    _localAlias = nil
   }
 }

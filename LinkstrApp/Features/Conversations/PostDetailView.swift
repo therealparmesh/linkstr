@@ -315,16 +315,15 @@ struct PostDetailView: View {
   @State private var remotePostText: String?
 
   private var scopedContacts: [ContactEntity] {
-    OwnerScopedCollections.contacts(contacts, ownerPubkey: session.identityService.pubkeyHex)
+    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
+    return contacts.filter { $0.ownerPubkey == ownerPubkey }
   }
 
   private var scopedReactions: [SessionReactionEntity] {
-    OwnerScopedCollections.reactions(
-      allReactions,
-      ownerPubkey: session.identityService.pubkeyHex
-    )
-    .filter {
-      $0.sessionID == post.conversationID
+    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
+    return allReactions.filter {
+      $0.ownerPubkey == ownerPubkey
+        && $0.sessionID == post.conversationID
         && $0.postID == post.rootID
         && $0.isActive
     }
@@ -392,7 +391,7 @@ struct PostDetailView: View {
       .padding(.bottom, LinkstrTheme.screenBottomPadding)
     }
     .linkstrTabBarContentInset()
-    .task(id: profileLookupPubkeys.sorted()) {
+    .task(id: profileLookupPubkeys.stableTaskID) {
       session.requestRemoteProfilesIfNeeded(pubkeyHexes: profileLookupPubkeys)
     }
     .background(LinkstrBackgroundView())

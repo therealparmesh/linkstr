@@ -130,7 +130,7 @@ struct DeepLinkDetailView: View {
     )
     if let path = ManagedLocalFileScope.shared.managedFileURL(fromPath: previewThumbnailPath)?.path
     {
-      thumbnailImage = ThumbnailImageCache.shared.loadImage(at: path)
+      thumbnailImage = await ThumbnailImageCache.shared.loadImageAsync(at: path)
     } else {
       thumbnailImage = nil
     }

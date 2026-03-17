@@ -6,15 +6,19 @@ final class ThumbnailImageCache: @unchecked Sendable {
 
   private init() {
     cache.countLimit = 120
+    cache.totalCostLimit = 50 * 1024 * 1024
   }
 
-  func loadImage(at path: String) -> UIImage? {
+  func loadImageAsync(at path: String) async -> UIImage? {
     if let cached = cache.object(forKey: path as NSString) {
       return cached
     }
-    guard let image = UIImage(contentsOfFile: path) else { return nil }
-    cache.setObject(image, forKey: path as NSString)
-    return image
+    return await Task.detached(priority: .userInitiated) {
+      guard let image = UIImage(contentsOfFile: path) else { return nil as UIImage? }
+      let cost = image.cgImage.map { $0.bytesPerRow * $0.height } ?? 0
+      self.cache.setObject(image, forKey: path as NSString, cost: cost)
+      return image
+    }.value
   }
 
   func clear() {

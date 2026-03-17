@@ -45,7 +45,8 @@ struct MainTabView: View {
   private var allSessions: [SessionEntity]
 
   private var scopedSessions: [SessionEntity] {
-    OwnerScopedCollections.sessions(allSessions, ownerPubkey: session.identityService.pubkeyHex)
+    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
+    return allSessions.filter { $0.ownerPubkey == ownerPubkey }
   }
 
   private var archivedSessionCount: Int {
@@ -120,7 +121,7 @@ struct MainTabView: View {
     .onChange(of: session.pendingSessionNavigationID) { _, _ in
       navigateToPendingSessionIfNeeded()
     }
-    .onChange(of: scopedSessions.map(\.sessionID)) { _, _ in
+    .onChange(of: scopedSessions.map(\.sessionID).stableTaskID) { _, _ in
       navigateToPendingSessionIfNeeded()
     }
     .sheet(isPresented: $isPresentingNewSession) {

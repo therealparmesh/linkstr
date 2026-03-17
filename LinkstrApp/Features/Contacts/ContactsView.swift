@@ -14,8 +14,8 @@ struct ContactsView: View {
   @State private var query = ""
 
   private var scopedContacts: [ContactEntity] {
-    return
-      OwnerScopedCollections.contacts(contacts, ownerPubkey: session.identityService.pubkeyHex)
+    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
+    return contacts.filter { $0.ownerPubkey == ownerPubkey }
       .sorted {
         session.resolvedIdentity(for: $0).displayName.localizedCaseInsensitiveCompare(
           session.resolvedIdentity(for: $1).displayName
@@ -53,7 +53,7 @@ struct ContactsView: View {
     } message: {
       Text(removeContactConfirmationMessage)
     }
-    .task(id: profileLookupPubkeys.sorted()) {
+    .task(id: profileLookupPubkeys.stableTaskID) {
       session.requestRemoteProfilesIfNeeded(pubkeyHexes: profileLookupPubkeys)
     }
     .navigationDestination(item: $selectedContact) { contact in

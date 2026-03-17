@@ -340,8 +340,10 @@ struct SettingsView: View {
   @MainActor
   private func refreshStorageUsage() {
     isRefreshingStorageUsage = true
-    clearableStorageBytes = session.clearableStorageBytes()
-    isRefreshingStorageUsage = false
+    Task { @MainActor in
+      clearableStorageBytes = session.clearableStorageBytes()
+      isRefreshingStorageUsage = false
+    }
   }
 
   private func hideSensitiveIdentityContent() {

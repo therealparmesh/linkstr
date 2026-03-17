@@ -296,11 +296,13 @@ struct SessionPostsView: View {
   @State private var isDeletingPost = false
 
   private var scopedMessages: [SessionMessageEntity] {
-    OwnerScopedCollections.messages(allMessages, ownerPubkey: session.identityService.pubkeyHex)
+    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
+    return allMessages.filter { $0.ownerPubkey == ownerPubkey }
   }
 
   private var scopedContacts: [ContactEntity] {
-    OwnerScopedCollections.contacts(allContacts, ownerPubkey: session.identityService.pubkeyHex)
+    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
+    return allContacts.filter { $0.ownerPubkey == ownerPubkey }
       .sorted {
         session.resolvedIdentity(for: $0).displayName.localizedCaseInsensitiveCompare(
           session.resolvedIdentity(for: $1).displayName
@@ -309,21 +311,24 @@ struct SessionPostsView: View {
   }
 
   private var scopedMembers: [SessionMemberEntity] {
-    OwnerScopedCollections.members(allMembers, ownerPubkey: session.identityService.pubkeyHex)
-      .filter { $0.sessionID == sessionEntity.sessionID && $0.isActive }
+    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
+    return allMembers.filter {
+      $0.ownerPubkey == ownerPubkey && $0.sessionID == sessionEntity.sessionID && $0.isActive
+    }
   }
 
   private var scopedMemberIntervals: [SessionMemberIntervalEntity] {
-    OwnerScopedCollections.memberIntervals(
-      allMemberIntervals,
-      ownerPubkey: session.identityService.pubkeyHex
-    )
-    .filter { $0.sessionID == sessionEntity.sessionID }
+    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
+    return allMemberIntervals.filter {
+      $0.ownerPubkey == ownerPubkey && $0.sessionID == sessionEntity.sessionID
+    }
   }
 
   private var scopedReactions: [SessionReactionEntity] {
-    OwnerScopedCollections.reactions(allReactions, ownerPubkey: session.identityService.pubkeyHex)
-      .filter { $0.sessionID == sessionEntity.sessionID && $0.isActive }
+    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
+    return allReactions.filter {
+      $0.ownerPubkey == ownerPubkey && $0.sessionID == sessionEntity.sessionID && $0.isActive
+    }
   }
 
   private var canManageMembers: Bool {
@@ -539,7 +544,7 @@ struct SessionPostsView: View {
         "this permanently removes the post from your session feed and sends a nostr deletion request."
       )
     }
-    .task(id: profileLookupPubkeys.sorted()) {
+    .task(id: profileLookupPubkeys.stableTaskID) {
       session.requestRemoteProfilesIfNeeded(pubkeyHexes: profileLookupPubkeys)
     }
     .onDisappear {
@@ -791,7 +796,7 @@ private struct PostCardView: View {
         thumbnailImage = nil
         return
       }
-      thumbnailImage = ThumbnailImageCache.shared.loadImage(at: path)
+      thumbnailImage = await ThumbnailImageCache.shared.loadImageAsync(at: path)
     }
   }
 
@@ -965,7 +970,8 @@ struct NewSessionSheet: View {
   }
 
   private var scopedContacts: [ContactEntity] {
-    OwnerScopedCollections.contacts(allContacts, ownerPubkey: session.identityService.pubkeyHex)
+    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
+    return allContacts.filter { $0.ownerPubkey == ownerPubkey }
   }
 
   private var profileLookupPubkeys: [String] {
@@ -1094,7 +1100,7 @@ struct NewSessionSheet: View {
           )
         }
       }
-      .task(id: profileLookupPubkeys.sorted()) {
+      .task(id: profileLookupPubkeys.stableTaskID) {
         session.requestRemoteProfilesIfNeeded(pubkeyHexes: profileLookupPubkeys)
       }
       .onChange(of: sessionName) { _, _ in
@@ -1337,18 +1343,19 @@ private struct SessionMembersSheet: View {
           }
         }
       }
-      .task(id: profileLookupPubkeys.sorted()) {
+      .task(id: profileLookupPubkeys.stableTaskID) {
         session.requestRemoteProfilesIfNeeded(pubkeyHexes: profileLookupPubkeys)
       }
       .onAppear(perform: syncIncludedMembersIfNeeded)
-      .onChange(of: activeMembers.map(\.memberPubkey).sorted()) { _, _ in
+      .onChange(of: activeMembers.map(\.memberPubkey).stableTaskID) { _, _ in
         syncIncludedMembersIfNeeded()
       }
     }
   }
 
   private var scopedContacts: [ContactEntity] {
-    OwnerScopedCollections.contacts(allContacts, ownerPubkey: session.identityService.pubkeyHex)
+    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
+    return allContacts.filter { $0.ownerPubkey == ownerPubkey }
       .sorted {
         session.resolvedIdentity(for: $0).displayName.localizedCaseInsensitiveCompare(
           session.resolvedIdentity(for: $1).displayName
@@ -1357,8 +1364,10 @@ private struct SessionMembersSheet: View {
   }
 
   private var activeMembers: [SessionMemberEntity] {
-    OwnerScopedCollections.members(allMembers, ownerPubkey: session.identityService.pubkeyHex)
-      .filter { $0.sessionID == sessionEntity.sessionID && $0.isActive }
+    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
+    return allMembers.filter {
+      $0.ownerPubkey == ownerPubkey && $0.sessionID == sessionEntity.sessionID && $0.isActive
+    }
   }
 
   private var canManageMembers: Bool {

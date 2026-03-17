@@ -2,6 +2,10 @@ import Foundation
 import NostrSDK
 
 enum ContactKeyParser {
+  private static let npubRegex = try! NSRegularExpression(
+    pattern: #"npub1[023456789acdefghjklmnpqrstuvwxyz]{20,}"#
+  )
+
   static func extractNPub(from raw: String) -> String? {
     let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return nil }
@@ -19,10 +23,10 @@ enum ContactKeyParser {
       return withoutPrefix
     }
 
-    if let range = withoutPrefix.range(
-      of: #"npub1[023456789acdefghjklmnpqrstuvwxyz]{20,}"#,
-      options: .regularExpression
-    ) {
+    let nsRange = NSRange(withoutPrefix.startIndex..<withoutPrefix.endIndex, in: withoutPrefix)
+    if let match = npubRegex.firstMatch(in: withoutPrefix, range: nsRange),
+      let range = Range(match.range, in: withoutPrefix)
+    {
       let token = String(withoutPrefix[range])
       if PublicKey(npub: token) != nil {
         return token
