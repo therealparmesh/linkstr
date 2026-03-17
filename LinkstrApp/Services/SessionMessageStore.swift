@@ -180,6 +180,29 @@ final class SessionMessageStore {
     return legacyMember.isActive
   }
 
+  func shouldApplyMemberSnapshot(
+    ownerPubkey: String,
+    sessionID: String,
+    updatedAt: Date,
+    eventID: String? = nil
+  ) throws -> Bool {
+    guard let sessionEntity = try session(sessionID: sessionID, ownerPubkey: ownerPubkey) else {
+      return false
+    }
+    let existingMembers = try members(
+      sessionID: sessionID,
+      ownerPubkey: ownerPubkey,
+      activeOnly: false
+    )
+    let fallbackSnapshotUpdatedAt = existingMembers.map(\.updatedAt).max()
+    return NostrValueNormalizer.shouldApplyStateUpdate(
+      currentUpdatedAt: sessionEntity.membershipStateUpdatedAt ?? fallbackSnapshotUpdatedAt,
+      currentEventID: sessionEntity.membershipStateEventID,
+      incomingUpdatedAt: updatedAt,
+      incomingEventID: eventID
+    )
+  }
+
   func applyMemberSnapshot(
     ownerPubkey: String,
     sessionID: String,
@@ -192,19 +215,18 @@ final class SessionMessageStore {
     guard let sessionEntity = try session(sessionID: sessionID, ownerPubkey: ownerPubkey) else {
       return
     }
-    let existingMembers = try members(
-      sessionID: sessionID, ownerPubkey: ownerPubkey, activeOnly: false)
-    let fallbackSnapshotUpdatedAt = existingMembers.map(\.updatedAt).max()
     guard
-      NostrValueNormalizer.shouldApplyStateUpdate(
-        currentUpdatedAt: sessionEntity.membershipStateUpdatedAt ?? fallbackSnapshotUpdatedAt,
-        currentEventID: sessionEntity.membershipStateEventID,
-        incomingUpdatedAt: updatedAt,
-        incomingEventID: eventID
+      try shouldApplyMemberSnapshot(
+        ownerPubkey: ownerPubkey,
+        sessionID: sessionID,
+        updatedAt: updatedAt,
+        eventID: eventID
       )
     else {
       return
     }
+    let existingMembers = try members(
+      sessionID: sessionID, ownerPubkey: ownerPubkey, activeOnly: false)
     var existingByHash: [String: SessionMemberEntity] = [:]
     for member in existingMembers {
       existingByHash[member.memberPubkeyHash] = member

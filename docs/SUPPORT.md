@@ -59,7 +59,7 @@ Generic web URLs are valid posts too. In-app playback, local caching, and save/e
 
 The bottom footer shows validation and relay status only. The keyboard return key on the link field advances into the note field.
 
-### React, delete, archive, and manage members
+### React, delete, rename, archive, and manage members
 
 | Action                 | How                                                                                                                                                                                     |
 | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -69,9 +69,10 @@ The bottom footer shows validation and relay status only. The keyboard return ke
 | Delete your own post   | Long-press the post row in the session view.                                                                                                                                            |
 | Archive a session      | Long-press the session row.                                                                                                                                                             |
 | View archived sessions | Tap the archive icon in the sessions header.                                                                                                                                            |
+| Rename a session       | Open a session, tap the members button, and edit the session name.                                                                                                                      |
 | Add or remove members  | Open a session and use the members button.                                                                                                                                              |
 
-Only the session creator can change session membership.
+Only the session creator can rename sessions or change session membership.
 
 ### Relay settings
 
@@ -165,6 +166,10 @@ Deleting the account is relay-gated. linkstr only finishes the delete flow when 
 When that succeeds, linkstr clears your local data on this device, logs you out, publishes an empty follow list, and sends a Nostr vanish request to your enabled relays.
 
 Deleting the account does not invalidate the `nsec` itself. If you still have that key, you can sign in again later.
+
+### Can I rename a session?
+
+Yes. Open the session and tap the members button. If you are the session creator, you can edit the session name at the top of the manage session sheet. Saving publishes the updated name to all current members.
 
 ### What happens when I add or remove a member?
 

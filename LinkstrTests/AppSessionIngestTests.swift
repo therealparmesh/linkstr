@@ -1922,4 +1922,137 @@ final class AppSessionIngestTests: AppSessionTestCase {
       Set(["giftwrap-pending-root-a", "giftwrap-pending-root-b"])
     )
   }
+
+  // MARK: - Session rename ingest
+
+  func testIngestSessionMembersRenameAppliesNewName() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let creatorPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-rename-ingest"
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-create-for-rename",
+        senderPubkey: creatorPubkey,
+        createdAt: Date(timeIntervalSince1970: 1000),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-create",
+          kind: .sessionCreate,
+          url: nil,
+          note: nil,
+          timestamp: 1000,
+          sessionName: "Original Name",
+          memberPubkeys: [creatorPubkey, myPubkey]
+        )
+      ))
+
+    let before = try XCTUnwrap(
+      container.mainContext.fetch(
+        FetchDescriptor<SessionEntity>(
+          predicate: #Predicate { $0.sessionID == sessionID }
+        )
+      ).first
+    )
+    XCTAssertEqual(before.name, "Original Name")
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-members-rename",
+        senderPubkey: creatorPubkey,
+        createdAt: Date(timeIntervalSince1970: 2000),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-rename",
+          kind: .sessionMembers,
+          url: nil,
+          note: nil,
+          timestamp: 2000,
+          sessionName: "Renamed Session",
+          memberPubkeys: [creatorPubkey, myPubkey]
+        )
+      ))
+
+    let after = try XCTUnwrap(
+      container.mainContext.fetch(
+        FetchDescriptor<SessionEntity>(
+          predicate: #Predicate { $0.sessionID == sessionID }
+        )
+      ).first
+    )
+    XCTAssertEqual(after.name, "Renamed Session")
+  }
+
+  func testIngestSessionMembersRenameRespectsEventIDTiebreak() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let creatorPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let winningPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let losingPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-rename-tiebreak"
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-create-for-rename-tiebreak",
+        senderPubkey: creatorPubkey,
+        createdAt: Date(timeIntervalSince1970: 2000),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-create",
+          kind: .sessionCreate,
+          url: nil,
+          note: nil,
+          timestamp: 2000,
+          sessionName: "Current Name",
+          memberPubkeys: [creatorPubkey, myPubkey]
+        )
+      ))
+
+    let tieDate = Date(timeIntervalSince1970: 2010)
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-members-z",
+        senderPubkey: creatorPubkey,
+        createdAt: tieDate,
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-rename-z",
+          kind: .sessionMembers,
+          url: nil,
+          note: nil,
+          timestamp: 2010,
+          sessionName: "Winning Rename",
+          memberPubkeys: [creatorPubkey, myPubkey, winningPubkey]
+        )
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-members-a",
+        senderPubkey: creatorPubkey,
+        createdAt: tieDate,
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-rename-a",
+          kind: .sessionMembers,
+          url: nil,
+          note: nil,
+          timestamp: 2010,
+          sessionName: "Losing Rename",
+          memberPubkeys: [creatorPubkey, myPubkey, losingPubkey]
+        )
+      ))
+
+    let entity = try XCTUnwrap(
+      container.mainContext.fetch(
+        FetchDescriptor<SessionEntity>(
+          predicate: #Predicate { $0.sessionID == sessionID }
+        )
+      ).first
+    )
+    XCTAssertEqual(entity.name, "Winning Rename")
+  }
 }

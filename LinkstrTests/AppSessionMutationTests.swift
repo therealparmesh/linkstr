@@ -588,7 +588,7 @@ final class AppSessionMutationTests: AppSessionTestCase {
     )
 
     XCTAssertFalse(didUpdate)
-    XCTAssertEqual(session.composeError, "only the session creator can manage members.")
+    XCTAssertEqual(session.composeError, "only the session creator can manage this session.")
 
     let members = try container.mainContext.fetch(
       FetchDescriptor<SessionMemberEntity>(
@@ -772,5 +772,63 @@ final class AppSessionMutationTests: AppSessionTestCase {
     XCTAssertFalse(didCreate)
     XCTAssertEqual(session.composeError, "blocked: policy")
     XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
+  }
+
+  // MARK: - Session rename
+
+  func testRenameSessionPublishesUpdatedNameAndKeepsActiveMembers() async throws {
+    var capturedPayload: LinkstrPayload?
+    let (session, container) = try makeSession(
+      disableNostrStartup: false,
+      hasConnectedRelays: { true },
+      sendPayload: { payload, _ in
+        capturedPayload = payload
+        return SentPayloadReceipt(
+          rumorEventID: "rename-event",
+          publishedEventIDs: ["rename-wrapper"]
+        )
+      }
+    )
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let peerNPub = try XCTUnwrap(PublicKey(hex: peerPubkey)?.npub)
+    let sessionID = "session-rename-payload"
+
+    let sessionEntity = try insertSessionFixture(
+      in: container.mainContext,
+      ownerPubkey: myPubkey,
+      createdByPubkey: myPubkey,
+      memberPubkeys: [myPubkey, peerPubkey],
+      name: "Original Name",
+      sessionID: sessionID
+    )
+
+    let didUpdate = await session.updateSessionMembersAwaitingRelay(
+      session: sessionEntity,
+      memberNPubs: [peerNPub],
+      sessionName: "Renamed Session"
+    )
+
+    XCTAssertTrue(didUpdate)
+    XCTAssertEqual(capturedPayload?.kind, .sessionMembers)
+    XCTAssertEqual(capturedPayload?.sessionName, "Renamed Session")
+
+    let activeMembers = try container.mainContext.fetch(
+      FetchDescriptor<SessionMemberEntity>(
+        predicate: #Predicate {
+          $0.ownerPubkey == myPubkey && $0.sessionID == sessionID && $0.isActive == true
+        }
+      ))
+    XCTAssertEqual(Set(activeMembers.map(\.memberPubkey)), Set([myPubkey, peerPubkey]))
+
+    let updated = try XCTUnwrap(
+      container.mainContext.fetch(
+        FetchDescriptor<SessionEntity>(
+          predicate: #Predicate { $0.sessionID == sessionID }
+        )
+      ).first
+    )
+    XCTAssertEqual(updated.name, "Renamed Session")
   }
 }

@@ -113,8 +113,9 @@ linkstr is built around private sessions, not one-off direct messages. A session
 - Newly added members are eligible only for content sent while they are active.
 - Removed members stop receiving future content but may retain anything they already received.
 - Update fanout targets both prior-active and next-active members so removed members receive the removal snapshot.
-- Outbound snapshots include the session name so newly added members can materialize the session from the snapshot alone.
+- Outbound snapshots include the session name so newly added members can materialize the session from the snapshot alone and existing members can apply renames.
 - Snapshot application is monotonic by `created_at`; older snapshots are ignored. Equal-timestamp conflicts resolve by lexicographic event-ID tiebreak.
+- The session creator can rename a session after creation from the manage session sheet.
 
 **Archive:**
 
@@ -128,11 +129,13 @@ linkstr is built around private sessions, not one-off direct messages. A session
 - Session member management is available inside a session.
 - Session detail uses chat-like link cards with grouped consecutive posts and inline membership timeline markers.
 - Members can be added only from existing contacts. Members can be removed from active membership.
-- Only the session creator can add or remove members. Non-creator membership mutations are ignored on ingest.
+- Only the session creator can rename the session or add or remove members. Non-creator membership mutations are ignored on ingest.
 - Session detail inserts centered `in:` / `out:` separators for membership changes observed after the first local membership snapshot.
 - If the signed-in user is removed, the session stays visible as local history but becomes read-only for new posts and reactions.
 - Member identity resolves as: local alias → remote Nostr profile name → `npub`.
 - Outbound membership snapshots always include the local sender key.
+- Outbound membership snapshots always include the current session name so other members can apply renames.
+- Inbound membership snapshots from the session creator update the local session name when the snapshot carries a newer name.
 
 ### Posts (root links)
 
@@ -413,7 +416,6 @@ Future proposals are tracked as separate docs and are not part of the current sh
 
 - [Delete session](docs/future/delete-session.md)
 - [Leave session](docs/future/leave-session.md)
-- [Rename session](docs/future/rename-session.md)
 
 ---
 

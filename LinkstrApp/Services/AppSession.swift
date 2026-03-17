@@ -1552,16 +1552,17 @@ final class AppSession: ObservableObject {
   func updateSessionMembersAwaitingRelay(
     session: SessionEntity,
     memberNPubs: [String],
+    sessionName: String? = nil,
     timeoutSeconds: TimeInterval = RelayMutationDefaults.timeoutSeconds,
     pollIntervalSeconds: TimeInterval = RelayMutationDefaults.pollIntervalSeconds
   ) async -> Bool {
     guard let keypair = identityService.keypair, let ownerPubkey = identityService.pubkeyHex else {
-      composeError = "you're signed out. sign in to manage session members."
+      composeError = "you're signed out. sign in to manage this session."
       return false
     }
 
     guard canManageMembers(for: session) else {
-      composeError = "only the session creator can manage members."
+      composeError = "only the session creator can manage this session."
       return false
     }
 
@@ -1583,6 +1584,7 @@ final class AppSession: ObservableObject {
     )
     let now = Date.now
     let timestamp = Int64(now.timeIntervalSince1970)
+    let effectiveName = sessionName ?? session.name
     let payload = LinkstrPayload(
       conversationID: session.sessionID,
       rootID: makeLocalEventID(),
@@ -1590,7 +1592,7 @@ final class AppSession: ObservableObject {
       url: nil,
       note: nil,
       timestamp: timestamp,
-      sessionName: session.name,
+      sessionName: effectiveName,
       memberPubkeys: members
     )
 
@@ -1616,7 +1618,7 @@ final class AppSession: ObservableObject {
       _ = try messageStore.upsertSession(
         ownerPubkey: ownerPubkey,
         sessionID: session.sessionID,
-        name: session.name,
+        name: effectiveName,
         createdByPubkey: session.createdByPubkey,
         updatedAt: updatedAt,
         isArchived: session.isArchived
@@ -2857,7 +2859,7 @@ final class AppSession: ObservableObject {
       return try messageStore.upsertSession(
         ownerPubkey: ownerPubkey,
         sessionID: sessionID,
-        name: existing.name,
+        name: sessionName ?? existing.name,
         createdByPubkey: existing.createdByPubkey,
         updatedAt: updatedAt,
         isArchived: existing.isArchived
@@ -2923,6 +2925,21 @@ final class AppSession: ObservableObject {
     guard members.contains(ownerPubkey) else { return .ignored }
 
     do {
+      let existing = try messageStore.session(sessionID: sessionID, ownerPubkey: ownerPubkey)
+      if let existing {
+        guard existing.createdByPubkey == incoming.senderPubkey else { return .ignored }
+        guard
+          try messageStore.shouldApplyMemberSnapshot(
+            ownerPubkey: ownerPubkey,
+            sessionID: sessionID,
+            updatedAt: incoming.createdAt,
+            eventID: incoming.eventID
+          )
+        else {
+          return .ignored
+        }
+      }
+
       guard
         try upsertIncomingSessionSnapshot(
           ownerPubkey: ownerPubkey,
@@ -2966,7 +2983,19 @@ final class AppSession: ObservableObject {
 
     do {
       let existing = try messageStore.session(sessionID: sessionID, ownerPubkey: ownerPubkey)
-      if existing == nil {
+      if let existing {
+        guard existing.createdByPubkey == incoming.senderPubkey else { return .ignored }
+        guard
+          try messageStore.shouldApplyMemberSnapshot(
+            ownerPubkey: ownerPubkey,
+            sessionID: sessionID,
+            updatedAt: incoming.createdAt,
+            eventID: incoming.eventID
+          )
+        else {
+          return .ignored
+        }
+      } else {
         guard members.contains(ownerPubkey) else { return .ignored }
       }
 

@@ -525,7 +525,7 @@ struct SessionPostsView: View {
             Image(systemName: "person.2")
               .linkstrToolbarIconLabel()
           }
-          .accessibilityLabel(canManageMembers ? "manage members" : "members")
+          .accessibilityLabel(canManageMembers ? "manage session" : "members")
           .tint(LinkstrTheme.accent)
 
           if contentState.canCreatePosts {
@@ -1256,6 +1256,10 @@ struct NewSessionSheet: View {
 }
 
 private struct SessionMembersSheet: View {
+  private enum Field: Hashable {
+    case sessionName
+  }
+
   @Environment(\.dismiss) private var dismiss
   @EnvironmentObject private var session: AppSession
   @Query(sort: [SortDescriptor(\ContactEntity.createdAt)])
@@ -1265,9 +1269,12 @@ private struct SessionMembersSheet: View {
 
   let sessionEntity: SessionEntity
 
+  @State private var sessionName = ""
   @State private var includedMemberHexes = Set<String>()
   @State private var query = ""
   @State private var isSaving = false
+  @State private var mutationFeedback = LinkstrSheetMutationFeedback()
+  @FocusState private var focusedField: Field?
 
   var body: some View {
     NavigationStack {
@@ -1275,7 +1282,18 @@ private struct SessionMembersSheet: View {
         LinkstrBackgroundView()
         ScrollView {
           VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
-            LinkstrScreenTitle(title: "session members")
+            LinkstrScreenTitle(title: canManageMembers ? "manage session" : "session members")
+            if canManageMembers {
+              LinkstrInsetSection(title: "session details") {
+                TextField("session name", text: $sessionName)
+                  .font(LinkstrTheme.body(15))
+                  .focused($focusedField, equals: .sessionName)
+                  .textInputAutocapitalization(.words)
+                  .submitLabel(.done)
+                  .onSubmit { focusedField = nil }
+                  .linkstrInputField()
+              }
+            }
             LinkstrInsetSection(
               title: "current members",
               accessory: "\(visibleCurrentMembers.count + 1)"
@@ -1386,7 +1404,7 @@ private struct SessionMembersSheet: View {
               }
             } else {
               LinkstrInsetSection(title: "member permissions") {
-                Text("only the session creator can add or remove members.")
+                Text("only the session creator can rename the session or change membership.")
                   .font(LinkstrTheme.body(13))
                   .foregroundStyle(LinkstrTheme.textSecondary)
               }
@@ -1395,9 +1413,9 @@ private struct SessionMembersSheet: View {
           .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
           .padding(.top, LinkstrTheme.screenTopPadding)
           .padding(.bottom, LinkstrTheme.screenBottomPadding)
+          .scrollDismissesKeyboard(.interactively)
         }
       }
-
       .linkstrBarChrome()
       .toolbar {
         ToolbarItem(placement: .topBarLeading) {
@@ -1414,23 +1432,37 @@ private struct SessionMembersSheet: View {
         if canManageMembers {
           ToolbarItem(placement: .confirmationAction) {
             Button {
-              saveMembers()
+              saveSession()
             } label: {
               Image(systemName: "checkmark")
                 .linkstrToolbarIconLabel()
             }
-            .accessibilityLabel(isSaving ? "saving members" : "save members")
-            .disabled(isSaving)
+            .accessibilityLabel(isSaving ? "saving session" : "save session")
+            .disabled(isSaving || !canSave)
             .tint(LinkstrTheme.accent)
           }
+        }
+      }
+      .safeAreaInset(edge: .bottom, spacing: 0) {
+        if canManageMembers, let footerStatus {
+          LinkstrSheetStatusFooter(
+            message: footerStatus.message,
+            messageColor: footerStatus.color
+          )
         }
       }
       .task(id: profileLookupPubkeys.stableTaskID) {
         session.requestRemoteProfilesIfNeeded(pubkeyHexes: profileLookupPubkeys)
       }
-      .onAppear(perform: syncIncludedMembersIfNeeded)
+      .onAppear(perform: syncStateIfNeeded)
+      .onChange(of: sessionName) { _, _ in
+        mutationFeedback.clear()
+      }
+      .onChange(of: includedMemberHexes.stableTaskID) { _, _ in
+        mutationFeedback.clear()
+      }
       .onChange(of: activeMembers.map(\.memberPubkey).stableTaskID) { _, _ in
-        syncIncludedMembersIfNeeded()
+        syncMembersIfNeeded()
       }
     }
   }
@@ -1454,6 +1486,24 @@ private struct SessionMembersSheet: View {
 
   private var canManageMembers: Bool {
     session.canManageMembers(for: sessionEntity)
+  }
+
+  private var canSave: Bool {
+    !sessionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+
+  private var footerStatus: LinkstrSheetFooterStatus? {
+    mutationFeedback.footerStatus(
+      isRunning: isSaving,
+      progressMessage: "waiting for relay reconnect before saving...",
+      validationMessage: canSave ? nil : "session name required."
+    )
+  }
+
+  private var pendingSessionName: String? {
+    let trimmed = sessionName.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty, trimmed != sessionEntity.name else { return nil }
+    return trimmed
   }
 
   private var visibleCurrentMembers: [String] {
@@ -1492,33 +1542,48 @@ private struct SessionMembersSheet: View {
     return session.resolvedIdentity(for: pubkeyHex, contacts: scopedContacts)
   }
 
-  private func saveMembers() {
+  private func saveSession() {
     guard canManageMembers else {
       composeCreatorOnlyError()
       return
     }
-    guard !isSaving else { return }
+    guard !isSaving, canSave else { return }
+    focusedField = nil
+    mutationFeedback.clear()
     isSaving = true
 
     let memberNPubs = includedMemberHexes.compactMap { PublicKey(hex: $0)?.npub }
+    let nameToSend = pendingSessionName
 
     Task { @MainActor in
-      let didSave = await session.updateSessionMembersAwaitingRelay(
-        session: sessionEntity,
-        memberNPubs: memberNPubs
-      )
+      let result = await session.performFormMutation {
+        await session.updateSessionMembersAwaitingRelay(
+          session: sessionEntity,
+          memberNPubs: memberNPubs,
+          sessionName: nameToSend
+        )
+      }
       isSaving = false
-      if didSave {
+      if result.didSucceed {
         dismiss()
+      } else {
+        mutationFeedback.record(errorMessage: result.errorMessage)
       }
     }
   }
 
   private func composeCreatorOnlyError() {
-    session.composeError = "only the session creator can manage members."
+    session.composeError = "only the session creator can manage this session."
   }
 
-  private func syncIncludedMembersIfNeeded() {
+  private func syncStateIfNeeded() {
+    if sessionName.isEmpty {
+      sessionName = sessionEntity.name
+    }
+    syncMembersIfNeeded()
+  }
+
+  private func syncMembersIfNeeded() {
     guard includedMemberHexes.isEmpty else { return }
     includedMemberHexes = Set(activeMembers.map(\.memberPubkey))
   }
