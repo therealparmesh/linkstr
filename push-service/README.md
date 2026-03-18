@@ -1,13 +1,13 @@
 # push-service
 
-Last updated: March 12, 2026
+_Last updated: March 12, 2026_
 
 Minimal linkstr push backend for iOS APNs delivery.
 
 ## What it does
 
-- Stores APNs device tokens per nostr pubkey.
-- Stores archived conversation ids per nostr pubkey.
+- Stores APNs device tokens per Nostr pubkey.
+- Stores archived conversation IDs per Nostr pubkey.
 - Accepts signed push enqueue requests from the app.
 - Sends generic APNs alerts for:
   - `new_post`
@@ -17,7 +17,7 @@ It does not decrypt linkstr content, watch relays directly, or keep a notificati
 
 ## Request auth
 
-Every mutating request is authorized with a signed nostr HTTP auth event.
+Every mutating request is authorized with a signed Nostr HTTP auth event.
 
 - The signature covers the HTTP method, request path, request body hash, and a random nonce.
 - The service stores recently used nonces for the current auth window and rejects reuse.
@@ -63,7 +63,7 @@ You will use those values as:
 6. In the run scheme, add `LINKSTR_PUSH_SERVICE_BASE_URL` once you have a backend URL.
 7. Build to a real iPhone for end-to-end validation. The simulator is useful for app wiring, but real APNs delivery requires a physical device.
 
-This branch already includes:
+The codebase already includes:
 
 - The entitlements change.
 - APNs registration callbacks.
@@ -98,6 +98,7 @@ Without `APNS_DISABLE=1`, the service expects a complete APNs configuration and 
 5. Grant notification permission.
 6. Confirm the service receives:
    - `POST /v1/devices/register`
+   - `POST /v1/devices/unregister`
    - `PUT /v1/conversations/archive-state`
    - `POST /v1/push`
 7. Create a post and an active emoji reaction from another account and confirm the no-op backend logs both attempted sends.
@@ -223,7 +224,7 @@ Do this after Fly is up and the app points at the Fly URL.
 
 For this v1, the expected alert text is generic. The app fetches the actual encrypted content separately.
 
-## Test coverage on this branch
+## Test coverage
 
 Backend:
 
@@ -235,10 +236,9 @@ Backend:
 - Self-send suppression.
 - Device unregistration.
 
-App:
+App (run from the repo root):
 
-- `xcodebuild -project Linkstr.xcodeproj -scheme Linkstr -showdestinations`
-- `xcodebuild test -project Linkstr.xcodeproj -scheme Linkstr -destination 'platform=iOS Simulator,id=<SIMULATOR_ID>'`
+- `./scripts/test.sh`
 - Post enqueue coverage.
 - Reaction enqueue coverage.
 - Archive sync coverage.
