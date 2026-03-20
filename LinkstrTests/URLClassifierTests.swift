@@ -69,7 +69,7 @@ final class URLClassifierTests: XCTestCase {
     XCTAssertEqual(
       NewPostSheet.composerAvailabilityHint(
         for: URLClassifier.MediaStrategy.extractionPreferred(
-          embedURL: URL(string: "https://www.tiktok.com/embed/v3/7596114833477537054")!
+          embedURL: URL(string: "https://www.tiktok.com/@_/video/7596114833477537054")!
         )
       ),
       "viewable in-app. may be saveable."

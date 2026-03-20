@@ -29,7 +29,7 @@ enum MediaURLFixtures {
       url: "https://www.tiktok.com/@acct/video/7596114833477537054",
       linkType: .tiktok,
       strategyKind: .extractionPreferred,
-      embedExpectation: .exact("https://www.tiktok.com/embed/v2/7596114833477537054"),
+      embedExpectation: .exact("https://www.tiktok.com/@_/video/7596114833477537054"),
       allowsLocalPlayback: true
     ),
     StrategyExpectation(
@@ -37,7 +37,7 @@ enum MediaURLFixtures {
       url: "https://www.instagram.com/reel/C7x5mYfP0R1/",
       linkType: .instagram,
       strategyKind: .extractionPreferred,
-      embedExpectation: .exact("https://www.instagram.com/reel/C7x5mYfP0R1/embed"),
+      embedExpectation: .exact("https://www.instagram.com/reel/C7x5mYfP0R1/"),
       allowsLocalPlayback: true
     ),
     StrategyExpectation(
@@ -45,7 +45,7 @@ enum MediaURLFixtures {
       url: "https://www.instagram.com/p/C7x5mYfP0R1/",
       linkType: .instagram,
       strategyKind: .embedOnly,
-      embedExpectation: .exact("https://www.instagram.com/p/C7x5mYfP0R1/embed"),
+      embedExpectation: .exact("https://www.instagram.com/p/C7x5mYfP0R1/"),
       allowsLocalPlayback: false
     ),
     StrategyExpectation(
@@ -77,7 +77,7 @@ enum MediaURLFixtures {
       url: "https://rumble.com/v5h7abc-sample-title.html",
       linkType: .rumble,
       strategyKind: .embedOnly,
-      embedExpectation: .exact("https://rumble.com/embed/v5h7abc/"),
+      embedExpectation: .exact("https://rumble.com/v5h7abc-sample-title.html"),
       allowsLocalPlayback: false
     ),
     StrategyExpectation(
@@ -140,6 +140,14 @@ enum MediaURLFixtures {
 
   static let aliasAndShareStrategyExpectations: [StrategyExpectation] = [
     StrategyExpectation(
+      name: "tiktok /t/ short link",
+      url: "https://www.tiktok.com/t/ZTk1EeG6M/",
+      linkType: .tiktok,
+      strategyKind: .extractionPreferred,
+      embedExpectation: .exact("https://www.tiktok.com/t/ZTk1EeG6M/"),
+      allowsLocalPlayback: true
+    ),
+    StrategyExpectation(
       name: "vm tiktok short link",
       url: "https://vm.tiktok.com/ZMfooBar/",
       linkType: .tiktok,
@@ -152,7 +160,7 @@ enum MediaURLFixtures {
       url: "https://m.instagram.com/reel/C7x5mYfP0R1/",
       linkType: .instagram,
       strategyKind: .extractionPreferred,
-      embedExpectation: .exact("https://www.instagram.com/reel/C7x5mYfP0R1/embed"),
+      embedExpectation: .exact("https://www.instagram.com/reel/C7x5mYfP0R1/"),
       allowsLocalPlayback: true
     ),
     StrategyExpectation(
@@ -160,7 +168,7 @@ enum MediaURLFixtures {
       url: "https://www.instagram.com/share/reel/DUSWiOIDivu/",
       linkType: .instagram,
       strategyKind: .extractionPreferred,
-      embedExpectation: .exact("https://www.instagram.com/reel/DUSWiOIDivu/embed"),
+      embedExpectation: .exact("https://www.instagram.com/reel/DUSWiOIDivu/"),
       allowsLocalPlayback: true
     ),
     StrategyExpectation(
@@ -168,7 +176,7 @@ enum MediaURLFixtures {
       url: "https://www.instagram.com/share/p/DUbRe_8EuQY/",
       linkType: .instagram,
       strategyKind: .embedOnly,
-      embedExpectation: .exact("https://www.instagram.com/p/DUbRe_8EuQY/embed"),
+      embedExpectation: .exact("https://www.instagram.com/p/DUbRe_8EuQY/"),
       allowsLocalPlayback: false
     ),
     StrategyExpectation(
@@ -201,6 +209,47 @@ enum MediaURLFixtures {
       linkType: .youtube,
       strategyKind: .embedOnly,
       embedExpectation: .exact("https://www.youtube.com/embed/dQw4w9WgXcQ?playsinline=1&rel=0"),
+      allowsLocalPlayback: false
+    ),
+    StrategyExpectation(
+      name: "youtube live stream",
+      url: "https://www.youtube.com/live/jfKfPfyJRdk",
+      linkType: .youtube,
+      strategyKind: .embedOnly,
+      embedExpectation: .exact("https://www.youtube.com/embed/jfKfPfyJRdk?playsinline=1&rel=0"),
+      allowsLocalPlayback: false
+    ),
+    StrategyExpectation(
+      name: "youtube watch with timestamp",
+      url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=43",
+      linkType: .youtube,
+      strategyKind: .embedOnly,
+      embedExpectation: .exact(
+        "https://www.youtube.com/embed/dQw4w9WgXcQ?playsinline=1&rel=0&start=43"),
+      allowsLocalPlayback: false
+    ),
+    StrategyExpectation(
+      name: "youtube-nocookie embed",
+      url: "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ",
+      linkType: .youtube,
+      strategyKind: .embedOnly,
+      embedExpectation: .exact("https://www.youtube.com/embed/dQw4w9WgXcQ?playsinline=1&rel=0"),
+      allowsLocalPlayback: false
+    ),
+    StrategyExpectation(
+      name: "youtube channel page",
+      url: "https://www.youtube.com/@MrBeast",
+      linkType: .youtube,
+      strategyKind: .link,
+      embedExpectation: nil,
+      allowsLocalPlayback: false
+    ),
+    StrategyExpectation(
+      name: "rumble channel page",
+      url: "https://rumble.com/c/RussellBrand",
+      linkType: .rumble,
+      strategyKind: .link,
+      embedExpectation: nil,
       allowsLocalPlayback: false
     ),
   ]

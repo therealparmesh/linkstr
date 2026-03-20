@@ -45,7 +45,7 @@ struct DeepLinkDetailView: View {
         Text(previewTitle)
           .font(LinkstrTheme.title(17, weight: .semibold))
           .foregroundStyle(LinkstrTheme.textPrimary)
-          .lineLimit(3)
+          .fixedSize(horizontal: false, vertical: true)
       }
 
       Text(normalizedURLString ?? urlString)
@@ -139,13 +139,12 @@ struct DeepLinkDetailView: View {
 
   private func shouldLoadRemotePostText(for urlString: String) -> Bool {
     guard let url = URL(string: urlString) else { return false }
-    guard URLClassifier.classify(url) == .twitter else { return false }
-    return URLClassifier.mediaStrategy(for: url).allowsLocalPlaybackToggle
+    return SocialPostResolutionService.supportsRemotePostText(for: url)
   }
 
   private func resolvedRemotePostText(for urlString: String) async -> String? {
     guard shouldLoadRemotePostText(for: urlString) else { return nil }
     guard let url = URL(string: urlString) else { return nil }
-    return await TwitterStatusResolutionService.shared.preview(for: url)?.bodyText
+    return await SocialPostResolutionService.resolveRemotePostText(for: url)
   }
 }

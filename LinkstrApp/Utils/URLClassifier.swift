@@ -64,7 +64,11 @@ enum URLClassifier {
     case .twitter:
       guard SocialURLHeuristics.isTwitterStatusURL(url) else { return .link }
       return .extractionPreferred(embedURL: embedURL(for: url, linkType: linkType) ?? url)
-    case .youtube, .rumble:
+    case .youtube:
+      guard SocialURLHeuristics.isYouTubeVideoURL(url) else { return .link }
+      return .embedOnly(embedURL: embedURL(for: url, linkType: linkType) ?? url)
+    case .rumble:
+      guard SocialURLHeuristics.isRumbleVideoURL(url) else { return .link }
       return .embedOnly(embedURL: embedURL(for: url, linkType: linkType) ?? url)
     case .generic:
       return .link
@@ -121,7 +125,7 @@ enum URLClassifier {
 
   private static func tikTokEmbedURL(for sourceURL: URL) -> URL? {
     if let id = SocialURLHeuristics.tikTokVideoID(from: sourceURL) {
-      return URL(string: "https://www.tiktok.com/embed/v2/\(id)")
+      return URL(string: "https://www.tiktok.com/@_/video/\(id)")
     }
     return sourceURL
   }
@@ -134,7 +138,8 @@ enum URLClassifier {
       let marker = parts[index].lowercased()
       let shortcode = parts[index + 1].trimmingCharacters(in: .whitespacesAndNewlines)
       guard ["reel", "reels", "p", "tv"].contains(marker), !shortcode.isEmpty else { continue }
-      return URL(string: "https://www.instagram.com/\(marker)/\(shortcode)/embed")
+      let normalizedMarker = (marker == "reels") ? "reel" : marker
+      return URL(string: "https://www.instagram.com/\(normalizedMarker)/\(shortcode)/")
     }
     return sourceURL
   }
@@ -168,6 +173,7 @@ enum URLClassifier {
     guard let host = sourceURL.host?.lowercased() else { return sourceURL }
 
     let parts = sourceURL.pathComponents.filter { $0 != "/" }
+    let queryItems = URLComponents(url: sourceURL, resolvingAgainstBaseURL: false)?.queryItems
 
     let videoID: String?
     if host.contains("youtu.be") {
@@ -176,8 +182,9 @@ enum URLClassifier {
       videoID = parts[1]
     } else if parts.first?.lowercased() == "embed", parts.count >= 2 {
       videoID = parts[1]
+    } else if parts.first?.lowercased() == "live", parts.count >= 2 {
+      videoID = parts[1]
     } else {
-      let queryItems = URLComponents(url: sourceURL, resolvingAgainstBaseURL: false)?.queryItems
       videoID = queryItems?.first(where: { $0.name == "v" })?.value
     }
 
@@ -185,11 +192,16 @@ enum URLClassifier {
       return sourceURL
     }
 
-    var components = URLComponents(string: "https://www.youtube.com/embed/\(id)")
-    components?.queryItems = [
+    var embedQueryItems = [
       URLQueryItem(name: "playsinline", value: "1"),
       URLQueryItem(name: "rel", value: "0"),
     ]
+    if let startTime = queryItems?.first(where: { $0.name == "t" })?.value {
+      embedQueryItems.append(URLQueryItem(name: "start", value: startTime))
+    }
+
+    var components = URLComponents(string: "https://www.youtube.com/embed/\(id)")
+    components?.queryItems = embedQueryItems
     return components?.url ?? sourceURL
   }
 
@@ -197,18 +209,15 @@ enum URLClassifier {
     let parts = sourceURL.pathComponents.filter { $0 != "/" }
     guard let first = parts.first, !first.isEmpty else { return sourceURL }
 
+    // If already an embed URL, use it directly.
     if first.lowercased() == "embed", parts.count >= 2 {
       return sourceURL
     }
 
-    let id =
-      first
-      .replacingOccurrences(of: ".html", with: "")
-      .split(separator: "-")
-      .first
-      .map(String.init)
-      ?? first
-    return URL(string: "https://rumble.com/embed/\(id)/")
+    // Rumble slug IDs (e.g. v6abcde in /v6abcde-title.html) differ from embed IDs.
+    // Return the source URL as the fallback; the async oEmbed resolution in
+    // URLCanonicalizationService provides the correct embed URL.
+    return sourceURL
   }
 
   private static func twitterEmbedURL(for sourceURL: URL) -> URL? {

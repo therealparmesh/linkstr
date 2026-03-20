@@ -52,6 +52,14 @@ final class URLMetadataService {
       return twitterPreview
     }
 
+    if let socialPreview = await socialPostPreview(for: url) {
+      return socialPreview
+    }
+
+    if let rumblePreview = await rumblePreview(for: url) {
+      return rumblePreview
+    }
+
     return await genericPreview(for: url)
   }
 
@@ -65,6 +73,55 @@ final class URLMetadataService {
     let thumbnailPath = try? await thumbnailPath(for: url, remoteImageURL: preview.imageURL)
     guard preview.title != nil || thumbnailPath != nil else { return nil }
     return LinkPreviewData(title: preview.title, thumbnailPath: thumbnailPath)
+  }
+
+  private func socialPostPreview(for url: URL) async -> LinkPreviewData? {
+    let linkType = URLClassifier.classify(url)
+    guard linkType == .instagram || linkType == .tiktok else { return nil }
+
+    guard let social = await SocialPostResolutionService.shared.preview(for: url) else {
+      return nil
+    }
+
+    let thumbnailPath = try? await thumbnailPath(for: url, remoteImageURL: social.imageURL)
+    let title = social.authorName
+
+    guard title != nil || thumbnailPath != nil else { return nil }
+    return LinkPreviewData(title: title, thumbnailPath: thumbnailPath)
+  }
+
+  private func rumblePreview(for url: URL) async -> LinkPreviewData? {
+    guard SocialURLHeuristics.isRumbleHost(url),
+      SocialURLHeuristics.isRumbleVideoURL(url)
+    else { return nil }
+
+    var components = URLComponents(string: "https://rumble.com/api/Media/oembed.json")
+    components?.queryItems = [URLQueryItem(name: "url", value: url.absoluteString)]
+    guard let requestURL = components?.url else { return nil }
+
+    do {
+      var request = URLRequest(url: requestURL)
+      request.timeoutInterval = URLMetadataTimingDefaults.providerTimeout
+      let (data, response) = try await URLSession.shared.data(for: request)
+      guard let httpResponse = response as? HTTPURLResponse,
+        (200..<300).contains(httpResponse.statusCode),
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+      else { return nil }
+
+      let title = json["title"] as? String
+      let authorName = json["author_name"] as? String
+      let displayTitle = title ?? authorName
+
+      var thumbnailPath: String?
+      if let raw = json["thumbnail_url"] as? String, let imageURL = URL(string: raw) {
+        thumbnailPath = try? await self.thumbnailPath(for: url, remoteImageURL: imageURL)
+      }
+
+      guard displayTitle != nil || thumbnailPath != nil else { return nil }
+      return LinkPreviewData(title: displayTitle, thumbnailPath: thumbnailPath)
+    } catch {
+      return nil
+    }
   }
 
   private func genericPreview(for url: URL) async -> LinkPreviewData? {

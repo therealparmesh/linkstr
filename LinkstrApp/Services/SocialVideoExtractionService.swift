@@ -14,10 +14,10 @@ enum ExtractionState {
 }
 
 private enum SocialVideoTimingDefaults {
-  static let tikTokAPITimeout: TimeInterval = 15
   static let mediaCandidateCollectionTimeout: TimeInterval = 12
-  static let twitterStatusRequestTimeout: TimeInterval = 8
-  static let urlCanonicalizationRequestTimeout: TimeInterval = 6
+  static let apiRequestTimeout: TimeInterval = 8
+  static let lightweightFetchTimeout: TimeInterval = 6
+  static let earlyFinishDebounce: TimeInterval = 1.5
 }
 
 private enum TwitterEmbedTimingDefaults {
@@ -39,7 +39,7 @@ final class SocialVideoExtractionService: NSObject {
   }
 
   func extractPlayableMedia(from sourceURL: URL) async -> ExtractionState {
-    if isTikTokURL(sourceURL) {
+    if SocialURLHeuristics.isTikTokHost(sourceURL) {
       if SocialURLHeuristics.tikTokVideoID(from: sourceURL) != nil {
         let directTikTokCandidates = await loadTikTokAPIPlayURLs(from: sourceURL)
         if let resolved = await resolvePlayableMedia(
@@ -51,8 +51,9 @@ final class SocialVideoExtractionService: NSObject {
           return resolved
         }
 
-        // For canonical TikTok post URLs, prefer failing into embed mode over risking a related
-        // clip from page-level sniffing.
+        // TikTok API fast-path failed; prefer embed fallback over the generic
+        // WebView sniff which risks extracting the wrong clip from TikTok's
+        // autoplay feed.
         return .cannotExtract("could not find a usable video stream for this post.")
       }
     }
@@ -74,11 +75,31 @@ final class SocialVideoExtractionService: NSObject {
       }
     }
 
-    for userAgent in [Self.desktopUserAgent, Self.mobileUserAgent] {
-      let sniffResult = await sniffMediaURLs(from: sourceURL, userAgent: userAgent)
-      let sniffedCandidates = sniffResult.urls
-      let pageCandidates = await scrapeMediaURLsFromPage(sourceURL: sourceURL, userAgent: userAgent)
-      let candidates = mergeCandidates(primary: sniffedCandidates, secondary: pageCandidates)
+    for userAgent in [Self.mobileUserAgent, Self.desktopUserAgent] {
+      // Try a lightweight HTML scrape first — it resolves in ~1-2s for
+      // providers that embed CDN media URLs in server-rendered HTML
+      // (Instagram, Facebook).  Only fall back to the heavier headless-
+      // WebView sniff (up to 12s) when the scrape finds nothing usable.
+      let scrapeCandidates = await scrapeMediaURLsFromPage(
+        sourceURL: sourceURL, userAgent: userAgent)
+
+      if !scrapeCandidates.isEmpty {
+        let ranked = rankCandidates(scrapeCandidates, sourceURL: sourceURL)
+        if let resolved = await resolvePlayableMedia(
+          from: ranked,
+          sourceURL: sourceURL,
+          userAgent: userAgent,
+          cookies: []
+        ) {
+          return resolved
+        }
+      }
+
+      // Scrape didn't yield a playable candidate — try the WebView sniff.
+      let sniffResult = await sniffMediaURLs(
+        from: sourceURL, userAgent: userAgent)
+      let candidates = mergeCandidates(
+        primary: sniffResult.urls, secondary: scrapeCandidates)
       guard !candidates.isEmpty else { continue }
 
       let rankedCandidates = rankCandidates(candidates, sourceURL: sourceURL)
@@ -129,45 +150,30 @@ final class SocialVideoExtractionService: NSObject {
     cookies: [HTTPCookie],
     assumePlayableCandidates: Bool = false
   ) async -> ExtractionState? {
-    for candidateURL in candidates {
-      // All providers in scope expose HTTPS media URLs and ATS expects secure transport.
-      guard candidateURL.scheme?.lowercased() == "https" else { continue }
+    // Filter to HTTPS candidates that pass identity matching (cheap, synchronous).
+    let viable = candidates.filter { url in
+      guard url.scheme?.lowercased() == "https" else { return false }
+      return matchesSourceIdentity(url, sourceURL: sourceURL)
+    }
+    guard !viable.isEmpty else { return nil }
 
-      if !matchesSourceIdentity(candidateURL, sourceURL: sourceURL) {
-        continue
-      }
-
+    if assumePlayableCandidates {
+      let url = viable[0]
       let headers = buildHeaders(
-        for: candidateURL,
-        sourcePageURL: sourceURL,
-        cookies: cookies,
-        userAgent: userAgent
-      )
-
-      if !assumePlayableCandidates {
-        guard await isLikelyPlayable(candidateURL, headers: headers) else {
-          continue
-        }
-
-        let asset = AVURLAsset(
-          url: candidateURL, options: ["AVURLAssetHTTPHeaderFieldsKey": headers])
-        let isProtected = (try? await asset.load(.hasProtectedContent)) ?? false
-        if isProtected {
-          continue
-        }
-      }
-
-      // Return a streamable candidate immediately; local caching is handled asynchronously by UI
-      // flows so long videos do not block playback controls.
-      return .ready(
-        PlayableMedia(playbackURL: candidateURL, headers: headers, isLocalFile: false))
+        for: url, sourcePageURL: sourceURL, cookies: cookies, userAgent: userAgent)
+      return .ready(PlayableMedia(playbackURL: url, headers: headers, isLocalFile: false))
     }
 
+    // Validate candidates sequentially — CDN tokens (especially Instagram/
+    // Facebook) are often single-use or connection-limited, so concurrent
+    // AVURLAsset loads on sibling URLs cause intermittent auth failures.
+    for candidateURL in viable {
+      let headers = buildHeaders(
+        for: candidateURL, sourcePageURL: sourceURL, cookies: cookies, userAgent: userAgent)
+      guard await isLikelyPlayable(candidateURL, headers: headers) else { continue }
+      return .ready(PlayableMedia(playbackURL: candidateURL, headers: headers, isLocalFile: false))
+    }
     return nil
-  }
-
-  private func isTikTokURL(_ url: URL) -> Bool {
-    SocialURLHeuristics.isTikTokHost(url)
   }
 
   private func matchesSourceIdentity(_ candidateURL: URL, sourceURL: URL) -> Bool {
@@ -207,13 +213,26 @@ final class SocialVideoExtractionService: NSObject {
     return true
   }
 
+  // MARK: - TikTok feed API
+
   private func loadTikTokAPIPlayURLs(from sourceURL: URL) async -> [URL] {
-    guard let awemeID = SocialURLHeuristics.tikTokVideoID(from: sourceURL),
-      var components = URLComponents(string: Self.tikTokFeedEndpoint)
-    else {
+    guard let awemeID = SocialURLHeuristics.tikTokVideoID(from: sourceURL) else {
       return []
     }
 
+    // Try endpoints sequentially — concurrent requests to TikTok's API
+    // servers get rate-limited or blocked.
+    for feedEndpoint in Self.tikTokFeedEndpoints {
+      let urls = await loadTikTokFeedURLs(endpoint: feedEndpoint, awemeID: awemeID)
+      if !urls.isEmpty {
+        return urls
+      }
+    }
+    return []
+  }
+
+  private func loadTikTokFeedURLs(endpoint feedEndpoint: String, awemeID: String) async -> [URL] {
+    guard var components = URLComponents(string: feedEndpoint) else { return [] }
     components.queryItems = [URLQueryItem(name: "aweme_id", value: awemeID)]
     guard let endpoint = components.url else { return [] }
 
@@ -221,7 +240,7 @@ final class SocialVideoExtractionService: NSObject {
     request.httpMethod = "OPTIONS"
     request.setValue(Self.tikTokAPIUserAgent, forHTTPHeaderField: "User-Agent")
     request.setValue("application/json", forHTTPHeaderField: "Accept")
-    request.timeoutInterval = SocialVideoTimingDefaults.tikTokAPITimeout
+    request.timeoutInterval = SocialVideoTimingDefaults.apiRequestTimeout
 
     do {
       let (data, response) = try await URLSession.shared.data(for: request)
@@ -245,7 +264,9 @@ final class SocialVideoExtractionService: NSObject {
       var seen = Set<String>()
       return rawURLs.compactMap { raw in
         let normalized = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty, seen.insert(normalized.lowercased()).inserted else { return nil }
+        guard !normalized.isEmpty, seen.insert(normalized.lowercased()).inserted else {
+          return nil
+        }
         return URL(string: normalized)
       }
     } catch {
@@ -280,87 +301,73 @@ final class SocialVideoExtractionService: NSObject {
 
   private func score(for url: URL, sourceURL: URL) -> Int {
     let value = url.absoluteString.lowercased()
+    let host = url.host?.lowercased() ?? ""
 
     var score = 0
 
+    // Format signals
     if value.contains(".m3u8") { score += 35 }
-    if value.contains(".mp4") { score += 28 }
-    if value.contains("/video/tos/") { score += 34 }
-    if value.contains("/aweme/v1/play/") { score += 30 }
-    if value.contains("mime_type=video_mp4") { score += 16 }
-    if value.contains("video.xx.fbcdn.net") { score += 30 }
-    if value.contains("fbcdn.net/v/t42.1790-2") { score += 24 }
-    if value.contains("fbcdn.net/v/t39.25447-2") { score += 24 }
-    if value.contains("cdninstagram.com/v/t50.2886-16") { score += 28 }
-    if value.contains("cdninstagram.com/v/t66.30100-16") { score += 28 }
-    if value.contains("video.twimg.com") { score += 34 }
-    if value.contains("/ext_tw_video/") { score += 24 }
-    if value.contains("/amplify_video/") { score += 24 }
-    if value.contains("/tweet_video/") { score += 20 }
-    if value.contains("video") { score += 14 }
+    if value.contains(".mp4") { score += 30 }
+    if value.contains("mime_type=video_mp4") { score += 15 }
+
+    // Semantic path signals
+    if value.contains("video") { score += 15 }
     if value.contains("play") { score += 10 }
     if value.contains("download") { score += 8 }
-    if value.contains("ply_type=2") { score += 10 }
-    if value.contains("br=") || value.contains("bt=") { score += 6 }
-    if value.contains("tiktokcdn") || value.contains("byteoversea") || value.contains("akamaized") {
-      score += 14
+
+    // Provider video CDN host (+25)
+    if host.contains("video") && host.contains("fbcdn") { score += 25 }
+    if host.contains("cdninstagram") && value.contains(".mp4") { score += 25 }
+    if host.contains("fbcdn") && value.contains(".mp4") { score += 20 }
+    if host.hasSuffix("twimg.com") && host.contains("video") { score += 25 }
+
+    // TikTok CDN host/path (+25/+15)
+    if value.contains("/aweme/v1/play/") { score += 25 }
+    if value.contains("/video/tos/") { score += 25 }
+    if host.contains("tiktokcdn") || host.contains("byteoversea") || host.contains("akamaized") {
+      score += 15
     }
 
-    if url.host == sourceURL.host { score += 4 }
+    // Same host as source page
+    if host == sourceURL.host?.lowercased() { score += 5 }
 
+    // Post ID found in URL (+50) / exact ID match (+100, mismatch -100)
     if let expectedTikTokID = SocialURLHeuristics.tikTokVideoID(from: sourceURL) {
-      if value.contains(expectedTikTokID) {
-        score += 95
+      if value.contains(expectedTikTokID) { score += 50 }
+      if let candidateID = SocialURLHeuristics.tikTokVideoID(fromCandidateURL: url) {
+        score += candidateID == expectedTikTokID ? 100 : -100
       }
-
-      if let candidateTikTokID = SocialURLHeuristics.tikTokVideoID(fromCandidateURL: url) {
-        score += candidateTikTokID == expectedTikTokID ? 125 : -125
-      }
-
-      if let host = url.host?.lowercased(),
-        !(host.contains("tiktok") || host.contains("byte") || host.contains("akamaized"))
-      {
-        score -= 28
+      if !(host.contains("tiktok") || host.contains("byte") || host.contains("akamaized")) {
+        score -= 25
       }
     }
 
     if let expectedInstagramID = SocialURLHeuristics.instagramPostID(from: sourceURL) {
-      if value.contains(expectedInstagramID) {
-        score += 40
+      if value.contains(expectedInstagramID) { score += 50 }
+      if let candidateID = SocialURLHeuristics.instagramPostID(fromCandidateURL: url) {
+        score += candidateID == expectedInstagramID ? 100 : -100
       }
-
-      if let candidateInstagramID = SocialURLHeuristics.instagramPostID(fromCandidateURL: url) {
-        score += candidateInstagramID == expectedInstagramID ? 80 : -120
-      }
-
-      if let host = url.host?.lowercased(),
-        !(host.contains("instagram") || host.contains("cdninstagram") || host.contains("fbcdn"))
-      {
-        score -= 24
+      if !(host.contains("instagram") || host.contains("cdninstagram") || host.contains("fbcdn")) {
+        score -= 25
       }
     }
 
     if let expectedFacebookID = SocialURLHeuristics.facebookVideoID(from: sourceURL) {
-      if value.contains(expectedFacebookID) {
-        score += 35
+      if value.contains(expectedFacebookID) { score += 50 }
+      if let candidateID = SocialURLHeuristics.facebookVideoID(fromCandidateURL: url) {
+        score += candidateID == expectedFacebookID ? 100 : -100
       }
-
-      if let candidateFacebookID = SocialURLHeuristics.facebookVideoID(fromCandidateURL: url) {
-        score += candidateFacebookID == expectedFacebookID ? 80 : -120
-      }
-
-      if let host = url.host?.lowercased(),
-        !(host.contains("facebook") || host.contains("fbcdn") || host.contains("fbsbx"))
-      {
-        score -= 20
+      if !(host.contains("facebook") || host.contains("fbcdn") || host.contains("fbsbx")) {
+        score -= 25
       }
     }
 
+    // Negative signals
     if Self.blockedPlaybackCandidateTokens.contains(where: value.contains) {
-      score -= 45
+      score -= 40
     }
-    if value.contains("cdninstagram.com/v/t51.82787-15") || value.contains("fbcdn.net/h") {
-      score -= 50
+    if host.contains("cdninstagram") && !value.contains(".mp4") && !value.contains(".m3u8") {
+      score -= 40
     }
 
     return score
@@ -376,9 +383,12 @@ final class SocialVideoExtractionService: NSObject {
     let playable = (try? await asset.load(.isPlayable)) ?? false
     guard playable else { return false }
 
+    let isProtected = (try? await asset.load(.hasProtectedContent)) ?? false
+    guard !isProtected else { return false }
+
     if let duration = try? await asset.load(.duration) {
       let seconds = CMTimeGetSeconds(duration)
-      if seconds.isFinite, seconds > 0, seconds < 6 {
+      if seconds.isFinite, seconds > 0, seconds < 2 {
         return false
       }
     }
@@ -389,7 +399,7 @@ final class SocialVideoExtractionService: NSObject {
     {
       let width = abs(size.width)
       let height = abs(size.height)
-      if width > 0, height > 0, min(width, height) < 220 {
+      if width > 0, height > 0, min(width, height) < 120 {
         return false
       }
     }
@@ -440,22 +450,22 @@ final class SocialVideoExtractionService: NSObject {
   }
 
   fileprivate static func isLikelyMediaURLString(_ lower: String) -> Bool {
+    // Generic video markers
     lower.contains(".m3u8")
       || lower.contains(".mp4")
       || lower.contains("mime_type=video_mp4")
+      // TikTok
       || lower.contains("/aweme/v1/play/")
       || lower.contains("/video/tos/")
       || lower.contains("playaddr")
       || lower.contains("play_addr")
+      // Facebook / Instagram CDN (host-level, not path-version-specific)
       || lower.contains("video.xx.fbcdn.net")
-      || lower.contains("fbcdn.net/v/t42.1790-2")
-      || lower.contains("fbcdn.net/v/t39.25447-2")
-      || lower.contains("cdninstagram.com/v/t50.2886-16")
-      || lower.contains("cdninstagram.com/v/t66.30100-16")
+      || lower.contains("scontent.cdninstagram.com")
+      || (lower.contains("cdninstagram.com") && lower.contains(".mp4"))
+      || (lower.contains("fbcdn.net") && lower.contains("/video"))
+      // Twitter / X
       || lower.contains("video.twimg.com")
-      || lower.contains("/ext_tw_video/")
-      || lower.contains("/amplify_video/")
-      || lower.contains("/tweet_video/")
   }
 
   private func mergeCandidates(primary: [URL], secondary: [URL]) -> [URL] {
@@ -474,12 +484,7 @@ final class SocialVideoExtractionService: NSObject {
       let (data, _) = try await URLSession.shared.data(for: request)
       guard var html = String(data: data, encoding: .utf8) else { return [] }
 
-      html =
-        html
-        .replacingOccurrences(of: "\\u002F", with: "/")
-        .replacingOccurrences(of: "\\u0026", with: "&")
-        .replacingOccurrences(of: "\\/", with: "/")
-        .replacingOccurrences(of: "\\", with: "")
+      html = Self.unescapeJSONStringLiterals(html)
 
       let regex = try NSRegularExpression(pattern: #"https://[^"'\s<]+"#)
       let nsRange = NSRange(html.startIndex..., in: html)
@@ -511,7 +516,45 @@ final class SocialVideoExtractionService: NSObject {
     "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
   private static let tikTokAPIUserAgent =
     "com.zhiliaoapp.musically/300904 (2018111632; U; Android 10; en_US; Pixel 4; Build/QQ3A.200805.001; Cronet/58.0.2991.0)"
-  private static let tikTokFeedEndpoint = "https://api16-normal-useast5.tiktokv.us/aweme/v1/feed/"
+  private static let tikTokFeedEndpoints = [
+    "https://api16-normal-c-useast1a.tiktokv.com/aweme/v1/feed/",
+    "https://api16-normal-useast5.tiktokv.us/aweme/v1/feed/",
+    "https://api19-normal-c-useast1a.tiktokv.com/aweme/v1/feed/",
+    "https://api16-core-c-useast1a.tiktokv.com/aweme/v1/feed/",
+    "https://api21-normal-c-useast2a.tiktokv.com/aweme/v1/feed/",
+  ]
+  /// Decode JSON-escaped text so that embedded URLs become plain `https://…`
+  /// strings the regex scraper can extract.  Handles all `\uXXXX` unicode
+  /// escapes (not just `\u002F` / `\u0026`), JSON-escaped forward slashes
+  /// (`\/`), and stray lone backslashes — in that order so no sequence is
+  /// partially consumed by a later step.
+  private static func unescapeJSONStringLiterals(_ text: String) -> String {
+    // 1. Decode all \uXXXX sequences (covers \u002F, \u0026, \u0025, etc.)
+    let unicodeEscapePattern = try! NSRegularExpression(pattern: #"\\u([0-9A-Fa-f]{4})"#)
+    let nsText = text as NSString
+    let fullRange = NSRange(location: 0, length: nsText.length)
+    var result = text
+    // Process from last match to first so ranges stay valid.
+    let matches = unicodeEscapePattern.matches(in: text, range: fullRange)
+    for match in matches.reversed() {
+      guard match.numberOfRanges > 1,
+        let hexRange = Range(match.range(at: 1), in: result),
+        let matchRange = Range(match.range, in: result),
+        let scalar = UInt32(result[hexRange], radix: 16),
+        let unicode = Unicode.Scalar(scalar)
+      else { continue }
+      result.replaceSubrange(matchRange, with: String(unicode))
+    }
+
+    // 2. JSON-escaped forward slash
+    result = result.replacingOccurrences(of: "\\/", with: "/")
+
+    // 3. Remove remaining lone backslashes (JSON string escape char)
+    result = result.replacingOccurrences(of: "\\", with: "")
+
+    return result
+  }
+
   private static let blockedVisualAssetTokens = [
     "logo", "watermark", "avatar", "icon", "poster", "thumb", "sprite", "preview", "init",
   ]
@@ -520,7 +563,7 @@ final class SocialVideoExtractionService: NSObject {
 
   private static let injectionScript = """
     (function() {
-      const candidatePattern = /(\\.m3u8|\\.mp4|mime_type=video_mp4|\\/aweme\\/v1\\/play\\/|\\/video\\/tos\\/|playaddr|play_addr|video\\.xx\\.fbcdn\\.net|fbcdn\\.net\\/v\\/t42\\.1790-2|fbcdn\\.net\\/v\\/t39\\.25447-2|cdninstagram\\.com\\/v\\/t50\\.2886-16|cdninstagram\\.com\\/v\\/t66\\.30100-16|video\\.twimg\\.com|\\/ext_tw_video\\/|\\/amplify_video\\/|\\/tweet_video\\/)/i;
+      const candidatePattern = /(\\.m3u8|\\.mp4|mime_type=video_mp4|\\/aweme\\/v1\\/play\\/|\\/video\\/tos\\/|playaddr|play_addr|video\\.xx\\.fbcdn\\.net|cdninstagram\\.com.*\\.mp4|fbcdn\\.net.*\\/video|video\\.twimg\\.com)/i;
 
       const send = (u) => {
         if (!u || typeof u !== 'string') return;
@@ -535,8 +578,7 @@ final class SocialVideoExtractionService: NSObject {
         if (!matches) return;
         matches.forEach((raw) => {
           const normalized = raw
-            .replace(/\\\\u002F/g, '/')
-            .replace(/\\\\u0026/g, '&')
+            .replace(/\\\\u([0-9A-Fa-f]{4})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
             .replace(/\\\\\\//g, '/')
             .replace(/\\\\/g, '');
           send(normalized);
@@ -725,6 +767,8 @@ private final class MediaCandidateCollector: NSObject, WKNavigationDelegate, WKS
   private func cleanup() {
     timeoutTask?.cancel()
     timeoutTask = nil
+    earlyFinishTask?.cancel()
+    earlyFinishTask = nil
 
     contentController?.removeScriptMessageHandler(forName: "linkstrVideo")
     contentController = nil
@@ -734,12 +778,35 @@ private final class MediaCandidateCollector: NSObject, WKNavigationDelegate, WKS
     webView = nil
   }
 
+  private static let highConfidencePatterns = [
+    ".mp4", ".m3u8",
+    "/aweme/v1/play/", "/video/tos/",
+    "video.xx.fbcdn.net", "cdninstagram.com", "video.twimg.com",
+  ]
+
+  private var earlyFinishTask: Task<Void, Never>?
+
   private func registerCandidate(_ url: URL) {
     let lower = url.absoluteString.lowercased()
     guard SocialVideoExtractionService.isLikelyMediaURLString(lower) else { return }
 
     if candidateSet.insert(lower).inserted {
       candidateOrder.append(url)
+
+      // When a high-confidence video candidate arrives, schedule a short
+      // debounce window to collect any companions (e.g. multiple quality
+      // variants that arrive together) then finish early instead of
+      // waiting the full collection timeout.
+      if earlyFinishTask == nil,
+        Self.highConfidencePatterns.contains(where: lower.contains)
+      {
+        earlyFinishTask = Task { [weak self] in
+          try? await Task.sleep(
+            for: .seconds(SocialVideoTimingDefaults.earlyFinishDebounce))
+          guard let self else { return }
+          await MainActor.run { self.finish() }
+        }
+      }
     }
   }
 
@@ -889,6 +956,7 @@ actor TwitterStatusResolutionService {
     let endpoints = [
       "https://api.vxtwitter.com/Twitter/status/\(statusID)",
       "https://api.fxtwitter.com/status/\(statusID)",
+      "https://cdn.syndication.twimg.com/tweet-result?id=\(statusID)&token=0",
     ]
 
     var fallbackSummary: TwitterStatusMediaSummary?
@@ -910,7 +978,7 @@ actor TwitterStatusResolutionService {
   private func fetchMediaSummary(from endpoint: URL) async -> TwitterStatusMediaSummary? {
     var request = URLRequest(url: endpoint)
     request.httpMethod = "GET"
-    request.timeoutInterval = SocialVideoTimingDefaults.twitterStatusRequestTimeout
+    request.timeoutInterval = SocialVideoTimingDefaults.apiRequestTimeout
     request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
     request.setValue("application/json", forHTTPHeaderField: "Accept")
 
@@ -948,7 +1016,7 @@ actor TwitterStatusResolutionService {
 
     var request = URLRequest(url: endpoint)
     request.httpMethod = "GET"
-    request.timeoutInterval = SocialVideoTimingDefaults.twitterStatusRequestTimeout
+    request.timeoutInterval = SocialVideoTimingDefaults.apiRequestTimeout
     request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
     request.setValue("application/json", forHTTPHeaderField: "Accept")
 
@@ -1211,7 +1279,6 @@ enum TwitterStatusResponseParser {
       hasVideo = true
 
       collectMediaURL(entry["url"], into: &candidateURLs, seen: &seen)
-      collectMediaURL(entry["thumbnail_url"], into: &candidateURLs, seen: &seen)
 
       if let formats = entry["formats"] as? [[String: Any]] {
         for format in formats {
@@ -1220,6 +1287,14 @@ enum TwitterStatusResponseParser {
       }
 
       if let variants = entry["variants"] as? [[String: Any]] {
+        for variant in variants {
+          collectMediaURL(variant["url"], into: &candidateURLs, seen: &seen)
+        }
+      }
+
+      if let videoInfo = entry["video_info"] as? [String: Any],
+        let variants = videoInfo["variants"] as? [[String: Any]]
+      {
         for variant in variants {
           collectMediaURL(variant["url"], into: &candidateURLs, seen: &seen)
         }
@@ -1252,6 +1327,10 @@ enum TwitterStatusResponseParser {
       return entries
     }
 
+    if let entries = fallbackJSON["mediaDetails"] as? [[String: Any]], !entries.isEmpty {
+      return entries
+    }
+
     return []
   }
 
@@ -1270,6 +1349,13 @@ enum TwitterStatusResponseParser {
       return formattedPreviewTitle(
         name: author["name"] as? String,
         screenName: author["screen_name"] as? String
+      )
+    }
+
+    if let user = json["user"] as? [String: Any] {
+      return formattedPreviewTitle(
+        name: user["name"] as? String,
+        screenName: user["screen_name"] as? String
       )
     }
 
@@ -1400,6 +1486,327 @@ enum TwitterStatusResponseParser {
   }
 }
 
+// MARK: - Social Post Preview
+
+struct SocialPostPreview: Equatable {
+  let bodyText: String?
+  let authorName: String?
+  let imageURL: URL?
+}
+
+actor SocialPostResolutionService {
+  static let shared = SocialPostResolutionService()
+
+  private let userAgent =
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15"
+    + " (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+
+  private var cache: [String: SocialPostPreview] = [:]
+
+  func preview(for sourceURL: URL) async -> SocialPostPreview? {
+    let linkType = URLClassifier.classify(sourceURL)
+    guard let cacheKey = cacheKey(for: sourceURL, linkType: linkType) else { return nil }
+
+    if let cached = cache[cacheKey] {
+      return cached
+    }
+
+    let resolved: SocialPostPreview?
+    switch linkType {
+    case .instagram:
+      resolved = await fetchInstagramPreview(for: sourceURL)
+    case .tiktok:
+      resolved = await fetchTikTokPreview(for: sourceURL)
+    default:
+      return nil
+    }
+
+    if let resolved, resolved.bodyText != nil || resolved.authorName != nil {
+      cache[cacheKey] = resolved
+    }
+    return resolved
+  }
+
+  private func cacheKey(for sourceURL: URL, linkType: LinkType) -> String? {
+    switch linkType {
+    case .instagram:
+      return SocialURLHeuristics.instagramPostID(from: sourceURL)
+    case .tiktok:
+      return SocialURLHeuristics.tikTokVideoID(from: sourceURL)
+    default:
+      return nil
+    }
+  }
+
+  // MARK: - Instagram
+
+  private func fetchInstagramPreview(for sourceURL: URL) async -> SocialPostPreview? {
+    guard let canonicalURL = instagramCanonicalURL(for: sourceURL) else { return nil }
+
+    var request = URLRequest(url: canonicalURL)
+    request.httpMethod = "GET"
+    request.timeoutInterval = SocialVideoTimingDefaults.apiRequestTimeout
+    request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+    request.setValue("text/html", forHTTPHeaderField: "Accept")
+
+    do {
+      let (data, response) = try await URLSession.shared.data(for: request)
+      guard let httpResponse = response as? HTTPURLResponse,
+        (200..<300).contains(httpResponse.statusCode),
+        let html = String(data: data, encoding: .utf8)
+      else { return nil }
+
+      return SocialPostHTMLParser.instagramPreview(from: html)
+    } catch {
+      return nil
+    }
+  }
+
+  private func instagramCanonicalURL(for sourceURL: URL) -> URL? {
+    guard let postID = SocialURLHeuristics.instagramPostID(from: sourceURL) else { return nil }
+
+    let parts = sourceURL.pathComponents.map { $0.lowercased() }
+    let marker: String
+    if parts.contains("reel") || parts.contains("reels") {
+      marker = "reel"
+    } else if parts.contains("tv") {
+      marker = "tv"
+    } else {
+      marker = "p"
+    }
+
+    return URL(string: "https://www.instagram.com/\(marker)/\(postID)/")
+  }
+
+  // MARK: - TikTok
+
+  private func fetchTikTokPreview(for sourceURL: URL) async -> SocialPostPreview? {
+    guard let videoID = SocialURLHeuristics.tikTokVideoID(from: sourceURL) else { return nil }
+
+    let canonicalURLString =
+      "https://www.tiktok.com/@_/video/\(videoID)"
+    guard var components = URLComponents(string: "https://www.tiktok.com/oembed") else {
+      return nil
+    }
+    components.queryItems = [URLQueryItem(name: "url", value: canonicalURLString)]
+    guard let endpoint = components.url else { return nil }
+
+    var request = URLRequest(url: endpoint)
+    request.httpMethod = "GET"
+    request.timeoutInterval = SocialVideoTimingDefaults.apiRequestTimeout
+    request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+    request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+    do {
+      let (data, response) = try await URLSession.shared.data(for: request)
+      guard let httpResponse = response as? HTTPURLResponse,
+        (200..<300).contains(httpResponse.statusCode),
+        !data.isEmpty,
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+      else { return nil }
+
+      return SocialPostHTMLParser.tikTokPreview(from: json)
+    } catch {
+      return nil
+    }
+  }
+
+  /// Whether the given URL's link type supports loading remote post text.
+  nonisolated static func supportsRemotePostText(for url: URL) -> Bool {
+    let linkType = URLClassifier.classify(url)
+    switch linkType {
+    case .twitter:
+      return URLClassifier.mediaStrategy(for: url).allowsLocalPlaybackToggle
+    case .instagram, .tiktok:
+      return true
+    case .facebook, .youtube, .rumble, .generic:
+      return false
+    }
+  }
+
+  /// Resolves the remote post body text for the given URL, if supported.
+  static func resolveRemotePostText(for url: URL) async -> String? {
+    let linkType = URLClassifier.classify(url)
+    switch linkType {
+    case .twitter:
+      return await TwitterStatusResolutionService.shared.preview(for: url)?.bodyText
+    case .instagram, .tiktok:
+      return await shared.preview(for: url)?.bodyText
+    default:
+      return nil
+    }
+  }
+}
+
+enum SocialPostHTMLParser {
+  static func instagramPreview(from html: String) -> SocialPostPreview? {
+    let bodyText = instagramBodyText(from: html)
+    let authorName = instagramAuthorName(from: html)
+    let imageURL = instagramImageURL(from: html)
+    guard bodyText != nil || authorName != nil || imageURL != nil else { return nil }
+    return SocialPostPreview(bodyText: bodyText, authorName: authorName, imageURL: imageURL)
+  }
+
+  static func tikTokPreview(from json: [String: Any]) -> SocialPostPreview? {
+    let title = normalizedText(json["title"] as? String)
+    let authorName = normalizedText(json["author_name"] as? String)
+    let imageURL: URL?
+    if let raw = normalizedText(json["thumbnail_url"] as? String),
+      raw.lowercased().hasPrefix("https://")
+    {
+      imageURL = URL(string: raw)
+    } else {
+      imageURL = nil
+    }
+    guard title != nil || authorName != nil || imageURL != nil else { return nil }
+    return SocialPostPreview(bodyText: title, authorName: authorName, imageURL: imageURL)
+  }
+
+  // MARK: - Instagram HTML parsing
+
+  private static func instagramBodyText(from html: String) -> String? {
+    // Try og:description first — it contains the full caption prefixed with engagement stats.
+    // Format: "120K likes, 527 comments - username on March 9, 2026: \"caption text\". "
+    if let ogDescription = extractMetaContent(from: html, property: "og:description") {
+      let cleaned = stripInstagramDescriptionPrefix(ogDescription)
+      if let normalized = normalizedText(cleaned) {
+        return normalized
+      }
+    }
+
+    // Fall back to og:title which includes "Author on Instagram: \"caption\""
+    if let ogTitle = extractMetaContent(from: html, property: "og:title") {
+      let cleaned = stripInstagramTitlePrefix(ogTitle)
+      if let normalized = normalizedText(cleaned) {
+        return normalized
+      }
+    }
+
+    return nil
+  }
+
+  private static func instagramImageURL(from html: String) -> URL? {
+    guard let raw = extractMetaContent(from: html, property: "og:image") else { return nil }
+    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard trimmed.lowercased().hasPrefix("https://") else { return nil }
+    return URL(string: trimmed)
+  }
+
+  private static func instagramAuthorName(from html: String) -> String? {
+    // twitter:title format: "Author Name (@handle) • Instagram reel"
+    if let twitterTitle = extractMetaContent(from: html, name: "twitter:title") {
+      let cleaned =
+        twitterTitle
+        .replacingOccurrences(of: " • Instagram reel", with: "")
+        .replacingOccurrences(of: " • Instagram photo", with: "")
+        .replacingOccurrences(of: " • Instagram video", with: "")
+        .replacingOccurrences(of: " • Instagram", with: "")
+        .replacingOccurrences(of: " \u{2022} Instagram reel", with: "")
+        .replacingOccurrences(of: " \u{2022} Instagram photo", with: "")
+        .replacingOccurrences(of: " \u{2022} Instagram video", with: "")
+        .replacingOccurrences(of: " \u{2022} Instagram", with: "")
+      return normalizedText(cleaned)
+    }
+    return nil
+  }
+
+  /// Strips the engagement stats prefix from Instagram og:description.
+  /// Input: "120K likes, 527 comments - pg_agi_ on March 9, 2026: \"caption\". "
+  /// Output: "caption"
+  private static func stripInstagramDescriptionPrefix(_ text: String) -> String {
+    // Pattern: "<stats> - <username> on <date>: "<caption>". "
+    // The quote-colon pattern marks the start of the caption.
+    let quoteColonPatterns = ["\": \"", "\": \u{201c}", ":\u{00a0}\u{201c}", ": \""]
+    for pattern in quoteColonPatterns {
+      if let range = text.range(of: pattern) {
+        var caption = String(text[range.upperBound...])
+        // Instagram wraps the caption in quotes and appends ". " at the end.
+        // Strip the specific trailing suffix rather than trimming all periods.
+        caption = caption.trimmingCharacters(in: .whitespacesAndNewlines)
+        for suffix in ["\". ", "\".", "\u{201d}. ", "\u{201d}.", "\"", "\u{201d}"] {
+          if caption.hasSuffix(suffix) {
+            caption = String(caption.dropLast(suffix.count))
+            break
+          }
+        }
+        caption = caption.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !caption.isEmpty { return caption }
+      }
+    }
+    return text
+  }
+
+  /// Strips the "Author on Instagram: " prefix from og:title.
+  /// Input: "Playing God with AGI on Instagram: \"caption\""
+  /// Output: "caption"
+  private static func stripInstagramTitlePrefix(_ text: String) -> String {
+    let pattern = " on Instagram: "
+    if let range = text.range(of: pattern, options: .caseInsensitive) {
+      var caption = String(text[range.upperBound...])
+      caption = caption.trimmingCharacters(in: .whitespacesAndNewlines)
+      // Strip surrounding quotes if present (the og:title wraps the caption in quotes).
+      for (open, close) in [("\"", "\""), ("\u{201c}", "\u{201d}")] {
+        if caption.hasPrefix(open), caption.hasSuffix(close), caption.count > 2 {
+          caption = String(caption.dropFirst(open.count).dropLast(close.count))
+          break
+        }
+      }
+      caption = caption.trimmingCharacters(in: .whitespacesAndNewlines)
+      if !caption.isEmpty { return caption }
+    }
+    return text
+  }
+
+  // MARK: - HTML meta tag extraction
+
+  private static func extractMetaContent(from html: String, property: String) -> String? {
+    // Match: <meta property="og:description" content="..." />
+    let pattern =
+      #"<meta\s+property="\#(NSRegularExpression.escapedPattern(for: property))"\s+content="([^"]*)"#
+    return firstRegexCapture(in: html, pattern: pattern)
+      .map(decodeHTMLEntities)
+  }
+
+  private static func extractMetaContent(from html: String, name: String) -> String? {
+    // Match: <meta name="twitter:title" content="..." />
+    let pattern =
+      #"<meta\s+name="\#(NSRegularExpression.escapedPattern(for: name))"\s+content="([^"]*)"#
+    return firstRegexCapture(in: html, pattern: pattern)
+      .map(decodeHTMLEntities)
+  }
+
+  private static func firstRegexCapture(in text: String, pattern: String) -> String? {
+    guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else {
+      return nil
+    }
+    let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
+    guard let match = regex.firstMatch(in: text, range: nsRange),
+      match.numberOfRanges > 1,
+      let captureRange = Range(match.range(at: 1), in: text)
+    else { return nil }
+    return String(text[captureRange])
+  }
+
+  private static func decodeHTMLEntities(_ text: String) -> String {
+    text
+      .replacingOccurrences(of: "&amp;", with: "&")
+      .replacingOccurrences(of: "&lt;", with: "<")
+      .replacingOccurrences(of: "&gt;", with: ">")
+      .replacingOccurrences(of: "&quot;", with: "\"")
+      .replacingOccurrences(of: "&#039;", with: "'")
+      .replacingOccurrences(of: "&#x27;", with: "'")
+      .replacingOccurrences(of: "&#064;", with: "@")
+      .replacingOccurrences(of: "&#x2022;", with: "\u{2022}")
+      .replacingOccurrences(of: "&apos;", with: "'")
+  }
+
+  private static func normalizedText(_ value: String?) -> String? {
+    guard let value else { return nil }
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
+  }
+}
+
 actor URLCanonicalizationService {
   static let shared = URLCanonicalizationService()
 
@@ -1413,8 +1820,10 @@ actor URLCanonicalizationService {
     }
 
     let resolved = await resolveUncached(sourceURL)
-    let isFacebookShare = SocialURLHeuristics.isFacebookShareURL(sourceURL)
-    if !isFacebookShare || resolved != sourceURL {
+    let skipCacheOnIdentity =
+      SocialURLHeuristics.isFacebookShareURL(sourceURL)
+      || sourceURL.host?.lowercased().hasSuffix("fb.watch") == true
+    if !skipCacheOnIdentity || resolved != sourceURL {
       cache[cacheKey] = resolved
     }
     return resolved
@@ -1441,7 +1850,9 @@ actor URLCanonicalizationService {
   }
 
   private func resolveUncached(_ sourceURL: URL) async -> URL {
-    guard SocialURLHeuristics.isFacebookShareURL(sourceURL) else {
+    let isFacebookShare = SocialURLHeuristics.isFacebookShareURL(sourceURL)
+    let isFbWatch = sourceURL.host?.lowercased().hasSuffix("fb.watch") == true
+    guard isFacebookShare || isFbWatch else {
       return sourceURL
     }
 
@@ -1470,10 +1881,10 @@ actor URLCanonicalizationService {
         + " (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
       forHTTPHeaderField: "User-Agent"
     )
-    request.timeoutInterval = SocialVideoTimingDefaults.urlCanonicalizationRequestTimeout
+    request.timeoutInterval = SocialVideoTimingDefaults.lightweightFetchTimeout
     return await FirstRedirectResolver.resolve(
       request: request,
-      timeout: SocialVideoTimingDefaults.urlCanonicalizationRequestTimeout
+      timeout: SocialVideoTimingDefaults.lightweightFetchTimeout
     )
   }
 
@@ -1489,7 +1900,7 @@ actor URLCanonicalizationService {
       "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
       forHTTPHeaderField: "Accept"
     )
-    request.timeoutInterval = SocialVideoTimingDefaults.urlCanonicalizationRequestTimeout
+    request.timeoutInterval = SocialVideoTimingDefaults.lightweightFetchTimeout
 
     do {
       let (data, response) = try await URLSession.shared.data(for: request)
@@ -1515,9 +1926,9 @@ actor URLCanonicalizationService {
     }
   }
 
-  private func canonicalFacebookURL(from candidateURL: URL) -> URL? {
-    if let loginNextURL = facebookLoginNextURL(from: candidateURL) {
-      return canonicalFacebookURL(from: loginNextURL)
+  private func canonicalFacebookURL(from candidateURL: URL, depth: Int = 3) -> URL? {
+    if depth > 0, let loginNextURL = facebookLoginNextURL(from: candidateURL) {
+      return canonicalFacebookURL(from: loginNextURL, depth: depth - 1)
     }
 
     let parts = candidateURL.pathComponents
@@ -1604,7 +2015,7 @@ actor URLCanonicalizationService {
       forHTTPHeaderField: "User-Agent"
     )
     request.setValue("application/json", forHTTPHeaderField: "Accept")
-    request.timeoutInterval = SocialVideoTimingDefaults.urlCanonicalizationRequestTimeout
+    request.timeoutInterval = SocialVideoTimingDefaults.lightweightFetchTimeout
 
     do {
       let (data, response) = try await URLSession.shared.data(for: request)
@@ -1618,7 +2029,7 @@ actor URLCanonicalizationService {
       guard
         let rawEmbedURL = Self.firstCapturedGroup(
           in: payload.html,
-          pattern: #"<iframe[^>]+src=['"]([^'"]+)['"][^>]*>"#
+          pattern: #"<iframe[^>]*\ssrc=['"]([^'"]+)['"][^>]*>"#
         )
       else {
         return nil

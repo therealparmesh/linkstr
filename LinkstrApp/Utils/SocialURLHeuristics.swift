@@ -34,7 +34,9 @@ enum SocialURLHeuristics {
   }
 
   static func isYouTubeHost(_ url: URL) -> Bool {
-    hostMatches(url, domain: "youtube.com") || hostMatches(url, domain: "youtu.be")
+    hostMatches(url, domain: "youtube.com")
+      || hostMatches(url, domain: "youtu.be")
+      || hostMatches(url, domain: "youtube-nocookie.com")
   }
 
   static func isRumbleHost(_ url: URL) -> Bool {
@@ -65,6 +67,11 @@ enum SocialURLHeuristics {
 
     let parts = url.pathComponents.map { $0.lowercased() }
     if parts.contains("video") {
+      return true
+    }
+
+    // tiktok.com/t/<code> short links redirect to video pages.
+    if parts.contains("t") {
       return true
     }
 
@@ -148,6 +155,42 @@ enum SocialURLHeuristics {
     return parts[(statusIndex + 2)...].contains("video")
   }
 
+  static func isYouTubeVideoURL(_ url: URL) -> Bool {
+    guard isYouTubeHost(url) else { return false }
+    guard let host = url.host?.lowercased() else { return false }
+
+    // youtu.be short links are always video links
+    if hostMatches(host, domain: "youtu.be") { return true }
+
+    let parts = url.pathComponents
+      .map { $0.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "/")) }
+      .filter { !$0.isEmpty }
+
+    // /watch?v=, /shorts/, /embed/, /live/, /v/
+    if parts.first == "watch" {
+      let queryItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
+      return queryItems?.contains(where: { $0.name == "v" }) == true
+    }
+    let videoPathPrefixes = ["shorts", "embed", "live", "v"]
+    if let first = parts.first, videoPathPrefixes.contains(first), parts.count >= 2 {
+      return true
+    }
+    return false
+  }
+
+  static func isRumbleVideoURL(_ url: URL) -> Bool {
+    guard isRumbleHost(url) else { return false }
+    let parts = url.pathComponents
+      .map { $0.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "/")) }
+      .filter { !$0.isEmpty }
+    guard let first = parts.first else { return false }
+
+    // /embed/xxx/ or /vXXXXX-title.html
+    if first == "embed", parts.count >= 2 { return true }
+    if first.hasPrefix("v"), first.contains("-") || first.hasSuffix(".html") { return true }
+    return false
+  }
+
   static func twitterStatusID(from sourceURL: URL) -> String? {
     let parts = normalizedPathComponents(for: sourceURL)
     guard let statusIndex = parts.firstIndex(of: "status"), statusIndex + 1 < parts.count else {
@@ -215,7 +258,7 @@ enum SocialURLHeuristics {
       let queryItems = components.queryItems
     else { return nil }
 
-    for key in ["shortcode", "media_id", "igshid"] {
+    for key in ["shortcode", "media_id"] {
       if let value = queryItems.first(where: { $0.name.lowercased() == key })?.value,
         let token = normalizedToken(value, minLength: 5, allowDigitsOnly: false)
       {

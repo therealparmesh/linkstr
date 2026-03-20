@@ -89,14 +89,14 @@ Open Settings to manage relays.
 
 linkstr accepts normal web URLs, but in-app playback is provider-dependent.
 
-**Extraction-first playback** (local playback attempted first, embed fallback available):
+**Extraction-preferred** (local playback attempted first, embed fallback available):
 
 - TikTok videos
 - Instagram Reels
 - Facebook Reels
 - Twitter/X statuses — only when provider metadata confirms video is present
 
-**Embed-first playback** (web player only, no local extraction):
+**Embed-only** (web player only, no local extraction):
 
 - YouTube
 - Rumble

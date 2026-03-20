@@ -1,6 +1,6 @@
 # linkstr
 
-_Last updated: March 14, 2026_
+_Last updated: March 20, 2026_
 
 linkstr is an iOS app for private link sharing on [Nostr](https://nostr.com). You create private sessions, share links with people you trust, react with emojis, and play supported video directly inside the app when a provider allows it.
 
@@ -231,21 +231,16 @@ linkstr payloads are JSON-encoded and delivered through Nostr gift-wrap direct m
 - `root_delete`
 - `reaction`
 
-**Ingest processing rules:**
+**Ingest rules:**
 
-- Ignore anything that cannot be decoded or validated.
-- Deduplicate by event ID.
-- If your own root comes back through more than one gift-wrap, merge the extra transport IDs into the same stored or staged root instead of creating duplicate posts.
-- `session_create` requires both sender and receiver in the snapshot member set. For an existing session it is accepted only from the stored creator pubkey.
-- `session_members` is accepted only from the stored creator pubkey. It can bootstrap a missing session when the snapshot includes sender, receiver, and a non-empty session name. Snapshots must include the creator pubkey.
-- Accepted session events update the stored session row and membership snapshot.
-- Live relay subscriptions use `since` filters to stay focused on new events. The `since` value accounts for the NIP-59 gift-wrap timestamp obfuscation window (up to two days) so that newly published gift-wraps with randomized backdated `created_at` values are not filtered out.
-- Root posts are persisted only when sender and receiver are active at the event timestamp. Live root ingest additionally requires both to be active in the latest local membership snapshot.
-- Out-of-order root posts are staged in memory until a valid session snapshot arrives.
-- Out-of-order root deletes are staged until the target root exists locally and the delete sender matches.
-- If a relay connects late, the live relay session resets backfill coverage and retries that history pass without tearing down the whole app-level relay lifecycle.
-- linkstr delete notices remove matching stored root posts only when the delete sender matches the original post sender; they do not persist speculative tombstones before that validation exists.
-- Reactions are upserted only when sender and receiver are active at the event timestamp and the root post exists locally. Out-of-order reactions are staged until the root arrives, then retried against the same membership rules. Live reaction ingest additionally requires both to be active in the latest local membership snapshot.
+- Ignore anything that cannot be decoded or validated. Deduplicate by event ID.
+- Duplicate gift-wraps for the same root merge transport IDs into the existing stored post instead of creating duplicates.
+- `session_create` requires both sender and receiver in the member set. For an existing session it is accepted only from the stored creator.
+- `session_members` is accepted only from the stored creator. It can bootstrap a missing session when the snapshot includes sender, receiver, and a non-empty session name.
+- Root posts and reactions are persisted only when sender and receiver are active at the event timestamp. Out-of-order events are staged in memory until the missing dependency arrives.
+- Delete notices are applied only when the delete sender matches the original root sender.
+- Late relay connections widen backfill coverage and retry staged events without tearing down the app-level relay lifecycle.
+- Live relay subscriptions use `since` filters that account for the gift-wrap timestamp obfuscation window so recently published events are not filtered out.
 
 ### Notifications
 
@@ -259,23 +254,22 @@ linkstr payloads are JSON-encoded and delivered through Nostr gift-wrap direct m
 
 ### Media and link behavior
 
-URL classification drives playback mode (extraction, embed, or link fallback). Canonicalization handles mobile host variants (for example, `m.facebook.com`).
+URL classification drives playback mode: extraction, embed, or link fallback. Mobile host variants (e.g. `m.facebook.com`) are canonicalized automatically.
 
-#### Extraction vs. embed
+#### Playback modes
 
 **Extraction** downloads the video file locally for native playback:
 
-- Uses the system video player with full controls.
+- System video player with full controls.
 - Extracted media can be saved to Photos or Files.
 - Works offline once cached.
-- The downloaded video cache auto-trims with a least-recently-used policy once device-local video cache exceeds approximately 1 GB.
+- Video cache auto-trims at approximately 1 GB with least-recently-used eviction.
 
 **Embed** loads the provider's web player in an inline web view:
 
 - Requires network connectivity.
-- Subject to provider playback restrictions and UX.
+- Subject to provider playback restrictions.
 - Fullscreen depends on provider iframe support.
-- Hidden provider-sniff web views use non-persistent website data and reject non-web navigation schemes.
 
 #### Provider support
 
@@ -293,49 +287,42 @@ URL classification drives playback mode (extraction, embed, or link fallback). C
 - Instagram non-Reel posts (`/p/`, `/tv/`)
 - Facebook non-Reel videos (`/videos/`)
 
-Twitter/X non-video statuses prefer official tweet embeds with deferred reveal and live height measurement, falling back to browser open otherwise. Generic links fall back to open-in-browser.
+Non-video provider URLs (channel pages, profiles, etc.) fall back to open-in-browser.
 
 #### Playback behavior
 
-- For extraction-capable providers, local playback is attempted first with explicit controls to switch to embed mode.
-- Local and embed action rows are normalized across post detail and shared-link detail surfaces.
-- Media playback surfaces temporarily acquire an `AVAudioSession` playback category while on-screen, so audio plays even when the iPhone silent switch is enabled.
-- In local playback mode with a cached file, users can export via **Save…**: save to Photos (requests photos add-only permission) or save to Files (document export flow, no broad media permission).
-- If extraction fails, embed mode remains available and offers retry-local plus Safari open actions.
-- Canonical TikTok post URLs prefer exact `aweme_id` API playback candidates and avoid page-sniff fallback when exact extraction fails, to reduce accidental related-video matches.
+- For extraction-preferred providers, local playback is attempted first with explicit controls to switch to embed mode.
+- If extraction fails, embed mode remains available with retry-local and open-in-browser actions.
+- Action rows are normalized across post detail and shared-link detail surfaces.
+- Audio plays even when the iPhone silent switch is enabled.
+- In local playback mode with a cached file, users can export via **Save…** to Photos or Files.
 
-**Twitter/X status handling** is resolved at runtime:
+**Twitter/X statuses** are resolved at runtime:
 
 - Video statuses use extraction-preferred playback.
-- Non-video statuses use the official X widgets render path, gated by `publish.twitter.com/oembed` availability.
-- Embedded tweet taps that navigate away from the widget open externally instead of silently dying inside `WKWebView`.
-- If official tweet embed resolution fails, the fallback is a regular browser link.
+- Non-video statuses use official tweet embeds when available, falling back to open-in-browser.
+- Embedded tweet taps that navigate away from the widget open externally.
 
-#### Embed URL patterns
+#### Embed URLs
 
-Embed URLs prefer provider-native patterns where available:
+| Provider  | Pattern                                                   |
+| --------- | --------------------------------------------------------- |
+| TikTok    | Desktop website (`/@_/video/<id>`)                        |
+| Instagram | Desktop website (`/reel/<shortcode>/`, `/p/<shortcode>/`) |
+| Facebook  | `/plugins/video.php`                                      |
+| YouTube   | `/embed`                                                  |
+| Rumble    | oEmbed iframe URL                                         |
+| Twitter/X | Official widget factory (`widgets.js` / `createTweet`)    |
 
-| Provider  | Pattern              |
-| --------- | -------------------- |
-| TikTok    | `embed/v2`           |
-| Instagram | `/embed`             |
-| Facebook  | `/plugins/video.php` |
-| YouTube   | `/embed`             |
-| Rumble    | oEmbed iframe URL    |
+Embedded web playback allows provider-element fullscreen when supported.
 
-- Twitter/X embeds use the official X widget factory (`widgets.js` / `createTweet`) instead of rendering the raw oEmbed fragment directly.
-- Facebook videos and Reels use Facebook plugin embed URLs (`/plugins/video.php`) with canonicalized `href` targets.
-- Rumble embeds are resolved from provider oEmbed iframe URLs when available.
-- Embedded web playback allows provider-element fullscreen when supported by the provider and iframe context.
+#### Metadata
 
-#### Media actions and metadata
-
-- Media actions are normalized: one action button uses full width; two action buttons split width evenly with spacing.
-- Metadata hydration fetches title and thumbnail asynchronously for root posts.
-- Twitter/X status previews prefer the Twitter-specific metadata path for author, title, and media thumbnails before falling back to generic `LinkPresentation` metadata.
-- Opening a session lazily retries missing metadata for posts as they scroll into view. Opening post detail retries directly when titles are missing, local thumbnail files are missing, or expected provider thumbnails are absent.
+- Title and thumbnail are fetched asynchronously for root posts.
+- Twitter/X, Instagram, TikTok, and Rumble use provider-specific metadata paths before falling back to generic `LinkPresentation`.
+- Missing metadata is retried lazily when posts scroll into view or when post detail is opened.
 - Missing local thumbnail files are treated as stale and re-fetched.
-- Settings → Storage can clear hydrated previews and cached media for the current account without deleting posts, and shows an estimate of how much local storage can be cleared.
+- Settings → Storage can clear cached media and hydrated previews without deleting posts.
 
 ### Contacts
 
@@ -376,21 +363,19 @@ Embed URLs prefer provider-native patterns where available:
 
 ### Local data and security
 
-**Persisted local entities:**
+**Persisted local data:**
 
 - Relay configuration and enabled state.
 - Contacts and private aliases.
-- Account-scoped app state (follow-list recency watermark).
 - Sessions, member snapshots, membership intervals, root posts, post deletion watermarks, reactions, read state, and archive state.
-- Cached media references and metadata hydration state.
+- Cached media references, downloaded videos, and metadata hydration state.
+- Account-scoped app state (follow-list recency watermark).
 
 **Storage and caching:**
 
 - SwiftData persistence is local-first and survives app relaunch.
-- Managed thumbnails and cached video files live under app-owned directories; cleanup only removes files from those managed paths.
-- Cached video files live under `Library/Caches` and are treated as disposable device cache.
-- The app enforces a least-recently-used video cache cap of approximately 1 GB for downloaded local playback media.
-- Settings → Storage can purge cached media plus hydrated preview titles and thumbnails for the signed-in account and let previews rebuild lazily.
+- Cached video files live under `Library/Caches` and are treated as disposable device cache with LRU eviction at approximately 1 GB.
+- Settings → Storage can purge cached media and hydrated previews for the signed-in account and let previews rebuild lazily.
 
 **Scoping and encryption:**
 

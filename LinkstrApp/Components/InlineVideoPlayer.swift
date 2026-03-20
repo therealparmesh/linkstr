@@ -160,8 +160,10 @@ struct AdaptiveVideoPlaybackView: View {
         resolvedMediaStrategy = nil
         let canonical = await URLCanonicalizationService.shared.canonicalPlaybackURL(for: sourceURL)
         canonicalSourceURL = canonical
-        isResolvingPresentation = SocialURLHeuristics.isTwitterStatusURL(canonical)
-        if isResolvingPresentation {
+        let isTwitter = SocialURLHeuristics.isTwitterStatusURL(canonical)
+        let isRumble = URLClassifier.classify(canonical) == .rumble
+        isResolvingPresentation = isTwitter || isRumble
+        if isTwitter {
           let twitterPresentation =
             await TwitterStatusResolutionService.shared.resolvedPresentation(for: canonical)
           resolvedMediaStrategy = twitterPresentation?.strategy ?? .link
@@ -533,10 +535,6 @@ struct AdaptiveVideoPlaybackView: View {
   private func resolvedOrFallbackEmbedSource(_ fallback: URL) -> EmbeddedWebSource {
     if let preferredEmbedSource {
       return preferredEmbedSource
-    }
-
-    if URLClassifier.classify(effectiveSourceURL) == .rumble {
-      return .url(effectiveSourceURL)
     }
 
     return .url(fallback)
