@@ -4,26 +4,28 @@ copy/paste-ready fields for app store connect.
 
 ## promotional text
 
-save, organize, and share links and social media videos privately, solo or in groups, with in-app playback that skips clunky mobile sites and app-store redirects.
+save social media videos and links in one place — extract tiktoks, reels, and more for in-app and offline playback.
 
 ## description
 
-linkstr is a private place to save, organize, and share links and social media videos, solo or in groups.
+linkstr is a link manager with built-in video extraction for social media.
 
-keep everything in one session instead of scattered across texts, dms, and apps. open supported social links in-app, download eligible media for offline access, and avoid broken mobile pages and app-store redirects.
+save links from tiktok, instagram, facebook, x/twitter, youtube, and rumble into organized sessions. supported videos play inline and can be downloaded for offline access — no switching apps, no broken mobile pages, no app-store redirects.
 
-private by design
+save and extract
 
-- solo or group sessions for friends, family, or projects
-- no phone number or email required
-- no ads, analytics, or tracking sdks
-
-watch and save
-
-- in-app playback for supported social video links
-- download eligible media for offline access
+- collect social media links into organized sessions
+- in-app playback for supported video links
+- download eligible videos for offline access
 - save to photos or files
 - open the original source anytime
+
+private by default
+
+- no account, phone number, or email required
+- no ads, analytics, or tracking sdks
+- use solo as a personal link collection
+- or create group sessions with friends, family, or collaborators
 
 built on nostr
 
@@ -32,13 +34,13 @@ built on nostr
 - create, import, or export your nostr identity
 - your relays, your keys, your data
 
-supported links
+supported platforms
 
 - tiktok, instagram, facebook, youtube, x/twitter, rumble
-- plus generic web links
+- plus any web link
 
 use responsibly: only download or share content you have rights to use, and follow source platform terms.
 
 ## keywords
 
-social,downloader,offline,bookmark,save,organizer,nostr,encrypted,group,family,friend,inbox
+social,video,downloader,offline,save,organizer,nostr,encrypted,private,tiktok,reels,links
