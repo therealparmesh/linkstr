@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import UIKit
 @preconcurrency import UserNotifications
@@ -6,9 +7,6 @@ extension Notification.Name {
   static let linkstrPushDeviceTokenDidChange = Notification.Name(
     "linkstr.pushDeviceTokenDidChange"
   )
-  static let linkstrPushNotificationTapped = Notification.Name(
-    "linkstr.pushNotificationTapped"
-  )
 }
 
 @MainActor
@@ -16,6 +14,17 @@ final class PushNotificationService: NSObject {
   static let shared = PushNotificationService()
 
   private(set) var deviceTokenHex: String?
+
+  /// Conversation ID from a tapped push notification, stored so it survives
+  /// cold-launch timing where SwiftUI subscribers aren't yet registered.
+  @Published var pendingConversationID: String?
+
+  /// Reads and clears the pending conversation ID in a single call.
+  func consumePendingConversationID() -> String? {
+    guard let id = pendingConversationID else { return nil }
+    pendingConversationID = nil
+    return id
+  }
 
   private override init() {
     super.init()
@@ -102,11 +111,9 @@ extension PushNotificationService: UNUserNotificationCenterDelegate {
     if let conversationID = userInfo["conversation_id"] as? String,
       !conversationID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     {
-      NotificationCenter.default.post(
-        name: .linkstrPushNotificationTapped,
-        object: nil,
-        userInfo: ["conversation_id": conversationID]
-      )
+      Task { @MainActor in
+        PushNotificationService.shared.pendingConversationID = conversationID
+      }
     }
     completionHandler()
   }

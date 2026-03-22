@@ -124,11 +124,11 @@ struct LinkstrAppMain: App {
                 readyContext.session.handlePushDeviceTokenDidChange()
               }
               .onReceive(
-                NotificationCenter.default.publisher(
-                  for: .linkstrPushNotificationTapped
-                )
-              ) { notification in
-                if let conversationID = notification.userInfo?["conversation_id"] as? String {
+                PushNotificationService.shared.$pendingConversationID
+              ) { _ in
+                if let conversationID = PushNotificationService.shared
+                  .consumePendingConversationID()
+                {
                   readyContext.session.pendingSessionNavigationID = conversationID
                 }
               }

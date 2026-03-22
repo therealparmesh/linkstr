@@ -80,8 +80,15 @@ final class SocialVideoExtractionService: NSObject {
       // providers that embed CDN media URLs in server-rendered HTML
       // (Instagram, Facebook).  Only fall back to the heavier headless-
       // WebView sniff (up to 12s) when the scrape finds nothing usable.
-      let scrapeCandidates = await scrapeMediaURLsFromPage(
+      // Retry the scrape once — Instagram occasionally returns a login
+      // wall or empty page on the first attempt.
+      var scrapeCandidates = await scrapeMediaURLsFromPage(
         sourceURL: sourceURL, userAgent: userAgent)
+      if scrapeCandidates.isEmpty {
+        try? await Task.sleep(for: .milliseconds(300))
+        scrapeCandidates = await scrapeMediaURLsFromPage(
+          sourceURL: sourceURL, userAgent: userAgent)
+      }
 
       if !scrapeCandidates.isEmpty {
         let ranked = rankCandidates(scrapeCandidates, sourceURL: sourceURL)
@@ -1760,18 +1767,32 @@ enum SocialPostHTMLParser {
   // MARK: - HTML meta tag extraction
 
   private static func extractMetaContent(from html: String, property: String) -> String? {
-    // Match: <meta property="og:description" content="..." />
-    let pattern =
-      #"<meta\s+property="\#(NSRegularExpression.escapedPattern(for: property))"\s+content="([^"]*)"#
-    return firstRegexCapture(in: html, pattern: pattern)
+    let escaped = NSRegularExpression.escapedPattern(for: property)
+    // Try property-first: <meta property="og:description" ... content="..." />
+    let forwardPattern =
+      #"<meta\s+property="\#(escaped)"[^>]*?\s+content="([^"]*)"#
+    if let result = firstRegexCapture(in: html, pattern: forwardPattern) {
+      return decodeHTMLEntities(result)
+    }
+    // Try content-first: <meta content="..." ... property="og:description" />
+    let reversePattern =
+      #"<meta\s+content="([^"]*)"[^>]*?\s+property="\#(escaped)""#
+    return firstRegexCapture(in: html, pattern: reversePattern)
       .map(decodeHTMLEntities)
   }
 
   private static func extractMetaContent(from html: String, name: String) -> String? {
-    // Match: <meta name="twitter:title" content="..." />
-    let pattern =
-      #"<meta\s+name="\#(NSRegularExpression.escapedPattern(for: name))"\s+content="([^"]*)"#
-    return firstRegexCapture(in: html, pattern: pattern)
+    let escaped = NSRegularExpression.escapedPattern(for: name)
+    // Try name-first: <meta name="twitter:title" ... content="..." />
+    let forwardPattern =
+      #"<meta\s+name="\#(escaped)"[^>]*?\s+content="([^"]*)"#
+    if let result = firstRegexCapture(in: html, pattern: forwardPattern) {
+      return decodeHTMLEntities(result)
+    }
+    // Try content-first: <meta content="..." ... name="twitter:title" />
+    let reversePattern =
+      #"<meta\s+content="([^"]*)"[^>]*?\s+name="\#(escaped)""#
+    return firstRegexCapture(in: html, pattern: reversePattern)
       .map(decodeHTMLEntities)
   }
 
