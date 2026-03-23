@@ -77,7 +77,7 @@ final class URLMetadataService {
 
   private func socialPostPreview(for url: URL) async -> LinkPreviewData? {
     let linkType = URLClassifier.classify(url)
-    guard linkType == .instagram || linkType == .tiktok else { return nil }
+    guard linkType == .instagram || linkType == .tiktok || linkType == .facebook else { return nil }
 
     guard let social = await SocialPostResolutionService.shared.preview(for: url) else {
       return nil

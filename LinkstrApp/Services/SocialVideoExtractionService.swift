@@ -68,6 +68,22 @@ final class SocialVideoExtractionService: NSObject {
       }
     }
 
+    if SocialURLHeuristics.isFacebookHost(sourceURL),
+      SocialURLHeuristics.isFacebookReelURL(sourceURL)
+        || SocialURLHeuristics.isFacebookVideoURL(sourceURL)
+    {
+      let ogVideoCandidates = await facebookOGVideoURLs(from: sourceURL)
+      let ranked = rankCandidates(ogVideoCandidates, sourceURL: sourceURL)
+      if let resolved = resolvePlayableMedia(
+        from: ranked,
+        sourceURL: sourceURL,
+        userAgent: Self.mobileUserAgent,
+        cookies: []
+      ) {
+        return resolved
+      }
+    }
+
     if SocialURLHeuristics.isTwitterStatusURL(sourceURL) {
       let summary = await TwitterStatusResolutionService.shared.mediaSummary(for: sourceURL)
       if summary.hasVideo == false {
@@ -231,6 +247,114 @@ final class SocialVideoExtractionService: NSObject {
     else { return nil }
 
     return canonical.appendingPathComponent("embed")
+  }
+
+  // MARK: - Facebook og:video extraction
+
+  /// Extracts direct CDN video URLs from Facebook's `og:video` meta tags.
+  /// Facebook embeds the playable `.mp4` URL in server-rendered HTML when
+  /// fetched with a mobile user-agent, making this faster and more reliable
+  /// than the generic scraper or headless WebView sniff.
+  private func facebookOGVideoURLs(from sourceURL: URL) async -> [URL] {
+    var request = URLRequest(url: sourceURL)
+    request.httpMethod = "GET"
+    request.setValue(Self.mobileUserAgent, forHTTPHeaderField: "User-Agent")
+    request.setValue(
+      "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      forHTTPHeaderField: "Accept"
+    )
+    request.timeoutInterval = SocialVideoTimingDefaults.lightweightFetchTimeout
+
+    do {
+      let (data, response) = try await URLSession.shared.data(for: request)
+      if let httpResponse = response as? HTTPURLResponse,
+        !(200..<400).contains(httpResponse.statusCode)
+      {
+        return []
+      }
+
+      guard
+        let html = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1)
+      else { return [] }
+
+      return Self.extractOGVideoURLs(fromHTML: html)
+    } catch {
+      return []
+    }
+  }
+
+  /// Parses `og:video`, `og:video:url`, and `og:video:secure_url` meta tags,
+  /// decodes HTML entities in the extracted URL, and returns all valid URLs.
+  private static func extractOGVideoURLs(fromHTML html: String) -> [URL] {
+    let patterns = [
+      #"<meta[^>]+property=['"]og:video(?::secure_url|:url)?['"][^>]+content=['"]([^'"]+)['"][^>]*>"#,
+      #"<meta[^>]+content=['"]([^'"]+)['"][^>]+property=['"]og:video(?::secure_url|:url)?['"][^>]*>"#,
+    ]
+
+    var seen = Set<String>()
+    var urls: [URL] = []
+
+    for pattern in patterns {
+      guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
+      else { continue }
+
+      let nsRange = NSRange(html.startIndex..<html.endIndex, in: html)
+      let matches = regex.matches(in: html, range: nsRange)
+
+      for match in matches {
+        guard match.numberOfRanges > 1,
+          let captureRange = Range(match.range(at: 1), in: html)
+        else { continue }
+
+        let raw = String(html[captureRange])
+        let decoded = decodeHTMLEntities(raw)
+        let lower = decoded.lowercased()
+
+        guard isLikelyMediaURLString(lower),
+          seen.insert(lower).inserted,
+          let url = URL(string: decoded)
+        else { continue }
+
+        urls.append(url)
+      }
+    }
+
+    return urls
+  }
+
+  private static func decodeHTMLEntities(_ text: String) -> String {
+    var result =
+      text
+      .replacingOccurrences(of: "&amp;", with: "&")
+      .replacingOccurrences(of: "&lt;", with: "<")
+      .replacingOccurrences(of: "&gt;", with: ">")
+      .replacingOccurrences(of: "&quot;", with: "\"")
+      .replacingOccurrences(of: "&apos;", with: "'")
+    result = replaceNumericHTMLEntities(result)
+    return result
+  }
+
+  private static func replaceNumericHTMLEntities(_ text: String) -> String {
+    guard let regex = try? NSRegularExpression(pattern: #"&#x([0-9A-Fa-f]+);|&#(\d+);"#) else {
+      return text
+    }
+    let nsText = text as NSString
+    let fullRange = NSRange(location: 0, length: nsText.length)
+    var result = text
+    for match in regex.matches(in: text, range: fullRange).reversed() {
+      guard let matchRange = Range(match.range, in: result) else { continue }
+      let scalar: UInt32?
+      if let hexRange = Range(match.range(at: 1), in: result) {
+        scalar = UInt32(result[hexRange], radix: 16)
+      } else if let decRange = Range(match.range(at: 2), in: result) {
+        scalar = UInt32(result[decRange], radix: 10)
+      } else {
+        scalar = nil
+      }
+      guard let scalar, let unicode = Unicode.Scalar(scalar) else { continue }
+      result.replaceSubrange(matchRange, with: String(unicode))
+    }
+    return result
   }
 
   // MARK: - TikTok feed API
@@ -481,8 +605,10 @@ final class SocialVideoExtractionService: NSObject {
 
       for match in matches {
         guard let range = Range(match.range, in: html) else { continue }
-        let candidate = String(html[range]).trimmingCharacters(
+        var candidate = String(html[range]).trimmingCharacters(
           in: CharacterSet(charactersIn: ")]},"))
+        // Decode HTML entities that survive in meta-tag or inline-JSON contexts
+        candidate = Self.decodeHTMLEntities(candidate)
         let lower = candidate.lowercased()
         guard Self.isLikelyMediaURLString(lower), seen.insert(lower).inserted,
           let url = URL(string: candidate)
@@ -1503,6 +1629,8 @@ actor SocialPostResolutionService {
       resolved = await fetchInstagramPreview(for: sourceURL)
     case .tiktok:
       resolved = await fetchTikTokPreview(for: sourceURL)
+    case .facebook:
+      resolved = await fetchFacebookPreview(for: sourceURL)
     default:
       return nil
     }
@@ -1519,6 +1647,8 @@ actor SocialPostResolutionService {
       return SocialURLHeuristics.instagramPostID(from: sourceURL)
     case .tiktok:
       return SocialURLHeuristics.tikTokVideoID(from: sourceURL)
+    case .facebook:
+      return SocialURLHeuristics.facebookVideoID(from: sourceURL)
     default:
       return nil
     }
@@ -1544,6 +1674,36 @@ actor SocialPostResolutionService {
       else { return nil }
 
       return SocialPostHTMLParser.instagramPreview(from: html)
+    } catch {
+      return nil
+    }
+  }
+
+  // MARK: - Facebook
+
+  private func fetchFacebookPreview(for sourceURL: URL) async -> SocialPostPreview? {
+    var request = URLRequest(url: sourceURL)
+    request.httpMethod = "GET"
+    request.timeoutInterval = SocialVideoTimingDefaults.apiRequestTimeout
+    request.setValue(
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15"
+        + " (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+      forHTTPHeaderField: "User-Agent"
+    )
+    request.setValue(
+      "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      forHTTPHeaderField: "Accept"
+    )
+
+    do {
+      let (data, response) = try await URLSession.shared.data(for: request)
+      guard let httpResponse = response as? HTTPURLResponse,
+        (200..<400).contains(httpResponse.statusCode),
+        let html = String(data: data, encoding: .utf8)
+          ?? String(data: data, encoding: .isoLatin1)
+      else { return nil }
+
+      return SocialPostHTMLParser.facebookPreview(from: html)
     } catch {
       return nil
     }
@@ -1588,9 +1748,9 @@ actor SocialPostResolutionService {
     switch linkType {
     case .twitter:
       return URLClassifier.mediaStrategy(for: url).allowsLocalPlaybackToggle
-    case .instagram, .tiktok:
+    case .instagram, .tiktok, .facebook:
       return true
-    case .facebook, .youtube, .rumble, .generic:
+    case .youtube, .rumble, .generic:
       return false
     }
   }
@@ -1601,7 +1761,7 @@ actor SocialPostResolutionService {
     switch linkType {
     case .twitter:
       return await TwitterStatusResolutionService.shared.preview(for: url)?.bodyText
-    case .instagram, .tiktok:
+    case .instagram, .tiktok, .facebook:
       return await shared.preview(for: url)?.bodyText
     default:
       return nil
@@ -1631,6 +1791,40 @@ enum SocialPostHTMLParser {
     }
     guard title != nil || authorName != nil || imageURL != nil else { return nil }
     return SocialPostPreview(bodyText: title, authorName: authorName, imageURL: imageURL)
+  }
+
+  static func facebookPreview(from html: String) -> SocialPostPreview? {
+    let bodyText = facebookBodyText(from: html)
+    let authorName = facebookAuthorName(from: html)
+    let imageURL = facebookImageURL(from: html)
+    guard bodyText != nil || authorName != nil || imageURL != nil else { return nil }
+    return SocialPostPreview(bodyText: bodyText, authorName: authorName, imageURL: imageURL)
+  }
+
+  // MARK: - Facebook HTML parsing
+
+  private static func facebookBodyText(from html: String) -> String? {
+    if let ogDescription = extractMetaContent(from: html, property: "og:description") {
+      return normalizedText(ogDescription)
+    }
+    return nil
+  }
+
+  private static func facebookAuthorName(from html: String) -> String? {
+    // og:title format: "Caption text | Author Name | Facebook"
+    guard let ogTitle = extractMetaContent(from: html, property: "og:title") else { return nil }
+    let parts = ogTitle.components(separatedBy: " | ")
+    // The author name is typically the second-to-last segment (before "Facebook").
+    guard parts.count >= 3 else { return nil }
+    let candidate = parts[parts.count - 2]
+    return normalizedText(candidate)
+  }
+
+  private static func facebookImageURL(from html: String) -> URL? {
+    guard let raw = extractMetaContent(from: html, property: "og:image") else { return nil }
+    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard trimmed.lowercased().hasPrefix("https://") else { return nil }
+    return URL(string: trimmed)
   }
 
   // MARK: - Instagram HTML parsing
@@ -1773,16 +1967,38 @@ enum SocialPostHTMLParser {
   }
 
   private static func decodeHTMLEntities(_ text: String) -> String {
-    text
+    var result =
+      text
       .replacingOccurrences(of: "&amp;", with: "&")
       .replacingOccurrences(of: "&lt;", with: "<")
       .replacingOccurrences(of: "&gt;", with: ">")
       .replacingOccurrences(of: "&quot;", with: "\"")
-      .replacingOccurrences(of: "&#039;", with: "'")
-      .replacingOccurrences(of: "&#x27;", with: "'")
-      .replacingOccurrences(of: "&#064;", with: "@")
-      .replacingOccurrences(of: "&#x2022;", with: "\u{2022}")
       .replacingOccurrences(of: "&apos;", with: "'")
+    result = replaceNumericHTMLEntities(result)
+    return result
+  }
+
+  private static func replaceNumericHTMLEntities(_ text: String) -> String {
+    guard let regex = try? NSRegularExpression(pattern: #"&#x([0-9A-Fa-f]+);|&#(\d+);"#) else {
+      return text
+    }
+    let nsText = text as NSString
+    let fullRange = NSRange(location: 0, length: nsText.length)
+    var result = text
+    for match in regex.matches(in: text, range: fullRange).reversed() {
+      guard let matchRange = Range(match.range, in: result) else { continue }
+      let scalar: UInt32?
+      if let hexRange = Range(match.range(at: 1), in: result) {
+        scalar = UInt32(result[hexRange], radix: 16)
+      } else if let decRange = Range(match.range(at: 2), in: result) {
+        scalar = UInt32(result[decRange], radix: 10)
+      } else {
+        scalar = nil
+      }
+      guard let scalar, let unicode = Unicode.Scalar(scalar) else { continue }
+      result.replaceSubrange(matchRange, with: String(unicode))
+    }
+    return result
   }
 
   private static func normalizedText(_ value: String?) -> String? {
