@@ -310,6 +310,27 @@ enum SocialURLHeuristics {
     return nil
   }
 
+  static func instagramCanonicalURL(for sourceURL: URL) -> URL? {
+    let rawParts = sourceURL.pathComponents
+      .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "/")) }
+      .filter { !$0.isEmpty }
+
+    for (index, part) in rawParts.enumerated() {
+      let lower = part.lowercased()
+      guard ["reel", "reels", "p", "tv"].contains(lower), index + 1 < rawParts.count else {
+        continue
+      }
+      let shortcode = rawParts[index + 1]
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .trimmingCharacters(in: CharacterSet(charactersIn: "/?&=#"))
+      guard shortcode.count >= 5 else { continue }
+      let marker = (lower == "reels") ? "reel" : lower
+      return URL(string: "https://www.instagram.com/\(marker)/\(shortcode)/")
+    }
+
+    return nil
+  }
+
   static func facebookVideoID(from sourceURL: URL) -> String? {
     if let id = pathToken(
       in: sourceURL,

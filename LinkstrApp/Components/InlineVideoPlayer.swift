@@ -9,8 +9,10 @@ import SwiftUI
 
 struct InlineVideoPlayer: View {
   let media: PlayableMedia
+  var onPlaybackFailed: (() -> Void)?
   @State private var player: AVPlayer?
   @State private var isShowingFullscreenPlayer = false
+  @State private var statusObservation: NSKeyValueObservation?
 
   var body: some View {
     ZStack(alignment: .topTrailing) {
@@ -48,7 +50,11 @@ struct InlineVideoPlayer: View {
           .background(Color.black)
       }
     }
-    .task {
+    .task(id: media.playbackURL) {
+      statusObservation?.invalidate()
+      statusObservation = nil
+      player?.pause()
+
       let item: AVPlayerItem
       if media.headers.isEmpty {
         item = AVPlayerItem(url: media.playbackURL)
@@ -57,10 +63,17 @@ struct InlineVideoPlayer: View {
           url: media.playbackURL, options: ["AVURLAssetHTTPHeaderFieldsKey": media.headers])
         item = AVPlayerItem(asset: asset)
       }
+      statusObservation = item.observe(\.status, options: [.new]) { observed, _ in
+        if observed.status == .failed {
+          Task { @MainActor in onPlaybackFailed?() }
+        }
+      }
       player = AVPlayer(playerItem: item)
     }
     .onDisappear {
       player?.pause()
+      statusObservation?.invalidate()
+      statusObservation = nil
     }
   }
 }
@@ -127,6 +140,7 @@ struct AdaptiveVideoPlaybackView: View {
   @State private var cachedLocalMedia: PlayableMedia?
   @State private var localCacheTask: Task<Void, Never>?
   @State private var localPlaybackMode: LocalPlaybackMode = .localPreferred
+  @State private var playbackCandidateIndex = 0
   @State private var extractionFallbackReason: String?
   @State private var exportTarget: LocalMediaExportTarget?
   @State private var fileExportItem: LocalFileExportItem?
@@ -185,6 +199,7 @@ struct AdaptiveVideoPlaybackView: View {
         isEmbeddedContentReady = false
         extractionState = nil
         extractionFallbackReason = nil
+        playbackCandidateIndex = 0
         localPlaybackMode = .localPreferred
         await prepareMediaIfNeeded()
       }
@@ -295,15 +310,23 @@ struct AdaptiveVideoPlaybackView: View {
   @ViewBuilder
   private func extractionPlaybackBlock(embedSource: EmbeddedWebSource) -> some View {
     switch extractionState {
-    case .ready(let media):
-      let exportFileURL = exportableLocalMediaURL(for: cachedLocalMedia ?? media)
-      VStack(alignment: .leading, spacing: 8) {
-        mediaSurface {
-          InlineVideoPlayer(media: media)
+    case .ready(let candidates):
+      if let media = currentPlaybackCandidate(from: candidates) {
+        let exportFileURL = exportableLocalMediaURL(for: cachedLocalMedia ?? media)
+        VStack(alignment: .leading, spacing: 8) {
+          mediaSurface {
+            InlineVideoPlayer(
+              media: media,
+              onPlaybackFailed: {
+                advancePlaybackCandidate(candidates: candidates)
+              })
+          }
+          extractionReadyActions(exportFileURL: exportFileURL)
         }
-        extractionReadyActions(exportFileURL: exportFileURL)
+        .frame(maxWidth: .infinity, alignment: .leading)
+      } else {
+        embedPlaybackBlock(embedSource: embedSource, allowsTryLocalPlayback: true)
       }
-      .frame(maxWidth: .infinity, alignment: .leading)
 
     case .cannotExtract:
       embedPlaybackBlock(embedSource: embedSource, allowsTryLocalPlayback: true)
@@ -436,11 +459,31 @@ struct AdaptiveVideoPlaybackView: View {
   private func retryLocalPlayback() {
     Task {
       localPlaybackMode = .localPreferred
+      playbackCandidateIndex = 0
       embeddedContentHeight = nil
       isEmbeddedContentReady = false
       extractionState = nil
       extractionFallbackReason = nil
       await prepareMediaIfNeeded()
+    }
+  }
+
+  private func currentPlaybackCandidate(from candidates: [PlayableMedia]) -> PlayableMedia? {
+    guard playbackCandidateIndex < candidates.count else { return nil }
+    return candidates[playbackCandidateIndex]
+  }
+
+  private func advancePlaybackCandidate(candidates: [PlayableMedia]) {
+    let nextIndex = playbackCandidateIndex + 1
+    if nextIndex < candidates.count {
+      playbackCandidateIndex = nextIndex
+      let newMedia = candidates[nextIndex]
+      if !newMedia.isLocalFile {
+        scheduleLocalCachingIfNeeded(sourceURL: effectiveSourceURL, media: newMedia)
+      }
+    } else {
+      extractionFallbackReason = "none of the extracted video streams were playable."
+      localPlaybackMode = .embedPreferred
     }
   }
 
@@ -477,32 +520,35 @@ struct AdaptiveVideoPlaybackView: View {
         }
       }
       cachedLocalMedia = cached
-      extractionState = .ready(cached)
+      extractionState = .ready([cached])
       extractionFallbackReason = nil
       return
     }
 
     if let cachedLocalMedia {
-      extractionState = .ready(cachedLocalMedia)
+      extractionState = .ready([cachedLocalMedia])
       extractionFallbackReason = nil
       return
     }
 
     let result = await SocialVideoExtractionService.shared.extractPlayableMedia(
       from: playbackSourceURL)
+    playbackCandidateIndex = 0
     extractionState = result
 
     switch result {
-    case .ready(let media):
+    case .ready(let candidates):
       extractionFallbackReason = nil
-      if media.isLocalFile {
-        Task {
-          await VideoCacheService.shared.touchCachedMedia(at: media.playbackURL)
+      if let media = candidates.first {
+        if media.isLocalFile {
+          Task {
+            await VideoCacheService.shared.touchCachedMedia(at: media.playbackURL)
+          }
+          cachedLocalMedia = media
+          persistLocalMedia?(playbackSourceURL, media)
+        } else {
+          scheduleLocalCachingIfNeeded(sourceURL: playbackSourceURL, media: media)
         }
-        cachedLocalMedia = media
-        persistLocalMedia?(playbackSourceURL, media)
-      } else {
-        scheduleLocalCachingIfNeeded(sourceURL: playbackSourceURL, media: media)
       }
     case .cannotExtract(let reason):
       extractionFallbackReason = reason

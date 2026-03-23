@@ -1,4 +1,3 @@
-import AVFoundation
 import Foundation
 import WebKit
 
@@ -9,7 +8,7 @@ struct PlayableMedia {
 }
 
 enum ExtractionState {
-  case ready(PlayableMedia)
+  case ready([PlayableMedia])
   case cannotExtract(String)
 }
 
@@ -42,7 +41,7 @@ final class SocialVideoExtractionService: NSObject {
     if SocialURLHeuristics.isTikTokHost(sourceURL) {
       if SocialURLHeuristics.tikTokVideoID(from: sourceURL) != nil {
         let directTikTokCandidates = await loadTikTokAPIPlayURLs(from: sourceURL)
-        if let resolved = await resolvePlayableMedia(
+        if let resolved = resolvePlayableMedia(
           from: directTikTokCandidates,
           sourceURL: sourceURL,
           userAgent: Self.tikTokAPIUserAgent,
@@ -50,11 +49,22 @@ final class SocialVideoExtractionService: NSObject {
         ) {
           return resolved
         }
+      }
+    }
 
-        // TikTok API fast-path failed; prefer embed fallback over the generic
-        // WebView sniff which risks extracting the wrong clip from TikTok's
-        // autoplay feed.
-        return .cannotExtract("could not find a usable video stream for this post.")
+    if SocialURLHeuristics.isInstagramHost(sourceURL),
+      let embedPageURL = instagramEmbedPageURL(from: sourceURL)
+    {
+      let candidates = await scrapeMediaURLsFromPage(
+        sourceURL: embedPageURL, userAgent: Self.desktopUserAgent)
+      let ranked = rankCandidates(candidates, sourceURL: sourceURL)
+      if let resolved = resolvePlayableMedia(
+        from: ranked,
+        sourceURL: sourceURL,
+        userAgent: Self.desktopUserAgent,
+        cookies: []
+      ) {
+        return resolved
       }
     }
 
@@ -64,12 +74,11 @@ final class SocialVideoExtractionService: NSObject {
         return .cannotExtract("this post does not include a playable video.")
       }
 
-      if let resolved = await resolvePlayableMedia(
+      if let resolved = resolvePlayableMedia(
         from: summary.candidateURLs,
         sourceURL: sourceURL,
         userAgent: Self.mobileUserAgent,
-        cookies: [],
-        assumePlayableCandidates: true
+        cookies: []
       ) {
         return resolved
       }
@@ -78,10 +87,10 @@ final class SocialVideoExtractionService: NSObject {
     for userAgent in [Self.mobileUserAgent, Self.desktopUserAgent] {
       // Try a lightweight HTML scrape first — it resolves in ~1-2s for
       // providers that embed CDN media URLs in server-rendered HTML
-      // (Instagram, Facebook).  Only fall back to the heavier headless-
+      // (e.g. Facebook).  Only fall back to the heavier headless-
       // WebView sniff (up to 12s) when the scrape finds nothing usable.
-      // Retry the scrape once — Instagram occasionally returns a login
-      // wall or empty page on the first attempt.
+      // Retry the scrape once in case the provider returns a login wall
+      // or empty page on the first attempt.
       var scrapeCandidates = await scrapeMediaURLsFromPage(
         sourceURL: sourceURL, userAgent: userAgent)
       if scrapeCandidates.isEmpty {
@@ -92,7 +101,7 @@ final class SocialVideoExtractionService: NSObject {
 
       if !scrapeCandidates.isEmpty {
         let ranked = rankCandidates(scrapeCandidates, sourceURL: sourceURL)
-        if let resolved = await resolvePlayableMedia(
+        if let resolved = resolvePlayableMedia(
           from: ranked,
           sourceURL: sourceURL,
           userAgent: userAgent,
@@ -110,7 +119,7 @@ final class SocialVideoExtractionService: NSObject {
       guard !candidates.isEmpty else { continue }
 
       let rankedCandidates = rankCandidates(candidates, sourceURL: sourceURL)
-      if let resolved = await resolvePlayableMedia(
+      if let resolved = resolvePlayableMedia(
         from: rankedCandidates,
         sourceURL: sourceURL,
         userAgent: userAgent,
@@ -154,33 +163,25 @@ final class SocialVideoExtractionService: NSObject {
     from candidates: [URL],
     sourceURL: URL,
     userAgent: String,
-    cookies: [HTTPCookie],
-    assumePlayableCandidates: Bool = false
-  ) async -> ExtractionState? {
-    // Filter to HTTPS candidates that pass identity matching (cheap, synchronous).
+    cookies: [HTTPCookie]
+  ) -> ExtractionState? {
+    // Filter to HTTPS candidates that aren't known-bad assets (logos,
+    // watermarks, etc.) and pass identity matching.  All checks are
+    // cheap and synchronous so we never consume short-lived CDN tokens
+    // before the player gets to use them.
     let viable = candidates.filter { url in
       guard url.scheme?.lowercased() == "https" else { return false }
+      guard !isKnownBadCandidate(url) else { return false }
       return matchesSourceIdentity(url, sourceURL: sourceURL)
     }
     guard !viable.isEmpty else { return nil }
 
-    if assumePlayableCandidates {
-      let url = viable[0]
+    let mediaList = viable.map { url in
       let headers = buildHeaders(
         for: url, sourcePageURL: sourceURL, cookies: cookies, userAgent: userAgent)
-      return .ready(PlayableMedia(playbackURL: url, headers: headers, isLocalFile: false))
+      return PlayableMedia(playbackURL: url, headers: headers, isLocalFile: false)
     }
-
-    // Validate candidates sequentially — CDN tokens (especially Instagram/
-    // Facebook) are often single-use or connection-limited, so concurrent
-    // AVURLAsset loads on sibling URLs cause intermittent auth failures.
-    for candidateURL in viable {
-      let headers = buildHeaders(
-        for: candidateURL, sourcePageURL: sourceURL, cookies: cookies, userAgent: userAgent)
-      guard await isLikelyPlayable(candidateURL, headers: headers) else { continue }
-      return .ready(PlayableMedia(playbackURL: candidateURL, headers: headers, isLocalFile: false))
-    }
-    return nil
+    return .ready(mediaList)
   }
 
   private func matchesSourceIdentity(_ candidateURL: URL, sourceURL: URL) -> Bool {
@@ -218,6 +219,18 @@ final class SocialVideoExtractionService: NSObject {
     }
 
     return true
+  }
+
+  // MARK: - Instagram embed page
+
+  private func instagramEmbedPageURL(from sourceURL: URL) -> URL? {
+    guard
+      SocialURLHeuristics.isInstagramReelURL(sourceURL)
+        || SocialURLHeuristics.isInstagramVideoPostURL(sourceURL),
+      let canonical = SocialURLHeuristics.instagramCanonicalURL(for: sourceURL)
+    else { return nil }
+
+    return canonical.appendingPathComponent("embed")
   }
 
   // MARK: - TikTok feed API
@@ -378,40 +391,6 @@ final class SocialVideoExtractionService: NSObject {
     }
 
     return score
-  }
-
-  private func isLikelyPlayable(_ candidateURL: URL, headers: [String: String]) async -> Bool {
-    guard !isKnownBadCandidate(candidateURL) else {
-      return false
-    }
-
-    let asset = AVURLAsset(url: candidateURL, options: ["AVURLAssetHTTPHeaderFieldsKey": headers])
-
-    let playable = (try? await asset.load(.isPlayable)) ?? false
-    guard playable else { return false }
-
-    let isProtected = (try? await asset.load(.hasProtectedContent)) ?? false
-    guard !isProtected else { return false }
-
-    if let duration = try? await asset.load(.duration) {
-      let seconds = CMTimeGetSeconds(duration)
-      if seconds.isFinite, seconds > 0, seconds < 2 {
-        return false
-      }
-    }
-
-    if let tracks = try? await asset.load(.tracks),
-      let videoTrack = tracks.first(where: { $0.mediaType == .video }),
-      let size = try? await videoTrack.load(.naturalSize)
-    {
-      let width = abs(size.width)
-      let height = abs(size.height)
-      if width > 0, height > 0, min(width, height) < 120 {
-        return false
-      }
-    }
-
-    return true
   }
 
   private func isKnownBadCandidate(_ url: URL) -> Bool {
@@ -1548,7 +1527,8 @@ actor SocialPostResolutionService {
   // MARK: - Instagram
 
   private func fetchInstagramPreview(for sourceURL: URL) async -> SocialPostPreview? {
-    guard let canonicalURL = instagramCanonicalURL(for: sourceURL) else { return nil }
+    guard let canonicalURL = SocialURLHeuristics.instagramCanonicalURL(for: sourceURL)
+    else { return nil }
 
     var request = URLRequest(url: canonicalURL)
     request.httpMethod = "GET"
@@ -1567,22 +1547,6 @@ actor SocialPostResolutionService {
     } catch {
       return nil
     }
-  }
-
-  private func instagramCanonicalURL(for sourceURL: URL) -> URL? {
-    guard let postID = SocialURLHeuristics.instagramPostID(from: sourceURL) else { return nil }
-
-    let parts = sourceURL.pathComponents.map { $0.lowercased() }
-    let marker: String
-    if parts.contains("reel") || parts.contains("reels") {
-      marker = "reel"
-    } else if parts.contains("tv") {
-      marker = "tv"
-    } else {
-      marker = "p"
-    }
-
-    return URL(string: "https://www.instagram.com/\(marker)/\(postID)/")
   }
 
   // MARK: - TikTok
