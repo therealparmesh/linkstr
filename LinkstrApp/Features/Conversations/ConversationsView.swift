@@ -303,11 +303,6 @@ struct SessionPostsView: View {
   private var scopedContacts: [ContactEntity] {
     guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
     return allContacts.filter { $0.ownerPubkey == ownerPubkey }
-      .sorted {
-        session.resolvedIdentity(for: $0).displayName.localizedCaseInsensitiveCompare(
-          session.resolvedIdentity(for: $1).displayName
-        ) == .orderedAscending
-      }
   }
 
   private var scopedMembers: [SessionMemberEntity] {
