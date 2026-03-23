@@ -202,7 +202,10 @@ struct MainTabView: View {
 
   private func openSession(_ sessionID: String) {
     selectedTab = .sessions
-    selectedSessionTarget = SessionNavigationTarget(id: sessionID)
+    selectedSessionTarget = nil
+    Task { @MainActor in
+      selectedSessionTarget = SessionNavigationTarget(id: sessionID)
+    }
   }
 
   private func navigateToPendingSessionIfNeeded() {
