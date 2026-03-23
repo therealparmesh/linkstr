@@ -55,14 +55,14 @@ final class SocialVideoExtractionService: NSObject {
     if SocialURLHeuristics.isInstagramHost(sourceURL),
       let embedPageURL = instagramEmbedPageURL(from: sourceURL)
     {
-      let candidates = await scrapeMediaURLsFromPage(
-        sourceURL: embedPageURL, userAgent: Self.desktopUserAgent)
-      let ranked = rankCandidates(candidates, sourceURL: sourceURL)
+      let sniffResult = await sniffMediaURLs(
+        from: embedPageURL, userAgent: Self.desktopUserAgent)
+      let ranked = rankCandidates(sniffResult.urls, sourceURL: sourceURL)
       if let resolved = resolvePlayableMedia(
         from: ranked,
         sourceURL: sourceURL,
         userAgent: Self.desktopUserAgent,
-        cookies: []
+        cookies: sniffResult.cookies
       ) {
         return resolved
       }
