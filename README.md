@@ -126,7 +126,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 ### Session members UX
 
 - Session member management is available inside a session.
-- Session detail uses chat-like link cards with grouped consecutive posts and a pinned session summary card at the top.
+- Session detail uses chat-like link cards with grouped consecutive posts and inline membership timeline markers.
 - Members can be added only from existing contacts. Members can be removed from active membership.
 - Only the session creator can add or remove members. Non-creator membership mutations are ignored on ingest.
 - Session detail inserts centered `in:` / `out:` separators for membership changes observed after the first local membership snapshot.

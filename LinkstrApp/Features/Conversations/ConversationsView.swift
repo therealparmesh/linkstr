@@ -12,70 +12,87 @@ private struct SessionSummary: Identifiable {
   let hasUnread: Bool
 }
 
+private struct ConversationsContentState {
+  let hasSessions: Bool
+  let visibleSummaries: [SessionSummary]
+}
+
 struct ConversationsView: View {
   @EnvironmentObject private var session: AppSession
   @Binding var isShowingArchivedSessions: Bool
   let openSession: (String) -> Void
+  private let ownerPubkeyHash: String
   @State private var query = ""
 
-  @Query(sort: [SortDescriptor(\SessionEntity.updatedAt, order: .reverse)])
-  private var allSessions: [SessionEntity]
+  @Query private var sessions: [SessionEntity]
 
-  @Query(sort: [SortDescriptor(\SessionMessageEntity.timestamp, order: .reverse)])
-  private var allMessages: [SessionMessageEntity]
+  @Query private var rootMessages: [SessionMessageEntity]
 
-  private var ownerPubkey: String? {
-    session.identityService.pubkeyHex
+  init(
+    ownerPubkey: String,
+    isShowingArchivedSessions: Binding<Bool>,
+    openSession: @escaping (String) -> Void
+  ) {
+    self._isShowingArchivedSessions = isShowingArchivedSessions
+    self.openSession = openSession
+    self.ownerPubkeyHash = LocalDataCrypto.shared.digestHex(ownerPubkey)
+
+    let rootKindRaw = SessionMessageKind.root.rawValue
+    _sessions = Query(
+      filter: #Predicate<SessionEntity> { session in
+        session.ownerPubkey == ownerPubkey
+      },
+      sort: [SortDescriptor(\SessionEntity.updatedAt, order: .reverse)]
+    )
+    _rootMessages = Query(
+      filter: #Predicate<SessionMessageEntity> { message in
+        message.ownerPubkey == ownerPubkey && message.kindRaw == rootKindRaw
+      },
+      sort: [SortDescriptor(\SessionMessageEntity.timestamp, order: .reverse)]
+    )
   }
 
-  private var ownerPubkeyHash: String? {
-    guard let ownerPubkey else { return nil }
-    return LocalDataCrypto.shared.digestHex(ownerPubkey)
-  }
-
-  private var scopedSessions: [SessionEntity] {
-    guard let ownerPubkey else { return [] }
-    return allSessions.filter { $0.ownerPubkey == ownerPubkey }
-  }
-
-  private var scopedMessages: [SessionMessageEntity] {
-    guard let ownerPubkey else { return [] }
-    return allMessages.filter { $0.ownerPubkey == ownerPubkey }
-  }
-
-  private var visibleSummaries: [SessionSummary] {
+  private var contentState: ConversationsContentState {
     let summaries = makeSummaries(
-      sessions: scopedSessions,
-      messages: scopedMessages,
+      sessions: sessions,
+      messages: rootMessages,
       ownerPubkeyHash: ownerPubkeyHash
     )
     let archiveFilteredSummaries = summaries.filter { summary in
       isShowingArchivedSessions ? summary.session.isArchived : !summary.session.isArchived
     }
 
-    let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
-      .localizedLowercase
-    guard !normalizedQuery.isEmpty else { return archiveFilteredSummaries }
-
-    return archiveFilteredSummaries.filter { summary in
-      summary.session.name.localizedLowercase.contains(normalizedQuery)
-        || summary.latestPreview.localizedLowercase.contains(normalizedQuery)
-        || (summary.latestNote?.localizedLowercase.contains(normalizedQuery) ?? false)
+    let visibleSummaries: [SessionSummary]
+    let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).localizedLowercase
+    if normalizedQuery.isEmpty {
+      visibleSummaries = archiveFilteredSummaries
+    } else {
+      visibleSummaries = archiveFilteredSummaries.filter { summary in
+        summary.session.name.localizedLowercase.contains(normalizedQuery)
+          || summary.latestPreview.localizedLowercase.contains(normalizedQuery)
+          || (summary.latestNote?.localizedLowercase.contains(normalizedQuery) ?? false)
+      }
     }
+
+    return ConversationsContentState(
+      hasSessions: !sessions.isEmpty,
+      visibleSummaries: visibleSummaries
+    )
   }
 
   var body: some View {
+    let contentState = contentState
     ZStack {
       LinkstrBackgroundView()
-      content
+      content(contentState)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     .scrollContentBackground(.hidden)
   }
 
   @ViewBuilder
-  private var content: some View {
-    if scopedSessions.isEmpty {
+  private func content(_ contentState: ConversationsContentState) -> some View {
+    if !contentState.hasSessions {
       LinkstrCenteredEmptyStateView(
         title: "no sessions",
         systemImage: "rectangle.stack.badge.plus",
@@ -89,7 +106,7 @@ struct ConversationsView: View {
             text: $query
           )
 
-          if visibleSummaries.isEmpty {
+          if contentState.visibleSummaries.isEmpty {
             LinkstrCenteredEmptyStateView(
               title: isShowingArchivedSessions ? "no archived sessions" : "no sessions found",
               systemImage: isShowingArchivedSessions ? "archivebox" : "magnifyingglass",
@@ -100,7 +117,7 @@ struct ConversationsView: View {
             .frame(maxWidth: .infinity, minHeight: 220)
           } else {
             LazyVStack(spacing: 0) {
-              ForEach(visibleSummaries) { summary in
+              ForEach(contentState.visibleSummaries) { summary in
                 Button {
                   openSession(summary.session.sessionID)
                 } label: {
@@ -136,9 +153,8 @@ struct ConversationsView: View {
 
   private func hasUnreadIncomingRootPost(
     _ post: SessionMessageEntity,
-    ownerPubkeyHash: String?
+    ownerPubkeyHash: String
   ) -> Bool {
-    guard let ownerPubkeyHash else { return false }
     return post.senderPubkeyHash != ownerPubkeyHash && post.readAt == nil
   }
 
@@ -162,7 +178,7 @@ struct ConversationsView: View {
   private func makeSummaries(
     sessions: [SessionEntity],
     messages: [SessionMessageEntity],
-    ownerPubkeyHash: String?
+    ownerPubkeyHash: String
   ) -> [SessionSummary] {
     var aggregates:
       [String: (
@@ -272,22 +288,15 @@ private struct SessionRowView: View {
 struct SessionPostsView: View {
   @EnvironmentObject private var session: AppSession
 
-  @Query(sort: [SortDescriptor(\SessionMessageEntity.timestamp, order: .reverse)])
-  private var allMessages: [SessionMessageEntity]
+  let ownerPubkey: String
+  let sessionID: String
 
-  @Query(sort: [SortDescriptor(\ContactEntity.createdAt)])
-  private var allContacts: [ContactEntity]
-
-  @Query(sort: [SortDescriptor(\SessionMemberEntity.createdAt)])
-  private var allMembers: [SessionMemberEntity]
-
-  @Query(sort: [SortDescriptor(\SessionMemberIntervalEntity.startAt)])
-  private var allMemberIntervals: [SessionMemberIntervalEntity]
-
-  @Query(sort: [SortDescriptor(\SessionReactionEntity.updatedAt, order: .reverse)])
-  private var allReactions: [SessionReactionEntity]
-
-  let sessionEntity: SessionEntity
+  @Query private var sessionEntities: [SessionEntity]
+  @Query private var rootPosts: [SessionMessageEntity]
+  @Query private var contacts: [ContactEntity]
+  @Query private var members: [SessionMemberEntity]
+  @Query private var memberIntervals: [SessionMemberIntervalEntity]
+  @Query private var reactions: [SessionReactionEntity]
 
   @State private var isPresentingNewPost = false
   @State private var isPresentingMembers = false
@@ -295,83 +304,118 @@ struct SessionPostsView: View {
   @State private var isPresentingDeleteConfirmation = false
   @State private var isDeletingPost = false
 
-  private var scopedMessages: [SessionMessageEntity] {
-    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
-    return allMessages.filter { $0.ownerPubkey == ownerPubkey }
+  init(ownerPubkey: String, sessionID: String) {
+    self.ownerPubkey = ownerPubkey
+    self.sessionID = sessionID
+
+    let rootKindRaw = SessionMessageKind.root.rawValue
+    _sessionEntities = Query(
+      filter: #Predicate<SessionEntity> { session in
+        session.ownerPubkey == ownerPubkey && session.sessionID == sessionID
+      },
+      sort: [SortDescriptor(\SessionEntity.updatedAt, order: .reverse)]
+    )
+    _rootPosts = Query(
+      filter: #Predicate<SessionMessageEntity> { message in
+        message.ownerPubkey == ownerPubkey
+          && message.conversationID == sessionID
+          && message.kindRaw == rootKindRaw
+      },
+      sort: [SortDescriptor(\SessionMessageEntity.timestamp, order: .reverse)]
+    )
+    _contacts = Query(
+      filter: #Predicate<ContactEntity> { contact in
+        contact.ownerPubkey == ownerPubkey
+      },
+      sort: [SortDescriptor(\ContactEntity.createdAt)]
+    )
+    _members = Query(
+      filter: #Predicate<SessionMemberEntity> { member in
+        member.ownerPubkey == ownerPubkey
+          && member.sessionID == sessionID
+          && member.isActive == true
+      },
+      sort: [SortDescriptor(\SessionMemberEntity.createdAt)]
+    )
+    _memberIntervals = Query(
+      filter: #Predicate<SessionMemberIntervalEntity> { interval in
+        interval.ownerPubkey == ownerPubkey && interval.sessionID == sessionID
+      },
+      sort: [SortDescriptor(\SessionMemberIntervalEntity.startAt)]
+    )
+    _reactions = Query(
+      filter: #Predicate<SessionReactionEntity> { reaction in
+        reaction.ownerPubkey == ownerPubkey
+          && reaction.sessionID == sessionID
+          && reaction.isActive == true
+      },
+      sort: [SortDescriptor(\SessionReactionEntity.updatedAt, order: .reverse)]
+    )
   }
 
-  private var scopedContacts: [ContactEntity] {
-    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
-    return allContacts.filter { $0.ownerPubkey == ownerPubkey }
-  }
-
-  private var scopedMembers: [SessionMemberEntity] {
-    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
-    return allMembers.filter {
-      $0.ownerPubkey == ownerPubkey && $0.sessionID == sessionEntity.sessionID && $0.isActive
-    }
-  }
-
-  private var scopedMemberIntervals: [SessionMemberIntervalEntity] {
-    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
-    return allMemberIntervals.filter {
-      $0.ownerPubkey == ownerPubkey && $0.sessionID == sessionEntity.sessionID
-    }
-  }
-
-  private var scopedReactions: [SessionReactionEntity] {
-    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
-    return allReactions.filter {
-      $0.ownerPubkey == ownerPubkey && $0.sessionID == sessionEntity.sessionID && $0.isActive
-    }
+  private var sessionEntity: SessionEntity? {
+    sessionEntities.first
   }
 
   private var canManageMembers: Bool {
-    session.canManageMembers(for: sessionEntity)
+    guard let sessionEntity else { return false }
+    return session.canManageMembers(for: sessionEntity)
   }
 
-  private var canCreatePosts: Bool {
-    session.isCurrentUserActiveMember(of: sessionEntity)
+  private var contactsByPubkey: [String: ContactEntity] {
+    var contactsByPubkey: [String: ContactEntity] = [:]
+    contactsByPubkey.reserveCapacity(contacts.count)
+
+    for contact in contacts {
+      contactsByPubkey[contact.targetPubkey] = contact
+    }
+
+    return contactsByPubkey
   }
 
-  private var posts: [SessionMessageEntity] {
-    scopedMessages
-      .filter { $0.conversationID == sessionEntity.sessionID && $0.kind == .root }
-      .sorted { $0.timestamp > $1.timestamp }
-  }
-
-  private var membershipChangeRows: [SessionMembershipChangeRow] {
+  private var contentState: SessionPostsContentState {
     let myPubkey = session.identityService.pubkeyHex
-    let intervals = scopedMemberIntervals.map {
-      SessionMembershipTimelineInterval(
-        memberPubkey: $0.memberPubkey,
-        startAt: $0.startAt,
-        endAt: $0.endAt
-      )
-    }
-    return SessionMembershipTimelineBuilder.changes(from: intervals).map { change in
-      let displayName: String
-      if change.memberPubkey == myPubkey {
-        displayName = "you"
-      } else {
-        displayName = session.displayName(for: change.memberPubkey, contacts: scopedContacts)
+    let contactIndex = contactsByPubkey
+    let canCreatePosts =
+      myPubkey.map { pubkey in
+        members.contains { member in
+          member.memberMatches(pubkey)
+        }
+      } ?? false
+    let reactionSummariesByPostID = makeReactionSummariesByPostID(
+      reactions: reactions,
+      myPubkey: myPubkey
+    )
+    let membershipRows = SessionMembershipTimelineBuilder.changes(
+      from: memberIntervals.map {
+        SessionMembershipTimelineInterval(
+          memberPubkey: $0.memberPubkey,
+          startAt: $0.startAt,
+          endAt: $0.endAt
+        )
       }
-      return SessionMembershipChangeRow(change: change, displayName: displayName)
+    ).map { change in
+      let resolvedDisplayName: String
+      if change.memberPubkey == myPubkey {
+        resolvedDisplayName = "you"
+      } else {
+        resolvedDisplayName = displayName(
+          for: change.memberPubkey,
+          contactsByPubkey: contactIndex
+        )
+      }
+      return SessionMembershipChangeRow(change: change, displayName: resolvedDisplayName)
     }
-  }
-
-  private var timelineRows: [SessionTimelineRow] {
     let entries =
-      posts.map(SessionTimelineEntry.post)
-      + membershipChangeRows.map(SessionTimelineEntry.membershipChange)
+      rootPosts.map(SessionTimelineEntry.post)
+      + membershipRows.map(SessionTimelineEntry.membershipChange)
     let sortedEntries = entries.sorted { lhs, rhs in
       if lhs.timestamp != rhs.timestamp {
         return lhs.timestamp > rhs.timestamp
       }
       return lhs.sortPriority < rhs.sortPriority
     }
-
-    return sortedEntries.enumerated().map { index, entry in
+    let timelineRows: [SessionTimelineRow] = sortedEntries.enumerated().map { index, entry in
       switch entry {
       case .membershipChange(let change):
         return .membershipChange(change)
@@ -381,141 +425,148 @@ struct SessionPostsView: View {
         return .post(
           PostListRow(
             post: post,
-            senderLabel: senderLabel(for: post),
-            isOutgoing: isOutgoing(post),
+            senderLabel: senderLabel(
+              for: post,
+              myPubkey: myPubkey,
+              contactsByPubkey: contactIndex
+            ),
+            isOutgoing: isOutgoing(post, myPubkey: myPubkey),
             showsSenderHeader: previousPost?.senderPubkey != post.senderPubkey,
             isFollowedBySameSender: nextPost?.senderPubkey == post.senderPubkey,
-            hasUnreadPost: hasUnreadIncomingRootPost(post),
+            hasUnreadPost: hasUnreadIncomingRootPost(post, myPubkey: myPubkey),
             reactionSummaries: reactionSummariesByPostID[post.rootID] ?? []
           )
         )
       }
     }
-  }
 
-  private var reactionSummariesByPostID: [String: [ReactionSummary]] {
-    let reactionsByPostID = Dictionary(grouping: scopedReactions, by: \.postID)
-    let myPubkey = session.identityService.pubkeyHex
-    var summariesByPostID: [String: [ReactionSummary]] = [:]
-    summariesByPostID.reserveCapacity(reactionsByPostID.count)
+    var profileLookupPubkeys = contacts.map(\.targetPubkey)
+    profileLookupPubkeys.append(contentsOf: members.map(\.memberPubkey))
+    profileLookupPubkeys.append(contentsOf: memberIntervals.map(\.memberPubkey))
+    profileLookupPubkeys.append(contentsOf: rootPosts.map(\.senderPubkey))
+    profileLookupPubkeys.append(contentsOf: reactions.map(\.senderPubkey))
 
-    for (postID, reactionsForPost) in reactionsByPostID {
-      summariesByPostID[postID] = ReactionSummary.summaries(
-        from: reactionsForPost,
-        myPubkey: myPubkey
-      )
-    }
-
-    return summariesByPostID
-  }
-
-  private var profileLookupPubkeys: [String] {
-    var pubkeys = scopedContacts.map(\.targetPubkey)
-    pubkeys.append(contentsOf: scopedMembers.map(\.memberPubkey))
-    pubkeys.append(contentsOf: scopedMemberIntervals.map(\.memberPubkey))
-    pubkeys.append(contentsOf: posts.map(\.senderPubkey))
-    pubkeys.append(contentsOf: scopedReactions.map(\.senderPubkey))
-    return NostrValueNormalizer.dedupedNormalizedPubkeyHexes(pubkeys)
-  }
-
-  private var postCountLabel: String {
-    posts.count == 1 ? "1 post" : "\(posts.count) posts"
+    return SessionPostsContentState(
+      canCreatePosts: canCreatePosts,
+      postCount: rootPosts.count,
+      timelineRows: timelineRows,
+      profileLookupPubkeys: NostrValueNormalizer.dedupedNormalizedPubkeyHexes(profileLookupPubkeys)
+    )
   }
 
   var body: some View {
-    ScrollView {
-      VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
-        if !posts.isEmpty {
-          Text(postCountLabel)
-            .font(LinkstrTheme.body(11, weight: .medium))
-            .foregroundStyle(LinkstrTheme.textTertiary)
-        }
+    let sessionEntity = sessionEntity
+    let contentState = contentState
 
-        if !canCreatePosts {
-          HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "person.crop.circle.badge.xmark")
-              .font(LinkstrTheme.system(14, weight: .semibold))
-              .foregroundStyle(LinkstrTheme.textSecondary)
+    Group {
+      if let sessionEntity {
+        ScrollView {
+          VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
+            if contentState.postCount > 0 {
+              Text(contentState.postCountLabel)
+                .font(LinkstrTheme.body(11, weight: .medium))
+                .foregroundStyle(LinkstrTheme.textTertiary)
+            }
 
-            Text("you're no longer a member. this session is read-only.")
-              .font(LinkstrTheme.body(12))
-              .foregroundStyle(LinkstrTheme.textSecondary)
-              .fixedSize(horizontal: false, vertical: true)
-          }
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(.horizontal, LinkstrTheme.fieldHorizontalPadding)
-          .padding(.vertical, 10)
-          .background(
-            RoundedRectangle(
-              cornerRadius: LinkstrTheme.fieldCornerRadius,
-              style: .continuous
-            )
-            .fill(LinkstrTheme.panelMuted)
-          )
-          .overlay {
-            RoundedRectangle(
-              cornerRadius: LinkstrTheme.fieldCornerRadius,
-              style: .continuous
-            )
-            .stroke(LinkstrTheme.separator.opacity(1.4), lineWidth: 1)
-          }
-        }
+            if !contentState.canCreatePosts {
+              HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "person.crop.circle.badge.xmark")
+                  .font(LinkstrTheme.system(14, weight: .semibold))
+                  .foregroundStyle(LinkstrTheme.textSecondary)
 
-        if timelineRows.isEmpty {
-          LinkstrCenteredEmptyStateView(
-            title: "no posts yet",
-            systemImage: "link.badge.plus",
-            description: canCreatePosts
-              ? "send a link to this session."
-              : "you're no longer a member of this session."
-          )
-          .frame(maxWidth: .infinity, minHeight: 260)
-        } else {
-          LazyVStack(alignment: .leading, spacing: 0) {
-            ForEach(timelineRows) { row in
-              timelineRow(row)
+                Text("you're no longer a member. this session is read-only.")
+                  .font(LinkstrTheme.body(12))
+                  .foregroundStyle(LinkstrTheme.textSecondary)
+                  .fixedSize(horizontal: false, vertical: true)
+              }
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .padding(.horizontal, LinkstrTheme.fieldHorizontalPadding)
+              .padding(.vertical, 10)
+              .background(
+                RoundedRectangle(
+                  cornerRadius: LinkstrTheme.fieldCornerRadius,
+                  style: .continuous
+                )
+                .fill(LinkstrTheme.panelMuted)
+              )
+              .overlay {
+                RoundedRectangle(
+                  cornerRadius: LinkstrTheme.fieldCornerRadius,
+                  style: .continuous
+                )
+                .stroke(LinkstrTheme.separator.opacity(1.4), lineWidth: 1)
+              }
+            }
+
+            if contentState.timelineRows.isEmpty {
+              LinkstrCenteredEmptyStateView(
+                title: "no posts yet",
+                systemImage: "link.badge.plus",
+                description: contentState.canCreatePosts
+                  ? "send a link to this session."
+                  : "you're no longer a member of this session."
+              )
+              .frame(maxWidth: .infinity, minHeight: 260)
+            } else {
+              LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(contentState.timelineRows) { row in
+                  timelineRow(row, sessionName: sessionEntity.name)
+                }
+              }
             }
           }
+          .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+          .padding(.top, LinkstrTheme.screenTopPadding)
+          .padding(.bottom, LinkstrTheme.screenBottomPadding)
         }
+      } else {
+        ContentUnavailableView(
+          "session unavailable",
+          systemImage: "exclamationmark.triangle",
+          description: Text("this session is no longer available.")
+        )
       }
-      .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-      .padding(.top, LinkstrTheme.screenTopPadding)
-      .padding(.bottom, LinkstrTheme.screenBottomPadding)
     }
     .linkstrTabBarContentInset()
     .scrollContentBackground(.hidden)
     .background(LinkstrBackgroundView())
-    .navigationTitle(sessionEntity.name)
+    .navigationTitle(sessionEntity?.name ?? "session")
     .navigationBarTitleDisplayMode(.inline)
     .linkstrBarChrome()
     .toolbar {
-      ToolbarItemGroup(placement: .topBarTrailing) {
-        Button {
-          isPresentingMembers = true
-        } label: {
-          Image(systemName: "person.2")
-            .linkstrToolbarIconLabel()
-        }
-        .accessibilityLabel(canManageMembers ? "manage members" : "members")
-        .tint(LinkstrTheme.accent)
-
-        if canCreatePosts {
+      if sessionEntity != nil {
+        ToolbarItemGroup(placement: .topBarTrailing) {
           Button {
-            isPresentingNewPost = true
+            isPresentingMembers = true
           } label: {
-            Image(systemName: "square.and.pencil")
+            Image(systemName: "person.2")
               .linkstrToolbarIconLabel()
           }
-          .accessibilityLabel("new post")
+          .accessibilityLabel(canManageMembers ? "manage members" : "members")
           .tint(LinkstrTheme.accent)
+
+          if contentState.canCreatePosts {
+            Button {
+              isPresentingNewPost = true
+            } label: {
+              Image(systemName: "square.and.pencil")
+                .linkstrToolbarIconLabel()
+            }
+            .accessibilityLabel("new post")
+            .tint(LinkstrTheme.accent)
+          }
         }
       }
     }
     .sheet(isPresented: $isPresentingNewPost) {
-      NewPostSheet(sessionEntity: sessionEntity)
+      if let sessionEntity {
+        NewPostSheet(sessionEntity: sessionEntity)
+      }
     }
     .sheet(isPresented: $isPresentingMembers) {
-      SessionMembersSheet(sessionEntity: sessionEntity)
+      if let sessionEntity {
+        SessionMembersSheet(sessionEntity: sessionEntity)
+      }
     }
     .alert("delete post", isPresented: $isPresentingDeleteConfirmation) {
       Button("delete post", role: .destructive) {
@@ -539,8 +590,8 @@ struct SessionPostsView: View {
         "this permanently removes the post from your session feed and sends a nostr deletion request."
       )
     }
-    .task(id: profileLookupPubkeys.stableTaskID) {
-      session.requestRemoteProfilesIfNeeded(pubkeyHexes: profileLookupPubkeys)
+    .task(id: contentState.profileLookupPubkeys.stableTaskID) {
+      session.requestRemoteProfilesIfNeeded(pubkeyHexes: contentState.profileLookupPubkeys)
     }
     .onDisappear {
       session.cancelPendingMetadataRefreshesForHiddenSession()
@@ -548,19 +599,24 @@ struct SessionPostsView: View {
   }
 
   @ViewBuilder
-  private func timelineRow(_ row: SessionTimelineRow) -> some View {
+  private func timelineRow(_ row: SessionTimelineRow, sessionName: String) -> some View {
     switch row {
     case .post(let postListRow):
-      postRow(postListRow)
+      postRow(postListRow, sessionName: sessionName)
     case .membershipChange(let changeRow):
-      membershipChangeRow(changeRow)
+      SessionMembershipChangeRowView(row: changeRow)
     }
   }
 
   @ViewBuilder
-  private func postRow(_ row: PostListRow) -> some View {
+  private func postRow(_ row: PostListRow, sessionName: String) -> some View {
     let postLink = NavigationLink {
-      PostDetailView(post: row.post, sessionName: sessionEntity.name)
+      PostDetailView(
+        ownerPubkey: ownerPubkey,
+        sessionID: sessionID,
+        postID: row.post.rootID,
+        sessionName: sessionName
+      )
     } label: {
       PostListRowView(
         post: row.post,
@@ -574,7 +630,9 @@ struct SessionPostsView: View {
     }
     .buttonStyle(.plain)
     .onAppear {
-      session.markRootPostRead(postID: row.post.rootID)
+      if row.hasUnreadPost {
+        session.markRootPostRead(postID: row.post.rootID)
+      }
       session.refreshMetadataForVisiblePostIfNeeded(row.post)
     }
 
@@ -599,26 +657,69 @@ struct SessionPostsView: View {
       postLink
     }
   }
+  private func makeReactionSummariesByPostID(
+    reactions: [SessionReactionEntity],
+    myPubkey: String?
+  ) -> [String: [ReactionSummary]] {
+    let reactionsByPostID = Dictionary(grouping: reactions, by: \.postID)
+    var summariesByPostID: [String: [ReactionSummary]] = [:]
+    summariesByPostID.reserveCapacity(reactionsByPostID.count)
 
-  private func membershipChangeRow(_ row: SessionMembershipChangeRow) -> some View {
-    SessionMembershipChangeRowView(row: row)
+    for (postID, reactionsForPost) in reactionsByPostID {
+      summariesByPostID[postID] = ReactionSummary.summaries(
+        from: reactionsForPost,
+        myPubkey: myPubkey
+      )
+    }
+
+    return summariesByPostID
   }
 
-  private func isOutgoing(_ message: SessionMessageEntity) -> Bool {
-    guard let myPubkey = session.identityService.pubkeyHex else { return false }
+  private func isOutgoing(_ message: SessionMessageEntity, myPubkey: String?) -> Bool {
+    guard let myPubkey else { return false }
     return message.senderPubkey == myPubkey
   }
 
-  private func senderLabel(for message: SessionMessageEntity) -> String {
-    if isOutgoing(message) {
+  private func senderLabel(
+    for message: SessionMessageEntity,
+    myPubkey: String?,
+    contactsByPubkey: [String: ContactEntity]
+  ) -> String {
+    if isOutgoing(message, myPubkey: myPubkey) {
       return "you"
     }
-    return session.displayName(for: message.senderPubkey, contacts: scopedContacts)
+    return displayName(for: message.senderPubkey, contactsByPubkey: contactsByPubkey)
   }
 
-  private func hasUnreadIncomingRootPost(_ post: SessionMessageEntity) -> Bool {
-    guard !isOutgoing(post) else { return false }
+  private func displayName(
+    for pubkeyHex: String,
+    contactsByPubkey: [String: ContactEntity]
+  ) -> String {
+    let normalizedPubkey = NostrValueNormalizer.normalizedPubkeyHex(pubkeyHex) ?? pubkeyHex
+    if let contact = contactsByPubkey[normalizedPubkey] {
+      return session.resolvedIdentity(for: contact).displayName
+    }
+    return LinkstrResolvedIdentity(
+      localAlias: nil,
+      chosenName: session.remoteProfilesByPubkey[normalizedPubkey]?.chosenName,
+      pubkeyHex: normalizedPubkey
+    ).displayName
+  }
+
+  private func hasUnreadIncomingRootPost(_ post: SessionMessageEntity, myPubkey: String?) -> Bool {
+    guard !isOutgoing(post, myPubkey: myPubkey) else { return false }
     return post.readAt == nil
+  }
+}
+
+private struct SessionPostsContentState {
+  let canCreatePosts: Bool
+  let postCount: Int
+  let timelineRows: [SessionTimelineRow]
+  let profileLookupPubkeys: [String]
+
+  var postCountLabel: String {
+    postCount == 1 ? "1 post" : "\(postCount) posts"
   }
 }
 

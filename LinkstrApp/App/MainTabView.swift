@@ -86,15 +86,10 @@ struct MainTabView: View {
     )
     .navigationBarTitleDisplayMode(.inline)
     .navigationDestination(item: $selectedSessionTarget) { target in
-      if let targetSession = scopedSessions.first(where: { $0.sessionID == target.id }) {
-        SessionPostsView(sessionEntity: targetSession)
-      } else {
-        ContentUnavailableView(
-          "session unavailable",
-          systemImage: "exclamationmark.triangle",
-          description: Text("this session is no longer available.")
-        )
-      }
+      SessionPostsView(
+        ownerPubkey: session.identityService.pubkeyHex ?? "",
+        sessionID: target.id
+      )
     }
     .toolbar {
       ToolbarItem(placement: .topBarLeading) {
@@ -188,6 +183,7 @@ struct MainTabView: View {
     switch tab {
     case .sessions:
       ConversationsView(
+        ownerPubkey: session.identityService.pubkeyHex ?? "",
         isShowingArchivedSessions: $isShowingArchivedSessions,
         openSession: openSession
       )

@@ -300,51 +300,69 @@ struct LinkstrEmojiPickerSheet: View {
 
 struct PostDetailView: View {
   @EnvironmentObject private var session: AppSession
+  @Environment(\.modelContext) private var modelContext
   @Environment(\.openURL) private var openURL
 
-  let post: SessionMessageEntity
+  let ownerPubkey: String
+  let sessionID: String
+  let postID: String
   let sessionName: String
 
-  @Query(sort: [SortDescriptor(\ContactEntity.createdAt)])
-  private var contacts: [ContactEntity]
-
-  @Query(sort: [SortDescriptor(\SessionReactionEntity.updatedAt, order: .reverse)])
-  private var allReactions: [SessionReactionEntity]
-
   @State private var isPresentingEmojiPicker = false
+  @State private var loadedPost: SessionMessageEntity?
+  @State private var loadedContacts: [ContactEntity] = []
+  @State private var loadedReactions: [SessionReactionEntity] = []
+  @State private var loadedMembers: [SessionMemberEntity] = []
   @State private var remotePostText: String?
 
-  private var scopedContacts: [ContactEntity] {
-    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
-    return contacts.filter { $0.ownerPubkey == ownerPubkey }
+  init(
+    ownerPubkey: String,
+    sessionID: String,
+    postID: String,
+    sessionName: String
+  ) {
+    self.ownerPubkey = ownerPubkey
+    self.sessionID = sessionID
+    self.postID = postID
+    self.sessionName = sessionName
   }
 
-  private var scopedReactions: [SessionReactionEntity] {
-    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
-    return allReactions.filter {
-      $0.ownerPubkey == ownerPubkey
-        && $0.sessionID == post.conversationID
-        && $0.postID == post.rootID
-        && $0.isActive
-    }
+  private var post: SessionMessageEntity? {
+    loadedPost
+  }
+
+  private var contacts: [ContactEntity] {
+    loadedContacts
+  }
+
+  private var reactions: [SessionReactionEntity] {
+    loadedReactions
+  }
+
+  private var members: [SessionMemberEntity] {
+    loadedMembers
+  }
+
+  private var loadRequestID: String {
+    "\(ownerPubkey)|\(sessionID)|\(postID)"
   }
 
   private var reactionSummaries: [ReactionSummary] {
     ReactionSummary.summaries(
-      from: scopedReactions,
+      from: reactions,
       myPubkey: session.identityService.pubkeyHex
     )
   }
 
   private var reactionBreakdown: [ReactionParticipantBreakdown] {
-    guard !scopedReactions.isEmpty else { return [] }
+    guard !reactions.isEmpty else { return [] }
 
-    let grouped = Dictionary(grouping: scopedReactions) { reaction -> String in
+    let grouped = Dictionary(grouping: reactions) { reaction -> String in
       let myPubkey = session.identityService.pubkeyHex
       if let myPubkey, reaction.senderMatches(myPubkey) {
         return "you"
       }
-      return session.displayName(for: reaction.senderPubkey, contacts: scopedContacts)
+      return session.displayName(for: reaction.senderPubkey, contacts: contacts)
     }
 
     return
@@ -364,33 +382,44 @@ struct PostDetailView: View {
   }
 
   private var profileLookupPubkeys: [String] {
-    var pubkeys = scopedContacts.map(\.targetPubkey)
-    pubkeys.append(post.senderPubkey)
-    pubkeys.append(contentsOf: scopedReactions.map(\.senderPubkey))
-    return NostrValueNormalizer.dedupedNormalizedPubkeyHexes(pubkeys)
+    NostrValueNormalizer.dedupedNormalizedPubkeyHexes(reactions.map(\.senderPubkey))
   }
 
   private var canReactToPost: Bool {
-    session.isCurrentUserActiveMember(
-      sessionID: post.conversationID,
-      ownerPubkey: post.ownerPubkey
-    )
+    guard let myPubkey = session.identityService.pubkeyHex else { return false }
+    return members.contains { member in
+      member.memberMatches(myPubkey)
+    }
   }
 
   private var shareDeepLinkURL: URL? {
-    LinkstrDeepLinkCodec.makeAppDeepLink(url: post.url)
+    guard let post else { return nil }
+    return LinkstrDeepLinkCodec.makeAppDeepLink(url: post.url)
   }
 
   var body: some View {
-    ScrollView {
-      VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
-        postCardContent
+    Group {
+      if let post {
+        ScrollView {
+          VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
+            postCardContent(post)
+          }
+          .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+          .padding(.top, LinkstrTheme.compactSpacing)
+          .padding(.bottom, LinkstrTheme.screenBottomPadding)
+        }
+      } else {
+        ContentUnavailableView(
+          "post unavailable",
+          systemImage: "exclamationmark.triangle",
+          description: Text("this post is no longer available.")
+        )
       }
-      .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-      .padding(.top, LinkstrTheme.compactSpacing)
-      .padding(.bottom, LinkstrTheme.screenBottomPadding)
     }
     .linkstrTabBarContentInset()
+    .task(id: loadRequestID) {
+      await loadContent()
+    }
     .task(id: profileLookupPubkeys.stableTaskID) {
       session.requestRemoteProfilesIfNeeded(pubkeyHexes: profileLookupPubkeys)
     }
@@ -410,7 +439,8 @@ struct PostDetailView: View {
         }
       }
     }
-    .task {
+    .task(id: post?.storageID) {
+      guard let post else { return }
       session.markRootPostRead(postID: post.rootID)
       session.refreshMetadataForVisiblePostIfNeeded(post)
     }
@@ -425,7 +455,7 @@ struct PostDetailView: View {
     }
   }
 
-  private var postCardContent: some View {
+  private func postCardContent(_ post: SessionMessageEntity) -> some View {
     VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
       HStack(spacing: 12) {
         Spacer(minLength: 0)
@@ -469,7 +499,7 @@ struct PostDetailView: View {
         }
       }
 
-      mediaBlock
+      mediaBlock(post)
 
       if !canReactToPost {
         Text("you're no longer a member of this session. reactions are read-only.")
@@ -519,7 +549,7 @@ struct PostDetailView: View {
   }
 
   @ViewBuilder
-  private var mediaBlock: some View {
+  private func mediaBlock(_ post: SessionMessageEntity) -> some View {
     if let urlString = post.url, let url = URL(string: urlString) {
       AdaptiveVideoPlaybackView(
         sourceURL: url,
@@ -560,17 +590,21 @@ struct PostDetailView: View {
 
   private func toggleReaction(_ emoji: String) {
     Task { @MainActor in
+      guard let post else { return }
       _ = await session.toggleReactionAwaitingRelay(emoji: emoji, post: post)
+      await loadContent()
     }
   }
 
   private var noteText: String? {
+    guard let post else { return nil }
     guard let note = post.note else { return nil }
     let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
     return trimmed.isEmpty ? nil : trimmed
   }
 
   private var remotePostTextRequestID: String? {
+    guard let post else { return nil }
     guard let urlString = post.url else { return nil }
     return shouldLoadRemotePostText(for: urlString) ? urlString : nil
   }
@@ -581,6 +615,7 @@ struct PostDetailView: View {
   }
 
   private func resolvedRemotePostText() async -> String? {
+    guard let post else { return nil }
     guard let urlString = post.url, shouldLoadRemotePostText(for: urlString) else { return nil }
     guard let url = URL(string: urlString) else { return nil }
     return await SocialPostResolutionService.resolveRemotePostText(for: url)
@@ -605,5 +640,75 @@ struct PostDetailView: View {
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(.leading, 2)
+  }
+
+  @MainActor
+  private func loadContent() async {
+    loadedPost = try? fetchPost()
+    loadedReactions = (try? fetchReactions()) ?? []
+    loadedMembers = (try? fetchMembers()) ?? []
+    loadedContacts = (try? fetchContacts(senderPubkeys: Set(reactions.map(\.senderPubkey)))) ?? []
+  }
+
+  private func fetchPost() throws -> SessionMessageEntity? {
+    let storageID = SessionMessageEntity.storageID(
+      ownerPubkey: ownerPubkey,
+      eventID: postID
+    )
+    let descriptor = FetchDescriptor<SessionMessageEntity>(
+      predicate: #Predicate { $0.storageID == storageID }
+    )
+    guard let post = try modelContext.fetch(descriptor).first else { return nil }
+    guard post.conversationID == sessionID, post.kind == .root else { return nil }
+    return post
+  }
+
+  private func fetchContacts(senderPubkeys: Set<String>) throws -> [ContactEntity] {
+    guard !senderPubkeys.isEmpty else { return [] }
+
+    let normalizedPubkeys = NostrValueNormalizer.dedupedNormalizedPubkeyHexes(
+      Array(senderPubkeys)
+    )
+    guard !normalizedPubkeys.isEmpty else { return [] }
+
+    var contacts: [ContactEntity] = []
+    contacts.reserveCapacity(normalizedPubkeys.count)
+
+    for pubkey in normalizedPubkeys {
+      let descriptor = FetchDescriptor<ContactEntity>(
+        predicate: #Predicate {
+          $0.ownerPubkey == ownerPubkey && $0.targetPubkey == pubkey
+        },
+        sortBy: [SortDescriptor(\.createdAt)]
+      )
+      contacts.append(contentsOf: try modelContext.fetch(descriptor))
+    }
+
+    return contacts
+  }
+
+  private func fetchReactions() throws -> [SessionReactionEntity] {
+    let descriptor = FetchDescriptor<SessionReactionEntity>(
+      predicate: #Predicate {
+        $0.ownerPubkey == ownerPubkey
+          && $0.sessionID == sessionID
+          && $0.postID == postID
+          && $0.isActive == true
+      },
+      sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+    )
+    return try modelContext.fetch(descriptor)
+  }
+
+  private func fetchMembers() throws -> [SessionMemberEntity] {
+    let descriptor = FetchDescriptor<SessionMemberEntity>(
+      predicate: #Predicate {
+        $0.ownerPubkey == ownerPubkey
+          && $0.sessionID == sessionID
+          && $0.isActive == true
+      },
+      sortBy: [SortDescriptor(\.createdAt)]
+    )
+    return try modelContext.fetch(descriptor)
   }
 }

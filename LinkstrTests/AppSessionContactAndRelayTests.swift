@@ -660,8 +660,11 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     try container.mainContext.save()
 
     let rootView = NavigationStack {
-      SessionPostsView(sessionEntity: sessionEntity)
-        .environmentObject(session)
+      SessionPostsView(
+        ownerPubkey: myPubkey,
+        sessionID: sessionEntity.sessionID
+      )
+      .environmentObject(session)
     }
     .modelContainer(container)
 
