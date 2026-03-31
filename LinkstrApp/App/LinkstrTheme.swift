@@ -333,7 +333,7 @@ struct LinkstrSearchField: View {
         Image(systemName: "xmark.circle.fill")
           .font(LinkstrTheme.system(13))
           .foregroundStyle(LinkstrTheme.textTertiary)
-          .frame(width: 44, height: 44)
+          .frame(width: 18, height: 18)
           .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
