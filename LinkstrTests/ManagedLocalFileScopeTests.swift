@@ -31,4 +31,23 @@ final class ManagedLocalFileScopeTests: XCTestCase {
     XCTAssertNil(scope.managedFileURL(fromPath: unmanagedURL.path))
     XCTAssertFalse(scope.isManagedFileURL(unmanagedURL))
   }
+
+  func testManagedFileURLRebasesLegacyThumbnailPathIntoCurrentManagedDirectory() throws {
+    let scope = ManagedLocalFileScope.shared
+    let thumbnailURL = scope.thumbnailFileURL(
+      for: "legacy-thumb-\(UUID().uuidString)",
+      fileExtension: "png"
+    )
+    try Data("thumbnail".utf8).write(to: thumbnailURL, options: .atomic)
+    defer { try? FileManager.default.removeItem(at: thumbnailURL) }
+
+    let legacyPath =
+      "/var/mobile/Containers/Data/Application/OLD/Library/Application Support/linkstr/thumbnails/"
+      + thumbnailURL.lastPathComponent
+
+    XCTAssertEqual(
+      scope.managedFileURL(fromPath: legacyPath),
+      thumbnailURL.standardizedFileURL.resolvingSymlinksInPath()
+    )
+  }
 }

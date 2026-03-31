@@ -51,8 +51,11 @@ final class ManagedLocalFileScope {
       URL(fileURLWithPath: trimmed, isDirectory: false)
       .standardizedFileURL
       .resolvingSymlinksInPath()
-    guard isManagedFileURL(candidate) else { return nil }
-    return candidate
+    if isManagedFileURL(candidate) {
+      return candidate
+    }
+
+    return rebasedManagedFileURL(forLegacyPath: candidate)
   }
 
   func normalizedManagedPath(_ path: String?) -> String? {
@@ -79,6 +82,47 @@ final class ManagedLocalFileScope {
   private func createDirectoryIfNeeded(_ directory: URL) {
     guard !fileManager.fileExists(atPath: directory.path) else { return }
     try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+  }
+
+  private func rebasedManagedFileURL(forLegacyPath candidate: URL) -> URL? {
+    guard looksLikeLegacyManagedPath(candidate) else { return nil }
+
+    let fileName = candidate.lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !fileName.isEmpty else { return nil }
+
+    for directory in rebasedSearchDirectories(forLegacyPath: candidate) {
+      let rebased =
+        directory
+        .appendingPathComponent(fileName, isDirectory: candidate.hasDirectoryPath)
+        .standardizedFileURL
+        .resolvingSymlinksInPath()
+      guard fileManager.fileExists(atPath: rebased.path), isManagedFileURL(rebased) else {
+        continue
+      }
+      return rebased
+    }
+
+    return nil
+  }
+
+  private func looksLikeLegacyManagedPath(_ candidate: URL) -> Bool {
+    let lowercasedPath = candidate.path.lowercased()
+    return
+      lowercasedPath.contains("/linkstr/")
+      || lowercasedPath.contains("linkstr_videos")
+      || lowercasedPath.contains("/thumbnails/")
+      || lowercasedPath.contains("/videos/")
+  }
+
+  private func rebasedSearchDirectories(forLegacyPath candidate: URL) -> [URL] {
+    let lowercasedPath = candidate.path.lowercased()
+    if lowercasedPath.contains("/thumbnails/") {
+      return [thumbnailDirectory, videoDirectory]
+    }
+    if lowercasedPath.contains("/videos/") || lowercasedPath.contains("linkstr_videos") {
+      return [videoDirectory, thumbnailDirectory]
+    }
+    return [thumbnailDirectory, videoDirectory]
   }
 }
 
