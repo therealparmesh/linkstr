@@ -409,7 +409,6 @@ struct PostDetailView: View {
       if let post {
         ScrollView {
           VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
-            LinkstrScreenTitle(title: sessionName)
             postCardContent(post)
           }
           .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
