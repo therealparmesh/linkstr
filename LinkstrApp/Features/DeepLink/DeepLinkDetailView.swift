@@ -27,10 +27,11 @@ struct DeepLinkDetailView: View {
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
+        LinkstrScreenTitle(title: "shared link")
         linkCard
       }
       .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-      .padding(.top, LinkstrTheme.compactSpacing)
+      .padding(.top, LinkstrTheme.screenTopPadding)
       .padding(.bottom, LinkstrTheme.screenBottomPadding)
     }
     .background(LinkstrBackgroundView())

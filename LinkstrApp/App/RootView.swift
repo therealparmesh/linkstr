@@ -9,6 +9,7 @@ struct RootView: View {
   @EnvironmentObject private var session: AppSession
   @EnvironmentObject private var deepLinkHandler: DeepLinkHandler
   @State private var toastMessage: String?
+  @State private var toastIsSuccess: Bool = false
   @State private var toastDisplayID = UUID()
 
   var body: some View {
@@ -17,18 +18,23 @@ struct RootView: View {
       Group {
         if !session.didFinishBoot {
           LinkstrBootLoadingView(statusMessage: session.bootStatusMessage)
+            .transition(.opacity)
         } else if session.shouldShowOnboarding {
           OnboardingView()
+            .transition(.opacity)
         } else {
           NavigationStack {
             MainTabView()
           }
+          .transition(.opacity)
         }
       }
+      .animation(.easeInOut(duration: 0.35), value: session.didFinishBoot)
+      .animation(.easeInOut(duration: 0.35), value: session.shouldShowOnboarding)
     }
     .overlay(alignment: .top) {
       if let toastMessage {
-        LinkstrErrorToast(message: toastMessage)
+        LinkstrErrorToast(message: toastMessage, isSuccess: toastIsSuccess)
           .padding(.top, LinkstrTheme.toastTopPadding)
           .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
           .transition(.move(edge: .top).combined(with: .opacity))
@@ -46,9 +52,18 @@ struct RootView: View {
       guard let newValue, !newValue.isEmpty else { return }
       guard session.shouldPresentComposeErrorToast else { return }
       withAnimation(.easeIn(duration: RootViewTimingDefaults.toastAnimationDuration)) {
+        toastIsSuccess = false
         toastMessage = newValue
       }
       session.composeError = nil
+      toastDisplayID = UUID()
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .linkstrSuccessToast)) { notification in
+      guard let message = notification.object as? String else { return }
+      withAnimation(.easeIn(duration: RootViewTimingDefaults.toastAnimationDuration)) {
+        toastIsSuccess = true
+        toastMessage = message
+      }
       toastDisplayID = UUID()
     }
     .task(id: toastDisplayID) {
@@ -71,8 +86,6 @@ struct RootView: View {
       if let urlString = deepLinkHandler.pendingURLString {
         NavigationStack {
           DeepLinkDetailView(urlString: urlString)
-            .navigationTitle("shared link")
-            .navigationBarTitleDisplayMode(.inline)
             .linkstrBarChrome()
             .toolbar {
               ToolbarItem(placement: .topBarLeading) {

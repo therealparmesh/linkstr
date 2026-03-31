@@ -322,8 +322,9 @@ Embedded web playback allows provider-element fullscreen when supported.
 - Title and thumbnail are fetched asynchronously for root posts.
 - Twitter/X, Instagram, TikTok, Facebook, and Rumble use provider-specific metadata paths before falling back to generic `LinkPresentation`.
 - Missing metadata is retried lazily when posts scroll into view or when post detail is opened.
+- Post detail also exposes a refresh action that forces metadata to re-fetch and resets stale local playback state for that post.
 - Missing local thumbnail files are treated as stale and re-fetched.
-- Settings → Storage can clear cached media and hydrated previews without deleting posts.
+- Settings → Storage clears downloaded videos only; hydrated metadata and thumbnails are preserved.
 
 ### Contacts
 
@@ -376,7 +377,7 @@ Embedded web playback allows provider-element fullscreen when supported.
 
 - SwiftData persistence is local-first and survives app relaunch.
 - Cached video files live under `Library/Caches` and are treated as disposable device cache with LRU eviction at approximately 1 GB.
-- Settings → Storage can purge cached media and hydrated previews for the signed-in account and let previews rebuild lazily.
+- Settings → Storage can purge downloaded videos for the signed-in account without removing hydrated metadata or thumbnails.
 
 **Scoping and encryption:**
 

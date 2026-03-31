@@ -30,8 +30,6 @@ struct OnboardingView: View {
           .padding(.bottom, LinkstrTheme.screenBottomPadding)
         }
       }
-      .navigationTitle("welcome")
-      .navigationBarTitleDisplayMode(.inline)
       .linkstrBarChrome()
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -116,6 +114,7 @@ struct OnboardingView: View {
 
         Button {
           UIPasteboard.general.string = nsec
+          LinkstrToast.showSuccess("copied to clipboard")
         } label: {
           LinkstrActionButtonLabel(title: "copy key", systemImage: "doc.on.doc")
         }
@@ -196,6 +195,7 @@ struct OnboardingView: View {
       )
       isSavingCreatedProfileName = false
       if didComplete {
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
         createdProfileName = ""
       }
     }

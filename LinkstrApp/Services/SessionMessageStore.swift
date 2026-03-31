@@ -524,7 +524,7 @@ final class SessionMessageStore {
     removeManagedFiles(at: storedFileURLs)
   }
 
-  func clearCachedMediaAndPreviews(ownerPubkey: String) throws {
+  func clearCachedMedia(ownerPubkey: String) throws {
     let descriptor = FetchDescriptor<SessionMessageEntity>(
       predicate: #Predicate { $0.ownerPubkey == ownerPubkey }
     )
@@ -532,26 +532,17 @@ final class SessionMessageStore {
 
     var didChange = false
     for message in messages {
-      if let thumbnailURL = ManagedLocalFileScope.shared.managedFileURL(
-        fromPath: message.thumbnailURL)
-      {
-        try? FileManager.default.removeItem(at: thumbnailURL)
-      }
       if let cachedMediaURL = ManagedLocalFileScope.shared.managedFileURL(
         fromPath: message.cachedMediaPath)
       {
         try? FileManager.default.removeItem(at: cachedMediaURL)
       }
 
-      let hadPreview =
-        message.metadataTitle != nil
-        || message.thumbnailURL != nil
       let hadCachedMedia =
         message.cachedMediaPath != nil
         || message.cachedMediaSourceURL != nil
-      guard hadPreview || hadCachedMedia else { continue }
+      guard hadCachedMedia else { continue }
 
-      try message.setMetadata(title: nil, thumbnailURL: nil)
       message.cachedMediaPath = nil
       message.cachedMediaSourceURL = nil
       didChange = true

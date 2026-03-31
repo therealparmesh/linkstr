@@ -33,6 +33,7 @@ struct YouView: View {
     if let npub = session.identityService.npub {
       ScrollView {
         VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
+          LinkstrScreenTitle(title: "you")
           qrSection(npub: npub)
           npubSection(npub: npub)
           profileNameSection
@@ -46,11 +47,16 @@ struct YouView: View {
       }
       .linkstrTabBarContentInset()
     } else {
-      LinkstrCenteredEmptyStateView(
-        title: "no identity",
-        systemImage: "person.crop.circle.badge.exclamationmark",
-        description: "sign in or create an account in settings."
-      )
+      VStack(spacing: 0) {
+        LinkstrScreenTitle(title: "you")
+          .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+          .padding(.top, LinkstrTheme.screenTopPadding)
+        LinkstrCenteredEmptyStateView(
+          title: "no identity",
+          systemImage: "person.crop.circle.badge.exclamationmark",
+          description: "sign in or create an account in settings."
+        )
+      }
     }
   }
 
@@ -95,6 +101,7 @@ struct YouView: View {
           .interpolation(.none)
           .resizable()
           .scaledToFit()
+          .accessibilityLabel("QR code for your public key")
           .frame(maxWidth: 280)
           .frame(maxWidth: .infinity, alignment: .center)
           .padding(.vertical, 8)
@@ -115,6 +122,7 @@ struct YouView: View {
 
       Button {
         UIPasteboard.general.string = npub
+        LinkstrToast.showSuccess("copied to clipboard")
       } label: {
         LinkstrActionButtonLabel(title: "copy public key", systemImage: "doc.on.doc")
       }
@@ -180,6 +188,7 @@ struct YouView: View {
       let didSave = await session.updateOwnProfileName(profileNameDraft)
       isSavingProfileName = false
       if didSave {
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
         syncProfileNameDraft()
       }
     }

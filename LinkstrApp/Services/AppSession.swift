@@ -2520,25 +2520,24 @@ final class AppSession: ObservableObject {
     return true
   }
 
-  func clearCachedMediaAndPreviews() {
+  func clearCachedMedia() {
     guard let ownerPubkey = identityService.pubkeyHex else {
       composeError = "you're signed out. sign in to manage local storage."
       return
     }
-    clearCachedMediaAndPreviews(ownerPubkey: ownerPubkey)
+    clearCachedMedia(ownerPubkey: ownerPubkey)
   }
 
-  private func clearCachedMediaAndPreviews(ownerPubkey: String) {
+  private func clearCachedMedia(ownerPubkey: String) {
     do {
-      try messageStore.clearCachedMediaAndPreviews(ownerPubkey: ownerPubkey)
-      ThumbnailImageCache.shared.clear()
+      try messageStore.clearCachedMedia(ownerPubkey: ownerPubkey)
       composeError = nil
     } catch {
       report(error: error)
     }
   }
 
-  func clearableStorageBytes() -> Int64 {
+  func clearableCachedMediaBytes() -> Int64 {
     let currentAccountUsage: ManagedStorageUsage
     if let ownerPubkey = identityService.pubkeyHex {
       currentAccountUsage =
@@ -2547,7 +2546,25 @@ final class AppSession: ObservableObject {
       currentAccountUsage = .zero
     }
 
-    return currentAccountUsage.previewBytes + currentAccountUsage.cachedMediaBytes
+    return currentAccountUsage.cachedMediaBytes
+  }
+
+  func refreshPostMetadata(_ message: SessionMessageEntity) async {
+    do {
+      var didChange = clearCachedLocalPlaybackState(for: message)
+      if let urlString = message.url, let url = URL(string: urlString) {
+        await invalidateTransientMediaCaches(for: url)
+      }
+      if try await refreshMetadata(for: message, force: true) {
+        didChange = true
+      }
+      if didChange {
+        try modelContext.save()
+      }
+      composeError = nil
+    } catch {
+      report(error: error)
+    }
   }
 
   private func persistIncomingFollowList(_ incoming: ReceivedFollowList) {
@@ -3334,9 +3351,11 @@ final class AppSession: ObservableObject {
     }
   }
 
-  private func refreshMetadata(for message: SessionMessageEntity) async throws -> Bool {
+  private func refreshMetadata(for message: SessionMessageEntity, force: Bool = false) async throws
+    -> Bool
+  {
     guard let url = message.url else { return false }
-    guard needsMetadataRefresh(message) else { return false }
+    guard force || needsMetadataRefresh(message) else { return false }
 
     let preview: LinkPreviewData?
     if let fetchLinkPreview = testingOverrides.fetchLinkPreview {
@@ -3377,6 +3396,36 @@ final class AppSession: ObservableObject {
       title: message.metadataTitle,
       thumbnailPath: ManagedLocalFileScope.shared.normalizedManagedPath(message.thumbnailURL)
     )
+  }
+
+  private func clearCachedLocalPlaybackState(for message: SessionMessageEntity) -> Bool {
+    if let cachedMediaURL = ManagedLocalFileScope.shared.managedFileURL(
+      fromPath: message.cachedMediaPath)
+    {
+      try? FileManager.default.removeItem(at: cachedMediaURL)
+    }
+
+    let hadCachedMedia =
+      message.cachedMediaPath != nil
+      || message.cachedMediaSourceURL != nil
+    guard hadCachedMedia else { return false }
+
+    message.cachedMediaPath = nil
+    message.cachedMediaSourceURL = nil
+    return true
+  }
+
+  private func invalidateTransientMediaCaches(for url: URL) async {
+    await URLCanonicalizationService.shared.invalidate(for: url)
+
+    switch URLClassifier.classify(url) {
+    case .twitter:
+      await TwitterStatusResolutionService.shared.invalidate(for: url)
+    case .instagram, .tiktok, .facebook:
+      await SocialPostResolutionService.shared.invalidate(for: url)
+    case .youtube, .rumble, .generic:
+      break
+    }
   }
 
   private func resetFollowListStateInMemory() {

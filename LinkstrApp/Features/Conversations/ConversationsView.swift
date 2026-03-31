@@ -93,14 +93,21 @@ struct ConversationsView: View {
   @ViewBuilder
   private func content(_ contentState: ConversationsContentState) -> some View {
     if !contentState.hasSessions {
-      LinkstrCenteredEmptyStateView(
-        title: "no sessions",
-        systemImage: "rectangle.stack.badge.plus",
-        description: "start a session. links you share will show up here."
-      )
+      VStack(spacing: 0) {
+        LinkstrScreenTitle(title: "sessions")
+          .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+          .padding(.top, LinkstrTheme.screenTopPadding)
+        LinkstrCenteredEmptyStateView(
+          title: "no sessions",
+          systemImage: "rectangle.stack.badge.plus",
+          description: "start a session. links you share will show up here."
+        )
+      }
     } else {
       ScrollView {
         VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
+          LinkstrScreenTitle(title: isShowingArchivedSessions ? "archived" : "sessions")
+
           LinkstrSearchField(
             prompt: isShowingArchivedSessions ? "search archived sessions" : "search sessions",
             text: $query
@@ -128,6 +135,7 @@ struct ConversationsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contextMenu {
                   Button {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                     session.setSessionArchived(
                       sessionID: summary.session.sessionID,
                       archived: !summary.session.isArchived
@@ -462,6 +470,8 @@ struct SessionPostsView: View {
       if let sessionEntity {
         ScrollView {
           VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
+            LinkstrScreenTitle(title: sessionEntity.name)
+
             if contentState.postCount > 0 {
               Text(contentState.postCountLabel)
                 .font(LinkstrTheme.body(11, weight: .medium))
@@ -469,33 +479,7 @@ struct SessionPostsView: View {
             }
 
             if !contentState.canCreatePosts {
-              HStack(alignment: .top, spacing: 10) {
-                Image(systemName: "person.crop.circle.badge.xmark")
-                  .font(LinkstrTheme.system(14, weight: .semibold))
-                  .foregroundStyle(LinkstrTheme.textSecondary)
-
-                Text("you're no longer a member. this session is read-only.")
-                  .font(LinkstrTheme.body(12))
-                  .foregroundStyle(LinkstrTheme.textSecondary)
-                  .fixedSize(horizontal: false, vertical: true)
-              }
-              .frame(maxWidth: .infinity, alignment: .leading)
-              .padding(.horizontal, LinkstrTheme.fieldHorizontalPadding)
-              .padding(.vertical, 10)
-              .background(
-                RoundedRectangle(
-                  cornerRadius: LinkstrTheme.fieldCornerRadius,
-                  style: .continuous
-                )
-                .fill(LinkstrTheme.panelMuted)
-              )
-              .overlay {
-                RoundedRectangle(
-                  cornerRadius: LinkstrTheme.fieldCornerRadius,
-                  style: .continuous
-                )
-                .stroke(LinkstrTheme.separator.opacity(1.4), lineWidth: 1)
-              }
+              LinkstrReadOnlyBanner()
             }
 
             if contentState.timelineRows.isEmpty {
@@ -530,8 +514,7 @@ struct SessionPostsView: View {
     .linkstrTabBarContentInset()
     .scrollContentBackground(.hidden)
     .background(LinkstrBackgroundView())
-    .navigationTitle(sessionEntity?.name ?? "session")
-    .navigationBarTitleDisplayMode(.inline)
+
     .linkstrBarChrome()
     .toolbar {
       if sessionEntity != nil {
@@ -571,6 +554,7 @@ struct SessionPostsView: View {
     .alert("delete post", isPresented: $isPresentingDeleteConfirmation) {
       Button("delete post", role: .destructive) {
         guard let postPendingDelete, !isDeletingPost else { return }
+        UINotificationFeedbackGenerator().notificationOccurred(.warning)
         isDeletingPost = true
         Task {
           let didDelete = await session.deletePostAwaitingRelay(postPendingDelete)
@@ -641,6 +625,7 @@ struct SessionPostsView: View {
         .contextMenu {
           Button(role: .destructive) {
             guard !isDeletingPost else { return }
+            UINotificationFeedbackGenerator().notificationOccurred(.warning)
             postPendingDelete = row.post
             isPresentingDeleteConfirmation = true
           } label: {
@@ -854,6 +839,7 @@ private struct PostCardView: View {
             Circle()
               .fill(LinkstrTheme.accent)
               .frame(width: 7, height: 7)
+              .accessibilityLabel("unread")
           }
 
           Text(post.timestamp.linkstrListTimestampLabel)
@@ -1080,6 +1066,7 @@ struct NewSessionSheet: View {
         LinkstrBackgroundView()
         ScrollView {
           VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
+            LinkstrScreenTitle(title: "new session")
             LinkstrInsetSection(title: "session details") {
               TextField("session name", text: $sessionName)
                 .font(LinkstrTheme.body(15))
@@ -1155,8 +1142,7 @@ struct NewSessionSheet: View {
           .scrollDismissesKeyboard(.interactively)
         }
       }
-      .navigationTitle("new session")
-      .navigationBarTitleDisplayMode(.inline)
+
       .linkstrBarChrome()
       .toolbar {
         ToolbarItem(placement: .topBarLeading) {
@@ -1289,6 +1275,7 @@ private struct SessionMembersSheet: View {
         LinkstrBackgroundView()
         ScrollView {
           VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
+            LinkstrScreenTitle(title: "session members")
             LinkstrInsetSection(
               title: "current members",
               accessory: "\(visibleCurrentMembers.count + 1)"
@@ -1410,8 +1397,7 @@ private struct SessionMembersSheet: View {
           .padding(.bottom, LinkstrTheme.screenBottomPadding)
         }
       }
-      .navigationTitle("session members")
-      .navigationBarTitleDisplayMode(.inline)
+
       .linkstrBarChrome()
       .toolbar {
         ToolbarItem(placement: .topBarLeading) {

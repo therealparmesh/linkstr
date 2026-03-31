@@ -40,16 +40,20 @@ enum LinkstrTheme {
   static let actionButtonIconWidth: CGFloat = 18
   static let fieldCornerRadius: CGFloat = 12
 
-  static func title(_ size: CGFloat, weight: Font.Weight = .semibold) -> Font {
+  static func font(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
     .system(size: size, weight: weight)
+  }
+
+  static func title(_ size: CGFloat, weight: Font.Weight = .semibold) -> Font {
+    font(size, weight: weight)
   }
 
   static func body(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
-    .system(size: size, weight: weight)
+    font(size, weight: weight)
   }
 
   static func system(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
-    .system(size: size, weight: weight)
+    font(size, weight: weight)
   }
 }
 
@@ -93,7 +97,7 @@ private struct LinkstrFieldChrome: ViewModifier {
           cornerRadius: LinkstrTheme.fieldCornerRadius,
           style: .continuous
         )
-        .stroke(LinkstrTheme.separator.opacity(1.4), lineWidth: 1)
+        .stroke(LinkstrTheme.separator.opacity(2), lineWidth: 1)
       }
   }
 }
@@ -210,9 +214,8 @@ extension View {
   }
 
   func linkstrBarChrome() -> some View {
-    toolbarBackground(.visible, for: .navigationBar)
+    toolbarBackground(.hidden, for: .navigationBar)
       .toolbarBackground(.visible, for: .tabBar)
-      .toolbarBackground(LinkstrTheme.chrome.opacity(0.88), for: .navigationBar)
       .toolbarBackground(LinkstrTheme.chrome.opacity(0.88), for: .tabBar)
       .toolbarColorScheme(.dark, for: .navigationBar)
       .toolbarColorScheme(.dark, for: .tabBar)
@@ -308,7 +311,6 @@ struct LinkstrSearchField: View {
   @Binding var text: String
   var submitLabel: SubmitLabel = .search
   var onSubmit: (() -> Void)? = nil
-  private let clearButtonSize: CGFloat = 18
 
   var body: some View {
     HStack(spacing: LinkstrTheme.compactSpacing) {
@@ -331,7 +333,8 @@ struct LinkstrSearchField: View {
         Image(systemName: "xmark.circle.fill")
           .font(LinkstrTheme.system(13))
           .foregroundStyle(LinkstrTheme.textTertiary)
-          .frame(width: clearButtonSize, height: clearButtonSize)
+          .frame(width: 44, height: 44)
+          .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
       .opacity(text.isEmpty ? 0 : 1)
@@ -411,6 +414,8 @@ struct LinkstrSheetStatusFooter: View {
           .fill(LinkstrTheme.separator)
           .frame(height: 1)
       }
+      .transition(.move(edge: .bottom).combined(with: .opacity))
+      .animation(.easeInOut(duration: 0.2), value: message)
   }
 }
 
@@ -487,6 +492,51 @@ struct LinkstrCenteredEmptyStateView: View {
   }
 }
 
+struct LinkstrScreenTitle: View {
+  let title: String
+
+  var body: some View {
+    Text(title)
+      .font(LinkstrTheme.title(28, weight: .bold))
+      .foregroundStyle(LinkstrTheme.textPrimary)
+      .frame(maxWidth: .infinity, alignment: .leading)
+  }
+}
+
+struct LinkstrReadOnlyBanner: View {
+  var message: String = "you're no longer a member. this session is read-only."
+
+  var body: some View {
+    HStack(alignment: .top, spacing: 10) {
+      Image(systemName: "person.crop.circle.badge.xmark")
+        .font(LinkstrTheme.system(14, weight: .semibold))
+        .foregroundStyle(LinkstrTheme.textSecondary)
+
+      Text(message)
+        .font(LinkstrTheme.body(12))
+        .foregroundStyle(LinkstrTheme.textSecondary)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(.horizontal, LinkstrTheme.fieldHorizontalPadding)
+    .padding(.vertical, 10)
+    .background(
+      RoundedRectangle(
+        cornerRadius: LinkstrTheme.fieldCornerRadius,
+        style: .continuous
+      )
+      .fill(LinkstrTheme.panelMuted)
+    )
+    .overlay {
+      RoundedRectangle(
+        cornerRadius: LinkstrTheme.fieldCornerRadius,
+        style: .continuous
+      )
+      .stroke(LinkstrTheme.separator.opacity(2), lineWidth: 1)
+    }
+  }
+}
+
 struct LinkstrAppIconBadge: View {
   var size: CGFloat = 72
 
@@ -507,7 +557,7 @@ struct LinkstrAppIconBadge: View {
       }
       .overlay {
         Circle()
-          .stroke(LinkstrTheme.separator.opacity(1.4), lineWidth: 1)
+          .stroke(LinkstrTheme.separator.opacity(2), lineWidth: 1)
       }
   }
 }
@@ -581,6 +631,7 @@ struct LinkstrContactAvatar: View {
         Circle()
           .stroke(Color.white.opacity(0.1), lineWidth: 1)
       }
+      .accessibilityLabel("avatar for \(name)")
   }
 }
 
@@ -596,6 +647,7 @@ struct LinkstrSessionAvatar: View {
         Circle()
           .stroke(Color.white.opacity(0.12), lineWidth: 1)
       }
+      .accessibilityLabel("session avatar")
   }
 }
 

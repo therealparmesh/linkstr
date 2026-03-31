@@ -532,7 +532,7 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     XCTAssertTrue(FileManager.default.fileExists(atPath: thumbnailURL.path))
   }
 
-  func testClearCachedMediaAndPreviewsRemovesManagedFilesAndClearsHydratedMetadata() throws {
+  func testClearCachedMediaRemovesManagedVideoFilesButPreservesHydratedMetadata() throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
     let ownerPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
@@ -557,18 +557,18 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     container.mainContext.insert(message)
     try container.mainContext.save()
 
-    session.clearCachedMediaAndPreviews()
+    session.clearCachedMedia()
 
     let stored = try XCTUnwrap(try fetchMessages(in: container.mainContext).first)
-    XCTAssertNil(stored.metadataTitle)
-    XCTAssertNil(stored.thumbnailURL)
+    XCTAssertEqual(stored.metadataTitle, "Title")
+    XCTAssertEqual(stored.thumbnailURL, thumbnailURL.path)
     XCTAssertNil(stored.cachedMediaPath)
     XCTAssertNil(stored.cachedMediaSourceURL)
-    XCTAssertFalse(FileManager.default.fileExists(atPath: thumbnailURL.path))
+    XCTAssertTrue(FileManager.default.fileExists(atPath: thumbnailURL.path))
     XCTAssertFalse(FileManager.default.fileExists(atPath: cachedMediaURL.path))
   }
 
-  func testClearableStorageBytesReportsCurrentAccountManagedUsage() async throws {
+  func testClearableCachedMediaBytesReportsOnlyCurrentAccountVideoUsage() async throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
     let ownerPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
@@ -600,9 +600,52 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     container.mainContext.insert(message)
     try container.mainContext.save()
 
-    let clearableStorageBytes = session.clearableStorageBytes()
+    let clearableStorageBytes = session.clearableCachedMediaBytes()
 
-    XCTAssertEqual(clearableStorageBytes, Int64(thumbnailData.count + mediaData.count))
+    XCTAssertEqual(clearableStorageBytes, Int64(mediaData.count))
+  }
+
+  func testRefreshPostMetadataClearsCachedLocalPlaybackAndForcesMetadataRefresh() async throws {
+    let refreshedThumbnailURL = makeManagedThumbnailURL()
+    let cachedMediaURL = makeManagedVideoURL()
+    try Data("refreshed-thumbnail".utf8).write(to: refreshedThumbnailURL, options: .atomic)
+    try Data("cached-media".utf8).write(to: cachedMediaURL, options: .atomic)
+    defer {
+      try? FileManager.default.removeItem(at: refreshedThumbnailURL)
+      try? FileManager.default.removeItem(at: cachedMediaURL)
+    }
+
+    let (session, container) = try makeSession(
+      fetchLinkPreview: { _ in
+        LinkPreviewData(title: "Refreshed Title", thumbnailPath: refreshedThumbnailURL.path)
+      }
+    )
+    try session.identityService.createNewIdentity()
+    let ownerPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+
+    let message = makeMessage(
+      eventID: "message-refresh-metadata",
+      conversationID: "conversation-refresh-metadata",
+      rootID: "message-refresh-metadata",
+      kind: .root,
+      senderPubkey: "peer",
+      receiverPubkey: ownerPubkey,
+      ownerPubkey: ownerPubkey
+    )
+    try message.setMetadata(title: "Old Title", thumbnailURL: nil)
+    message.cachedMediaPath = cachedMediaURL.path
+    message.cachedMediaSourceURL = "https://example.com/video.mp4"
+    container.mainContext.insert(message)
+    try container.mainContext.save()
+
+    await session.refreshPostMetadata(message)
+
+    let stored = try XCTUnwrap(try fetchMessages(in: container.mainContext).first)
+    XCTAssertEqual(stored.metadataTitle, "Refreshed Title")
+    XCTAssertEqual(stored.thumbnailURL, refreshedThumbnailURL.path)
+    XCTAssertNil(stored.cachedMediaPath)
+    XCTAssertNil(stored.cachedMediaSourceURL)
+    XCTAssertFalse(FileManager.default.fileExists(atPath: cachedMediaURL.path))
   }
 
   func testVideoCacheServiceCurrentUsageCountsVideoAndThumbnailBytes() async throws {

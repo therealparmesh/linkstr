@@ -1,6 +1,7 @@
 import EmojiKit
 import SwiftData
 import SwiftUI
+import UIKit
 
 struct ReactionSummary: Identifiable, Hashable {
   let emoji: String
@@ -159,6 +160,8 @@ struct LinkstrReactionRow: View {
     .fixedSize(horizontal: true, vertical: false)
     .padding(.vertical, 4)
     .padding(.trailing, 8)
+    .accessibilityLabel(
+      "\(summary.count) \(summary.emoji) reaction\(summary.count == 1 ? "" : "s")")
   }
 
   private func summaryChip(_ summary: ReactionSummary) -> some View {
@@ -262,24 +265,27 @@ struct LinkstrEmojiPickerSheet: View {
     NavigationStack {
       ZStack {
         LinkstrBackgroundView()
-        EmojiGridScrollView(
-          axis: .vertical,
-          category: $category,
-          selection: $selection,
-          query: query,
-          action: { emoji in
-            onPick(emoji.char)
-            dismiss()
-          },
-          sectionTitle: { $0.view },
-          gridItem: { $0.view }
-        )
-        .emojiGridStyle(.medium)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 8)
+        VStack(spacing: 0) {
+          LinkstrScreenTitle(title: "add reaction")
+            .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+            .padding(.top, LinkstrTheme.screenTopPadding)
+          EmojiGridScrollView(
+            axis: .vertical,
+            category: $category,
+            selection: $selection,
+            query: query,
+            action: { emoji in
+              onPick(emoji.char)
+              dismiss()
+            },
+            sectionTitle: { $0.view },
+            gridItem: { $0.view }
+          )
+          .emojiGridStyle(.medium)
+          .padding(.horizontal, 8)
+          .padding(.vertical, 8)
+        }
       }
-      .navigationTitle("add reaction")
-      .navigationBarTitleDisplayMode(.inline)
       .linkstrBarChrome()
       .searchable(text: $query, prompt: "search emoji")
       .toolbar {
@@ -314,6 +320,7 @@ struct PostDetailView: View {
   @State private var loadedReactions: [SessionReactionEntity] = []
   @State private var loadedMembers: [SessionMemberEntity] = []
   @State private var remotePostText: String?
+  @State private var isRefreshingMetadata = false
 
   init(
     ownerPubkey: String,
@@ -402,10 +409,11 @@ struct PostDetailView: View {
       if let post {
         ScrollView {
           VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
+            LinkstrScreenTitle(title: sessionName)
             postCardContent(post)
           }
           .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-          .padding(.top, LinkstrTheme.compactSpacing)
+          .padding(.top, LinkstrTheme.screenTopPadding)
           .padding(.bottom, LinkstrTheme.screenBottomPadding)
         }
       } else {
@@ -424,18 +432,18 @@ struct PostDetailView: View {
       session.requestRemoteProfilesIfNeeded(pubkeyHexes: profileLookupPubkeys)
     }
     .background(LinkstrBackgroundView())
-    .navigationTitle(sessionName)
-    .navigationBarTitleDisplayMode(.inline)
     .linkstrBarChrome()
     .toolbar {
-      if let shareDeepLinkURL {
-        ToolbarItem(placement: .topBarTrailing) {
-          ShareLink(item: shareDeepLinkURL) {
-            Image(systemName: "square.and.arrow.up")
-              .linkstrToolbarIconLabel()
+      if let post {
+        ToolbarItemGroup(placement: .topBarTrailing) {
+          metadataRefreshButton(for: post)
+          if let shareDeepLinkURL {
+            shareDeepLinkButton(for: shareDeepLinkURL)
           }
-          .accessibilityLabel("share deep link")
-          .tint(LinkstrTheme.accent)
+        }
+      } else if let shareDeepLinkURL {
+        ToolbarItem(placement: .topBarTrailing) {
+          shareDeepLinkButton(for: shareDeepLinkURL)
         }
       }
     }
@@ -564,8 +572,7 @@ struct PostDetailView: View {
             return nil
           }
           guard FileManager.default.fileExists(atPath: localURL.path) else {
-            post.cachedMediaPath = nil
-            post.cachedMediaSourceURL = nil
+            clearPersistedLocalMedia(for: post)
             return nil
           }
           return PlayableMedia(playbackURL: localURL, headers: [:], isLocalFile: true)
@@ -577,23 +584,58 @@ struct PostDetailView: View {
               fromPath: media.playbackURL.path
             )
           else {
-            post.cachedMediaPath = nil
-            post.cachedMediaSourceURL = nil
+            clearPersistedLocalMedia(for: post)
             return
           }
           post.cachedMediaPath = managedURL.path
           post.cachedMediaSourceURL = sourceURL.absoluteString
+          try? modelContext.save()
+        },
+        clearPersistedLocalMedia: {
+          clearPersistedLocalMedia(for: post)
         }
       )
     }
   }
 
   private func toggleReaction(_ emoji: String) {
+    UIImpactFeedbackGenerator(style: .light).impactOccurred()
     Task { @MainActor in
       guard let post else { return }
       _ = await session.toggleReactionAwaitingRelay(emoji: emoji, post: post)
       await loadContent()
     }
+  }
+
+  private func refreshPostMetadata(_ post: SessionMessageEntity) {
+    guard !isRefreshingMetadata else { return }
+    isRefreshingMetadata = true
+    Task { @MainActor in
+      await session.refreshPostMetadata(post)
+      await loadContent()
+      isRefreshingMetadata = false
+    }
+  }
+
+  private func metadataRefreshButton(for post: SessionMessageEntity) -> some View {
+    Button {
+      refreshPostMetadata(post)
+    } label: {
+      Image(systemName: "arrow.clockwise")
+        .linkstrToolbarIconLabel()
+    }
+    .accessibilityLabel("refresh post metadata")
+    .disabled(isRefreshingMetadata)
+    .tint(LinkstrTheme.accent)
+  }
+
+  private func shareDeepLinkButton(for url: URL) -> some View {
+    ShareLink(item: url) {
+      Image(systemName: "square.and.arrow.up")
+        .linkstrToolbarIconLabel()
+    }
+    .accessibilityLabel("share deep link")
+    .tint(LinkstrTheme.accent)
   }
 
   private var noteText: String? {
@@ -640,6 +682,15 @@ struct PostDetailView: View {
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(.leading, 2)
+  }
+
+  private func clearPersistedLocalMedia(for post: SessionMessageEntity) {
+    if let localURL = ManagedLocalFileScope.shared.managedFileURL(fromPath: post.cachedMediaPath) {
+      try? FileManager.default.removeItem(at: localURL)
+    }
+    post.cachedMediaPath = nil
+    post.cachedMediaSourceURL = nil
+    try? modelContext.save()
   }
 
   @MainActor

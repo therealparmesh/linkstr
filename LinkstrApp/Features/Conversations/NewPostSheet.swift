@@ -28,6 +28,7 @@ struct NewPostSheet: View {
         LinkstrBackgroundView()
         ScrollView {
           VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
+            LinkstrScreenTitle(title: "new post")
             LinkstrInsetSection(title: "session") {
               Text(sessionEntity.name)
                 .font(LinkstrTheme.body(15, weight: .medium))
@@ -36,33 +37,7 @@ struct NewPostSheet: View {
             }
 
             if !canCreatePostInSession {
-              HStack(alignment: .top, spacing: 10) {
-                Image(systemName: "person.crop.circle.badge.xmark")
-                  .font(LinkstrTheme.system(14, weight: .semibold))
-                  .foregroundStyle(LinkstrTheme.textSecondary)
-
-                Text("you're no longer a member. this session is read-only.")
-                  .font(LinkstrTheme.body(12))
-                  .foregroundStyle(LinkstrTheme.textSecondary)
-                  .fixedSize(horizontal: false, vertical: true)
-              }
-              .frame(maxWidth: .infinity, alignment: .leading)
-              .padding(.horizontal, LinkstrTheme.fieldHorizontalPadding)
-              .padding(.vertical, 10)
-              .background(
-                RoundedRectangle(
-                  cornerRadius: LinkstrTheme.fieldCornerRadius,
-                  style: .continuous
-                )
-                .fill(LinkstrTheme.panelMuted)
-              )
-              .overlay {
-                RoundedRectangle(
-                  cornerRadius: LinkstrTheme.fieldCornerRadius,
-                  style: .continuous
-                )
-                .stroke(LinkstrTheme.separator.opacity(1.4), lineWidth: 1)
-              }
+              LinkstrReadOnlyBanner()
             }
 
             LinkstrInsetSection(title: "link") {
@@ -125,8 +100,7 @@ struct NewPostSheet: View {
         .padding(.bottom, LinkstrTheme.screenBottomPadding)
         .scrollDismissesKeyboard(.interactively)
       }
-      .navigationTitle("new post")
-      .navigationBarTitleDisplayMode(.inline)
+
       .linkstrBarChrome()
       .toolbar {
         ToolbarItem(placement: .topBarLeading) {
@@ -261,6 +235,7 @@ struct NewPostSheet: View {
       }
       isSending = false
       if result.didSucceed {
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
         dismiss()
       } else {
         mutationFeedback.record(errorMessage: result.errorMessage)

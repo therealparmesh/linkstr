@@ -45,9 +45,9 @@
                         <viewLayoutGuide key="safeArea" id="Bcu-3y-fUS" />
                         <color
               key="backgroundColor"
-              red="0.070588235299999996"
-              green="0.078431372548999997"
-              blue="0.1176470588"
+              red="0.09"
+              green="0.10"
+              blue="0.16"
               alpha="1"
               colorSpace="custom"
               customColorSpace="sRGB"

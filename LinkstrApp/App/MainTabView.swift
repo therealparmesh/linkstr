@@ -80,11 +80,7 @@ struct MainTabView: View {
         }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-    .navigationTitle(
-      selectedTab == .sessions && isShowingArchivedSessions
-        ? "archived" : selectedTab.title
-    )
-    .navigationBarTitleDisplayMode(.inline)
+
     .navigationDestination(item: $selectedSessionTarget) { target in
       SessionPostsView(
         ownerPubkey: session.identityService.pubkeyHex ?? "",

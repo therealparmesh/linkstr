@@ -1,6 +1,6 @@
 # linkstr support
 
-_Last updated: March 16, 2026_
+_Last updated: March 31, 2026_
 
 linkstr is a private link-sharing app built on [Nostr](https://nostr.com). You create or join private sessions, share links inside those sessions, and react with emoji. This page describes the current shipped behavior in plain language.
 
@@ -229,7 +229,7 @@ In the device keychain, with iOS-controlled protection. Simulator fallback stora
 
 ### Where are videos and previews stored?
 
-Downloaded media and generated previews are stored in app-owned local storage. Video cache is treated as disposable device cache and auto-trims with least-recently-used eviction at approximately 1 GB. You can also clear cached media and previews from Settings.
+Downloaded media and generated previews are stored in app-owned local storage. Video cache is treated as disposable device cache and auto-trims with least-recently-used eviction at approximately 1 GB. Settings can clear downloaded videos, while saved metadata and thumbnails stay on-device until they are replaced or account data is removed.
 
 ### What permissions does linkstr ask for?
 
@@ -267,14 +267,16 @@ Historical replay depends on relay retention. linkstr can retry out-of-order pos
 1. Check your network connection.
 2. Switch between **Try local playback** and **Try embed playback**.
 3. If a downloaded copy was auto-trimmed, try local playback again to re-download it.
-4. Clear cached media and previews from Settings if playback metadata looks stale.
-5. Use **Open in browser** if the provider blocks embedded playback.
+4. Use **Try local playback** again to clear a stale local failure and force a fresh retry.
+5. Open post detail and tap the refresh button to the left of share if you want to reset that post's local playback state and re-fetch metadata.
+6. Use **Open in browser** if the provider blocks embedded playback.
 
 ### A preview looks stale or wrong
 
-1. Clear cached media and previews from Settings.
-2. Open the session, the post detail, or the shared-link screen and let linkstr rebuild the preview.
-3. If the provider itself is serving bad metadata, use **Open in browser**.
+1. Open post detail and tap the refresh button to force metadata to re-fetch for that post.
+2. Open the session, the post detail, or the shared-link screen and let linkstr rebuild the preview if metadata is still missing.
+3. Settings only clears downloaded videos; it does not wipe saved metadata or thumbnails.
+4. If the provider itself is serving bad metadata, use **Open in browser**.
 
 ### I can't scan a QR code
 

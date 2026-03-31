@@ -2,12 +2,13 @@ import SwiftUI
 
 struct LinkstrErrorToast: View {
   let message: String
+  var isSuccess: Bool = false
 
   var body: some View {
     HStack(alignment: .top, spacing: 10) {
-      Image(systemName: "exclamationmark.circle.fill")
+      Image(systemName: isSuccess ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
         .font(LinkstrTheme.system(15, weight: .semibold))
-        .foregroundStyle(LinkstrTheme.amber)
+        .foregroundStyle(isSuccess ? LinkstrTheme.statusSuccess : LinkstrTheme.amber)
         .padding(.top, 1)
 
       Text(message)
@@ -24,5 +25,16 @@ struct LinkstrErrorToast: View {
         .stroke(LinkstrTheme.separator, lineWidth: 1)
     }
     .shadow(color: .black.opacity(0.18), radius: 18, y: 8)
+  }
+}
+
+extension Notification.Name {
+  static let linkstrSuccessToast = Notification.Name("linkstrSuccessToast")
+}
+
+enum LinkstrToast {
+  @MainActor
+  static func showSuccess(_ message: String) {
+    NotificationCenter.default.post(name: .linkstrSuccessToast, object: message)
   }
 }

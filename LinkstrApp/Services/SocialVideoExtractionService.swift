@@ -461,6 +461,7 @@ final class SocialVideoExtractionService: NSObject {
 
     // Provider video CDN host (+25)
     if host.contains("video") && host.contains("fbcdn") { score += 25 }
+    if Self.isLikelyInstagramSignedVideoURLString(value) { score += 30 }
     if host.contains("cdninstagram") && value.contains(".mp4") { score += 25 }
     if host.contains("fbcdn") && value.contains(".mp4") { score += 20 }
     if host.hasSuffix("twimg.com") && host.contains("video") { score += 25 }
@@ -510,7 +511,11 @@ final class SocialVideoExtractionService: NSObject {
     if Self.blockedPlaybackCandidateTokens.contains(where: value.contains) {
       score -= 40
     }
-    if host.contains("cdninstagram") && !value.contains(".mp4") && !value.contains(".m3u8") {
+    if host.contains("cdninstagram")
+      && !value.contains(".mp4")
+      && !value.contains(".m3u8")
+      && !Self.isLikelyInstagramSignedVideoURLString(value)
+    {
       score -= 40
     }
 
@@ -559,7 +564,7 @@ final class SocialVideoExtractionService: NSObject {
     return headers
   }
 
-  fileprivate static func isLikelyMediaURLString(_ lower: String) -> Bool {
+  static func isLikelyMediaURLString(_ lower: String) -> Bool {
     // Generic video markers
     lower.contains(".m3u8")
       || lower.contains(".mp4")
@@ -574,8 +579,24 @@ final class SocialVideoExtractionService: NSObject {
       || lower.contains("scontent.cdninstagram.com")
       || (lower.contains("cdninstagram.com") && lower.contains(".mp4"))
       || (lower.contains("fbcdn.net") && lower.contains("/video"))
+      || isLikelyInstagramSignedVideoURLString(lower)
       // Twitter / X
       || lower.contains("video.twimg.com")
+  }
+
+  private static func isLikelyInstagramSignedVideoURLString(_ lower: String) -> Bool {
+    guard lower.contains("cdninstagram.com") || lower.contains("fbcdn.net") else { return false }
+    // Instagram CDN video URLs are often signed and omit a literal `.mp4`.
+    // Match the broader signed video delivery shape instead of a single path
+    // family number so minor CDN renames do not break extraction immediately.
+    guard lower.contains("/o1/v/") else { return false }
+    return !hasStaticImageExtension(lower)
+  }
+
+  private static func hasStaticImageExtension(_ lower: String) -> Bool {
+    [".jpg", ".jpeg", ".png", ".webp", ".gif", ".heic", ".heif"].contains {
+      lower.contains($0)
+    }
   }
 
   private func mergeCandidates(primary: [URL], secondary: [URL]) -> [URL] {
@@ -675,7 +696,7 @@ final class SocialVideoExtractionService: NSObject {
 
   private static let injectionScript = """
     (function() {
-      const candidatePattern = /(\\.m3u8|\\.mp4|mime_type=video_mp4|\\/aweme\\/v1\\/play\\/|\\/video\\/tos\\/|playaddr|play_addr|video\\.xx\\.fbcdn\\.net|cdninstagram\\.com.*\\.mp4|fbcdn\\.net.*\\/video|video\\.twimg\\.com)/i;
+      const candidatePattern = /(\\.m3u8|\\.mp4|mime_type=video_mp4|\\/aweme\\/v1\\/play\\/|\\/video\\/tos\\/|playaddr|play_addr|video\\.xx\\.fbcdn\\.net|cdninstagram\\.com.*\\.mp4|fbcdn\\.net.*\\/video|(?:cdninstagram\\.com|fbcdn\\.net).*\\/o1\\/v\\/|video\\.twimg\\.com)/i;
 
       const send = (u) => {
         if (!u || typeof u !== 'string') return;
@@ -1012,6 +1033,12 @@ actor TwitterStatusResolutionService {
   func preview(for sourceURL: URL) async -> TwitterStatusPreview? {
     let summary = await mediaSummary(for: sourceURL)
     return summary.preview
+  }
+
+  func invalidate(for sourceURL: URL) {
+    guard let cacheKey = cacheKey(for: sourceURL) else { return }
+    mediaSummaryCache.removeValue(forKey: cacheKey)
+    presentationCache.removeValue(forKey: cacheKey)
   }
 
   func resolvedPresentation(for sourceURL: URL) async -> TwitterStatusResolvedPresentation? {
@@ -1641,6 +1668,12 @@ actor SocialPostResolutionService {
     return resolved
   }
 
+  func invalidate(for sourceURL: URL) {
+    let linkType = URLClassifier.classify(sourceURL)
+    guard let cacheKey = cacheKey(for: sourceURL, linkType: linkType) else { return }
+    cache.removeValue(forKey: cacheKey)
+  }
+
   private func cacheKey(for sourceURL: URL, linkType: LinkType) -> String? {
     switch linkType {
     case .instagram:
@@ -2048,6 +2081,12 @@ actor URLCanonicalizationService {
       embedURLCache[cacheKey] = resolved
     }
     return resolved
+  }
+
+  func invalidate(for sourceURL: URL) {
+    let cacheKey = sourceURL.absoluteString
+    cache.removeValue(forKey: cacheKey)
+    embedURLCache.removeValue(forKey: cacheKey)
   }
 
   private func resolveUncached(_ sourceURL: URL) async -> URL {

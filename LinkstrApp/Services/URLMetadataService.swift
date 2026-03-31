@@ -182,6 +182,7 @@ final class URLMetadataService {
       fileExtension: "png"
     )
     try normalizedPNGData.write(to: fileURL, options: .atomic)
+    ThumbnailImageCache.shared.removeImage(at: fileURL.path)
     return fileURL.path
   }
 }

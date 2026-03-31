@@ -1,6 +1,7 @@
 import AVFoundation
 import SwiftData
 import SwiftUI
+import UIKit
 
 struct ContactsView: View {
   @EnvironmentObject private var session: AppSession
@@ -64,14 +65,21 @@ struct ContactsView: View {
   @ViewBuilder
   private var content: some View {
     if scopedContacts.isEmpty {
-      LinkstrCenteredEmptyStateView(
-        title: "no contacts",
-        systemImage: "person.2.slash",
-        description: "add a contact. invite them when you start a session."
-      )
+      VStack(spacing: 0) {
+        LinkstrScreenTitle(title: "contacts")
+          .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+          .padding(.top, LinkstrTheme.screenTopPadding)
+        LinkstrCenteredEmptyStateView(
+          title: "no contacts",
+          systemImage: "person.2.slash",
+          description: "add a contact. invite them when you start a session."
+        )
+      }
     } else {
       ScrollView {
         VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
+          LinkstrScreenTitle(title: "contacts")
+
           LinkstrSearchField(prompt: "search contacts", text: $query)
 
           if visibleContacts.isEmpty {
@@ -137,7 +145,7 @@ struct ContactsView: View {
 
   private func removePendingContact() {
     guard !isRemovingContact, let pendingContactRemoval else { return }
-
+    UINotificationFeedbackGenerator().notificationOccurred(.warning)
     isRemovingContact = true
     Task { @MainActor in
       let didRemove = await session.removeContact(pendingContactRemoval)
@@ -194,6 +202,8 @@ private struct EditContactView: View {
       LinkstrBackgroundView()
       ScrollView {
         VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
+          LinkstrScreenTitle(title: "edit contact")
+
           LinkstrInsetSection(
             title: "contact",
             footer: "only you see this alias. the public key (npub) stays the real identity."
@@ -242,8 +252,6 @@ private struct EditContactView: View {
       }
       .linkstrTabBarContentInset()
     }
-    .navigationTitle("edit contact")
-    .navigationBarTitleDisplayMode(.inline)
     .navigationBarBackButtonHidden(true)
     .linkstrBarChrome()
     .toolbar {
@@ -251,11 +259,11 @@ private struct EditContactView: View {
         Button {
           dismiss()
         } label: {
-          Image(systemName: "xmark")
+          Image(systemName: "chevron.left")
             .linkstrToolbarIconLabel()
         }
-        .accessibilityLabel("cancel")
-        .tint(LinkstrTheme.textSecondary)
+        .accessibilityLabel("back")
+        .tint(LinkstrTheme.accent)
       }
       ToolbarItem(placement: .topBarTrailing) {
         Button {
@@ -321,6 +329,8 @@ struct AddContactSheet: View {
         LinkstrBackgroundView()
         ScrollView {
           VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
+            LinkstrScreenTitle(title: "add contact")
+
             LinkstrInsetSection(title: "public key (npub)") {
               TextField("public key (npub...)", text: $npub)
                 .font(LinkstrTheme.body(15))
@@ -395,8 +405,6 @@ struct AddContactSheet: View {
         guard let previewPubkeyHex else { return }
         session.requestRemoteProfilesIfNeeded(pubkeyHexes: [previewPubkeyHex])
       }
-      .navigationTitle("add contact")
-      .navigationBarTitleDisplayMode(.inline)
       .linkstrBarChrome()
       .toolbar {
         ToolbarItem(placement: .topBarLeading) {
@@ -575,15 +583,17 @@ struct LinkstrQRScannerSheet: View {
 
       VStack {
         HStack {
-          Spacer()
-          Button("close") {
+          Button {
             dismiss()
+          } label: {
+            Image(systemName: "xmark")
+              .font(LinkstrTheme.system(15, weight: .semibold))
+              .foregroundStyle(.white)
+              .frame(width: 36, height: 36)
+              .background(.black.opacity(0.45), in: Circle())
           }
-          .font(LinkstrTheme.body(16))
-          .foregroundStyle(.white)
-          .padding(.horizontal, 12)
-          .padding(.vertical, 8)
-          .background(.black.opacity(0.45), in: Capsule())
+          .accessibilityLabel("close")
+          Spacer()
         }
         .padding(.top, LinkstrTheme.screenTopPadding)
         .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)

@@ -131,6 +131,7 @@ struct AdaptiveVideoPlaybackView: View {
   let openSourceAction: (() -> Void)?
   let resolveCachedLocalMedia: ((URL) -> PlayableMedia?)?
   let persistLocalMedia: ((URL, PlayableMedia) -> Void)?
+  let clearPersistedLocalMedia: (() -> Void)?
 
   @State private var canonicalSourceURL: URL?
   @State private var preferredEmbedSource: EmbeddedWebSource?
@@ -154,13 +155,15 @@ struct AdaptiveVideoPlaybackView: View {
     showOpenSourceButtonInEmbedMode: Bool = true,
     openSourceAction: (() -> Void)? = nil,
     resolveCachedLocalMedia: ((URL) -> PlayableMedia?)? = nil,
-    persistLocalMedia: ((URL, PlayableMedia) -> Void)? = nil
+    persistLocalMedia: ((URL, PlayableMedia) -> Void)? = nil,
+    clearPersistedLocalMedia: (() -> Void)? = nil
   ) {
     self.sourceURL = sourceURL
     self.showOpenSourceButtonInEmbedMode = showOpenSourceButtonInEmbedMode
     self.openSourceAction = openSourceAction
     self.resolveCachedLocalMedia = resolveCachedLocalMedia
     self.persistLocalMedia = persistLocalMedia
+    self.clearPersistedLocalMedia = clearPersistedLocalMedia
   }
 
   var body: some View {
@@ -318,7 +321,7 @@ struct AdaptiveVideoPlaybackView: View {
             InlineVideoPlayer(
               media: media,
               onPlaybackFailed: {
-                advancePlaybackCandidate(candidates: candidates)
+                handlePlaybackFailure(currentMedia: media, candidates: candidates)
               })
           }
           extractionReadyActions(exportFileURL: exportFileURL)
@@ -458,6 +461,9 @@ struct AdaptiveVideoPlaybackView: View {
 
   private func retryLocalPlayback() {
     Task {
+      if extractionFallbackReason != nil {
+        clearFailedLocalPlaybackState()
+      }
       localPlaybackMode = .localPreferred
       playbackCandidateIndex = 0
       embeddedContentHeight = nil
@@ -466,6 +472,16 @@ struct AdaptiveVideoPlaybackView: View {
       extractionFallbackReason = nil
       await prepareMediaIfNeeded()
     }
+  }
+
+  private func handlePlaybackFailure(currentMedia: PlayableMedia, candidates: [PlayableMedia]) {
+    if currentMedia.isLocalFile {
+      clearFailedLocalPlaybackState()
+      retryLocalPlayback()
+      return
+    }
+
+    advancePlaybackCandidate(candidates: candidates)
   }
 
   private func currentPlaybackCandidate(from candidates: [PlayableMedia]) -> PlayableMedia? {
@@ -572,6 +588,21 @@ struct AdaptiveVideoPlaybackView: View {
         persistLocalMedia?(sourceURL, localMedia)
       }
     }
+  }
+
+  private func clearFailedLocalPlaybackState() {
+    localCacheTask?.cancel()
+    localCacheTask = nil
+
+    if clearPersistedLocalMedia == nil,
+      let cachedLocalMedia,
+      cachedLocalMedia.isLocalFile
+    {
+      try? FileManager.default.removeItem(at: cachedLocalMedia.playbackURL)
+    }
+
+    cachedLocalMedia = nil
+    clearPersistedLocalMedia?()
   }
 
   private var effectiveSourceURL: URL {

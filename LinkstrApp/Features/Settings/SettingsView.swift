@@ -42,6 +42,7 @@ struct SettingsView: View {
   private var content: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
+        LinkstrScreenTitle(title: "settings")
         relaysSection
         storageSection
         identitySection
@@ -193,6 +194,7 @@ struct SettingsView: View {
         Spacer()
 
         Button {
+          UIImpactFeedbackGenerator(style: .light).impactOccurred()
           session.removeRelay(relay)
         } label: {
           Label("remove", systemImage: "trash")
@@ -207,6 +209,7 @@ struct SettingsView: View {
 
   private func addRelayFromDraft() {
     if session.addRelay(url: relayURL) {
+      UIImpactFeedbackGenerator(style: .light).impactOccurred()
       relayURL = ""
     }
   }
@@ -215,7 +218,7 @@ struct SettingsView: View {
     LinkstrInsetSection(
       title: "storage",
       footer:
-        "downloaded videos and hydrated previews are device-local only and can be rebuilt later if needed."
+        "downloaded videos are device-local only. clearing them keeps post metadata and thumbnails."
     ) {
       if isRefreshingStorageUsage && clearableStorageBytes == nil {
         Text("measuring local storage...")
@@ -223,17 +226,18 @@ struct SettingsView: View {
           .foregroundStyle(LinkstrTheme.textSecondary)
       } else if let clearableStorageBytes {
         Text(
-          "this will save about \(ByteCountFormatter.string(fromByteCount: clearableStorageBytes, countStyle: .file).lowercased())."
+          "this will remove locally downloaded videos only and save about \(ByteCountFormatter.string(fromByteCount: clearableStorageBytes, countStyle: .file).lowercased())."
         )
         .font(LinkstrTheme.body(13))
         .foregroundStyle(LinkstrTheme.textSecondary)
       }
 
       Button(role: .destructive) {
-        session.clearCachedMediaAndPreviews()
+        UINotificationFeedbackGenerator().notificationOccurred(.warning)
+        session.clearCachedMedia()
         refreshStorageUsage()
       } label: {
-        LinkstrActionButtonLabel(title: "clear cached media and previews")
+        LinkstrActionButtonLabel(title: "clear downloaded videos")
       }
       .linkstrDestructiveButton()
     }
@@ -262,6 +266,7 @@ struct SettingsView: View {
             Button {
               guard !revealedNsec.isEmpty else { return }
               UIPasteboard.general.string = revealedNsec
+              LinkstrToast.showSuccess("copied to clipboard")
             } label: {
               LinkstrActionButtonLabel(title: "copy", systemImage: "doc.on.doc")
             }
@@ -341,7 +346,7 @@ struct SettingsView: View {
   private func refreshStorageUsage() {
     isRefreshingStorageUsage = true
     Task { @MainActor in
-      clearableStorageBytes = session.clearableStorageBytes()
+      clearableStorageBytes = session.clearableCachedMediaBytes()
       isRefreshingStorageUsage = false
     }
   }
