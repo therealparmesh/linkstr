@@ -605,14 +605,11 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     XCTAssertEqual(clearableStorageBytes, Int64(mediaData.count))
   }
 
-  func testRefreshPostMetadataClearsCachedLocalPlaybackAndForcesMetadataRefresh() async throws {
+  func testRefreshPostMetadataUpdatesStoredMetadataWhenPreviewChanges() async throws {
     let refreshedThumbnailURL = makeManagedThumbnailURL()
-    let cachedMediaURL = makeManagedVideoURL()
     try Data("refreshed-thumbnail".utf8).write(to: refreshedThumbnailURL, options: .atomic)
-    try Data("cached-media".utf8).write(to: cachedMediaURL, options: .atomic)
     defer {
       try? FileManager.default.removeItem(at: refreshedThumbnailURL)
-      try? FileManager.default.removeItem(at: cachedMediaURL)
     }
 
     let (session, container) = try makeSession(
@@ -633,19 +630,49 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
       ownerPubkey: ownerPubkey
     )
     try message.setMetadata(title: "Old Title", thumbnailURL: nil)
-    message.cachedMediaPath = cachedMediaURL.path
-    message.cachedMediaSourceURL = "https://example.com/video.mp4"
     container.mainContext.insert(message)
     try container.mainContext.save()
 
-    await session.refreshPostMetadata(message)
+    let result = await session.refreshPostMetadata(message)
 
     let stored = try XCTUnwrap(try fetchMessages(in: container.mainContext).first)
+    XCTAssertTrue(result)
     XCTAssertEqual(stored.metadataTitle, "Refreshed Title")
     XCTAssertEqual(stored.thumbnailURL, refreshedThumbnailURL.path)
-    XCTAssertNil(stored.cachedMediaPath)
-    XCTAssertNil(stored.cachedMediaSourceURL)
-    XCTAssertFalse(FileManager.default.fileExists(atPath: cachedMediaURL.path))
+  }
+
+  func testRefreshPostMetadataReturnsFalseWhenPreviewMatchesStoredMetadata() async throws {
+    let thumbnailURL = makeManagedThumbnailURL()
+    try Data("thumbnail".utf8).write(to: thumbnailURL, options: .atomic)
+    defer { try? FileManager.default.removeItem(at: thumbnailURL) }
+
+    let (session, container) = try makeSession(
+      fetchLinkPreview: { _ in
+        LinkPreviewData(title: "Same Title", thumbnailPath: thumbnailURL.path)
+      }
+    )
+    try session.identityService.createNewIdentity()
+    let ownerPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+
+    let message = makeMessage(
+      eventID: "message-refresh-noop",
+      conversationID: "conversation-refresh-noop",
+      rootID: "message-refresh-noop",
+      kind: .root,
+      senderPubkey: "peer",
+      receiverPubkey: ownerPubkey,
+      ownerPubkey: ownerPubkey
+    )
+    try message.setMetadata(title: "Same Title", thumbnailURL: thumbnailURL.path)
+    container.mainContext.insert(message)
+    try container.mainContext.save()
+
+    let result = await session.refreshPostMetadata(message)
+
+    let stored = try XCTUnwrap(try fetchMessages(in: container.mainContext).first)
+    XCTAssertFalse(result)
+    XCTAssertEqual(stored.metadataTitle, "Same Title")
+    XCTAssertEqual(stored.thumbnailURL, thumbnailURL.path)
   }
 
   func testVideoCacheServiceCurrentUsageCountsVideoAndThumbnailBytes() async throws {

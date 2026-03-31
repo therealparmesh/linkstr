@@ -610,7 +610,7 @@ struct PostDetailView: View {
     guard !isRefreshingMetadata else { return }
     isRefreshingMetadata = true
     Task { @MainActor in
-      await session.refreshPostMetadata(post)
+      _ = await session.refreshPostMetadata(post)
       await loadContent()
       isRefreshingMetadata = false
     }
@@ -620,8 +620,16 @@ struct PostDetailView: View {
     Button {
       refreshPostMetadata(post)
     } label: {
-      Image(systemName: "arrow.clockwise")
-        .linkstrToolbarIconLabel()
+      Group {
+        if isRefreshingMetadata {
+          ProgressView()
+            .controlSize(.small)
+            .frame(width: 18, height: 18)
+        } else {
+          Image(systemName: "arrow.clockwise")
+            .linkstrToolbarIconLabel()
+        }
+      }
     }
     .accessibilityLabel("refresh post metadata")
     .disabled(isRefreshingMetadata)

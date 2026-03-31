@@ -322,7 +322,7 @@ Embedded web playback allows provider-element fullscreen when supported.
 - Title and thumbnail are fetched asynchronously for root posts.
 - Twitter/X, Instagram, TikTok, Facebook, and Rumble use provider-specific metadata paths before falling back to generic `LinkPresentation`.
 - Missing metadata is retried lazily when posts scroll into view or when post detail is opened.
-- Post detail also exposes a refresh action that forces metadata to re-fetch and resets stale local playback state for that post.
+- Post detail also exposes a refresh action that forces metadata to re-fetch for that post.
 - Missing local thumbnail files are treated as stale and re-fetched.
 - Settings → Storage clears downloaded videos only; hydrated metadata and thumbnails are preserved.
 

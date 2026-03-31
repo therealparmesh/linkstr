@@ -267,13 +267,13 @@ Historical replay depends on relay retention. linkstr can retry out-of-order pos
 1. Check your network connection.
 2. Switch between **Try local playback** and **Try embed playback**.
 3. If a downloaded copy was auto-trimmed, try local playback again to re-download it.
-4. Use **Try local playback** again to clear a stale local failure and force a fresh retry.
-5. Open post detail and tap the refresh button to the left of share if you want to reset that post's local playback state and re-fetch metadata.
+4. Try local playback again to clear a stale local failure and force a fresh retry.
+5. Use the refresh button in post detail if that post's metadata seems stale or missing.
 6. Use **Open in browser** if the provider blocks embedded playback.
 
 ### A preview looks stale or wrong
 
-1. Open post detail and tap the refresh button to force metadata to re-fetch for that post.
+1. Use the refresh button in post detail to re-fetch metadata for that post.
 2. Open the session, the post detail, or the shared-link screen and let linkstr rebuild the preview if metadata is still missing.
 3. Settings only clears downloaded videos; it does not wipe saved metadata or thumbnails.
 4. If the provider itself is serving bad metadata, use **Open in browser**.

@@ -217,21 +217,8 @@ struct SettingsView: View {
   private var storageSection: some View {
     LinkstrInsetSection(
       title: "storage",
-      footer:
-        "downloaded videos are device-local only. clearing them keeps post metadata and thumbnails."
+      footer: storageUsageHint
     ) {
-      if isRefreshingStorageUsage && clearableStorageBytes == nil {
-        Text("measuring local storage...")
-          .font(LinkstrTheme.body(12))
-          .foregroundStyle(LinkstrTheme.textSecondary)
-      } else if let clearableStorageBytes {
-        Text(
-          "this will remove locally downloaded videos only and save about \(ByteCountFormatter.string(fromByteCount: clearableStorageBytes, countStyle: .file).lowercased())."
-        )
-        .font(LinkstrTheme.body(13))
-        .foregroundStyle(LinkstrTheme.textSecondary)
-      }
-
       Button(role: .destructive) {
         UINotificationFeedbackGenerator().notificationOccurred(.warning)
         session.clearCachedMedia()
@@ -241,6 +228,15 @@ struct SettingsView: View {
       }
       .linkstrDestructiveButton()
     }
+  }
+
+  private var storageUsageHint: String? {
+    if isRefreshingStorageUsage && clearableStorageBytes == nil {
+      return "measuring local storage..."
+    }
+    guard let clearableStorageBytes else { return nil }
+    return
+      "this will save ~\(ByteCountFormatter.string(fromByteCount: clearableStorageBytes, countStyle: .file).lowercased())."
   }
 
   private var identitySection: some View {

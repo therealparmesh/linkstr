@@ -2549,21 +2549,21 @@ final class AppSession: ObservableObject {
     return currentAccountUsage.cachedMediaBytes
   }
 
-  func refreshPostMetadata(_ message: SessionMessageEntity) async {
+  @discardableResult
+  func refreshPostMetadata(_ message: SessionMessageEntity) async -> Bool {
     do {
-      var didChange = clearCachedLocalPlaybackState(for: message)
       if let urlString = message.url, let url = URL(string: urlString) {
         await invalidateTransientMediaCaches(for: url)
       }
-      if try await refreshMetadata(for: message, force: true) {
-        didChange = true
-      }
-      if didChange {
+      let didRefreshMetadata = try await refreshMetadata(for: message, force: true)
+      if didRefreshMetadata {
         try modelContext.save()
       }
       composeError = nil
+      return didRefreshMetadata
     } catch {
       report(error: error)
+      return false
     }
   }
 
@@ -3396,23 +3396,6 @@ final class AppSession: ObservableObject {
       title: message.metadataTitle,
       thumbnailPath: ManagedLocalFileScope.shared.normalizedManagedPath(message.thumbnailURL)
     )
-  }
-
-  private func clearCachedLocalPlaybackState(for message: SessionMessageEntity) -> Bool {
-    if let cachedMediaURL = ManagedLocalFileScope.shared.managedFileURL(
-      fromPath: message.cachedMediaPath)
-    {
-      try? FileManager.default.removeItem(at: cachedMediaURL)
-    }
-
-    let hadCachedMedia =
-      message.cachedMediaPath != nil
-      || message.cachedMediaSourceURL != nil
-    guard hadCachedMedia else { return false }
-
-    message.cachedMediaPath = nil
-    message.cachedMediaSourceURL = nil
-    return true
   }
 
   private func invalidateTransientMediaCaches(for url: URL) async {
