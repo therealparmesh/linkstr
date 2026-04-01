@@ -1363,34 +1363,6 @@ private struct SessionManagementSheet: View {
               }
             }
 
-            LinkstrInsetSection(title: "session visibility") {
-              Button {
-                toggleArchived()
-              } label: {
-                HStack(spacing: LinkstrTheme.rowSpacing) {
-                  Label(
-                    sessionEntity.isArchived ? "unarchive session" : "archive session",
-                    systemImage: sessionEntity.isArchived ? "tray.and.arrow.up" : "archivebox"
-                  )
-                  .font(LinkstrTheme.body(14, weight: .semibold))
-                  Spacer()
-                }
-                .foregroundStyle(LinkstrTheme.textPrimary)
-                .padding(.vertical, LinkstrTheme.listRowVerticalPadding)
-                .contentShape(Rectangle())
-              }
-              .buttonStyle(.plain)
-              .disabled(isSaving || isDeletingSession)
-
-              Text(
-                sessionEntity.isArchived
-                  ? "unarchiving returns this session to the main sessions list on this device."
-                  : "archiving hides this session from the main sessions list on this device."
-              )
-              .font(LinkstrTheme.body(13))
-              .foregroundStyle(LinkstrTheme.textSecondary)
-            }
-
             if canManageSession {
               LinkstrInsetSection(title: "add from contacts") {
                 LinkstrSearchField(prompt: "search contacts", text: $query)
@@ -1447,7 +1419,30 @@ private struct SessionManagementSheet: View {
                 }
               }
 
-              LinkstrInsetSection(title: "danger zone") {
+              LinkstrInsetSection(
+                title: "session visibility",
+                footer: archiveFooterText
+              ) {
+                Button {
+                  toggleArchived()
+                } label: {
+                  HStack(spacing: LinkstrTheme.rowSpacing) {
+                    Label(
+                      sessionEntity.isArchived ? "unarchive session" : "archive session",
+                      systemImage: sessionEntity.isArchived ? "tray.and.arrow.up" : "archivebox"
+                    )
+                    .font(LinkstrTheme.body(14, weight: .semibold))
+                    Spacer()
+                  }
+                  .foregroundStyle(LinkstrTheme.textPrimary)
+                  .padding(.vertical, LinkstrTheme.listRowVerticalPadding)
+                  .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(isSaving || isDeletingSession)
+              }
+
+              LinkstrInsetSection(title: "danger zone", footer: deleteFooterText) {
                 Button(role: .destructive) {
                   guard !isSaving, !isDeletingSession else { return }
                   focusedField = nil
@@ -1465,15 +1460,32 @@ private struct SessionManagementSheet: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(isSaving || isDeletingSession)
-
-                Text(
-                  "deleting removes this session from the app and sends delete notices to known members."
-                )
-                .font(LinkstrTheme.body(13))
-                .foregroundStyle(LinkstrTheme.textSecondary)
               }
             } else {
-              LinkstrInsetSection(title: "member permissions") {
+              LinkstrInsetSection(
+                title: "session visibility",
+                footer: archiveFooterText
+              ) {
+                Button {
+                  toggleArchived()
+                } label: {
+                  HStack(spacing: LinkstrTheme.rowSpacing) {
+                    Label(
+                      sessionEntity.isArchived ? "unarchive session" : "archive session",
+                      systemImage: sessionEntity.isArchived ? "tray.and.arrow.up" : "archivebox"
+                    )
+                    .font(LinkstrTheme.body(14, weight: .semibold))
+                    Spacer()
+                  }
+                  .foregroundStyle(LinkstrTheme.textPrimary)
+                  .padding(.vertical, LinkstrTheme.listRowVerticalPadding)
+                  .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(isSaving || isDeletingSession)
+              }
+
+              LinkstrInsetSection(title: "permissions") {
                 Text("only the session creator can rename, delete, or change membership.")
                   .font(LinkstrTheme.body(13))
                   .foregroundStyle(LinkstrTheme.textSecondary)
@@ -1594,6 +1606,16 @@ private struct SessionManagementSheet: View {
         : "waiting for relay reconnect before saving...",
       validationMessage: isDeletingSession || canSave ? nil : "session name required."
     )
+  }
+
+  private var archiveFooterText: String {
+    sessionEntity.isArchived
+      ? "unarchiving returns this session to the main sessions list on this device."
+      : "archiving hides this session from the main sessions list on this device."
+  }
+
+  private var deleteFooterText: String {
+    "deleting removes this session from the app and sends delete notices to known members."
   }
 
   private var pendingSessionName: String? {
