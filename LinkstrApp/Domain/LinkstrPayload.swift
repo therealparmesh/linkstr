@@ -4,6 +4,7 @@ enum LinkstrPayloadKind: String, Codable {
   case root
   case rootDelete = "root_delete"
   case sessionCreate = "session_create"
+  case sessionDelete = "session_delete"
   case sessionMembers = "session_members"
   case reaction
 }
@@ -89,6 +90,11 @@ struct LinkstrPayload: Codable, Hashable {
       guard !trimmedRootID.isEmpty else {
         throw LinkstrPayloadError.invalidRootID
       }
+    case .sessionDelete:
+      let trimmedRootID = rootID.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !trimmedRootID.isEmpty else {
+        throw LinkstrPayloadError.invalidRootID
+      }
     case .sessionCreate:
       let trimmedName = sessionName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
       guard !trimmedName.isEmpty else {
@@ -142,7 +148,7 @@ enum LinkstrPayloadError: Error, LocalizedError {
     case .invalidMembers:
       return "session requires valid members."
     case .invalidRootID:
-      return "reaction requires a post identifier."
+      return "payload requires a root identifier."
     case .invalidReactionEmoji:
       return "reaction requires an emoji."
     case .invalidReactionState:

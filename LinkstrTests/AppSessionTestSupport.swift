@@ -77,6 +77,7 @@ class AppSessionTestCase: XCTestCase {
       SessionMemberEntity.self,
       SessionMemberIntervalEntity.self,
       SessionReactionEntity.self,
+      SessionDeletionTombstoneEntity.self,
       SessionPostDeletionEntity.self,
       SessionMessageEntity.self,
     ])
@@ -158,6 +159,13 @@ class AppSessionTestCase: XCTestCase {
   func fetchPostDeletions(in context: ModelContext) throws -> [SessionPostDeletionEntity] {
     try context.fetch(
       FetchDescriptor<SessionPostDeletionEntity>(sortBy: [SortDescriptor(\.updatedAt)]))
+  }
+
+  func fetchSessionDeletionTombstones(in context: ModelContext) throws
+    -> [SessionDeletionTombstoneEntity]
+  {
+    try context.fetch(
+      FetchDescriptor<SessionDeletionTombstoneEntity>(sortBy: [SortDescriptor(\.updatedAt)]))
   }
 
   func fetchAccountStates(in context: ModelContext) throws -> [AccountStateEntity] {

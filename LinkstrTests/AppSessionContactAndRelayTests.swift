@@ -560,7 +560,7 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     XCTAssertFalse(rootInDifferentSession.isArchived)
   }
 
-  func testUpsertSessionCanPromoteNameFromOlderEventWithoutRewindingTimestamp() throws {
+  func testUpsertSessionPreservesExistingNameWhenTouchingOlderEvent() throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
     let ownerPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
@@ -584,7 +584,7 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
       updatedAt: olderDate
     )
 
-    XCTAssertEqual(updated.name, "Canonical Session Name")
+    XCTAssertEqual(updated.name, "Fallback Name")
     XCTAssertEqual(updated.updatedAt, newerDate)
   }
 

@@ -103,6 +103,28 @@ final class SessionPayloadValidationTests: XCTestCase {
     XCTAssertThrowsError(try missingRootID.validated())
   }
 
+  func testSessionDeleteValidationRequiresOperationID() {
+    let valid = LinkstrPayload(
+      conversationID: "session-1",
+      rootID: "delete-op-1",
+      kind: .sessionDelete,
+      url: nil,
+      note: nil,
+      timestamp: 123
+    )
+    XCTAssertNoThrow(try valid.validated())
+
+    let missingRootID = LinkstrPayload(
+      conversationID: "session-1",
+      rootID: "   ",
+      kind: .sessionDelete,
+      url: nil,
+      note: nil,
+      timestamp: 123
+    )
+    XCTAssertThrowsError(try missingRootID.validated())
+  }
+
   func testNormalizedMemberPubkeysDedupesAndRejectsInvalid() throws {
     let keypair = try XCTUnwrap(Keypair())
     let duplicateMembers = LinkstrPayload(

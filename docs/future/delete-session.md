@@ -1,38 +1,44 @@
-# Future Proposal: Delete Session
+# Delete Session
 
-Status: Proposal only. Not implemented.
+Status: Implemented on this branch. Pending merge.
 
-## Goals
+## Product shape
 
-- Support destructive session delete in addition to archive.
-- Keep delete distinct from archive (`archive` reversible, `delete` destructive).
+- Delete is destructive and stays distinct from archive (`archive` reversible, `delete` permanent for linkstr UX).
+- `Delete Session` lives in the creator-only manage session sheet and requires confirmation.
+- If a session disappears while you are viewing it, session detail dismisses back to the list.
+- Deleted sessions are removed from both active and archived views because the local session row is purged.
 
-## UX shape
+## Protocol shape
 
-- Expose destructive `Delete Session` with confirmation.
-- If delete succeeds while viewing the session, dismiss detail and return to list.
-- Hide deleted sessions from active and archived views.
+- Adds payload kind `session_delete`.
+- Uses `conversation_id` as the session identifier.
+- Uses `root_id` as the delete operation identifier for parity with other session lifecycle payloads.
+- Applies only when authored by the session creator.
+- Multiple delete notices for the same session resolve deterministically by `created_at`, then lexicographic event-ID tiebreak.
 
-## Protocol shape (proposed)
+## Local data behavior
 
-- Add payload kind `session_delete`.
-- Include `conversation_id`, `root_id`, `timestamp`, and optional `reason`.
-- Accept only authorized deletes (session creator).
-- Preserve deterministic ordering (`created_at`, then event-ID tie-break for equal timestamps).
+- Persist one tombstone per deleted session and owner scope.
+- Applying delete purges the local session row, active/inactive members, membership intervals, posts, reactions, post-delete watermarks, unread state, archive state, and managed media references for that session.
+- Managed thumbnail and cached-media files tied to deleted session posts are removed after the local save succeeds.
+- Pending in-memory events for that session are discarded immediately.
+- Tombstoned sessions are not recreated by later `session_create`, `session_members`, `root`, `reaction`, or `root_delete` traffic. There is no restore path.
 
-## Data behavior
+## Relay behavior
 
-- Persist a tombstone per deleted session.
-- Ignore older session lifecycle/content events once tombstoned.
-- Purge or suppress account-scoped session data (session row, members, roots, reactions, unread state, cached media references).
-- Discard any staged in-memory posts, delete notices, or reactions that are still waiting on that session or its roots.
+- Outbound delete sends an encrypted `session_delete` notice to known current and former session members.
+- The app also makes a best-effort NIP-09 `kind:5` deletion request for stored root-post gift-wrap IDs in that session when those relay event IDs are known.
+- Relay-side deletion is secondary. If it is unavailable, the local tombstone still remains authoritative for linkstr UX and the app surfaces a warning instead of rolling back the delete.
 
-## Relay behavior (best effort)
+## Test coverage
 
-- Optionally publish NIP-09 kind `5` requests for known session event IDs.
-- Treat relay deletion as non-authoritative; local tombstone logic remains authoritative for linkstr UX.
+- Payload validation for `session_delete`.
+- Outbound mutation coverage for local purge, member fanout, and relay-deletion warning behavior.
+- Inbound ingest coverage for creator-only authorization, session purge, and pending delete ordering before the session snapshot arrives.
 
 ## Non-goals
 
-- No guarantee of global/permanent relay erasure.
-- No automatic restore/undo flow.
+- No guarantee of global or permanent relay erasure.
+- No automatic restore or undo flow.
+- No retrospective deletion of lifecycle wrappers whose relay-visible event IDs were never stored locally.

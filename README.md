@@ -85,7 +85,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 | Log out and clear local data |        ✓        |         ✓         |          —          |
 | Delete account               |        ✓        |         ✓         |          ✓          |
 
-- "Log out and clear local data" and "Delete account" both remove account-scoped local data: contacts, sessions, session members, membership intervals, posts, reactions, cached media references, and local encryption key material for that owner scope.
+- "Log out and clear local data" and "Delete account" both remove account-scoped local data: contacts, sessions, session members, membership intervals, posts, session deletion tombstones, reactions, cached media references, and local encryption key material for that owner scope.
 - "Delete account" includes a two-step destructive confirmation flow. When relays are available, it also publishes an empty follow list (`kind:3`) and a Nostr request-to-vanish (`kind:62`) to enabled relays.
 - "Delete account" does not invalidate the `nsec`; the key remains usable for sign-in later.
 - "Delete account" is send-gated like other relay-backed mutations and does not proceed while relay confirmation is unavailable.
@@ -123,6 +123,15 @@ linkstr is built around private sessions, not one-off direct messages. A session
 - The session list shows active sessions by default. When archived sessions exist, a header archive toggle icon appears to the left of the compose action.
 - Tapping the archive icon switches between active and archived list mode; the filled icon state indicates archive mode.
 - Switching away from the sessions tab resets the list mode back to active. Archive is non-destructive.
+
+**Delete:**
+
+- The session creator can delete a session from the manage session sheet.
+- Delete requires confirmation and dismisses back to the session list when the session disappears.
+- Delete persists a local tombstone and purges the session row, members, membership intervals, posts, reactions, post-delete watermarks, unread state, archive state, and managed media references for that session.
+- Tombstoned sessions ignore later relay backfill for `session_create`, `session_members`, `root`, `reaction`, and `root_delete`.
+- Delete sends an encrypted `session_delete` notice to known current and former members.
+- Delete also issues a best-effort Nostr deletion request (`kind:5`) for stored root-post gift-wrap IDs when available. Missing relay-side deletion does not roll back the local delete.
 
 ### Session members UX
 
@@ -372,7 +381,7 @@ Embedded web playback allows provider-element fullscreen when supported.
 
 - Relay configuration and enabled state.
 - Contacts and private aliases.
-- Sessions, member snapshots, membership intervals, root posts, post deletion watermarks, reactions, read state, and archive state.
+- Sessions, member snapshots, membership intervals, session deletion tombstones, root posts, post deletion watermarks, reactions, read state, and archive state.
 - Cached media references, downloaded videos, and metadata hydration state.
 - Account-scoped app state (follow-list recency watermark).
 

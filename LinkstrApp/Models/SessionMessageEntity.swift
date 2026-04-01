@@ -452,6 +452,51 @@ final class SessionReactionEntity {
 }
 
 @Model
+final class SessionDeletionTombstoneEntity {
+  @Attribute(.unique) var storageID: String
+  var ownerPubkey: String
+  var sessionID: String
+  var deletedByPubkeyHash: String
+  var encryptedDeletedByPubkey: String
+  var updatedAt: Date
+  var lastEventID: String = ""
+
+  @Transient private var _deletedByPubkey: String?
+  var deletedByPubkey: String {
+    if let cached = _deletedByPubkey { return cached }
+    let value =
+      LocalDataCrypto.shared.decryptString(encryptedDeletedByPubkey, ownerPubkey: ownerPubkey) ?? ""
+    _deletedByPubkey = value
+    return value
+  }
+
+  init(
+    ownerPubkey: String,
+    sessionID: String,
+    deletedByPubkey: String,
+    updatedAt: Date = .now,
+    eventID: String = ""
+  ) throws {
+    self.storageID = Self.storageID(ownerPubkey: ownerPubkey, sessionID: sessionID)
+    self.ownerPubkey = ownerPubkey
+    self.sessionID = sessionID
+    self.deletedByPubkeyHash = LocalDataCrypto.shared.digestHex(deletedByPubkey)
+    self.encryptedDeletedByPubkey =
+      try LocalDataCrypto.shared.encryptString(deletedByPubkey, ownerPubkey: ownerPubkey) ?? ""
+    self.updatedAt = updatedAt
+    self.lastEventID = eventID.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  static func storageID(ownerPubkey: String, sessionID: String) -> String {
+    "\(ownerPubkey):\(sessionID)"
+  }
+
+  func deletedByMatches(_ pubkeyHex: String) -> Bool {
+    deletedByPubkeyHash == LocalDataCrypto.shared.digestHex(pubkeyHex)
+  }
+}
+
+@Model
 final class SessionPostDeletionEntity {
   @Attribute(.unique) var storageID: String
   var ownerPubkey: String

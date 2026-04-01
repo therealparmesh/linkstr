@@ -295,6 +295,7 @@ enum LinkstrAppBootstrapConfiguration {
     SessionMemberEntity.self,
     SessionMemberIntervalEntity.self,
     SessionReactionEntity.self,
+    SessionDeletionTombstoneEntity.self,
     SessionPostDeletionEntity.self,
     SessionMessageEntity.self,
   ])

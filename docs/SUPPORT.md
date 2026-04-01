@@ -70,9 +70,10 @@ The bottom footer shows validation and relay status only. The keyboard return ke
 | Archive a session      | Long-press the session row.                                                                                                                                                             |
 | View archived sessions | Tap the archive icon in the sessions header.                                                                                                                                            |
 | Rename a session       | Open a session, tap the members button, and edit the session name.                                                                                                                      |
+| Delete a session       | Open a session, tap the members button, and use **Delete Session** in the manage sheet.                                                                                                 |
 | Add or remove members  | Open a session and use the members button.                                                                                                                                              |
 
-Only the session creator can rename sessions or change session membership.
+Only the session creator can rename sessions, delete them, or change session membership.
 
 ### Relay settings
 
@@ -210,7 +211,11 @@ If you delete and reinstall the app without restoring its local data, linkstr re
 
 ### Can I delete a session?
 
-Not yet. Sessions can be archived and unarchived, but there is no shipped session-delete feature.
+Yes. Open the session, tap the members button, and use **Delete Session** in the manage sheet.
+
+Delete is creator-only and requires confirmation. When it succeeds, linkstr removes the session from active and archived lists on this device, sends an encrypted delete notice to known members, and makes a best-effort relay deletion request for stored root-post wrappers when those relay event IDs are known.
+
+Delete is permanent for linkstr UX. There is no restore flow.
 
 ### Can I remove a contact?
 
@@ -226,7 +231,7 @@ Yes, for content you have the right to save. Save and export are available only 
 
 ### What data is stored locally?
 
-linkstr stores account-scoped sessions, member snapshots and intervals, posts, reactions, read state, archive state, contacts, and media cache references on the device. Sensitive content fields are encrypted at rest with local per-owner keys.
+linkstr stores account-scoped sessions, member snapshots and intervals, session deletion tombstones, posts, reactions, read state, archive state, contacts, and media cache references on the device. Sensitive content fields are encrypted at rest with local per-owner keys.
 
 ### Where are account keys stored?
 

@@ -294,6 +294,7 @@ private struct SessionRowView: View {
 }
 
 struct SessionPostsView: View {
+  @Environment(\.dismiss) private var dismiss
   @EnvironmentObject private var session: AppSession
 
   let ownerPubkey: String
@@ -311,6 +312,7 @@ struct SessionPostsView: View {
   @State private var postPendingDelete: SessionMessageEntity?
   @State private var isPresentingDeleteConfirmation = false
   @State private var isDeletingPost = false
+  @State private var hadResolvedSession = false
 
   init(ownerPubkey: String, sessionID: String) {
     self.ownerPubkey = ownerPubkey
@@ -577,6 +579,12 @@ struct SessionPostsView: View {
     .task(id: contentState.profileLookupPubkeys.stableTaskID) {
       session.requestRemoteProfilesIfNeeded(pubkeyHexes: contentState.profileLookupPubkeys)
     }
+    .onAppear {
+      dismissIfSessionWasDeleted()
+    }
+    .onChange(of: sessionEntities.map(\.storageID).stableTaskID) { _, _ in
+      dismissIfSessionWasDeleted()
+    }
     .onDisappear {
       session.cancelPendingMetadataRefreshesForHiddenSession()
     }
@@ -694,6 +702,19 @@ struct SessionPostsView: View {
   private func hasUnreadIncomingRootPost(_ post: SessionMessageEntity, myPubkey: String?) -> Bool {
     guard !isOutgoing(post, myPubkey: myPubkey) else { return false }
     return post.readAt == nil
+  }
+
+  private func dismissIfSessionWasDeleted() {
+    if sessionEntity != nil {
+      hadResolvedSession = true
+      return
+    }
+    guard hadResolvedSession else { return }
+    isPresentingNewPost = false
+    isPresentingMembers = false
+    postPendingDelete = nil
+    isPresentingDeleteConfirmation = false
+    dismiss()
   }
 }
 
@@ -1273,6 +1294,8 @@ private struct SessionMembersSheet: View {
   @State private var includedMemberHexes = Set<String>()
   @State private var query = ""
   @State private var isSaving = false
+  @State private var isDeletingSession = false
+  @State private var isPresentingDeleteConfirmation = false
   @State private var mutationFeedback = LinkstrSheetMutationFeedback()
   @FocusState private var focusedField: Field?
 
@@ -1402,6 +1425,32 @@ private struct SessionMembersSheet: View {
                   }
                 }
               }
+
+              LinkstrInsetSection(title: "danger zone") {
+                Button(role: .destructive) {
+                  guard !isSaving, !isDeletingSession else { return }
+                  focusedField = nil
+                  mutationFeedback.clear()
+                  isPresentingDeleteConfirmation = true
+                } label: {
+                  HStack(spacing: LinkstrTheme.rowSpacing) {
+                    Label("delete session", systemImage: "trash")
+                      .font(LinkstrTheme.body(14, weight: .semibold))
+                    Spacer()
+                  }
+                  .foregroundStyle(LinkstrTheme.destructive)
+                  .padding(.vertical, LinkstrTheme.listRowVerticalPadding)
+                  .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(isSaving || isDeletingSession)
+
+                Text(
+                  "deleting removes this session from the app and sends delete notices to known members."
+                )
+                .font(LinkstrTheme.body(13))
+                .foregroundStyle(LinkstrTheme.textSecondary)
+              }
             } else {
               LinkstrInsetSection(title: "member permissions") {
                 Text("only the session creator can rename the session or change membership.")
@@ -1427,7 +1476,7 @@ private struct SessionMembersSheet: View {
           }
           .accessibilityLabel(canManageMembers ? "cancel" : "close")
           .tint(LinkstrTheme.textSecondary)
-          .disabled(isSaving)
+          .disabled(isSaving || isDeletingSession)
         }
         if canManageMembers {
           ToolbarItem(placement: .confirmationAction) {
@@ -1438,10 +1487,34 @@ private struct SessionMembersSheet: View {
                 .linkstrToolbarIconLabel()
             }
             .accessibilityLabel(isSaving ? "saving session" : "save session")
-            .disabled(isSaving || !canSave)
+            .disabled(isSaving || isDeletingSession || !canSave)
             .tint(LinkstrTheme.accent)
           }
         }
+      }
+      .alert("delete session", isPresented: $isPresentingDeleteConfirmation) {
+        Button("delete session", role: .destructive) {
+          guard !isDeletingSession else { return }
+          UINotificationFeedbackGenerator().notificationOccurred(.warning)
+          mutationFeedback.clear()
+          isDeletingSession = true
+          Task { @MainActor in
+            let result = await session.performFormMutation {
+              await session.deleteSessionAwaitingRelay(sessionEntity)
+            }
+            isDeletingSession = false
+            if result.didSucceed {
+              dismiss()
+            } else {
+              mutationFeedback.record(errorMessage: result.errorMessage)
+            }
+          }
+        }
+        Button("cancel", role: .cancel) {}
+      } message: {
+        Text(
+          "this permanently removes the session from your device and sends a delete notice to other members."
+        )
       }
       .safeAreaInset(edge: .bottom, spacing: 0) {
         if canManageMembers, let footerStatus {
@@ -1494,9 +1567,11 @@ private struct SessionMembersSheet: View {
 
   private var footerStatus: LinkstrSheetFooterStatus? {
     mutationFeedback.footerStatus(
-      isRunning: isSaving,
-      progressMessage: "waiting for relay reconnect before saving...",
-      validationMessage: canSave ? nil : "session name required."
+      isRunning: isSaving || isDeletingSession,
+      progressMessage: isDeletingSession
+        ? "waiting for relay reconnect before deleting..."
+        : "waiting for relay reconnect before saving...",
+      validationMessage: isDeletingSession || canSave ? nil : "session name required."
     )
   }
 
@@ -1547,7 +1622,7 @@ private struct SessionMembersSheet: View {
       composeCreatorOnlyError()
       return
     }
-    guard !isSaving, canSave else { return }
+    guard !isSaving, !isDeletingSession, canSave else { return }
     focusedField = nil
     mutationFeedback.clear()
     isSaving = true

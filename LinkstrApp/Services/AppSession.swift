@@ -113,6 +113,15 @@ final class AppSession: ObservableObject {
     let publishedTransportEventIDs: [String]
   }
 
+  private struct SessionDeletionDraft {
+    let payload: LinkstrPayload
+    let ownerPubkey: String
+    let senderPubkey: String
+    let recipientPubkeys: [String]
+    let sessionID: String
+    let publishedTransportEventIDs: [String]
+  }
+
   struct TestingOverrides {
     var disableNostrStartup: Bool?
     var hasConnectedRelays: (() -> Bool)?
@@ -1525,16 +1534,11 @@ final class AppSession: ObservableObject {
       }
 
       let updatedAt = now
-      _ = try messageStore.upsertSession(
+      _ = try applySessionSnapshotLocally(
         ownerPubkey: ownerPubkey,
         sessionID: sessionID,
-        name: normalizedName,
         createdByPubkey: keypair.publicKey.hex,
-        updatedAt: updatedAt
-      )
-      try applySessionMembershipSnapshot(
-        ownerPubkey: ownerPubkey,
-        sessionID: sessionID,
+        sessionName: normalizedName,
         memberPubkeys: members,
         updatedAt: updatedAt,
         eventID: membershipEventID
@@ -1615,20 +1619,15 @@ final class AppSession: ObservableObject {
       }
 
       let updatedAt = now
-      _ = try messageStore.upsertSession(
+      _ = try applySessionSnapshotLocally(
         ownerPubkey: ownerPubkey,
         sessionID: session.sessionID,
-        name: effectiveName,
         createdByPubkey: session.createdByPubkey,
-        updatedAt: updatedAt,
-        isArchived: session.isArchived
-      )
-      try applySessionMembershipSnapshot(
-        ownerPubkey: ownerPubkey,
-        sessionID: session.sessionID,
+        sessionName: effectiveName,
         memberPubkeys: members,
         updatedAt: updatedAt,
-        eventID: membershipEventID
+        eventID: membershipEventID,
+        isArchived: session.isArchived
       )
       composeError = nil
       return true
@@ -1782,8 +1781,9 @@ final class AppSession: ObservableObject {
         deletionRequestEventID = nil
       } else {
         deletionRequestEventID = try await publishEventAwaitingRelayAcceptance(
-          makeRootPostDeletionEvent(
+          makeRelayDeletionEvent(
             publishedTransportEventIDs: draft.publishedTransportEventIDs,
+            reason: "linkstr post deletion request",
             signedBy: keypair
           )
         )
@@ -1810,6 +1810,76 @@ final class AppSession: ObservableObject {
           "post deleted, but relay deletion is unavailable for older copies of this post."
       } else {
         composeError = nil
+      }
+      return true
+    } catch {
+      report(error: error)
+      return false
+    }
+  }
+
+  @discardableResult
+  func deleteSessionAwaitingRelay(
+    _ session: SessionEntity,
+    timeoutSeconds: TimeInterval = RelayMutationDefaults.timeoutSeconds,
+    pollIntervalSeconds: TimeInterval = RelayMutationDefaults.pollIntervalSeconds
+  ) async -> Bool {
+    guard let draft = makeSessionDeletionDraft(session: session) else {
+      return false
+    }
+
+    if !isRelayPublicationEnabledForCurrentProcess() {
+      do {
+        try persistSessionDeletion(draft, eventID: makeLocalEventID())
+        composeError = nil
+        return true
+      } catch {
+        report(error: error)
+        return false
+      }
+    }
+
+    do {
+      try await prepareRelayMutationIfNeeded(
+        timeoutSeconds: timeoutSeconds,
+        pollIntervalSeconds: pollIntervalSeconds
+      )
+    } catch MutationPreparationError.relayBlocked {
+      return false
+    } catch {
+      report(error: error)
+      return false
+    }
+
+    guard let keypair = identityService.keypair else {
+      composeError = "you're signed out. sign in to manage this session."
+      return false
+    }
+
+    do {
+      let deletionEventID = try await sendPayloadAwaitingRelayAcceptance(
+        payload: draft.payload,
+        recipientPubkeyHexes: draft.recipientPubkeys
+      ).rumorEventID
+      try persistSessionDeletion(draft, eventID: deletionEventID)
+
+      guard !draft.publishedTransportEventIDs.isEmpty else {
+        composeError = "session deleted, but older relay copies of its posts may remain."
+        return true
+      }
+
+      do {
+        _ = try await publishEventAwaitingRelayAcceptance(
+          makeRelayDeletionEvent(
+            publishedTransportEventIDs: draft.publishedTransportEventIDs,
+            reason: "linkstr session deletion request",
+            signedBy: keypair
+          )
+        )
+        composeError = nil
+      } catch {
+        NSLog("Session relay deletion request failed: \(error.localizedDescription)")
+        composeError = "session deleted, but older relay copies of its posts may remain."
       }
       return true
     } catch {
@@ -1936,6 +2006,55 @@ final class AppSession: ObservableObject {
     )
   }
 
+  private func makeSessionDeletionDraft(session: SessionEntity) -> SessionDeletionDraft? {
+    guard let keypair = identityService.keypair, let ownerPubkey = identityService.pubkeyHex else {
+      composeError = "you're signed out. sign in to manage this session."
+      return nil
+    }
+    guard canManageMembers(for: session) else {
+      composeError = "only the session creator can delete this session."
+      return nil
+    }
+
+    guard
+      let recipientPubkeys = resolveDeletionRecipients(
+        sessionID: session.sessionID,
+        ownerPubkey: ownerPubkey,
+        senderPubkey: keypair.publicKey.hex
+      )
+    else {
+      return nil
+    }
+
+    let publishedTransportEventIDs: [String]
+    do {
+      publishedTransportEventIDs = try messageStore.knownSessionTransportEventIDs(
+        ownerPubkey: ownerPubkey,
+        sessionID: session.sessionID
+      )
+    } catch {
+      composeError = error.localizedDescription
+      return nil
+    }
+
+    let timestamp = Int64(Date.now.timeIntervalSince1970)
+    return SessionDeletionDraft(
+      payload: LinkstrPayload(
+        conversationID: session.sessionID,
+        rootID: makeLocalEventID(),
+        kind: .sessionDelete,
+        url: nil,
+        note: nil,
+        timestamp: timestamp
+      ),
+      ownerPubkey: ownerPubkey,
+      senderPubkey: keypair.publicKey.hex,
+      recipientPubkeys: recipientPubkeys,
+      sessionID: session.sessionID,
+      publishedTransportEventIDs: publishedTransportEventIDs
+    )
+  }
+
   private func makeRootPostDraft(
     url: String,
     note: String?,
@@ -2043,6 +2162,22 @@ final class AppSession: ObservableObject {
       sessionID: draft.payload.conversationID,
       rootID: draft.rootID
     )
+  }
+
+  private func persistSessionDeletion(_ draft: SessionDeletionDraft, eventID: String) throws {
+    _ = try messageStore.applySessionDeletion(
+      ownerPubkey: draft.ownerPubkey,
+      sessionID: draft.sessionID,
+      deletedByPubkey: draft.senderPubkey,
+      updatedAt: Date(timeIntervalSince1970: TimeInterval(draft.payload.timestamp)),
+      eventID: eventID
+    )
+    discardPendingIncomingSessionData(sessionID: draft.sessionID)
+    invalidateMemberIntervalCache(sessionID: draft.sessionID)
+    if pendingSessionNavigationID == draft.sessionID {
+      pendingSessionNavigationID = nil
+    }
+    schedulePushStateSync()
   }
 
   private func publishFollowListAwaitingRelayAcceptance(followedPubkeyHexes: [String]) async throws
@@ -2170,8 +2305,9 @@ final class AppSession: ObservableObject {
     NostrValueNormalizer.dedupedNormalizedPubkeyHexes(first + second)
   }
 
-  private func makeRootPostDeletionEvent(
+  private func makeRelayDeletionEvent(
     publishedTransportEventIDs: [String],
+    reason: String,
     signedBy keypair: Keypair
   ) throws
     -> NostrEvent
@@ -2185,7 +2321,7 @@ final class AppSession: ObservableObject {
     let eventTags = try normalizedEventIDs.map { try customTag(name: "e", value: $0) }
 
     return try NostrEvent.Builder<NostrEvent>(kind: .deletion)
-      .content("linkstr post deletion request")
+      .content(reason)
       .appendTags(contentsOf: eventTags)
       .appendTags(try customTag(name: "k", value: String(EventKind.giftWrap.rawValue)))
       .build(signedBy: keypair)
@@ -2275,13 +2411,47 @@ final class AppSession: ObservableObject {
     persistFollowListState(ownerPubkey: ownerPubkey, createdAt: createdAt, eventID: eventID)
   }
 
-  private func applySessionMembershipSnapshot(
+  @discardableResult
+  private func applySessionSnapshotLocally(
     ownerPubkey: String,
     sessionID: String,
+    createdByPubkey: String,
+    sessionName: String?,
     memberPubkeys: [String],
     updatedAt: Date,
-    eventID: String
-  ) throws {
+    eventID: String,
+    isArchived: Bool? = nil
+  ) throws -> SessionEntity? {
+    let normalizedName = normalizedSessionName(sessionName)
+    let sessionEntity: SessionEntity
+
+    if let existing = try messageStore.session(sessionID: sessionID, ownerPubkey: ownerPubkey) {
+      let renameUpdatedAt = max(existing.updatedAt, updatedAt)
+      sessionEntity = try messageStore.upsertSession(
+        ownerPubkey: ownerPubkey,
+        sessionID: sessionID,
+        name: existing.name,
+        createdByPubkey: existing.createdByPubkey,
+        updatedAt: updatedAt,
+        isArchived: isArchived ?? existing.isArchived
+      )
+
+      if let normalizedName, sessionEntity.name != normalizedName {
+        try sessionEntity.updateName(normalizedName, updatedAt: renameUpdatedAt)
+        try modelContext.save()
+      }
+    } else {
+      guard let normalizedName else { return nil }
+      sessionEntity = try messageStore.upsertSession(
+        ownerPubkey: ownerPubkey,
+        sessionID: sessionID,
+        name: normalizedName,
+        createdByPubkey: createdByPubkey,
+        updatedAt: updatedAt,
+        isArchived: isArchived
+      )
+    }
+
     try messageStore.applyMemberSnapshot(
       ownerPubkey: ownerPubkey,
       sessionID: sessionID,
@@ -2290,6 +2460,7 @@ final class AppSession: ObservableObject {
       eventID: eventID
     )
     invalidateMemberIntervalCache(sessionID: sessionID)
+    return sessionEntity
   }
 
   @discardableResult
@@ -2703,7 +2874,12 @@ final class AppSession: ObservableObject {
       // Session state just landed — try resolving pending roots/reactions/deletions for this session.
       drainPendingMessages { pending in
         let kind = pending.incoming.payload.kind
-        guard kind == .root || kind == .reaction || kind == .rootDelete else { return false }
+        guard
+          kind == .root
+            || kind == .reaction
+            || kind == .rootDelete
+            || kind == .sessionDelete
+        else { return false }
         return pending.incoming.payload.conversationID.trimmingCharacters(
           in: .whitespacesAndNewlines) == sessionID
       }
@@ -2754,6 +2930,8 @@ final class AppSession: ObservableObject {
     switch pending.incoming.payload.kind {
     case .sessionCreate:
       return persistIncomingSessionCreate(pending.incoming)
+    case .sessionDelete:
+      return persistIncomingSessionDelete(pending.incoming)
     case .sessionMembers:
       return persistIncomingSessionMembers(pending.incoming)
     case .reaction:
@@ -2789,6 +2967,13 @@ final class AppSession: ObservableObject {
     }
   }
 
+  private func discardPendingIncomingSessionData(sessionID: String) {
+    pendingIncomingMessages.removeAll { pending in
+      pending.incoming.payload.conversationID.trimmingCharacters(in: .whitespacesAndNewlines)
+        == sessionID
+    }
+  }
+
   private func drainPendingIncomingMessagesIfNeeded() {
     guard !isDrainingPendingIncomingMessages else { return }
     guard !pendingIncomingMessages.isEmpty else { return }
@@ -2816,9 +3001,25 @@ final class AppSession: ObservableObject {
     }
   }
 
-  private func normalizedIncomingSessionName(_ value: String?) -> String? {
+  private func normalizedSessionName(_ value: String?) -> String? {
     let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     return trimmed.isEmpty ? nil : trimmed
+  }
+
+  private func hasDeletedSession(ownerPubkey: String, sessionID: String) throws -> Bool {
+    try messageStore.sessionDeletionTombstone(sessionID: sessionID, ownerPubkey: ownerPubkey) != nil
+  }
+
+  private func sessionDeletionAuthorityPubkey(ownerPubkey: String, sessionID: String) throws
+    -> String?
+  {
+    if let tombstone = try messageStore.sessionDeletionTombstone(
+      sessionID: sessionID,
+      ownerPubkey: ownerPubkey
+    ) {
+      return tombstone.deletedByPubkey
+    }
+    return try messageStore.session(sessionID: sessionID, ownerPubkey: ownerPubkey)?.createdByPubkey
   }
 
   private func resetInitialHistoricalUnreadPolicy() {
@@ -2847,35 +3048,6 @@ final class AppSession: ObservableObject {
     hasEvaluatedInitialHistoricalUnreadPolicy = true
   }
 
-  private func upsertIncomingSessionSnapshot(
-    ownerPubkey: String,
-    sessionID: String,
-    senderPubkey: String,
-    sessionName: String?,
-    updatedAt: Date
-  ) throws -> SessionEntity? {
-    if let existing = try messageStore.session(sessionID: sessionID, ownerPubkey: ownerPubkey) {
-      guard existing.createdByPubkey == senderPubkey else { return nil }
-      return try messageStore.upsertSession(
-        ownerPubkey: ownerPubkey,
-        sessionID: sessionID,
-        name: sessionName ?? existing.name,
-        createdByPubkey: existing.createdByPubkey,
-        updatedAt: updatedAt,
-        isArchived: existing.isArchived
-      )
-    }
-
-    guard let sessionName else { return nil }
-    return try messageStore.upsertSession(
-      ownerPubkey: ownerPubkey,
-      sessionID: sessionID,
-      name: sessionName,
-      createdByPubkey: senderPubkey,
-      updatedAt: updatedAt
-    )
-  }
-
   private func resolveInboundSession(
     ownerPubkey: String,
     sessionID: String,
@@ -2884,6 +3056,9 @@ final class AppSession: ObservableObject {
     source: DirectMessageIngestSource
   ) -> InboundSessionResolution {
     do {
+      if try hasDeletedSession(ownerPubkey: ownerPubkey, sessionID: sessionID) {
+        return .ignored
+      }
       guard let session = try messageStore.session(sessionID: sessionID, ownerPubkey: ownerPubkey)
       else {
         return .pending
@@ -2925,6 +3100,9 @@ final class AppSession: ObservableObject {
     guard members.contains(ownerPubkey) else { return .ignored }
 
     do {
+      guard try !hasDeletedSession(ownerPubkey: ownerPubkey, sessionID: sessionID) else {
+        return .ignored
+      }
       let existing = try messageStore.session(sessionID: sessionID, ownerPubkey: ownerPubkey)
       if let existing {
         guard existing.createdByPubkey == incoming.senderPubkey else { return .ignored }
@@ -2941,24 +3119,18 @@ final class AppSession: ObservableObject {
       }
 
       guard
-        try upsertIncomingSessionSnapshot(
+        try applySessionSnapshotLocally(
           ownerPubkey: ownerPubkey,
           sessionID: sessionID,
-          senderPubkey: incoming.senderPubkey,
-          sessionName: normalizedIncomingSessionName(incoming.payload.sessionName),
-          updatedAt: incoming.createdAt
+          createdByPubkey: incoming.senderPubkey,
+          sessionName: normalizedSessionName(incoming.payload.sessionName),
+          memberPubkeys: members,
+          updatedAt: incoming.createdAt,
+          eventID: incoming.eventID
         ) != nil
       else {
         return .ignored
       }
-
-      try applySessionMembershipSnapshot(
-        ownerPubkey: ownerPubkey,
-        sessionID: sessionID,
-        memberPubkeys: members,
-        updatedAt: incoming.createdAt,
-        eventID: incoming.eventID
-      )
       return .applied
     } catch {
       report(error: error)
@@ -2982,6 +3154,9 @@ final class AppSession: ObservableObject {
     guard members.contains(incoming.senderPubkey) else { return .ignored }
 
     do {
+      guard try !hasDeletedSession(ownerPubkey: ownerPubkey, sessionID: sessionID) else {
+        return .ignored
+      }
       let existing = try messageStore.session(sessionID: sessionID, ownerPubkey: ownerPubkey)
       if let existing {
         guard existing.createdByPubkey == incoming.senderPubkey else { return .ignored }
@@ -3000,26 +3175,67 @@ final class AppSession: ObservableObject {
       }
 
       guard
-        let session = try upsertIncomingSessionSnapshot(
+        try applySessionSnapshotLocally(
           ownerPubkey: ownerPubkey,
           sessionID: sessionID,
-          senderPubkey: incoming.senderPubkey,
-          sessionName: normalizedIncomingSessionName(incoming.payload.sessionName),
-          updatedAt: incoming.createdAt
-        )
+          createdByPubkey: incoming.senderPubkey,
+          sessionName: normalizedSessionName(incoming.payload.sessionName),
+          memberPubkeys: members,
+          updatedAt: incoming.createdAt,
+          eventID: incoming.eventID,
+          isArchived: existing?.isArchived
+        ) != nil
       else {
         return .ignored
       }
-      guard members.contains(session.createdByPubkey) else { return .ignored }
+      return .applied
+    } catch {
+      report(error: error)
+      return .ignored
+    }
+  }
 
-      try applySessionMembershipSnapshot(
+  private func persistIncomingSessionDelete(_ incoming: ReceivedDirectMessage)
+    -> IncomingPersistenceOutcome
+  {
+    guard let ownerPubkey = identityService.pubkeyHex else { return .ignored }
+
+    let sessionID = incoming.payload.conversationID.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !sessionID.isEmpty else { return .ignored }
+
+    do {
+      guard
+        let authorityPubkey = try sessionDeletionAuthorityPubkey(
+          ownerPubkey: ownerPubkey,
+          sessionID: sessionID
+        )
+      else {
+        return .pending
+      }
+      guard authorityPubkey == incoming.senderPubkey else { return .ignored }
+
+      let didApply = try messageStore.applySessionDeletion(
         ownerPubkey: ownerPubkey,
         sessionID: sessionID,
-        memberPubkeys: members,
+        deletedByPubkey: incoming.senderPubkey,
         updatedAt: incoming.createdAt,
         eventID: incoming.eventID
       )
-      return .applied
+      let tombstoneExists = try hasDeletedSession(
+        ownerPubkey: ownerPubkey,
+        sessionID: sessionID
+      )
+      let isDeleted = didApply || tombstoneExists
+      if isDeleted {
+        discardPendingIncomingSessionData(sessionID: sessionID)
+        invalidateMemberIntervalCache(sessionID: sessionID)
+        if pendingSessionNavigationID == sessionID {
+          pendingSessionNavigationID = nil
+        }
+        schedulePushStateSync()
+        return .applied
+      }
+      return .ignored
     } catch {
       report(error: error)
       return .ignored
@@ -3038,6 +3254,15 @@ final class AppSession: ObservableObject {
     guard !sessionID.isEmpty else { return .ignored }
     let postID = incoming.payload.rootID.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !postID.isEmpty else { return .ignored }
+
+    do {
+      guard try !hasDeletedSession(ownerPubkey: ownerPubkey, sessionID: sessionID) else {
+        return .ignored
+      }
+    } catch {
+      report(error: error)
+      return .ignored
+    }
 
     switch resolveInboundSession(
       ownerPubkey: ownerPubkey,
@@ -3101,6 +3326,9 @@ final class AppSession: ObservableObject {
     guard !rootID.isEmpty else { return .ignored }
 
     do {
+      guard try !hasDeletedSession(ownerPubkey: ownerPubkey, sessionID: sessionID) else {
+        return .ignored
+      }
       if try messageStore.hasRootDeletion(
         ownerPubkey: ownerPubkey,
         sessionID: sessionID,
@@ -3151,6 +3379,14 @@ final class AppSession: ObservableObject {
 
     let sessionID = incoming.payload.conversationID.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !sessionID.isEmpty else { return .ignored }
+    do {
+      guard try !hasDeletedSession(ownerPubkey: ownerPubkey, sessionID: sessionID) else {
+        return .ignored
+      }
+    } catch {
+      report(error: error)
+      return .ignored
+    }
     let payloadRootID = incoming.payload.rootID.trimmingCharacters(in: .whitespacesAndNewlines)
     if !payloadRootID.isEmpty, payloadRootID != incoming.eventID {
       return .ignored

@@ -1923,6 +1923,219 @@ final class AppSessionIngestTests: AppSessionTestCase {
     )
   }
 
+  // MARK: - Session delete ingest
+
+  func testIngestSessionDeletePurgesStoredSessionDataAndPersistsTombstone() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let creatorPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-delete-ingest"
+    _ = try insertSessionFixture(
+      in: container.mainContext,
+      ownerPubkey: myPubkey,
+      createdByPubkey: creatorPubkey,
+      memberPubkeys: [myPubkey, creatorPubkey, peerPubkey],
+      sessionID: sessionID
+    )
+
+    let rootPost = makeMessage(
+      eventID: "root-session-delete-ingest",
+      conversationID: sessionID,
+      rootID: "root-session-delete-ingest",
+      kind: .root,
+      senderPubkey: creatorPubkey,
+      receiverPubkey: myPubkey,
+      ownerPubkey: myPubkey
+    )
+    container.mainContext.insert(rootPost)
+    container.mainContext.insert(
+      try SessionReactionEntity(
+        ownerPubkey: myPubkey,
+        sessionID: sessionID,
+        postID: rootPost.rootID,
+        emoji: "🔥",
+        senderPubkey: peerPubkey,
+        isActive: true,
+        eventID: "reaction-session-delete-ingest"
+      )
+    )
+    container.mainContext.insert(
+      try SessionPostDeletionEntity(
+        ownerPubkey: myPubkey,
+        sessionID: sessionID,
+        rootID: "older-root-watermark",
+        deletedByPubkey: creatorPubkey,
+        updatedAt: Date(timeIntervalSince1970: 10),
+        eventID: "older-root-watermark-event"
+      )
+    )
+    try container.mainContext.save()
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-delete-event",
+        senderPubkey: creatorPubkey,
+        createdAt: Date(timeIntervalSince1970: 1_000),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-session-delete",
+          kind: .sessionDelete,
+          url: nil,
+          note: nil,
+          timestamp: 1_000
+        )
+      ))
+
+    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
+    XCTAssertTrue(try fetchReactions(in: container.mainContext).isEmpty)
+    XCTAssertTrue(try fetchPostDeletions(in: container.mainContext).isEmpty)
+    XCTAssertTrue(
+      try container.mainContext.fetch(
+        FetchDescriptor<SessionEntity>(
+          predicate: #Predicate { $0.ownerPubkey == myPubkey && $0.sessionID == sessionID }
+        )
+      ).isEmpty
+    )
+    XCTAssertTrue(
+      try container.mainContext.fetch(
+        FetchDescriptor<SessionMemberEntity>(
+          predicate: #Predicate { $0.ownerPubkey == myPubkey && $0.sessionID == sessionID }
+        )
+      ).isEmpty
+    )
+    XCTAssertTrue(
+      try container.mainContext.fetch(
+        FetchDescriptor<SessionMemberIntervalEntity>(
+          predicate: #Predicate { $0.ownerPubkey == myPubkey && $0.sessionID == sessionID }
+        )
+      ).isEmpty
+    )
+    let tombstones = try fetchSessionDeletionTombstones(in: container.mainContext)
+    XCTAssertEqual(tombstones.count, 1)
+    XCTAssertEqual(tombstones.first?.sessionID, sessionID)
+    XCTAssertEqual(tombstones.first?.deletedByPubkey, creatorPubkey)
+  }
+
+  func testIngestSessionDeleteBeforeSessionSnapshotSuppressesLaterSessionAndRootArrivals()
+    throws
+  {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let creatorPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-delete-before-session-snapshot"
+    let rootEventID = "root-pending-until-session-delete-applies"
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-delete-before-snapshot",
+        senderPubkey: creatorPubkey,
+        createdAt: Date(timeIntervalSince1970: 2_000),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-session-delete-before-snapshot",
+          kind: .sessionDelete,
+          url: nil,
+          note: nil,
+          timestamp: 2_000
+        ),
+        source: .historical
+      ))
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: rootEventID,
+        senderPubkey: creatorPubkey,
+        createdAt: Date(timeIntervalSince1970: 1_500),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: rootEventID,
+          kind: .root,
+          url: "https://example.com/session-delete-before-snapshot",
+          note: nil,
+          timestamp: 1_500
+        ),
+        source: .historical
+      ))
+
+    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
+    XCTAssertTrue(try fetchSessionDeletionTombstones(in: container.mainContext).isEmpty)
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-create-after-pending-delete",
+        senderPubkey: creatorPubkey,
+        createdAt: Date(timeIntervalSince1970: 1_400),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-session-create",
+          kind: .sessionCreate,
+          url: nil,
+          note: nil,
+          timestamp: 1_400,
+          sessionName: "Pending Deleted Session",
+          memberPubkeys: [creatorPubkey, myPubkey]
+        ),
+        source: .historical
+      ))
+
+    XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
+    XCTAssertTrue(
+      try container.mainContext.fetch(
+        FetchDescriptor<SessionEntity>(
+          predicate: #Predicate { $0.ownerPubkey == myPubkey && $0.sessionID == sessionID }
+        )
+      ).isEmpty
+    )
+    let tombstones = try fetchSessionDeletionTombstones(in: container.mainContext)
+    XCTAssertEqual(tombstones.count, 1)
+    XCTAssertEqual(tombstones.first?.sessionID, sessionID)
+    XCTAssertEqual(tombstones.first?.deletedByPubkey, creatorPubkey)
+  }
+
+  func testIngestSessionDeleteIgnoresNonCreator() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let creatorPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let otherMemberPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-delete-non-creator-ignored"
+    _ = try insertSessionFixture(
+      in: container.mainContext,
+      ownerPubkey: myPubkey,
+      createdByPubkey: creatorPubkey,
+      memberPubkeys: [creatorPubkey, myPubkey, otherMemberPubkey],
+      sessionID: sessionID
+    )
+
+    session.ingestForTesting(
+      makeIncomingMessage(
+        eventID: "session-delete-non-creator",
+        senderPubkey: otherMemberPubkey,
+        createdAt: Date(timeIntervalSince1970: 1_100),
+        payload: LinkstrPayload(
+          conversationID: sessionID,
+          rootID: "op-session-delete-non-creator",
+          kind: .sessionDelete,
+          url: nil,
+          note: nil,
+          timestamp: 1_100
+        )
+      ))
+
+    XCTAssertEqual(
+      try container.mainContext.fetch(
+        FetchDescriptor<SessionEntity>(
+          predicate: #Predicate { $0.ownerPubkey == myPubkey && $0.sessionID == sessionID }
+        )
+      ).count,
+      1
+    )
+    XCTAssertTrue(try fetchSessionDeletionTombstones(in: container.mainContext).isEmpty)
+  }
+
   // MARK: - Session rename ingest
 
   func testIngestSessionMembersRenameAppliesNewName() throws {

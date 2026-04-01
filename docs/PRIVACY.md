@@ -17,7 +17,7 @@ linkstr stores app data locally for the signed-in account, including:
 - Account keys in the device keychain.
 - Contacts, including private aliases you save locally.
 - Sessions, member snapshots, and membership intervals.
-- Posts, reactions, delete watermarks, read state, and archive state.
+- Session deletion tombstones, posts, reactions, delete watermarks, read state, and archive state.
 - Media cache references, downloaded videos, and generated previews.
 - Local per-account encryption keys used to protect sensitive stored fields at rest.
 

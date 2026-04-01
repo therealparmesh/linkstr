@@ -29,6 +29,19 @@ final class SessionMessageStore {
     return try modelContext.fetch(descriptor).first
   }
 
+  func sessionDeletionTombstone(sessionID: String, ownerPubkey: String) throws
+    -> SessionDeletionTombstoneEntity?
+  {
+    let storageID = SessionDeletionTombstoneEntity.storageID(
+      ownerPubkey: ownerPubkey,
+      sessionID: sessionID
+    )
+    let descriptor = FetchDescriptor<SessionDeletionTombstoneEntity>(
+      predicate: #Predicate { $0.storageID == storageID }
+    )
+    return try modelContext.fetch(descriptor).first
+  }
+
   func archivedConversationIDs(ownerPubkey: String) throws -> [String] {
     let descriptor = FetchDescriptor<SessionEntity>(
       predicate: #Predicate { $0.ownerPubkey == ownerPubkey && $0.isArchived == true }
@@ -50,7 +63,14 @@ final class SessionMessageStore {
         $0.ownerPubkey == ownerPubkey && $0.kindRaw == rootKindRaw
       }
     )
-    return !(try modelContext.fetch(messageDescriptor)).isEmpty
+    if !(try modelContext.fetch(messageDescriptor)).isEmpty {
+      return true
+    }
+
+    let tombstoneDescriptor = FetchDescriptor<SessionDeletionTombstoneEntity>(
+      predicate: #Predicate { $0.ownerPubkey == ownerPubkey }
+    )
+    return !(try modelContext.fetch(tombstoneDescriptor)).isEmpty
   }
 
   @discardableResult
@@ -67,11 +87,6 @@ final class SessionMessageStore {
 
     if let existing = try session(sessionID: sessionID, ownerPubkey: ownerPubkey) {
       var didChange = false
-      if existing.name != effectiveName {
-        let renameUpdatedAt = max(existing.updatedAt, updatedAt)
-        try existing.updateName(effectiveName, updatedAt: renameUpdatedAt)
-        didChange = true
-      }
       if existing.updatedAt < updatedAt {
         existing.updatedAt = updatedAt
         didChange = true
@@ -315,6 +330,81 @@ final class SessionMessageStore {
     return try modelContext.fetch(descriptor)
   }
 
+  func knownSessionTransportEventIDs(ownerPubkey: String, sessionID: String) throws -> [String] {
+    let rootKindRaw = SessionMessageKind.root.rawValue
+    let descriptor = FetchDescriptor<SessionMessageEntity>(
+      predicate: #Predicate {
+        $0.ownerPubkey == ownerPubkey
+          && $0.conversationID == sessionID
+          && $0.kindRaw == rootKindRaw
+      }
+    )
+    let messages = try modelContext.fetch(descriptor)
+    return NostrValueNormalizer.dedupedNormalizedEventIDs(
+      messages.flatMap(\.publishedTransportEventIDs)
+    )
+  }
+
+  @discardableResult
+  func applySessionDeletion(
+    ownerPubkey: String,
+    sessionID: String,
+    deletedByPubkey: String,
+    updatedAt: Date,
+    eventID: String
+  ) throws -> Bool {
+    guard let normalizedDeletedByPubkey = NostrValueNormalizer.normalizedPubkeyHex(deletedByPubkey)
+    else {
+      throw NostrServiceError.invalidPubkey
+    }
+    let normalizedEventID = NostrValueNormalizer.normalizedEventID(eventID) ?? ""
+    let storageID = SessionDeletionTombstoneEntity.storageID(
+      ownerPubkey: ownerPubkey,
+      sessionID: sessionID
+    )
+    let descriptor = FetchDescriptor<SessionDeletionTombstoneEntity>(
+      predicate: #Predicate { $0.storageID == storageID }
+    )
+
+    var didChange = false
+    if let existing = try modelContext.fetch(descriptor).first {
+      guard
+        NostrValueNormalizer.shouldApplyStateUpdate(
+          currentUpdatedAt: existing.updatedAt,
+          currentEventID: existing.lastEventID,
+          incomingUpdatedAt: updatedAt,
+          incomingEventID: normalizedEventID
+        )
+      else {
+        return false
+      }
+      existing.updatedAt = updatedAt
+      existing.lastEventID = normalizedEventID
+      didChange = true
+    } else {
+      let tombstone = try SessionDeletionTombstoneEntity(
+        ownerPubkey: ownerPubkey,
+        sessionID: sessionID,
+        deletedByPubkey: normalizedDeletedByPubkey,
+        updatedAt: updatedAt,
+        eventID: normalizedEventID
+      )
+      modelContext.insert(tombstone)
+      didChange = true
+    }
+
+    let storedFileURLs = try purgeSessionDataRecords(
+      ownerPubkey: ownerPubkey,
+      sessionID: sessionID,
+      shouldSave: false
+    )
+    if didChange || !storedFileURLs.isEmpty {
+      try modelContext.save()
+    }
+    removeManagedFiles(at: storedFileURLs)
+    return didChange || !storedFileURLs.isEmpty
+  }
+
   func hasRootDeletion(
     ownerPubkey: String,
     sessionID: String,
@@ -510,6 +600,15 @@ final class SessionMessageStore {
     }
   }
 
+  func purgeSessionData(ownerPubkey: String, sessionID: String) throws {
+    let storedFileURLs = try purgeSessionDataRecords(
+      ownerPubkey: ownerPubkey,
+      sessionID: sessionID,
+      shouldSave: true
+    )
+    removeManagedFiles(at: storedFileURLs)
+  }
+
   func clearAllSessionData(ownerPubkey: String) throws {
     let messages = try modelContext.fetch(
       FetchDescriptor<SessionMessageEntity>(predicate: #Predicate { $0.ownerPubkey == ownerPubkey })
@@ -532,6 +631,10 @@ final class SessionMessageStore {
       FetchDescriptor<SessionPostDeletionEntity>(
         predicate: #Predicate { $0.ownerPubkey == ownerPubkey })
     )
+    let tombstones = try modelContext.fetch(
+      FetchDescriptor<SessionDeletionTombstoneEntity>(
+        predicate: #Predicate { $0.ownerPubkey == ownerPubkey })
+    )
 
     let storedFileURLs = managedStoredFileURLs(for: messages)
 
@@ -541,6 +644,7 @@ final class SessionMessageStore {
     intervals.forEach(modelContext.delete)
     reactions.forEach(modelContext.delete)
     deletions.forEach(modelContext.delete)
+    tombstones.forEach(modelContext.delete)
     try modelContext.save()
 
     removeManagedFiles(at: storedFileURLs)
@@ -663,6 +767,65 @@ final class SessionMessageStore {
     }
     openInterval.endAt = max(openInterval.startAt, endedAt)
     return true
+  }
+
+  @discardableResult
+  private func purgeSessionDataRecords(
+    ownerPubkey: String,
+    sessionID: String,
+    shouldSave: Bool
+  ) throws -> Set<URL> {
+    let messages = try modelContext.fetch(
+      FetchDescriptor<SessionMessageEntity>(
+        predicate: #Predicate { $0.ownerPubkey == ownerPubkey && $0.conversationID == sessionID }
+      )
+    )
+    let sessions = try modelContext.fetch(
+      FetchDescriptor<SessionEntity>(
+        predicate: #Predicate { $0.ownerPubkey == ownerPubkey && $0.sessionID == sessionID }
+      )
+    )
+    let members = try modelContext.fetch(
+      FetchDescriptor<SessionMemberEntity>(
+        predicate: #Predicate { $0.ownerPubkey == ownerPubkey && $0.sessionID == sessionID }
+      )
+    )
+    let intervals = try modelContext.fetch(
+      FetchDescriptor<SessionMemberIntervalEntity>(
+        predicate: #Predicate { $0.ownerPubkey == ownerPubkey && $0.sessionID == sessionID }
+      )
+    )
+    let reactions = try modelContext.fetch(
+      FetchDescriptor<SessionReactionEntity>(
+        predicate: #Predicate { $0.ownerPubkey == ownerPubkey && $0.sessionID == sessionID }
+      )
+    )
+    let deletions = try modelContext.fetch(
+      FetchDescriptor<SessionPostDeletionEntity>(
+        predicate: #Predicate { $0.ownerPubkey == ownerPubkey && $0.sessionID == sessionID }
+      )
+    )
+
+    let didChange =
+      !messages.isEmpty
+      || !sessions.isEmpty
+      || !members.isEmpty
+      || !intervals.isEmpty
+      || !reactions.isEmpty
+      || !deletions.isEmpty
+    guard didChange else { return [] }
+
+    let storedFileURLs = managedStoredFileURLs(for: messages)
+    messages.forEach(modelContext.delete)
+    sessions.forEach(modelContext.delete)
+    members.forEach(modelContext.delete)
+    intervals.forEach(modelContext.delete)
+    reactions.forEach(modelContext.delete)
+    deletions.forEach(modelContext.delete)
+    if shouldSave {
+      try modelContext.save()
+    }
+    return storedFileURLs
   }
 
   private func managedStoredFileURLs(for messages: [SessionMessageEntity]) -> Set<URL> {
