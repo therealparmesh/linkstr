@@ -119,6 +119,7 @@ final class AppSession: ObservableObject {
     let senderPubkey: String
     let recipientPubkeys: [String]
     let sessionID: String
+    let hadStoredRootPosts: Bool
     let publishedTransportEventIDs: [String]
   }
 
@@ -430,7 +431,7 @@ final class AppSession: ObservableObject {
     }
   }
 
-  func canManageMembers(for session: SessionEntity) -> Bool {
+  func canManageSession(for session: SessionEntity) -> Bool {
     guard let myPubkey = identityService.pubkeyHex else { return false }
     return session.createdByPubkey == myPubkey
   }
@@ -1565,7 +1566,7 @@ final class AppSession: ObservableObject {
       return false
     }
 
-    guard canManageMembers(for: session) else {
+    guard canManageSession(for: session) else {
       composeError = "only the session creator can manage this session."
       return false
     }
@@ -1864,7 +1865,10 @@ final class AppSession: ObservableObject {
       try persistSessionDeletion(draft, eventID: deletionEventID)
 
       guard !draft.publishedTransportEventIDs.isEmpty else {
-        composeError = "session deleted, but older relay copies of its posts may remain."
+        composeError =
+          draft.hadStoredRootPosts
+          ? "session deleted, but older relay copies of its posts may remain."
+          : nil
         return true
       }
 
@@ -2011,7 +2015,7 @@ final class AppSession: ObservableObject {
       composeError = "you're signed out. sign in to manage this session."
       return nil
     }
-    guard canManageMembers(for: session) else {
+    guard canManageSession(for: session) else {
       composeError = "only the session creator can delete this session."
       return nil
     }
@@ -2027,8 +2031,13 @@ final class AppSession: ObservableObject {
     }
 
     let publishedTransportEventIDs: [String]
+    let hadStoredRootPosts: Bool
     do {
       publishedTransportEventIDs = try messageStore.knownSessionTransportEventIDs(
+        ownerPubkey: ownerPubkey,
+        sessionID: session.sessionID
+      )
+      hadStoredRootPosts = try messageStore.hasRootPosts(
         ownerPubkey: ownerPubkey,
         sessionID: session.sessionID
       )
@@ -2051,6 +2060,7 @@ final class AppSession: ObservableObject {
       senderPubkey: keypair.publicKey.hex,
       recipientPubkeys: recipientPubkeys,
       sessionID: session.sessionID,
+      hadStoredRootPosts: hadStoredRootPosts,
       publishedTransportEventIDs: publishedTransportEventIDs
     )
   }
@@ -2974,6 +2984,17 @@ final class AppSession: ObservableObject {
     }
   }
 
+  private func discardPendingIncomingSessionDependents(sessionID: String) {
+    pendingIncomingMessages.removeAll { pending in
+      let payload = pending.incoming.payload
+      guard payload.conversationID.trimmingCharacters(in: .whitespacesAndNewlines) == sessionID
+      else {
+        return false
+      }
+      return payload.kind != .sessionDelete
+    }
+  }
+
   private func drainPendingIncomingMessagesIfNeeded() {
     guard !isDrainingPendingIncomingMessages else { return }
     guard !pendingIncomingMessages.isEmpty else { return }
@@ -3227,7 +3248,7 @@ final class AppSession: ObservableObject {
       )
       let isDeleted = didApply || tombstoneExists
       if isDeleted {
-        discardPendingIncomingSessionData(sessionID: sessionID)
+        discardPendingIncomingSessionDependents(sessionID: sessionID)
         invalidateMemberIntervalCache(sessionID: sessionID)
         if pendingSessionNavigationID == sessionID {
           pendingSessionNavigationID = nil
@@ -3329,12 +3350,20 @@ final class AppSession: ObservableObject {
       guard try !hasDeletedSession(ownerPubkey: ownerPubkey, sessionID: sessionID) else {
         return .ignored
       }
-      if try messageStore.hasRootDeletion(
+      if try messageStore.rootDeletion(
         ownerPubkey: ownerPubkey,
         sessionID: sessionID,
         rootID: rootID,
         deletedByPubkey: incoming.senderPubkey
-      ) {
+      ) != nil {
+        _ = try messageStore.applyRootDeletion(
+          ownerPubkey: ownerPubkey,
+          sessionID: sessionID,
+          rootID: rootID,
+          deletedByPubkey: incoming.senderPubkey,
+          updatedAt: incoming.createdAt,
+          eventID: incoming.eventID
+        )
         discardPendingIncomingReactions(sessionID: sessionID, rootID: rootID)
         return .applied
       }

@@ -119,7 +119,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 
 **Archive:**
 
-- Sessions can be archived or unarchived from a session-row long-press menu.
+- Sessions can be archived or unarchived from the session members/manage sheet.
 - The session list shows active sessions by default. When archived sessions exist, a header archive toggle icon appears to the left of the compose action.
 - Tapping the archive icon switches between active and archived list mode; the filled icon state indicates archive mode.
 - Switching away from the sessions tab resets the list mode back to active. Archive is non-destructive.
@@ -132,13 +132,14 @@ linkstr is built around private sessions, not one-off direct messages. A session
 - Tombstoned sessions ignore later relay backfill for `session_create`, `session_members`, `root`, `reaction`, and `root_delete`.
 - Delete sends an encrypted `session_delete` notice to known current and former members.
 - Delete also issues a best-effort Nostr deletion request (`kind:5`) for stored root-post gift-wrap IDs when available. Missing relay-side deletion does not roll back the local delete.
+- Implementation notes: [Delete session](docs/delete-session.md).
 
 ### Session members UX
 
 - Session member management is available inside a session.
 - Session detail uses chat-like link cards with grouped consecutive posts and inline membership timeline markers.
 - Members can be added only from existing contacts. Members can be removed from active membership.
-- Only the session creator can rename the session or add or remove members. Non-creator membership mutations are ignored on ingest.
+- Only the session creator can rename, delete, or change session membership. Non-creator membership and delete mutations are ignored on ingest.
 - Session detail inserts centered `in:` / `out:` separators for membership changes observed after the first local membership snapshot.
 - If the signed-in user is removed, the session stays visible as local history but becomes read-only for new posts and reactions.
 - Member identity resolves as: local alias → remote Nostr profile name → `npub`.
@@ -423,7 +424,6 @@ Embedded web playback allows provider-element fullscreen when supported.
 
 Future proposals are tracked as separate docs and are not part of the current shipped behavior. Proposal docs are directional and high-level and can change before implementation.
 
-- [Delete session](docs/future/delete-session.md)
 - [Leave session](docs/future/leave-session.md)
 
 ---

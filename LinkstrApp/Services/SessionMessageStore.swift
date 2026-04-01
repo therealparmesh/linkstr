@@ -345,6 +345,18 @@ final class SessionMessageStore {
     )
   }
 
+  func hasRootPosts(ownerPubkey: String, sessionID: String) throws -> Bool {
+    let rootKindRaw = SessionMessageKind.root.rawValue
+    let descriptor = FetchDescriptor<SessionMessageEntity>(
+      predicate: #Predicate {
+        $0.ownerPubkey == ownerPubkey
+          && $0.conversationID == sessionID
+          && $0.kindRaw == rootKindRaw
+      }
+    )
+    return !(try modelContext.fetch(descriptor)).isEmpty
+  }
+
   @discardableResult
   func applySessionDeletion(
     ownerPubkey: String,
@@ -411,6 +423,20 @@ final class SessionMessageStore {
     rootID: String,
     deletedByPubkey: String
   ) throws -> Bool {
+    try rootDeletion(
+      ownerPubkey: ownerPubkey,
+      sessionID: sessionID,
+      rootID: rootID,
+      deletedByPubkey: deletedByPubkey
+    ) != nil
+  }
+
+  func rootDeletion(
+    ownerPubkey: String,
+    sessionID: String,
+    rootID: String,
+    deletedByPubkey: String
+  ) throws -> SessionPostDeletionEntity? {
     guard let normalizedDeletedByPubkey = NostrValueNormalizer.normalizedPubkeyHex(deletedByPubkey)
     else {
       throw NostrServiceError.invalidPubkey
@@ -424,7 +450,7 @@ final class SessionMessageStore {
     let descriptor = FetchDescriptor<SessionPostDeletionEntity>(
       predicate: #Predicate { $0.storageID == storageID }
     )
-    return try modelContext.fetch(descriptor).first != nil
+    return try modelContext.fetch(descriptor).first
   }
 
   @discardableResult

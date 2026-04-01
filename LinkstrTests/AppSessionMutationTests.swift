@@ -747,13 +747,25 @@ final class AppSessionMutationTests: AppSessionTestCase {
     try session.identityService.createNewIdentity()
     let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
     let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionID = "session-delete-no-kind5"
     let sessionEntity = try insertSessionFixture(
       in: container.mainContext,
       ownerPubkey: myPubkey,
       createdByPubkey: myPubkey,
       memberPubkeys: [myPubkey, peerPubkey],
-      sessionID: "session-delete-no-kind5"
+      sessionID: sessionID
     )
+    let rootPost = makeMessage(
+      eventID: "root-session-delete-no-kind5",
+      conversationID: sessionID,
+      rootID: "root-session-delete-no-kind5",
+      kind: .root,
+      senderPubkey: myPubkey,
+      receiverPubkey: peerPubkey,
+      ownerPubkey: myPubkey
+    )
+    container.mainContext.insert(rootPost)
+    try container.mainContext.save()
 
     let didDelete = await session.deleteSessionAwaitingRelay(
       sessionEntity,
@@ -767,6 +779,44 @@ final class AppSessionMutationTests: AppSessionTestCase {
       session.composeError,
       "session deleted, but older relay copies of its posts may remain."
     )
+    XCTAssertEqual(try fetchSessionDeletionTombstones(in: container.mainContext).count, 1)
+  }
+
+  func testDeleteSessionAwaitingRelayWithoutPostsDoesNotShowRelayLeftoverWarning() async throws {
+    let (session, container) = try makeSession(
+      disableNostrStartup: false,
+      hasConnectedRelays: { true },
+      publishRelayEvent: { _ in
+        XCTFail("unexpected relay deletion publish")
+        return "unexpected-session-kind5-delete"
+      },
+      sendPayload: { payload, _ in
+        XCTAssertEqual(payload.kind, .sessionDelete)
+        return SentPayloadReceipt(
+          rumorEventID: "session-delete-empty-session",
+          publishedEventIDs: ["session-delete-wrapper"]
+        )
+      }
+    )
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let sessionEntity = try insertSessionFixture(
+      in: container.mainContext,
+      ownerPubkey: myPubkey,
+      createdByPubkey: myPubkey,
+      memberPubkeys: [myPubkey, peerPubkey],
+      sessionID: "session-delete-empty"
+    )
+
+    let didDelete = await session.deleteSessionAwaitingRelay(
+      sessionEntity,
+      timeoutSeconds: shortRelayMutationTimeoutSeconds,
+      pollIntervalSeconds: shortRelayMutationPollIntervalSeconds
+    )
+
+    XCTAssertTrue(didDelete)
+    XCTAssertNil(session.composeError)
     XCTAssertEqual(try fetchSessionDeletionTombstones(in: container.mainContext).count, 1)
   }
 

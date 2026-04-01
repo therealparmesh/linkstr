@@ -1,6 +1,6 @@
 # Delete Session
 
-Status: Implemented on this branch. Pending merge.
+Status: Implemented.
 
 ## Product shape
 

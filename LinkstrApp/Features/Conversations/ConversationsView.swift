@@ -133,20 +133,6 @@ struct ConversationsView: View {
                 .buttonStyle(.plain)
                 .contentShape(Rectangle())
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .contextMenu {
-                  Button {
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    session.setSessionArchived(
-                      sessionID: summary.session.sessionID,
-                      archived: !summary.session.isArchived
-                    )
-                  } label: {
-                    Label(
-                      summary.session.isArchived ? "unarchive session" : "archive session",
-                      systemImage: summary.session.isArchived ? "tray.and.arrow.up" : "archivebox"
-                    )
-                  }
-                }
               }
             }
           }
@@ -367,9 +353,9 @@ struct SessionPostsView: View {
     sessionEntities.first
   }
 
-  private var canManageMembers: Bool {
+  private var canManageSession: Bool {
     guard let sessionEntity else { return false }
-    return session.canManageMembers(for: sessionEntity)
+    return session.canManageSession(for: sessionEntity)
   }
 
   private var contactsByPubkey: [String: ContactEntity] {
@@ -527,7 +513,7 @@ struct SessionPostsView: View {
             Image(systemName: "person.2")
               .linkstrToolbarIconLabel()
           }
-          .accessibilityLabel(canManageMembers ? "manage session" : "members")
+          .accessibilityLabel(canManageSession ? "manage session" : "members")
           .tint(LinkstrTheme.accent)
 
           if contentState.canCreatePosts {
@@ -550,7 +536,7 @@ struct SessionPostsView: View {
     }
     .sheet(isPresented: $isPresentingMembers) {
       if let sessionEntity {
-        SessionMembersSheet(sessionEntity: sessionEntity)
+        SessionManagementSheet(sessionEntity: sessionEntity)
       }
     }
     .alert("delete post", isPresented: $isPresentingDeleteConfirmation) {
@@ -1276,7 +1262,7 @@ struct NewSessionSheet: View {
   }
 }
 
-private struct SessionMembersSheet: View {
+private struct SessionManagementSheet: View {
   private enum Field: Hashable {
     case sessionName
   }
@@ -1305,15 +1291,22 @@ private struct SessionMembersSheet: View {
         LinkstrBackgroundView()
         ScrollView {
           VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
-            LinkstrScreenTitle(title: canManageMembers ? "manage session" : "session members")
-            if canManageMembers {
-              LinkstrInsetSection(title: "session details") {
+            LinkstrScreenTitle(title: canManageSession ? "manage session" : "session members")
+            LinkstrInsetSection(title: "session details") {
+              if canManageSession {
                 TextField("session name", text: $sessionName)
                   .font(LinkstrTheme.body(15))
                   .focused($focusedField, equals: .sessionName)
                   .textInputAutocapitalization(.words)
                   .submitLabel(.done)
                   .onSubmit { focusedField = nil }
+                  .linkstrInputField()
+              } else {
+                Text(sessionEntity.name)
+                  .font(LinkstrTheme.body(14))
+                  .foregroundStyle(LinkstrTheme.textPrimary)
+                  .lineLimit(3)
+                  .textSelection(.enabled)
                   .linkstrInputField()
               }
             }
@@ -1348,7 +1341,7 @@ private struct SessionMembersSheet: View {
 
                       Spacer()
 
-                      if canManageMembers {
+                      if canManageSession {
                         Button(role: .destructive) {
                           includedMemberHexes.remove(memberHex)
                         } label: {
@@ -1370,7 +1363,35 @@ private struct SessionMembersSheet: View {
               }
             }
 
-            if canManageMembers {
+            LinkstrInsetSection(title: "session visibility") {
+              Button {
+                toggleArchived()
+              } label: {
+                HStack(spacing: LinkstrTheme.rowSpacing) {
+                  Label(
+                    sessionEntity.isArchived ? "unarchive session" : "archive session",
+                    systemImage: sessionEntity.isArchived ? "tray.and.arrow.up" : "archivebox"
+                  )
+                  .font(LinkstrTheme.body(14, weight: .semibold))
+                  Spacer()
+                }
+                .foregroundStyle(LinkstrTheme.textPrimary)
+                .padding(.vertical, LinkstrTheme.listRowVerticalPadding)
+                .contentShape(Rectangle())
+              }
+              .buttonStyle(.plain)
+              .disabled(isSaving || isDeletingSession)
+
+              Text(
+                sessionEntity.isArchived
+                  ? "unarchiving returns this session to the main sessions list on this device."
+                  : "archiving hides this session from the main sessions list on this device."
+              )
+              .font(LinkstrTheme.body(13))
+              .foregroundStyle(LinkstrTheme.textSecondary)
+            }
+
+            if canManageSession {
               LinkstrInsetSection(title: "add from contacts") {
                 LinkstrSearchField(prompt: "search contacts", text: $query)
 
@@ -1453,7 +1474,7 @@ private struct SessionMembersSheet: View {
               }
             } else {
               LinkstrInsetSection(title: "member permissions") {
-                Text("only the session creator can rename the session or change membership.")
+                Text("only the session creator can rename, delete, or change membership.")
                   .font(LinkstrTheme.body(13))
                   .foregroundStyle(LinkstrTheme.textSecondary)
               }
@@ -1474,11 +1495,11 @@ private struct SessionMembersSheet: View {
             Image(systemName: "xmark")
               .linkstrToolbarIconLabel()
           }
-          .accessibilityLabel(canManageMembers ? "cancel" : "close")
+          .accessibilityLabel(canManageSession ? "cancel" : "close")
           .tint(LinkstrTheme.textSecondary)
           .disabled(isSaving || isDeletingSession)
         }
-        if canManageMembers {
+        if canManageSession {
           ToolbarItem(placement: .confirmationAction) {
             Button {
               saveSession()
@@ -1517,7 +1538,7 @@ private struct SessionMembersSheet: View {
         )
       }
       .safeAreaInset(edge: .bottom, spacing: 0) {
-        if canManageMembers, let footerStatus {
+        if canManageSession, let footerStatus {
           LinkstrSheetStatusFooter(
             message: footerStatus.message,
             messageColor: footerStatus.color
@@ -1557,8 +1578,8 @@ private struct SessionMembersSheet: View {
     }
   }
 
-  private var canManageMembers: Bool {
-    session.canManageMembers(for: sessionEntity)
+  private var canManageSession: Bool {
+    session.canManageSession(for: sessionEntity)
   }
 
   private var canSave: Bool {
@@ -1618,7 +1639,7 @@ private struct SessionMembersSheet: View {
   }
 
   private func saveSession() {
-    guard canManageMembers else {
+    guard canManageSession else {
       composeCreatorOnlyError()
       return
     }
@@ -1661,5 +1682,17 @@ private struct SessionMembersSheet: View {
   private func syncMembersIfNeeded() {
     guard includedMemberHexes.isEmpty else { return }
     includedMemberHexes = Set(activeMembers.map(\.memberPubkey))
+  }
+
+  private func toggleArchived() {
+    guard !isSaving, !isDeletingSession else { return }
+    focusedField = nil
+    mutationFeedback.clear()
+    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+    session.setSessionArchived(
+      sessionID: sessionEntity.sessionID,
+      archived: !sessionEntity.isArchived
+    )
+    dismiss()
   }
 }

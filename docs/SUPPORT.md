@@ -61,17 +61,17 @@ The bottom footer shows validation and relay status only. The keyboard return ke
 
 ### React, delete, rename, archive, and manage members
 
-| Action                 | How                                                                                                                                                                                     |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| React to a post        | Open a post and tap 👍, 👎, 👀, or **…** for the emoji picker.                                                                                                                          |
-| Remove a reaction      | Tap the same emoji again.                                                                                                                                                               |
-| Share a deep link      | Open post detail and tap the share button in the top-right corner. The shared link carries only the normalized URL; linkstr fetches preview metadata again when the recipient opens it. |
-| Delete your own post   | Long-press the post row in the session view.                                                                                                                                            |
-| Archive a session      | Long-press the session row.                                                                                                                                                             |
-| View archived sessions | Tap the archive icon in the sessions header.                                                                                                                                            |
-| Rename a session       | Open a session, tap the members button, and edit the session name.                                                                                                                      |
-| Delete a session       | Open a session, tap the members button, and use **Delete Session** in the manage sheet.                                                                                                 |
-| Add or remove members  | Open a session and use the members button.                                                                                                                                              |
+| Action                         | How                                                                                                                                                                                     |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| React to a post                | Open a post and tap 👍, 👎, 👀, or **…** for the emoji picker.                                                                                                                          |
+| Remove a reaction              | Tap the same emoji again.                                                                                                                                                               |
+| Share a deep link              | Open post detail and tap the share button in the top-right corner. The shared link carries only the normalized URL; linkstr fetches preview metadata again when the recipient opens it. |
+| Delete your own post           | Long-press the post row in the session view.                                                                                                                                            |
+| Archive or unarchive a session | Open a session, tap the members button, and use **Archive Session** or **Unarchive Session**.                                                                                           |
+| View archived sessions         | Tap the archive icon in the sessions header.                                                                                                                                            |
+| Rename a session               | Open a session, tap the members button, and edit the session name.                                                                                                                      |
+| Delete a session               | Open a session, tap the members button, and use **Delete Session** in the manage sheet.                                                                                                 |
+| Add or remove members          | Open a session and use the members button.                                                                                                                                              |
 
 Only the session creator can rename sessions, delete them, or change session membership.
 
