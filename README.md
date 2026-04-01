@@ -1,6 +1,6 @@
 # linkstr
 
-_Last updated: March 20, 2026_
+_Last updated: April 1, 2026_
 
 linkstr is an iOS app for private link sharing on [Nostr](https://nostr.com). You create private sessions, share links with people you trust, react with emojis, and play supported video directly inside the app when a provider allows it.
 
@@ -115,7 +115,6 @@ linkstr is built around private sessions, not one-off direct messages. A session
 - Update fanout targets both prior-active and next-active members so removed members receive the removal snapshot.
 - Outbound snapshots include the session name so newly added members can materialize the session from the snapshot alone and existing members can apply renames.
 - Snapshot application is monotonic by `created_at`; older snapshots are ignored. Equal-timestamp conflicts resolve by lexicographic event-ID tiebreak.
-- The session creator can rename a session after creation from the manage session sheet.
 
 **Archive:**
 
@@ -128,15 +127,14 @@ linkstr is built around private sessions, not one-off direct messages. A session
 
 - The session creator can delete a session from the manage session sheet.
 - Delete requires confirmation and dismisses back to the session list when the session disappears.
-- Delete persists a local tombstone and purges the session row, members, membership intervals, posts, reactions, post-delete watermarks, unread state, archive state, and managed media references for that session.
-- Tombstoned sessions ignore later relay backfill for `session_create`, `session_members`, `root`, `reaction`, and `root_delete`.
+- Delete removes the session from both active and archived views on this device and prevents later relay backfill from recreating it.
 - Delete sends an encrypted `session_delete` notice to known current and former members.
-- Delete also issues a best-effort Nostr deletion request (`kind:5`) for stored root-post gift-wrap IDs when available. Missing relay-side deletion does not roll back the local delete.
-- Implementation notes: [Delete session](docs/delete-session.md).
+- When relay-visible wrapper IDs are available, linkstr also makes a best-effort relay-side delete request. Missing relay-side deletion does not roll back the local delete.
 
 ### Session members UX
 
 - Session member management is available inside a session.
+- The session members button opens the same sheet for everyone. Creators manage the session there; non-creators see the session name read-only and can review current members.
 - Session detail uses chat-like link cards with grouped consecutive posts and inline membership timeline markers.
 - Members can be added only from existing contacts. Members can be removed from active membership.
 - Only the session creator can rename, delete, or change session membership. Non-creator membership and delete mutations are ignored on ingest.
@@ -240,6 +238,7 @@ linkstr payloads are JSON-encoded and delivered through Nostr gift-wrap direct m
 
 - `session_create`
 - `session_members`
+- `session_delete`
 - `root`
 - `root_delete`
 - `reaction`

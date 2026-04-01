@@ -1,6 +1,6 @@
 # linkstr support
 
-_Last updated: March 31, 2026_
+_Last updated: April 1, 2026_
 
 linkstr is a private link-sharing app built on [Nostr](https://nostr.com). You create or join private sessions, share links inside those sessions, and react with emoji. This page describes the current shipped behavior in plain language.
 
@@ -170,7 +170,13 @@ Deleting the account does not invalidate the `nsec` itself. If you still have th
 
 ### Can I rename a session?
 
-Yes. Open the session and tap the members button. If you are the session creator, you can edit the session name at the top of the manage session sheet. Saving publishes the updated name to all current members.
+Yes. Open the session and tap the members button. That sheet shows the session name and current members for everyone. If you are the session creator, you can edit the name there and save to publish the updated name to all current members.
+
+### Can I archive a session?
+
+Yes. Open the session, tap the members button, and use **Archive Session** or **Unarchive Session**.
+
+Archive only changes whether the session appears in the active or archived list on this device. It does not delete the session or its posts.
 
 ### What happens when I add or remove a member?
 
@@ -213,7 +219,7 @@ If you delete and reinstall the app without restoring its local data, linkstr re
 
 Yes. Open the session, tap the members button, and use **Delete Session** in the manage sheet.
 
-Delete is creator-only and requires confirmation. When it succeeds, linkstr removes the session from active and archived lists on this device, sends an encrypted delete notice to known members, and makes a best-effort relay deletion request for stored root-post wrappers when those relay event IDs are known.
+Delete is creator-only and requires confirmation. When it succeeds, linkstr removes the session from active and archived lists on this device, sends an encrypted delete notice to known members, and tries a best-effort relay-side delete for older transport copies when possible.
 
 Delete is permanent for linkstr UX. There is no restore flow.
 
