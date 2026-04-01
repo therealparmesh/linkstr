@@ -1546,7 +1546,7 @@ private struct SessionManagementSheet: View {
         Button("cancel", role: .cancel) {}
       } message: {
         Text(
-          "this permanently removes the session from your device and sends a delete notice to other members."
+          "this permanently removes the session from your device and sends a delete notice to known members."
         )
       }
       .safeAreaInset(edge: .bottom, spacing: 0) {

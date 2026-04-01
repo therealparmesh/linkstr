@@ -128,7 +128,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 - The session creator can delete a session from the manage session sheet.
 - Delete requires confirmation and dismisses back to the session list when the session disappears.
 - Delete removes the session from both active and archived views on this device and prevents later relay backfill from recreating it.
-- Delete sends an encrypted `session_delete` notice to known current and former members.
+- Delete sends an encrypted `session_delete` notice to known members.
 - When relay-visible wrapper IDs are available, linkstr also makes a best-effort relay-side delete request. Missing relay-side deletion does not roll back the local delete.
 
 ### Session members UX
@@ -182,7 +182,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 - Outgoing root posts persist the relay-visible gift-wrap event IDs that carried the payload.
 - Session post lists show sender headers above post cards and collapse repeated headers for consecutive posts from the same sender.
 - Post delete is available via long-press on posts sent by the signed-in user.
-- Delete publishes a Nostr deletion request (`kind:5`) against the stored gift-wrap event IDs when available, and also sends a linkstr delete notice to known current and former session members so encrypted session feeds converge on the removal.
+- Delete publishes a Nostr deletion request (`kind:5`) against the stored gift-wrap event IDs when available, and also sends a linkstr delete notice to known members so encrypted session feeds converge on the removal.
 - Older locally stored root posts without recorded gift-wrap IDs skip relay-side `kind:5` publication and still use the linkstr delete notice plus local tombstoning.
 - Validated post deletes persist a local deletion watermark so historical backfill cannot resurrect a previously deleted root post.
 
