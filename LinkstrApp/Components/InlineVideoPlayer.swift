@@ -72,6 +72,7 @@ struct InlineVideoPlayer: View {
     }
     .onDisappear {
       player?.pause()
+      player = nil
       statusObservation?.invalidate()
       statusObservation = nil
     }
