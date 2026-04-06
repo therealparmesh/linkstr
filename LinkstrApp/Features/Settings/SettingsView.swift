@@ -13,6 +13,7 @@ struct SettingsView: View {
   @State private var isPresentingDeleteAccountFinalConfirm = false
   @State private var isDeletingAccount = false
   @State private var clearableStorageBytes: Int64?
+  @State private var clearableMetadataBytes: Int64?
   @State private var isRefreshingStorageUsage = false
 
   var body: some View {
@@ -223,16 +224,48 @@ struct SettingsView: View {
         LinkstrActionButtonLabel(title: "clear downloaded videos")
       }
       .linkstrDestructiveButton()
+
+      Button(role: .destructive) {
+        UINotificationFeedbackGenerator().notificationOccurred(.warning)
+        session.clearCachedMetadata()
+        refreshStorageUsage()
+      } label: {
+        LinkstrActionButtonLabel(title: "clear metadata")
+      }
+      .linkstrDestructiveButton()
     }
   }
 
   private var storageUsageHint: String? {
-    if isRefreshingStorageUsage && clearableStorageBytes == nil {
+    if isRefreshingStorageUsage
+      && clearableStorageBytes == nil
+      && clearableMetadataBytes == nil
+    {
       return "measuring local storage..."
     }
-    guard let clearableStorageBytes else { return nil }
-    return
-      "this will save ~\(ByteCountFormatter.string(fromByteCount: clearableStorageBytes, countStyle: .file).lowercased())."
+    let segments = [
+      storageUsageHintSegment(
+        label: "downloaded videos",
+        clearableBytes: clearableStorageBytes
+      ),
+      storageUsageHintSegment(
+        label: "metadata previews",
+        clearableBytes: clearableMetadataBytes
+      ),
+    ]
+    .compactMap { $0 }
+    guard !segments.isEmpty else { return "nothing to clear right now." }
+    return segments.joined(separator: ". ") + "."
+  }
+
+  private func storageUsageHintSegment(label: String, clearableBytes: Int64?) -> String? {
+    guard let clearableBytes else { return nil }
+    guard clearableBytes > 0 else { return nil }
+    let size = ByteCountFormatter.string(
+      fromByteCount: clearableBytes,
+      countStyle: .file
+    ).lowercased()
+    return "clearing \(label) would free ~\(size)"
   }
 
   private var identitySection: some View {
@@ -339,6 +372,7 @@ struct SettingsView: View {
     isRefreshingStorageUsage = true
     Task { @MainActor in
       clearableStorageBytes = session.clearableCachedMediaBytes()
+      clearableMetadataBytes = session.clearableMetadataBytes()
       isRefreshingStorageUsage = false
     }
   }

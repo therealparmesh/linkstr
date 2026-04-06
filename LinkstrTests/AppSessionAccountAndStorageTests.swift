@@ -232,7 +232,6 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
         return .loaded
       },
       identityRetryDelayNanoseconds: 0,
-      skipDefaultRelaySetup: true,
       skipPersistedFollowListStateLoad: true
     )
     _ = container
@@ -247,7 +246,6 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
   func testBootStartsNostrWithoutWaitingForSecondForegroundEvent() async throws {
     var nostrStartCount = 0
     let (session, container) = try makeSession(
-      skipDefaultRelaySetup: true,
       skipPersistedFollowListStateLoad: true,
       onNostrStart: {
         nostrStartCount += 1
@@ -269,7 +267,6 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
   func testCreateAccountAfterBootStartsNostr() async throws {
     var nostrStartCount = 0
     let (session, container) = try makeSession(
-      skipDefaultRelaySetup: true,
       skipPersistedFollowListStateLoad: true,
       onNostrStart: {
         nostrStartCount += 1
@@ -305,7 +302,6 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
         return .loaded
       },
       identityRetryDelayNanoseconds: 0,
-      skipDefaultRelaySetup: true,
       skipPersistedFollowListStateLoad: true
     )
     _ = container
@@ -336,7 +332,6 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
         return .loaded
       },
       identityRetryDelayNanoseconds: 0,
-      skipDefaultRelaySetup: true,
       skipPersistedFollowListStateLoad: true
     )
     _ = container
@@ -502,6 +497,35 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     XCTAssertFalse(FileManager.default.fileExists(atPath: thumbnailURL.path))
   }
 
+  func testLogOutClearLocalDataRemovesStoredVideoFiles() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let ownerPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+
+    let cachedMediaURL = makeManagedVideoURL()
+    try Data("media".utf8).write(to: cachedMediaURL, options: .atomic)
+
+    let message = makeMessage(
+      eventID: "message-video",
+      conversationID: "conversation-video",
+      rootID: "message-video",
+      kind: .root,
+      senderPubkey: "peer",
+      receiverPubkey: ownerPubkey,
+      ownerPubkey: ownerPubkey
+    )
+    message.cachedMediaPath = cachedMediaURL.path
+    message.cachedMediaSourceURL = "https://example.com/video.mp4"
+    container.mainContext.insert(message)
+    try container.mainContext.save()
+
+    XCTAssertTrue(FileManager.default.fileExists(atPath: cachedMediaURL.path))
+
+    session.logOut(clearLocalData: true)
+
+    XCTAssertFalse(FileManager.default.fileExists(atPath: cachedMediaURL.path))
+  }
+
   func testLogOutClearLocalDataDoesNotRemoveUnmanagedThumbnailFiles() throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
@@ -532,77 +556,219 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     XCTAssertTrue(FileManager.default.fileExists(atPath: thumbnailURL.path))
   }
 
-  func testClearCachedMediaRemovesManagedVideoFilesButPreservesHydratedMetadata() throws {
+  func testClearCachedMediaClearsManagedVideoFilesAcrossRetainedAccounts() throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
-    let ownerPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let firstOwner = try XCTUnwrap(session.identityService.pubkeyHex)
 
-    let thumbnailURL = makeManagedThumbnailURL()
-    let cachedMediaURL = makeManagedVideoURL()
-    try Data("thumbnail".utf8).write(to: thumbnailURL, options: .atomic)
-    try Data("media".utf8).write(to: cachedMediaURL, options: .atomic)
-
-    let message = makeMessage(
-      eventID: "message-clear-preview-cache",
-      conversationID: "conversation-clear-preview-cache",
-      rootID: "message-clear-preview-cache",
-      kind: .root,
-      senderPubkey: "peer",
-      receiverPubkey: ownerPubkey,
-      ownerPubkey: ownerPubkey
+    let firstThumbnailURL = makeManagedThumbnailURL()
+    let firstCachedMediaURL = makeManagedVideoURL()
+    let secondThumbnailURL = makeManagedThumbnailURL()
+    let secondCachedMediaURL = makeManagedVideoURL()
+    try Data("thumb-a".utf8).write(to: firstThumbnailURL, options: .atomic)
+    try Data("video-a".utf8).write(to: firstCachedMediaURL, options: .atomic)
+    try insertRetainedAccountStorageFixture(
+      in: container.mainContext,
+      ownerPubkey: firstOwner,
+      label: "first",
+      thumbnailURL: firstThumbnailURL,
+      cachedMediaURL: firstCachedMediaURL
     )
-    try message.setMetadata(title: "Title", thumbnailURL: thumbnailURL.path)
-    message.cachedMediaPath = cachedMediaURL.path
-    message.cachedMediaSourceURL = "https://example.com/video.mp4"
-    container.mainContext.insert(message)
-    try container.mainContext.save()
+
+    let secondKeypair = try TestKeyMaterialFactory.makeKeypair()
+    session.logOut(clearLocalData: false)
+    session.importNsec(secondKeypair.privateKey.nsec)
+    let secondOwner = try XCTUnwrap(session.identityService.pubkeyHex)
+    try Data("thumb-b".utf8).write(to: secondThumbnailURL, options: .atomic)
+    try Data("video-b".utf8).write(to: secondCachedMediaURL, options: .atomic)
+    try insertRetainedAccountStorageFixture(
+      in: container.mainContext,
+      ownerPubkey: secondOwner,
+      label: "second",
+      thumbnailURL: secondThumbnailURL,
+      cachedMediaURL: secondCachedMediaURL
+    )
 
     session.clearCachedMedia()
 
-    let stored = try XCTUnwrap(try fetchMessages(in: container.mainContext).first)
-    XCTAssertEqual(stored.metadataTitle, "Title")
-    XCTAssertEqual(stored.thumbnailURL, thumbnailURL.path)
-    XCTAssertNil(stored.cachedMediaPath)
-    XCTAssertNil(stored.cachedMediaSourceURL)
-    XCTAssertTrue(FileManager.default.fileExists(atPath: thumbnailURL.path))
-    XCTAssertFalse(FileManager.default.fileExists(atPath: cachedMediaURL.path))
+    let storedMessages = try fetchMessages(in: container.mainContext)
+    XCTAssertEqual(storedMessages.count, 2)
+    XCTAssertEqual(
+      Set(storedMessages.compactMap(\.metadataTitle)),
+      ["Title first", "Title second"]
+    )
+    XCTAssertEqual(
+      Set(storedMessages.compactMap(\.thumbnailURL)),
+      [firstThumbnailURL.path, secondThumbnailURL.path]
+    )
+    XCTAssertTrue(storedMessages.allSatisfy { $0.cachedMediaPath == nil })
+    XCTAssertTrue(storedMessages.allSatisfy { $0.cachedMediaSourceURL == nil })
+    XCTAssertFalse(FileManager.default.fileExists(atPath: firstCachedMediaURL.path))
+    XCTAssertFalse(FileManager.default.fileExists(atPath: secondCachedMediaURL.path))
+    XCTAssertTrue(FileManager.default.fileExists(atPath: firstThumbnailURL.path))
+    XCTAssertTrue(FileManager.default.fileExists(atPath: secondThumbnailURL.path))
+    XCTAssertEqual(
+      try fetchContacts(in: container.mainContext).compactMap(\.localAlias).sorted(),
+      ["Alias first", "Alias second"]
+    )
+    XCTAssertEqual(
+      try container.mainContext.fetch(FetchDescriptor<SessionEntity>())
+        .filter { $0.isArchived }
+        .map(\.sessionID)
+        .sorted(),
+      ["session-first", "session-second"]
+    )
+    XCTAssertNil(session.composeError)
   }
 
-  func testClearableCachedMediaBytesReportsOnlyCurrentAccountVideoUsage() async throws {
+  func testClearCachedMetadataStillWorksWhenSignedOutAcrossRetainedAccounts() throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
-    let ownerPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let firstOwner = try XCTUnwrap(session.identityService.pubkeyHex)
 
-    let thumbnailData = Data("thumbnail".utf8)
-    let mediaData = Data("cached-video".utf8)
-    let thumbnailURL = makeManagedThumbnailURL()
-    let cachedMediaURL = makeManagedVideoURL()
-    defer {
-      try? FileManager.default.removeItem(at: thumbnailURL)
-      try? FileManager.default.removeItem(at: cachedMediaURL)
-    }
-
-    try thumbnailData.write(to: thumbnailURL, options: .atomic)
-    try mediaData.write(to: cachedMediaURL, options: .atomic)
-
-    let message = makeMessage(
-      eventID: "message-storage-usage",
-      conversationID: "conversation-storage-usage",
-      rootID: "message-storage-usage",
-      kind: .root,
-      senderPubkey: "peer",
-      receiverPubkey: ownerPubkey,
-      ownerPubkey: ownerPubkey
+    let firstThumbnailURL = makeManagedThumbnailURL()
+    let firstCachedMediaURL = makeManagedVideoURL()
+    let secondThumbnailURL = makeManagedThumbnailURL()
+    let secondCachedMediaURL = makeManagedVideoURL()
+    try Data("thumb-a".utf8).write(to: firstThumbnailURL, options: .atomic)
+    try Data("video-a".utf8).write(to: firstCachedMediaURL, options: .atomic)
+    try insertRetainedAccountStorageFixture(
+      in: container.mainContext,
+      ownerPubkey: firstOwner,
+      label: "first",
+      thumbnailURL: firstThumbnailURL,
+      cachedMediaURL: firstCachedMediaURL
     )
-    try message.setMetadata(title: "Title", thumbnailURL: thumbnailURL.path)
-    message.cachedMediaPath = cachedMediaURL.path
-    message.cachedMediaSourceURL = "https://example.com/video.mp4"
-    container.mainContext.insert(message)
-    try container.mainContext.save()
+
+    let secondKeypair = try TestKeyMaterialFactory.makeKeypair()
+    session.logOut(clearLocalData: false)
+    session.importNsec(secondKeypair.privateKey.nsec)
+    let secondOwner = try XCTUnwrap(session.identityService.pubkeyHex)
+    try Data("thumb-b".utf8).write(to: secondThumbnailURL, options: .atomic)
+    try Data("video-b".utf8).write(to: secondCachedMediaURL, options: .atomic)
+    try insertRetainedAccountStorageFixture(
+      in: container.mainContext,
+      ownerPubkey: secondOwner,
+      label: "second",
+      thumbnailURL: secondThumbnailURL,
+      cachedMediaURL: secondCachedMediaURL
+    )
+
+    session.logOut(clearLocalData: false)
+
+    session.clearCachedMetadata()
+
+    let storedMessages = try fetchMessages(in: container.mainContext)
+    XCTAssertEqual(storedMessages.count, 2)
+    XCTAssertTrue(storedMessages.allSatisfy { $0.metadataTitle == nil })
+    XCTAssertTrue(storedMessages.allSatisfy { $0.thumbnailURL == nil })
+    XCTAssertEqual(
+      Set(storedMessages.compactMap(\.cachedMediaPath)),
+      [firstCachedMediaURL.path, secondCachedMediaURL.path]
+    )
+    XCTAssertEqual(
+      Set(storedMessages.compactMap(\.cachedMediaSourceURL)),
+      ["https://example.com/first.mp4", "https://example.com/second.mp4"]
+    )
+    XCTAssertFalse(FileManager.default.fileExists(atPath: firstThumbnailURL.path))
+    XCTAssertFalse(FileManager.default.fileExists(atPath: secondThumbnailURL.path))
+    XCTAssertTrue(FileManager.default.fileExists(atPath: firstCachedMediaURL.path))
+    XCTAssertTrue(FileManager.default.fileExists(atPath: secondCachedMediaURL.path))
+    XCTAssertEqual(
+      try fetchContacts(in: container.mainContext).compactMap(\.localAlias).sorted(),
+      ["Alias first", "Alias second"]
+    )
+    XCTAssertEqual(
+      try container.mainContext.fetch(FetchDescriptor<SessionEntity>())
+        .filter { $0.isArchived }
+        .map(\.sessionID)
+        .sorted(),
+      ["session-first", "session-second"]
+    )
+    XCTAssertNil(session.composeError)
+  }
+
+  func testClearableCachedMediaBytesAggregatesRetainedAccountVideoUsage() async throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let firstOwner = try XCTUnwrap(session.identityService.pubkeyHex)
+
+    let firstThumbnailURL = makeManagedThumbnailURL()
+    let firstCachedMediaURL = makeManagedVideoURL()
+    try Data("thumb-a".utf8).write(to: firstThumbnailURL, options: .atomic)
+    let firstVideoData = Data("video-a".utf8)
+    try firstVideoData.write(to: firstCachedMediaURL, options: .atomic)
+    try insertRetainedAccountStorageFixture(
+      in: container.mainContext,
+      ownerPubkey: firstOwner,
+      label: "first",
+      thumbnailURL: firstThumbnailURL,
+      cachedMediaURL: firstCachedMediaURL
+    )
+
+    let secondKeypair = try TestKeyMaterialFactory.makeKeypair()
+    session.logOut(clearLocalData: false)
+    session.importNsec(secondKeypair.privateKey.nsec)
+    let secondOwner = try XCTUnwrap(session.identityService.pubkeyHex)
+    let secondThumbnailURL = makeManagedThumbnailURL()
+    let secondCachedMediaURL = makeManagedVideoURL()
+    try Data("thumb-b".utf8).write(to: secondThumbnailURL, options: .atomic)
+    let secondVideoData = Data("video-bb".utf8)
+    try secondVideoData.write(to: secondCachedMediaURL, options: .atomic)
+    try insertRetainedAccountStorageFixture(
+      in: container.mainContext,
+      ownerPubkey: secondOwner,
+      label: "second",
+      thumbnailURL: secondThumbnailURL,
+      cachedMediaURL: secondCachedMediaURL
+    )
 
     let clearableStorageBytes = session.clearableCachedMediaBytes()
 
-    XCTAssertEqual(clearableStorageBytes, Int64(mediaData.count))
+    XCTAssertEqual(clearableStorageBytes, Int64(firstVideoData.count + secondVideoData.count))
+  }
+
+  func testClearableMetadataBytesAggregatesRetainedAccountPreviewUsage() async throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let firstOwner = try XCTUnwrap(session.identityService.pubkeyHex)
+
+    let firstThumbnailData = Data("thumb-a".utf8)
+    let firstThumbnailURL = makeManagedThumbnailURL()
+    let firstCachedMediaURL = makeManagedVideoURL()
+    try firstThumbnailData.write(to: firstThumbnailURL, options: .atomic)
+    try Data("video-a".utf8).write(to: firstCachedMediaURL, options: .atomic)
+    try insertRetainedAccountStorageFixture(
+      in: container.mainContext,
+      ownerPubkey: firstOwner,
+      label: "first",
+      thumbnailURL: firstThumbnailURL,
+      cachedMediaURL: firstCachedMediaURL
+    )
+
+    let secondKeypair = try TestKeyMaterialFactory.makeKeypair()
+    session.logOut(clearLocalData: false)
+    session.importNsec(secondKeypair.privateKey.nsec)
+    let secondOwner = try XCTUnwrap(session.identityService.pubkeyHex)
+    let secondThumbnailData = Data("thumb-bb".utf8)
+    let secondThumbnailURL = makeManagedThumbnailURL()
+    let secondCachedMediaURL = makeManagedVideoURL()
+    try secondThumbnailData.write(to: secondThumbnailURL, options: .atomic)
+    try Data("video-b".utf8).write(to: secondCachedMediaURL, options: .atomic)
+    try insertRetainedAccountStorageFixture(
+      in: container.mainContext,
+      ownerPubkey: secondOwner,
+      label: "second",
+      thumbnailURL: secondThumbnailURL,
+      cachedMediaURL: secondCachedMediaURL
+    )
+
+    let clearableMetadataBytes = session.clearableMetadataBytes()
+
+    XCTAssertEqual(
+      clearableMetadataBytes,
+      Int64(firstThumbnailData.count + secondThumbnailData.count)
+    )
   }
 
   func testRefreshPostMetadataUpdatesStoredMetadataWhenPreviewChanges() async throws {
@@ -803,6 +969,47 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     XCTAssertEqual(messages.count, 2)
     XCTAssertEqual(Set(messages.map(\.ownerPubkey)).count, 2)
     XCTAssertEqual(Set(messages.map(\.storageID)).count, 2)
+  }
+
+  private func insertRetainedAccountStorageFixture(
+    in context: ModelContext,
+    ownerPubkey: String,
+    label: String,
+    thumbnailURL: URL,
+    cachedMediaURL: URL
+  ) throws {
+    let sessionEntity = try SessionEntity(
+      ownerPubkey: ownerPubkey,
+      sessionID: "session-\(label)",
+      name: "Session \(label)",
+      createdByPubkey: ownerPubkey,
+      createdAt: .now,
+      updatedAt: .now,
+      isArchived: true
+    )
+    context.insert(sessionEntity)
+
+    let contact = try ContactEntity(
+      ownerPubkey: ownerPubkey,
+      targetPubkey: String(repeating: label == "first" ? "a" : "b", count: 64),
+      alias: "Alias \(label)"
+    )
+    context.insert(contact)
+
+    let message = makeMessage(
+      eventID: "message-\(label)",
+      conversationID: "session-\(label)",
+      rootID: "message-\(label)",
+      kind: .root,
+      senderPubkey: "peer-\(label)",
+      receiverPubkey: ownerPubkey,
+      ownerPubkey: ownerPubkey
+    )
+    try message.setMetadata(title: "Title \(label)", thumbnailURL: thumbnailURL.path)
+    message.cachedMediaPath = cachedMediaURL.path
+    message.cachedMediaSourceURL = "https://example.com/\(label).mp4"
+    context.insert(message)
+    try context.save()
   }
 }
 

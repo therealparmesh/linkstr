@@ -2722,16 +2722,17 @@ final class AppSession: ObservableObject {
   }
 
   func clearCachedMedia() {
-    guard let ownerPubkey = identityService.pubkeyHex else {
-      composeError = "you're signed out. sign in to manage local storage."
-      return
+    do {
+      try messageStore.clearCachedMedia()
+      composeError = nil
+    } catch {
+      report(error: error)
     }
-    clearCachedMedia(ownerPubkey: ownerPubkey)
   }
 
-  private func clearCachedMedia(ownerPubkey: String) {
+  func clearCachedMetadata() {
     do {
-      try messageStore.clearCachedMedia(ownerPubkey: ownerPubkey)
+      try messageStore.clearCachedMetadata()
       composeError = nil
     } catch {
       report(error: error)
@@ -2739,15 +2740,13 @@ final class AppSession: ObservableObject {
   }
 
   func clearableCachedMediaBytes() -> Int64 {
-    let currentAccountUsage: ManagedStorageUsage
-    if let ownerPubkey = identityService.pubkeyHex {
-      currentAccountUsage =
-        (try? messageStore.managedStorageUsage(ownerPubkey: ownerPubkey)) ?? .zero
-    } else {
-      currentAccountUsage = .zero
-    }
+    let usage = (try? messageStore.managedStorageUsage()) ?? .zero
+    return usage.cachedMediaBytes
+  }
 
-    return currentAccountUsage.cachedMediaBytes
+  func clearableMetadataBytes() -> Int64 {
+    let usage = (try? messageStore.managedStorageUsage()) ?? .zero
+    return usage.previewBytes
   }
 
   @discardableResult

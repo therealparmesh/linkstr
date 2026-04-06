@@ -678,12 +678,24 @@ final class SessionMessageStore {
     removeManagedFiles(at: storedFileURLs)
   }
 
-  func clearCachedMedia(ownerPubkey: String) throws {
-    let descriptor = FetchDescriptor<SessionMessageEntity>(
-      predicate: #Predicate { $0.ownerPubkey == ownerPubkey }
-    )
-    let messages = try modelContext.fetch(descriptor)
+  func clearCachedMedia() throws {
+    try clearCachedMedia(messages: storageMessages())
+  }
 
+  func clearCachedMetadata() throws {
+    try clearCachedMetadata(messages: storageMessages())
+  }
+
+  func managedStorageUsage() throws -> ManagedStorageUsage {
+    let messages = try storageMessages()
+    return managedStorageUsage(messages: messages)
+  }
+
+  private func storageMessages() throws -> [SessionMessageEntity] {
+    return try modelContext.fetch(FetchDescriptor<SessionMessageEntity>())
+  }
+
+  private func clearCachedMedia(messages: [SessionMessageEntity]) throws {
     var didChange = false
     for message in messages {
       if let cachedMediaURL = ManagedLocalFileScope.shared.managedFileURL(
@@ -706,12 +718,35 @@ final class SessionMessageStore {
     }
   }
 
-  func managedStorageUsage(ownerPubkey: String) throws -> ManagedStorageUsage {
-    let descriptor = FetchDescriptor<SessionMessageEntity>(
-      predicate: #Predicate { $0.ownerPubkey == ownerPubkey }
-    )
-    let messages = try modelContext.fetch(descriptor)
+  private func clearCachedMetadata(messages: [SessionMessageEntity]) throws {
+    var didChange = false
+    var clearedStorageIDs = Set<String>()
+    var clearedThumbnailPaths = Set<String>()
+    for message in messages {
+      let currentThumbnailPath = ManagedLocalFileScope.shared.normalizedManagedPath(message.thumbnailURL)
+      let hadCachedMetadata = message.metadataTitle != nil || currentThumbnailPath != nil
+      guard hadCachedMetadata else { continue }
 
+      if let currentThumbnailPath {
+        clearedThumbnailPaths.insert(currentThumbnailPath)
+      }
+      try message.setMetadata(title: nil, thumbnailURL: nil)
+      clearedStorageIDs.insert(message.storageID)
+      didChange = true
+    }
+
+    if didChange {
+      try modelContext.save()
+      for thumbnailPath in clearedThumbnailPaths {
+        pruneManagedThumbnailIfUnreferenced(
+          thumbnailPath: thumbnailPath,
+          excludingStorageIDs: clearedStorageIDs
+        )
+      }
+    }
+  }
+
+  private func managedStorageUsage(messages: [SessionMessageEntity]) -> ManagedStorageUsage {
     let previewURLs = Set(
       messages.compactMap { message in
         ManagedLocalFileScope.shared.managedFileURL(fromPath: message.thumbnailURL)
@@ -731,6 +766,28 @@ final class SessionMessageStore {
         total += LocalFileMetrics.allocatedSize(at: fileURL)
       }
     )
+  }
+
+  private func pruneManagedThumbnailIfUnreferenced(
+    thumbnailPath: String,
+    excludingStorageIDs: Set<String> = []
+  ) {
+    guard
+      let managedThumbnailURL = ManagedLocalFileScope.shared.managedFileURL(fromPath: thumbnailPath)
+    else {
+      return
+    }
+
+    let messages = (try? modelContext.fetch(FetchDescriptor<SessionMessageEntity>())) ?? []
+    let hasOtherReference = messages.contains { message in
+      guard !excludingStorageIDs.contains(message.storageID) else { return false }
+      return ManagedLocalFileScope.shared.normalizedManagedPath(message.thumbnailURL)
+        == managedThumbnailURL.path
+    }
+    guard !hasOtherReference else { return }
+
+    ThumbnailImageCache.shared.removeImage(at: managedThumbnailURL.path)
+    try? FileManager.default.removeItem(at: managedThumbnailURL)
   }
 
   private func normalizedPubkeys(_ candidates: [String]) -> [String] {
