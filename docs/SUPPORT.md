@@ -1,6 +1,6 @@
 # linkstr support
 
-_Last updated: April 1, 2026_
+_Last updated: April 6, 2026_
 
 linkstr is a private link-sharing app built on [Nostr](https://nostr.com). You create or join private sessions, share links inside those sessions, and react with emoji. This page describes the current shipped behavior in plain language.
 
@@ -79,11 +79,11 @@ Only the session creator can rename sessions, delete them, or change session mem
 
 Open Settings to manage relays.
 
-- Default relays are created automatically if you do not have any yet.
+- If you have not changed relays, linkstr uses the current default relay set.
 - You can add your own relay URLs.
 - Enabled relays can be toggled on or off.
 - Relay rows can be removed.
-- **Reset defaults** restores the shipped relay set.
+- **Reset defaults** puts you back on the current default relay set.
 
 ---
 
@@ -149,7 +149,7 @@ Session content is end-to-end encrypted before it reaches relays. Only session m
 
 linkstr uses an APNs push service for iOS notifications. That service stores your APNs device token, your Nostr pubkey, archived conversation IDs used to suppress notifications for archived sessions, and lightweight push-dedupe bookkeeping so the same event is not pushed repeatedly.
 
-Push alerts use generic text. Old push notifications are not replayed during historical restore.
+Push alerts use generic text. Tapping a push alert opens the relevant session. Old push notifications are not replayed during historical restore.
 
 ### Can I use my account in other Nostr apps?
 
@@ -158,7 +158,7 @@ Yes. Your `nsec` is a Nostr secret key, not a linkstr-only credential.
 ### What happens if I log out?
 
 - **Log out (keep local data)** removes the active identity from memory and keychain state but keeps the signed-in account's local sessions, posts, contacts, and caches on the device.
-- **Log out and clear local data** removes the active identity and deletes all account-scoped local data for that account from the device.
+- **Log out and clear local data** removes the active identity and deletes that account's local data, including caches, from the device.
 
 ### What happens if I delete my account?
 
@@ -245,7 +245,7 @@ In the device keychain, with iOS-controlled protection. Simulator fallback stora
 
 ### Where are videos and previews stored?
 
-Downloaded media and generated previews are stored in app-owned local storage. Video cache is treated as disposable device cache and auto-trims with least-recently-used eviction at approximately 1 GB. Settings can clear downloaded videos, while saved metadata and thumbnails stay on-device until they are replaced or account data is removed.
+Downloaded media and generated previews are stored in app-owned local storage. Video cache is treated as disposable device cache and trims itself automatically. Settings can clear downloaded videos or saved preview metadata if you want to free space or force a preview rebuild.
 
 ### What permissions does linkstr ask for?
 
@@ -266,7 +266,7 @@ Archived sessions do not send notifications.
 
 1. Confirm your internet connection works.
 2. Open Settings and check that at least one relay is enabled.
-3. If needed, use **Reset defaults** in the relays section.
+3. If needed, use **Reset defaults** in the relays section to go back to the current default relay set.
 4. Bring the app back to the foreground and leave it open for a few seconds. linkstr treats this like a light reopen: it stops relay runtime whenever the app leaves the foreground and does one clean rebuild from a disconnected baseline when it becomes active again.
 5. If it still does not recover, force-quit and reopen the app.
 
@@ -291,7 +291,7 @@ Historical replay depends on relay retention. linkstr can retry out-of-order pos
 
 1. Use the refresh button in post detail to re-fetch metadata for that post.
 2. Open the session, the post detail, or the shared-link screen and let linkstr rebuild the preview if metadata is still missing.
-3. Settings only clears downloaded videos; it does not wipe saved metadata or thumbnails.
+3. Settings can clear saved preview metadata if you want linkstr to rebuild it.
 4. If the provider itself is serving bad metadata, use **Open in browser**.
 
 ### I can't scan a QR code

@@ -1,6 +1,6 @@
 # linkstr
 
-_Last updated: April 1, 2026_
+_Last updated: April 6, 2026_
 
 linkstr is an iOS app for private link sharing on [Nostr](https://nostr.com). You create private sessions, share links with people you trust, react with emojis, and play supported video directly inside the app when a provider allows it.
 
@@ -53,7 +53,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
   - `starting session…`
 - Boot loads identity from the keychain and registers for remote notifications when allowed.
 - Boot briefly retries identity load before falling back to onboarding, to tolerate transient keychain or protected-data unavailability at launch.
-- Boot ensures default relays exist if the local relay list is empty.
+- Boot uses the shipped default relay set when no relay configuration is persisted.
 - Boot starts the relay runtime once identity is available.
 - Foreground re-entry and protected-data availability events retry identity load when no account is currently active in memory.
 - If persistent local storage cannot be opened, the app shows a recovery screen instead of crashing. Recovery allows retrying startup or continuing in a temporary in-memory mode for that launch only.
@@ -75,6 +75,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 - The active identity is keychain-backed.
 - The You tab exposes a profile card, QR code, current public key (`npub`), and editing for the account's published Nostr profile name.
 - Settings uses always-visible grouped sections for relays, storage, and identity.
+- Settings storage controls can clear downloaded videos separately from saved link metadata and thumbnails.
 - The `nsec` is hidden by default and only revealed on explicit action. The revealed value is cleared again when the settings identity view disappears or the app moves to the inactive or background state.
 
 **Account removal:**
@@ -215,7 +216,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 ### Relay settings and runtime
 
 - Relay management lives in settings.
-- Users can add a relay URL (`ws://` or `wss://`, valid host required), enable or disable a relay, remove a relay, or reset to default relays.
+- Users can add a relay URL (`ws://` or `wss://`, valid host required), enable or disable a relay, remove a relay, or reset back to the current shipped default relays.
 - The relay header shows `connected_or_readonly / total`.
 - Relay, storage, and identity controls remain visible without disclosure-group expansion.
 - Relay rows show a live status dot (`connecting`, `connected`, `read-only`, `failed`, `disabled`) and optional inline error text. Error rows reserve layout height to avoid jitter when status text appears or disappears.
@@ -336,7 +337,7 @@ Embedded web playback allows provider-element fullscreen when supported.
 - Missing metadata is retried lazily when posts scroll into view or when post detail is opened.
 - Post detail also exposes a refresh action that forces metadata to re-fetch for that post.
 - Missing local thumbnail files are treated as stale and re-fetched.
-- Settings → Storage clears downloaded videos only; hydrated metadata and thumbnails are preserved.
+- Settings → Storage can clear downloaded videos separately from hydrated metadata and thumbnails.
 
 ### Contacts
 
@@ -379,7 +380,7 @@ Embedded web playback allows provider-element fullscreen when supported.
 
 **Persisted local data:**
 
-- Relay configuration and enabled state.
+- Relay configuration and enabled state when persisted.
 - Contacts and private aliases.
 - Sessions, member snapshots, membership intervals, session deletion tombstones, root posts, post deletion watermarks, reactions, read state, and archive state.
 - Cached media references, downloaded videos, and metadata hydration state.
@@ -389,13 +390,13 @@ Embedded web playback allows provider-element fullscreen when supported.
 
 - SwiftData persistence is local-first and survives app relaunch.
 - Cached video files live under `Library/Caches` and are treated as disposable device cache with LRU eviction at approximately 1 GB.
-- Settings → Storage can purge downloaded videos for the signed-in account without removing hydrated metadata or thumbnails.
+- Settings → Storage can purge downloaded videos or clear hydrated metadata and thumbnails across all local accounts retained on the device.
 
 **Scoping and encryption:**
 
 - Local entities are owner-scoped by pubkey. Account scoping is enforced in storage and query paths to prevent cross-account bleed.
 - "Log out (keep local data)" preserves persisted entities so the same account can log back in later.
-- "Log out and clear local data" removes the signed-in account's persisted entities and cached media references.
+- "Log out and clear local data" removes the signed-in account's persisted entities, managed thumbnails, cached videos, and cache references.
 - If account-scoped local cleanup cannot fully complete, the app surfaces an error instead of reporting a clean success.
 - Sensitive content fields are encrypted at rest with per-owner local keys (aliases, session and member identity values, URLs, notes, metadata, and creator keys).
 - Operational identifiers and timestamps remain plaintext in local storage for indexing and querying.
