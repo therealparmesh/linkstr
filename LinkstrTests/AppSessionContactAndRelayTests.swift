@@ -892,6 +892,22 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     XCTAssertEqual(startCount, stableStartCount + 1)
   }
 
+  func testPushConversationNavigationConsumesTrimmedConversationIDIntoSessionRequest() throws {
+    let (session, _) = try makeSession()
+    let rawConversationID = "  push-session  "
+    PushNotificationService.shared.enqueueConversationNavigation(to: rawConversationID)
+    defer { _ = PushNotificationService.shared.consumePendingConversationID() }
+
+    guard let conversationID = PushNotificationService.shared.consumePendingConversationID() else {
+      XCTFail("expected pending conversation id")
+      return
+    }
+    session.requestSessionNavigation(to: conversationID)
+
+    XCTAssertEqual(session.pendingSessionNavigationRequest?.sessionID, "push-session")
+    XCTAssertNil(PushNotificationService.shared.pendingConversationID)
+  }
+
   func testPassiveOfflineToastDoesNotLoopAcrossForegroundRelayFlaps() throws {
     let (session, container) = try makeSession(passiveOfflineToastGraceInterval: 0.01)
     let relay = RelayEntity(url: "wss://relay.example.com")

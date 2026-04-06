@@ -49,7 +49,7 @@ final class AppSessionMutationTests: AppSessionTestCase {
     XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
   }
 
-  func testCreateSessionSetsPendingNavigationID() async throws {
+  func testCreateSessionSetsPendingNavigationRequest() async throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
     let peerNPub = try TestKeyMaterialFactory.makeNPub()
@@ -63,10 +63,22 @@ final class AppSessionMutationTests: AppSessionTestCase {
     let sessions = try container.mainContext.fetch(
       FetchDescriptor<SessionEntity>(sortBy: [SortDescriptor(\.createdAt)]))
     XCTAssertEqual(sessions.count, 1)
-    XCTAssertEqual(session.pendingSessionNavigationID, sessions.first?.sessionID)
+    XCTAssertEqual(session.pendingSessionNavigationRequest?.sessionID, sessions.first?.sessionID)
 
-    session.clearPendingSessionNavigationID()
-    XCTAssertNil(session.pendingSessionNavigationID)
+    session.clearPendingSessionNavigationRequest()
+    XCTAssertNil(session.pendingSessionNavigationRequest)
+  }
+
+  func testRequestSessionNavigationReplacesRequestForRepeatedSessionID() throws {
+    let (session, _) = try makeSession()
+
+    session.requestSessionNavigation(to: "session-repeat")
+    let firstRequestID = session.pendingSessionNavigationRequest?.id
+
+    session.requestSessionNavigation(to: "session-repeat")
+
+    XCTAssertEqual(session.pendingSessionNavigationRequest?.sessionID, "session-repeat")
+    XCTAssertNotEqual(session.pendingSessionNavigationRequest?.id, firstRequestID)
   }
 
   func testCreateSessionPostAwaitingRelaySendsWhenLiveRelayConnectionExists() async throws {

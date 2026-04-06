@@ -27,6 +27,11 @@ private enum IdentityLoadRetryDefaults {
 
 @MainActor
 final class AppSession: ObservableObject {
+  struct SessionNavigationRequest: Identifiable, Equatable {
+    let id = UUID()
+    let sessionID: String
+  }
+
   struct FormMutationResult {
     let didSucceed: Bool
     let errorMessage: String?
@@ -210,7 +215,7 @@ final class AppSession: ObservableObject {
   private var hasEvaluatedInitialHistoricalUnreadPolicy = false
 
   @Published var composeError: String?
-  @Published var pendingSessionNavigationID: String?
+  @Published private(set) var pendingSessionNavigationRequest: SessionNavigationRequest?
   @Published private(set) var hasIdentity = false
   @Published private(set) var didFinishBoot = false
   @Published private(set) var bootStatusMessage = "loading account…"
@@ -316,6 +321,12 @@ final class AppSession: ObservableObject {
 
   private func report(error: Error) {
     composeError = error.localizedDescription
+  }
+
+  func requestSessionNavigation(to sessionID: String) {
+    let normalizedID = sessionID.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !normalizedID.isEmpty else { return }
+    pendingSessionNavigationRequest = SessionNavigationRequest(sessionID: normalizedID)
   }
 
   var shouldPresentComposeErrorToast: Bool {
@@ -1308,7 +1319,7 @@ final class AppSession: ObservableObject {
     activeMetadataRefreshStorageID = nil
     metadataRefreshQueueGeneration = 0
     passiveOfflineToastGraceUntil = nil
-    pendingSessionNavigationID = nil
+    pendingSessionNavigationRequest = nil
     pendingCreatedAccountNsec = nil
   }
 
@@ -1544,7 +1555,7 @@ final class AppSession: ObservableObject {
         updatedAt: updatedAt,
         eventID: membershipEventID
       )
-      pendingSessionNavigationID = sessionID
+      requestSessionNavigation(to: sessionID)
       composeError = nil
       return true
     } catch {
@@ -2186,8 +2197,8 @@ final class AppSession: ObservableObject {
     )
     discardPendingIncomingSessionData(sessionID: draft.sessionID)
     invalidateMemberIntervalCache(sessionID: draft.sessionID)
-    if pendingSessionNavigationID == draft.sessionID {
-      pendingSessionNavigationID = nil
+    if pendingSessionNavigationRequest?.sessionID == draft.sessionID {
+      pendingSessionNavigationRequest = nil
     }
     schedulePushStateSync()
   }
@@ -2687,8 +2698,8 @@ final class AppSession: ObservableObject {
     }
   }
 
-  func clearPendingSessionNavigationID() {
-    pendingSessionNavigationID = nil
+  func clearPendingSessionNavigationRequest() {
+    pendingSessionNavigationRequest = nil
   }
 
   @discardableResult
@@ -3252,8 +3263,8 @@ final class AppSession: ObservableObject {
       if isDeleted {
         discardPendingIncomingSessionDependents(sessionID: sessionID)
         invalidateMemberIntervalCache(sessionID: sessionID)
-        if pendingSessionNavigationID == sessionID {
-          pendingSessionNavigationID = nil
+        if pendingSessionNavigationRequest?.sessionID == sessionID {
+          pendingSessionNavigationRequest = nil
         }
         schedulePushStateSync()
         return .applied

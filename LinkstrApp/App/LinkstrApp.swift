@@ -15,6 +15,13 @@ struct LinkstrAppMain: App {
     Self.configureNavigationAppearance()
   }
 
+  private func consumePendingPushConversationNavigationIfNeeded(for session: AppSession) {
+    guard let conversationID = PushNotificationService.shared.consumePendingConversationID() else {
+      return
+    }
+    session.requestSessionNavigation(to: conversationID)
+  }
+
   private static func configureScrollViewAppearance() {
     let scrollViewAppearance = UIScrollView.appearance()
     scrollViewAppearance.backgroundColor = .clear
@@ -105,6 +112,7 @@ struct LinkstrAppMain: App {
                 Task {
                   await readyContext.session.boot()
                 }
+                consumePendingPushConversationNavigationIfNeeded(for: readyContext.session)
               }
               .onOpenURL { url in
                 deepLinkHandler.handle(url: url)
@@ -126,15 +134,12 @@ struct LinkstrAppMain: App {
               .onReceive(
                 PushNotificationService.shared.$pendingConversationID
               ) { _ in
-                if let conversationID = PushNotificationService.shared
-                  .consumePendingConversationID()
-                {
-                  readyContext.session.pendingSessionNavigationID = conversationID
-                }
+                consumePendingPushConversationNavigationIfNeeded(for: readyContext.session)
               }
               .onChange(of: scenePhase) { _, newValue in
                 switch newValue {
                 case .active:
+                  consumePendingPushConversationNavigationIfNeeded(for: readyContext.session)
                   readyContext.session.handleAppDidBecomeActive()
                 case .inactive, .background:
                   readyContext.session.handleAppDidLeaveForeground()

@@ -17,7 +17,14 @@ final class PushNotificationService: NSObject {
 
   /// Conversation ID from a tapped push notification, stored so it survives
   /// cold-launch timing where SwiftUI subscribers aren't yet registered.
-  @Published var pendingConversationID: String?
+  @Published private(set) var pendingConversationID: String?
+
+  func enqueueConversationNavigation(to rawConversationID: String?) {
+    guard let rawConversationID else { return }
+    let conversationID = rawConversationID.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !conversationID.isEmpty else { return }
+    pendingConversationID = conversationID
+  }
 
   /// Reads and clears the pending conversation ID in a single call.
   func consumePendingConversationID() -> String? {
@@ -108,12 +115,12 @@ extension PushNotificationService: UNUserNotificationCenterDelegate {
     withCompletionHandler completionHandler: @escaping () -> Void
   ) {
     let userInfo = response.notification.request.content.userInfo
-    if let conversationID = userInfo["conversation_id"] as? String,
-      !conversationID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    {
+    if let conversationID = userInfo["conversation_id"] as? String {
       Task { @MainActor in
-        PushNotificationService.shared.pendingConversationID = conversationID
+        PushNotificationService.shared.enqueueConversationNavigation(to: conversationID)
+        completionHandler()
       }
+      return
     }
     completionHandler()
   }

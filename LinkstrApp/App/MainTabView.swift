@@ -5,7 +5,8 @@ struct MainTabView: View {
   @EnvironmentObject private var session: AppSession
 
   private struct SessionNavigationTarget: Identifiable, Hashable {
-    let id: String
+    let id = UUID()
+    let sessionID: String
   }
 
   private enum AppTab: String, CaseIterable, Identifiable {
@@ -84,7 +85,7 @@ struct MainTabView: View {
     .navigationDestination(item: $selectedSessionTarget) { target in
       SessionPostsView(
         ownerPubkey: session.identityService.pubkeyHex ?? "",
-        sessionID: target.id
+        sessionID: target.sessionID
       )
     }
     .toolbar {
@@ -109,7 +110,7 @@ struct MainTabView: View {
     .onAppear {
       navigateToPendingSessionIfNeeded()
     }
-    .onChange(of: session.pendingSessionNavigationID) { _, _ in
+    .onChange(of: session.pendingSessionNavigationRequest?.id) { _, _ in
       navigateToPendingSessionIfNeeded()
     }
     .onChange(of: scopedSessions.map(\.sessionID).stableTaskID) { _, _ in
@@ -194,16 +195,13 @@ struct MainTabView: View {
 
   private func openSession(_ sessionID: String) {
     selectedTab = .sessions
-    selectedSessionTarget = nil
-    Task { @MainActor in
-      selectedSessionTarget = SessionNavigationTarget(id: sessionID)
-    }
+    selectedSessionTarget = SessionNavigationTarget(sessionID: sessionID)
   }
 
   private func navigateToPendingSessionIfNeeded() {
-    guard let pendingID = session.pendingSessionNavigationID else { return }
-    guard scopedSessions.contains(where: { $0.sessionID == pendingID }) else { return }
-    openSession(pendingID)
-    session.clearPendingSessionNavigationID()
+    guard let request = session.pendingSessionNavigationRequest else { return }
+    guard scopedSessions.contains(where: { $0.sessionID == request.sessionID }) else { return }
+    openSession(request.sessionID)
+    session.clearPendingSessionNavigationRequest()
   }
 }
