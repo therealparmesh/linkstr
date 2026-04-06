@@ -4,22 +4,24 @@ import SwiftData
 
 @MainActor
 final class RelayStore {
-  private let modelContext: ModelContext
-
-  init(modelContext: ModelContext) {
-    self.modelContext = modelContext
+  private enum RelayConfigurationKey {
+    static let hasCustomizedRelays = "linkstr.hasCustomizedRelays"
   }
 
-  func ensureDefaultRelays() throws {
-    let relays = try fetchRelays()
-    guard relays.isEmpty else { return }
-    RelayDefaults.urls.forEach { modelContext.insert(RelayEntity(url: $0)) }
-    try modelContext.save()
+  private let modelContext: ModelContext
+  private let userDefaults: UserDefaults
+
+  init(modelContext: ModelContext, userDefaults: UserDefaults = .standard) {
+    self.modelContext = modelContext
+    self.userDefaults = userDefaults
   }
 
   func fetchRelays() throws -> [RelayEntity] {
-    let descriptor = FetchDescriptor<RelayEntity>(sortBy: [SortDescriptor(\.createdAt)])
-    return try modelContext.fetch(descriptor)
+    let persistedRelays = try fetchPersistedRelays()
+    if try shouldUseCustomizedRelays(persistedRelays) {
+      return persistedRelays
+    }
+    return makeVirtualDefaultRelays()
   }
 
   func addRelay(url: URL) throws {
@@ -29,27 +31,88 @@ final class RelayStore {
       throw RelayStoreError.duplicateRelay
     }
 
+    try materializeDefaultsForCustomizationIfNeeded()
     modelContext.insert(RelayEntity(url: relayURL))
     try modelContext.save()
   }
 
-  func removeRelay(_ relay: RelayEntity) throws {
+  func removeRelay(url rawValue: String) throws {
+    try materializeDefaultsForCustomizationIfNeeded()
+    guard let relay = try persistedRelay(matching: rawValue) else { return }
     modelContext.delete(relay)
     try modelContext.save()
   }
 
-  func toggleRelay(_ relay: RelayEntity) throws {
+  func toggleRelay(url rawValue: String) throws {
+    try materializeDefaultsForCustomizationIfNeeded()
+    guard let relay = try persistedRelay(matching: rawValue) else { return }
     relay.isEnabled.toggle()
     try modelContext.save()
   }
 
   func resetDefaultRelays() throws {
-    let descriptor = FetchDescriptor<RelayEntity>()
-    let existingRelays = try modelContext.fetch(descriptor)
-    existingRelays.forEach(modelContext.delete)
+    try deletePersistedRelays()
+    clearCustomizedRelays()
+  }
+
+  private func fetchPersistedRelays() throws -> [RelayEntity] {
+    let descriptor = FetchDescriptor<RelayEntity>(sortBy: [SortDescriptor(\.createdAt)])
+    return try modelContext.fetch(descriptor)
+  }
+
+  private func materializeDefaultsForCustomizationIfNeeded() throws {
+    let persistedRelays = try fetchPersistedRelays()
+    guard try !shouldUseCustomizedRelays(persistedRelays) else {
+      return
+    }
 
     RelayDefaults.urls.forEach { modelContext.insert(RelayEntity(url: $0)) }
     try modelContext.save()
+    markCustomizedRelays()
+  }
+
+  private func persistedRelay(matching rawValue: String) throws -> RelayEntity? {
+    let canonicalURL = canonicalRelayURLString(from: rawValue)
+    return try fetchPersistedRelays().first(where: {
+      canonicalRelayURLString(from: $0.url) == canonicalURL
+    })
+  }
+
+  private func shouldUseCustomizedRelays(_ persistedRelays: [RelayEntity]) throws -> Bool {
+    if hasCustomizedRelays {
+      return true
+    }
+    guard !persistedRelays.isEmpty else { return false }
+    markCustomizedRelays()
+    return true
+  }
+
+  private func deletePersistedRelays() throws {
+    let relaysToDelete = try fetchPersistedRelays()
+    guard !relaysToDelete.isEmpty else { return }
+    relaysToDelete.forEach(modelContext.delete)
+    try modelContext.save()
+  }
+
+  private func makeVirtualDefaultRelays() -> [RelayEntity] {
+    RelayDefaults.urls.enumerated().map { offset, url in
+      RelayEntity(
+        url: url,
+        createdAt: Date(timeIntervalSince1970: TimeInterval(offset))
+      )
+    }
+  }
+
+  private var hasCustomizedRelays: Bool {
+    userDefaults.bool(forKey: RelayConfigurationKey.hasCustomizedRelays)
+  }
+
+  private func markCustomizedRelays() {
+    userDefaults.set(true, forKey: RelayConfigurationKey.hasCustomizedRelays)
+  }
+
+  private func clearCustomizedRelays() {
+    userDefaults.removeObject(forKey: RelayConfigurationKey.hasCustomizedRelays)
   }
 
   private func canonicalRelayURLString(from url: URL) -> String {
@@ -90,7 +153,7 @@ final class ContactStore {
     self.modelContext = modelContext
   }
 
-  func fetchContacts(ownerPubkey: String, sortedByDisplayName: Bool = false) throws
+  private func fetchContacts(ownerPubkey: String, sortedByDisplayName: Bool = false) throws
     -> [ContactEntity]
   {
     let descriptor = FetchDescriptor<ContactEntity>(

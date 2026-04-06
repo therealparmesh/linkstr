@@ -1,13 +1,9 @@
-import SwiftData
 import SwiftUI
 import UIKit
 
 struct SettingsView: View {
   @Environment(\.scenePhase) private var scenePhase
   @EnvironmentObject private var session: AppSession
-
-  @Query(sort: [SortDescriptor(\RelayEntity.url)])
-  private var relays: [RelayEntity]
 
   @State private var relayURL = ""
   @State private var revealedNsec = ""
@@ -101,7 +97,7 @@ struct SettingsView: View {
   private var relaysSection: some View {
     LinkstrInsetSection(
       title: "relays",
-      accessory: "\(connectedRelayCount)/\(relays.count)",
+      accessory: "\(connectedRelayCount)/\(session.configuredRelays.count)",
       footer:
         "enable at least one writable relay to create sessions, send posts, or publish account changes."
     ) {
@@ -111,7 +107,7 @@ struct SettingsView: View {
           .foregroundStyle(LinkstrTheme.textSecondary)
       } else {
         VStack(spacing: 0) {
-          ForEach(Array(sortedRelays.enumerated()), id: \.element.id) { index, relay in
+          ForEach(Array(sortedRelays.enumerated()), id: \.element.url) { index, relay in
             relayRow(relay)
 
             if index < sortedRelays.count - 1 {
@@ -309,7 +305,7 @@ struct SettingsView: View {
   }
 
   private var connectedRelayCount: Int {
-    session.connectedRelayCount(for: relays)
+    session.connectedRelayCount(for: session.configuredRelays)
   }
 
   private func statusDotColor(for relay: RelayEntity) -> Color {
@@ -333,7 +329,7 @@ struct SettingsView: View {
   }
 
   private var sortedRelays: [RelayEntity] {
-    relays.sorted {
+    session.configuredRelays.sorted {
       $0.url.localizedCaseInsensitiveCompare($1.url) == .orderedAscending
     }
   }

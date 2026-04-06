@@ -1831,7 +1831,10 @@ final class AppSessionIngestTests: AppSessionTestCase {
   }
 
   func testFollowListRecencyPersistsAcrossAppRestart() throws {
-    let (session, container) = try makeSession()
+    let relaySettingsUserDefaults = makeRelaySettingsUserDefaults()
+    let (session, container) = try makeSession(
+      relaySettingsUserDefaults: relaySettingsUserDefaults
+    )
     try session.identityService.createNewIdentity()
     let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
     let nsec = try session.identityService.revealNsec()
@@ -1848,6 +1851,7 @@ final class AppSessionIngestTests: AppSessionTestCase {
 
     let restartedSession = AppSession(
       modelContext: container.mainContext,
+      relaySettingsUserDefaults: relaySettingsUserDefaults,
       testingOverrides: {
         var overrides = AppSession.TestingOverrides()
         overrides.skipNostrNetworkStartup = true

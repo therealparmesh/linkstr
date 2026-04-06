@@ -189,6 +189,10 @@ final class AppSessionMutationTests: AppSessionTestCase {
   {
     let (session, container) = try makeSession(disableNostrStartup: false)
     try session.identityService.createNewIdentity()
+    await session.boot()
+    for relay in session.configuredRelays {
+      session.removeRelay(relay)
+    }
     let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
     let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
     let sessionEntity = try insertSessionFixture(

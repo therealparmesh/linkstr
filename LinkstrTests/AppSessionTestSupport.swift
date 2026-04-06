@@ -10,6 +10,7 @@ class AppSessionTestCase: XCTestCase {
   let shortRelayMutationPollIntervalSeconds: TimeInterval = 0.01
   let shortRemoteProfileLookupRetryNanoseconds: UInt64 = 50_000_000
   let asyncExpectationTimeoutSeconds: TimeInterval = 1.0
+  private var relaySettingsSuiteNames: [String] = []
 
   override func setUpWithError() throws {
     try KeychainStore.shared.delete("nostr_nsec")
@@ -17,6 +18,18 @@ class AppSessionTestCase: XCTestCase {
 
   override func tearDownWithError() throws {
     try KeychainStore.shared.delete("nostr_nsec")
+    for suiteName in relaySettingsSuiteNames {
+      UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
+    }
+    relaySettingsSuiteNames.removeAll()
+  }
+
+  func makeRelaySettingsUserDefaults() -> UserDefaults {
+    let suiteName = "LinkstrTests.RelaySettings.\(UUID().uuidString)"
+    relaySettingsSuiteNames.append(suiteName)
+    let userDefaults = UserDefaults(suiteName: suiteName) ?? UserDefaults()
+    userDefaults.removePersistentDomain(forName: suiteName)
+    return userDefaults
   }
 
   func insertSessionFixture(
@@ -63,6 +76,7 @@ class AppSessionTestCase: XCTestCase {
   }
 
   func makeSession(
+    relaySettingsUserDefaults: UserDefaults? = nil,
     testingOverrides: AppSession.TestingOverrides = {
       var overrides = AppSession.TestingOverrides()
       overrides.skipNostrNetworkStartup = true
@@ -86,6 +100,7 @@ class AppSessionTestCase: XCTestCase {
     return (
       AppSession(
         modelContext: container.mainContext,
+        relaySettingsUserDefaults: relaySettingsUserDefaults ?? makeRelaySettingsUserDefaults(),
         testingOverrides: testingOverrides
       ),
       container
@@ -98,7 +113,6 @@ class AppSessionTestCase: XCTestCase {
     passiveOfflineToastGraceInterval: TimeInterval? = nil,
     loadIdentity: ((IdentityService) -> IdentityService.LoadResult)? = nil,
     identityRetryDelayNanoseconds: UInt64? = nil,
-    skipDefaultRelaySetup: Bool = false,
     skipPersistedFollowListStateLoad: Bool = false,
     publishFollowList: (([String]) async throws -> String)? = nil,
     publishRelayEvent: ((NostrEvent) async throws -> String)? = nil,
@@ -112,7 +126,8 @@ class AppSessionTestCase: XCTestCase {
     unregisterPushDevice: ((String) async throws -> Void)? = nil,
     syncArchivedConversationIDs: (([String]) async throws -> Void)? = nil,
     enqueuePushNotification: ((PushEnqueueRequest) async throws -> Void)? = nil,
-    fetchLinkPreview: ((String) async -> LinkPreviewData?)? = nil
+    fetchLinkPreview: ((String) async -> LinkPreviewData?)? = nil,
+    relaySettingsUserDefaults: UserDefaults? = nil
   ) throws -> (AppSession, ModelContainer) {
     var testingOverrides = AppSession.TestingOverrides()
     testingOverrides.disableNostrStartup = disableNostrStartup
@@ -120,7 +135,6 @@ class AppSessionTestCase: XCTestCase {
     testingOverrides.passiveOfflineToastGraceInterval = passiveOfflineToastGraceInterval
     testingOverrides.loadIdentity = loadIdentity
     testingOverrides.identityRetryDelayNanoseconds = identityRetryDelayNanoseconds
-    testingOverrides.skipDefaultRelaySetup = skipDefaultRelaySetup
     testingOverrides.skipPersistedFollowListStateLoad = skipPersistedFollowListStateLoad
     testingOverrides.publishFollowList = publishFollowList
     testingOverrides.publishRelayEvent = publishRelayEvent
@@ -135,14 +149,17 @@ class AppSessionTestCase: XCTestCase {
     testingOverrides.syncArchivedConversationIDs = syncArchivedConversationIDs
     testingOverrides.enqueuePushNotification = enqueuePushNotification
     testingOverrides.fetchLinkPreview = fetchLinkPreview
-    return try makeSession(testingOverrides: testingOverrides)
+    return try makeSession(
+      relaySettingsUserDefaults: relaySettingsUserDefaults,
+      testingOverrides: testingOverrides
+    )
   }
 
   func fetchContacts(in context: ModelContext) throws -> [ContactEntity] {
     try context.fetch(FetchDescriptor<ContactEntity>(sortBy: [SortDescriptor(\.createdAt)]))
   }
 
-  func fetchRelays(in context: ModelContext) throws -> [RelayEntity] {
+  func fetchPersistedRelays(in context: ModelContext) throws -> [RelayEntity] {
     try context.fetch(FetchDescriptor<RelayEntity>(sortBy: [SortDescriptor(\.createdAt)]))
   }
 

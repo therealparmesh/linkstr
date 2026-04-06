@@ -360,10 +360,12 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
   }
 
   func testBootRestoresPersistedOwnProfileNameState() async throws {
+    let relaySettingsUserDefaults = makeRelaySettingsUserDefaults()
     let (session, container) = try makeSession(
       disableNostrStartup: false,
       hasConnectedRelays: { true },
-      publishRelayEvent: { event in event.id }
+      publishRelayEvent: { event in event.id },
+      relaySettingsUserDefaults: relaySettingsUserDefaults
     )
     try session.identityService.createNewIdentity()
 
@@ -375,10 +377,10 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     XCTAssertTrue(didSave)
 
     var restoredOverrides = AppSession.TestingOverrides()
-    restoredOverrides.skipDefaultRelaySetup = true
     restoredOverrides.skipNostrNetworkStartup = true
     let restoredSession = AppSession(
       modelContext: container.mainContext,
+      relaySettingsUserDefaults: relaySettingsUserDefaults,
       testingOverrides: restoredOverrides
     )
 
@@ -389,7 +391,10 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
   }
 
   func testBootDoesNotRestoreRemoteProfileDirectoryAcrossSessions() async throws {
-    let (session, container) = try makeSession()
+    let relaySettingsUserDefaults = makeRelaySettingsUserDefaults()
+    let (session, container) = try makeSession(
+      relaySettingsUserDefaults: relaySettingsUserDefaults
+    )
     try session.identityService.createNewIdentity()
     let participantPubkey = try TestKeyMaterialFactory.makePubkeyHex()
 
@@ -403,10 +408,10 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     )
 
     var restoredOverrides = AppSession.TestingOverrides()
-    restoredOverrides.skipDefaultRelaySetup = true
     restoredOverrides.skipNostrNetworkStartup = true
     let restoredSession = AppSession(
       modelContext: container.mainContext,
+      relaySettingsUserDefaults: relaySettingsUserDefaults,
       testingOverrides: restoredOverrides
     )
 
@@ -759,7 +764,38 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     XCTAssertEqual(third.metadataTitle, "preview for metadata-test-third")
   }
 
-  func testRelayCRUDFlow() throws {
+  func testBootUsesVirtualDefaultRelaysWhenStoreIsEmpty() async throws {
+    let (session, container) = try makeSession()
+
+    await session.boot()
+
+    XCTAssertEqual(session.configuredRelays.map(\.url), RelayDefaults.urls)
+    XCTAssertTrue(try fetchPersistedRelays(in: container.mainContext).isEmpty)
+  }
+
+  func testBootLeavesPersistedRelayRowsInPlaceUntilResetDefaults() async throws {
+    let relaySettingsUserDefaults = makeRelaySettingsUserDefaults()
+    let (session, container) = try makeSession(
+      relaySettingsUserDefaults: relaySettingsUserDefaults
+    )
+    let persistedRelayURLs = [
+      "wss://relay.damus.io",
+      "wss://relay.primal.net",
+      "wss://nos.lol",
+      "wss://relay.snort.social",
+      "wss://nostr.satoshisfrens.win",
+    ]
+
+    persistedRelayURLs.forEach { container.mainContext.insert(RelayEntity(url: $0)) }
+    try container.mainContext.save()
+
+    await session.boot()
+
+    XCTAssertEqual(session.configuredRelays.map(\.url), persistedRelayURLs)
+    XCTAssertEqual(try fetchPersistedRelays(in: container.mainContext).map(\.url), persistedRelayURLs)
+  }
+
+  func testAddingCustomRelayMaterializesDefaultsAndRejectsDuplicates() throws {
     let (session, container) = try makeSession()
 
     session.addRelay(url: "https://invalid-relay.example.com")
@@ -767,40 +803,60 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
 
     session.addRelay(url: "wss://")
     XCTAssertEqual(session.composeError, "enter a valid relay url (ws:// or wss://).")
-    XCTAssertTrue(try fetchRelays(in: container.mainContext).isEmpty)
+    XCTAssertTrue(try fetchPersistedRelays(in: container.mainContext).isEmpty)
 
     session.addRelay(url: "wss://relay.example.com")
-    var relays = try fetchRelays(in: container.mainContext)
-    XCTAssertEqual(relays.count, 1)
-    XCTAssertEqual(relays[0].url, "wss://relay.example.com")
-    XCTAssertTrue(relays[0].isEnabled)
+    var relays = try fetchPersistedRelays(in: container.mainContext)
+    XCTAssertEqual(relays.count, RelayDefaults.urls.count + 1)
+    XCTAssertEqual(
+      Set(relays.map(\.url)),
+      Set(RelayDefaults.urls).union(["wss://relay.example.com"])
+    )
+    XCTAssertTrue(relays.allSatisfy(\.isEnabled))
+    XCTAssertEqual(
+      Set(session.configuredRelays.map(\.url)),
+      Set(RelayDefaults.urls).union(["wss://relay.example.com"])
+    )
 
     session.addRelay(url: "wss://relay.example.com/")
     XCTAssertEqual(session.composeError, "that relay is already in your list.")
-    relays = try fetchRelays(in: container.mainContext)
-    XCTAssertEqual(relays.count, 1)
-
-    session.toggleRelay(relays[0])
-    XCTAssertFalse(relays[0].isEnabled)
-
-    session.removeRelay(relays[0])
-    relays = try fetchRelays(in: container.mainContext)
-    XCTAssertTrue(relays.isEmpty)
+    relays = try fetchPersistedRelays(in: container.mainContext)
+    XCTAssertEqual(relays.count, RelayDefaults.urls.count + 1)
   }
 
-  func testResetDefaultRelaysReplacesExistingRelays() throws {
+  func testRelayMutationsMaterializeDefaultsAndPreserveCustomEmptyState() async throws {
     let (session, container) = try makeSession()
 
+    await session.boot()
+
+    let firstRelay = try XCTUnwrap(session.configuredRelays.first)
+    session.toggleRelay(firstRelay)
+    var relays = try fetchPersistedRelays(in: container.mainContext)
+    XCTAssertEqual(relays.count, RelayDefaults.urls.count)
+    XCTAssertFalse(relays.contains(where: { $0.url == firstRelay.url && $0.isEnabled }))
+
+    for relay in session.configuredRelays {
+      session.removeRelay(relay)
+    }
+
+    relays = try fetchPersistedRelays(in: container.mainContext)
+    XCTAssertTrue(relays.isEmpty)
+    XCTAssertTrue(session.configuredRelays.isEmpty)
+  }
+
+  func testResetDefaultRelaysReturnsToVirtualDefaults() async throws {
+    let (session, container) = try makeSession()
+
+    await session.boot()
     session.addRelay(url: "wss://custom.example.com")
-    var relays = try fetchRelays(in: container.mainContext)
-    XCTAssertEqual(relays.map(\.url), ["wss://custom.example.com"])
+    var relays = try fetchPersistedRelays(in: container.mainContext)
+    XCTAssertEqual(relays.count, RelayDefaults.urls.count + 1)
 
     session.resetDefaultRelays()
-    relays = try fetchRelays(in: container.mainContext)
+    relays = try fetchPersistedRelays(in: container.mainContext)
 
-    XCTAssertEqual(Set(relays.map(\.url)), Set(RelayDefaults.urls))
-    XCTAssertEqual(relays.count, RelayDefaults.urls.count)
-    XCTAssertTrue(relays.allSatisfy(\.isEnabled))
+    XCTAssertTrue(relays.isEmpty)
+    XCTAssertEqual(session.configuredRelays.map(\.url), RelayDefaults.urls)
   }
 
   func testBackgroundClearsRuntimeRelayStateBeforeForegroundRebuild() async throws {

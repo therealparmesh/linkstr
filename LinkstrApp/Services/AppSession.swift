@@ -134,7 +134,6 @@ final class AppSession: ObservableObject {
     var passiveOfflineToastGraceInterval: TimeInterval?
     var loadIdentity: ((IdentityService) -> IdentityService.LoadResult)?
     var identityRetryDelayNanoseconds: UInt64?
-    var skipDefaultRelaySetup = false
     var skipPersistedFollowListStateLoad = false
     var publishFollowList: (([String]) async throws -> String)?
     var publishRelayEvent: ((NostrEvent) async throws -> String)?
@@ -219,6 +218,7 @@ final class AppSession: ObservableObject {
   @Published private(set) var hasIdentity = false
   @Published private(set) var didFinishBoot = false
   @Published private(set) var bootStatusMessage = "loading account…"
+  @Published private(set) var configuredRelays: [RelayEntity] = []
   @Published private(set) var pendingCreatedAccountNsec: String?
   @Published private(set) var currentProfileName: String?
   @Published private(set) var remoteProfilesByPubkey: [String: KnownProfileSnapshot] = [:]
@@ -230,6 +230,7 @@ final class AppSession: ObservableObject {
 
   init(
     modelContext: ModelContext,
+    relaySettingsUserDefaults: UserDefaults = .standard,
     testingOverrides: TestingOverrides = .init()
   ) {
     self.modelContext = modelContext
@@ -237,7 +238,10 @@ final class AppSession: ObservableObject {
     self.identityService = IdentityService()
     self.nostrService = NostrDMService()
     self.contactStore = ContactStore(modelContext: modelContext)
-    self.relayStore = RelayStore(modelContext: modelContext)
+    self.relayStore = RelayStore(
+      modelContext: modelContext,
+      userDefaults: relaySettingsUserDefaults
+    )
     self.messageStore = SessionMessageStore(modelContext: modelContext)
     self.accountStateStore = AccountStateStore(modelContext: modelContext)
   }
@@ -270,12 +274,8 @@ final class AppSession: ObservableObject {
     do {
       bootStatusMessage = "preparing local data…"
       bootStatusMessage = "connecting relays…"
-      if testingOverrides.skipDefaultRelaySetup {
-        relayRuntimeStatusByURL.removeAll()
-      } else {
-        try relayStore.ensureDefaultRelays()
-        pruneRuntimeRelayStatusCache()
-      }
+      try reloadRelayConfiguration()
+      pruneRuntimeRelayStatusCache()
     } catch {
       composeError = error.localizedDescription
     }
@@ -349,7 +349,7 @@ final class AppSession: ObservableObject {
     return message
   }
 
-  func relayConnectivityState(for enabledRelays: [RelayEntity]) -> RelayConnectivityState {
+  private func relayConnectivityState(for enabledRelays: [RelayEntity]) -> RelayConnectivityState {
     guard !enabledRelays.isEmpty else { return .noEnabledRelays }
 
     if enabledRelays.contains(where: { effectiveRelayStatus(for: $0) == .connected }) {
@@ -630,6 +630,10 @@ final class AppSession: ObservableObject {
 
   private func enabledRelayURLsSnapshot() -> [String] {
     (try? relayStore.fetchRelays().filter(\.isEnabled).map(\.url)) ?? []
+  }
+
+  private func reloadRelayConfiguration() throws {
+    configuredRelays = try relayStore.fetchRelays()
   }
 
   private func clearRelayRuntimeTracking() {
@@ -2682,13 +2686,13 @@ final class AppSession: ObservableObject {
 
   func removeRelay(_ relay: RelayEntity) {
     performRelayMutation {
-      try relayStore.removeRelay(relay)
+      try relayStore.removeRelay(url: relay.url)
     }
   }
 
   func toggleRelay(_ relay: RelayEntity) {
     performRelayMutation {
-      try relayStore.toggleRelay(relay)
+      try relayStore.toggleRelay(url: relay.url)
     }
   }
 
@@ -2706,6 +2710,7 @@ final class AppSession: ObservableObject {
   private func performRelayMutation(_ mutation: () throws -> Void) -> Bool {
     do {
       try mutation()
+      try reloadRelayConfiguration()
       composeError = nil
     } catch {
       report(error: error)
