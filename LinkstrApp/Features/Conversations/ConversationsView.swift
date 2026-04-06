@@ -374,8 +374,9 @@ struct SessionPostsView: View {
     let contactIndex = contactsByPubkey
     let canCreatePosts =
       myPubkey.map { pubkey in
-        members.contains { member in
-          member.memberMatches(pubkey)
+        let pubkeyHash = LocalDataCrypto.shared.digestHex(pubkey)
+        return members.contains { member in
+          member.memberMatchesHash(pubkeyHash)
         }
       } ?? false
     let reactionSummariesByPostID = makeReactionSummariesByPostID(

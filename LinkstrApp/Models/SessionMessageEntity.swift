@@ -8,6 +8,10 @@ enum SessionMessageKind: String, Codable {
 @Model
 final class SessionMessageEntity {
   @Attribute(.unique) var storageID: String
+  #Index<SessionMessageEntity>(
+    [\.ownerPubkey, \.kindRaw, \.timestamp], [\.ownerPubkey, \.conversationID], [\.senderPubkeyHash]
+  )
+
   var eventID: String
   var ownerPubkey: String
   var conversationID: String
@@ -173,8 +177,8 @@ final class SessionMessageEntity {
     }
   }
 
-  func senderMatches(_ pubkeyHex: String) -> Bool {
-    senderPubkeyHash == LocalDataCrypto.shared.digestHex(pubkeyHex)
+  func senderMatchesHash(_ precomputedHash: String) -> Bool {
+    senderPubkeyHash == precomputedHash
   }
 
   @discardableResult
@@ -206,6 +210,8 @@ final class SessionMessageEntity {
 @Model
 final class SessionEntity {
   @Attribute(.unique) var storageID: String
+  #Index<SessionEntity>([\.ownerPubkey, \.updatedAt])
+
   var ownerPubkey: String
   var sessionID: String
   var encryptedName: String
@@ -280,6 +286,8 @@ final class SessionEntity {
 @Model
 final class SessionMemberEntity {
   @Attribute(.unique) var storageID: String
+  #Index<SessionMemberEntity>([\.ownerPubkey, \.sessionID, \.isActive], [\.memberPubkeyHash])
+
   var ownerPubkey: String
   var sessionID: String
   var memberPubkeyHash: String
@@ -330,14 +338,16 @@ final class SessionMemberEntity {
     self.updatedAt = updatedAt
   }
 
-  func memberMatches(_ pubkeyHex: String) -> Bool {
-    memberPubkeyHash == LocalDataCrypto.shared.digestHex(pubkeyHex)
+  func memberMatchesHash(_ precomputedHash: String) -> Bool {
+    memberPubkeyHash == precomputedHash
   }
 }
 
 @Model
 final class SessionMemberIntervalEntity {
   @Attribute(.unique) var storageID: String
+  #Index<SessionMemberIntervalEntity>([\.ownerPubkey, \.sessionID])
+
   var ownerPubkey: String
   var sessionID: String
   var memberPubkeyHash: String
@@ -387,6 +397,8 @@ final class SessionMemberIntervalEntity {
 @Model
 final class SessionReactionEntity {
   @Attribute(.unique) var storageID: String
+  #Index<SessionReactionEntity>([\.ownerPubkey, \.sessionID, \.postID], [\.senderPubkeyHash])
+
   var ownerPubkey: String
   var sessionID: String
   var postID: String
@@ -446,14 +458,16 @@ final class SessionReactionEntity {
     return "\(ownerPubkey):\(digest)"
   }
 
-  func senderMatches(_ pubkeyHex: String) -> Bool {
-    senderPubkeyHash == LocalDataCrypto.shared.digestHex(pubkeyHex)
+  func senderMatchesHash(_ precomputedHash: String) -> Bool {
+    senderPubkeyHash == precomputedHash
   }
 }
 
 @Model
 final class SessionDeletionTombstoneEntity {
   @Attribute(.unique) var storageID: String
+  #Index<SessionDeletionTombstoneEntity>([\.ownerPubkey, \.sessionID])
+
   var ownerPubkey: String
   var sessionID: String
   var deletedByPubkeyHash: String
@@ -491,14 +505,13 @@ final class SessionDeletionTombstoneEntity {
     "\(ownerPubkey):\(sessionID)"
   }
 
-  func deletedByMatches(_ pubkeyHex: String) -> Bool {
-    deletedByPubkeyHash == LocalDataCrypto.shared.digestHex(pubkeyHex)
-  }
 }
 
 @Model
 final class SessionPostDeletionEntity {
   @Attribute(.unique) var storageID: String
+  #Index<SessionPostDeletionEntity>([\.ownerPubkey, \.sessionID])
+
   var ownerPubkey: String
   var sessionID: String
   var rootID: String
@@ -550,7 +563,4 @@ final class SessionPostDeletionEntity {
     return "\(ownerPubkey):\(digest)"
   }
 
-  func deletedByMatches(_ pubkeyHex: String) -> Bool {
-    deletedByPubkeyHash == LocalDataCrypto.shared.digestHex(pubkeyHex)
-  }
 }

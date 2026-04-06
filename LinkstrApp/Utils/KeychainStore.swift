@@ -272,9 +272,14 @@ final class LocalDataCrypto {
 
   func digestHex(_ value: String) -> String {
     let digest = SHA256.hash(data: Data(value.utf8))
-    return digest.reduce(into: "") { result, byte in
-      result += String(format: "%02x", byte)
+    let hexChars: [UInt8] = Array("0123456789abcdef".utf8)
+    var bytes = [UInt8]()
+    bytes.reserveCapacity(64)
+    for byte in digest {
+      bytes.append(hexChars[Int(byte >> 4)])
+      bytes.append(hexChars[Int(byte & 0x0F)])
     }
+    return String(bytes: bytes, encoding: .ascii)!
   }
 
   private func symmetricKey(for ownerPubkey: String) throws -> SymmetricKey {

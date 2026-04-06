@@ -24,6 +24,7 @@ struct ReactionSummary: Identifiable, Hashable {
   {
     guard !reactions.isEmpty else { return [] }
 
+    let myPubkeyHash = myPubkey.map { LocalDataCrypto.shared.digestHex($0) }
     return
       Dictionary(grouping: reactions, by: \.emoji)
       .map { emoji, groupedReactions -> ReactionSummary in
@@ -31,8 +32,8 @@ struct ReactionSummary: Identifiable, Hashable {
           emoji: emoji,
           count: groupedReactions.count,
           includesCurrentUser: groupedReactions.contains { reaction in
-            guard let myPubkey else { return false }
-            return reaction.senderMatches(myPubkey)
+            guard let myPubkeyHash else { return false }
+            return reaction.senderMatchesHash(myPubkeyHash)
           }
         )
       }
@@ -364,9 +365,11 @@ struct PostDetailView: View {
   private var reactionBreakdown: [ReactionParticipantBreakdown] {
     guard !reactions.isEmpty else { return [] }
 
+    let myPubkeyHash = session.identityService.pubkeyHex.map {
+      LocalDataCrypto.shared.digestHex($0)
+    }
     let grouped = Dictionary(grouping: reactions) { reaction -> String in
-      let myPubkey = session.identityService.pubkeyHex
-      if let myPubkey, reaction.senderMatches(myPubkey) {
+      if let myPubkeyHash, reaction.senderMatchesHash(myPubkeyHash) {
         return "you"
       }
       return session.displayName(for: reaction.senderPubkey, contacts: contacts)
@@ -394,8 +397,9 @@ struct PostDetailView: View {
 
   private var canReactToPost: Bool {
     guard let myPubkey = session.identityService.pubkeyHex else { return false }
+    let myPubkeyHash = LocalDataCrypto.shared.digestHex(myPubkey)
     return members.contains { member in
-      member.memberMatches(myPubkey)
+      member.memberMatchesHash(myPubkeyHash)
     }
   }
 

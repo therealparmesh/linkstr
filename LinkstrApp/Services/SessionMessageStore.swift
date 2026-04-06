@@ -503,8 +503,9 @@ final class SessionMessageStore {
     }
 
     let storedRoot = try rootPost(ownerPubkey: ownerPubkey, sessionID: sessionID, rootID: rootID)
+    let deletedByHash = LocalDataCrypto.shared.digestHex(normalizedDeletedByPubkey)
     let matchingRootMessages =
-      storedRoot.map { $0.senderMatches(normalizedDeletedByPubkey) ? [$0] : [] } ?? []
+      storedRoot.map { $0.senderMatchesHash(deletedByHash) ? [$0] : [] } ?? []
     let storedFileURLs = managedStoredFileURLs(for: matchingRootMessages)
     if !matchingRootMessages.isEmpty {
       matchingRootMessages.forEach(modelContext.delete)
@@ -615,8 +616,9 @@ final class SessionMessageStore {
     let messages = try modelContext.fetch(descriptor)
 
     var didChange = false
+    let myPubkeyHash = LocalDataCrypto.shared.digestHex(myPubkey)
     for message in messages where message.kind == .root {
-      guard !message.senderMatches(myPubkey), message.readAt == nil else { continue }
+      guard !message.senderMatchesHash(myPubkeyHash), message.readAt == nil else { continue }
       message.readAt = .now
       didChange = true
     }

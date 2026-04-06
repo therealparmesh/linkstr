@@ -6,6 +6,8 @@ import SwiftData
 final class ContactEntity {
   var ownerPubkey: String
   var targetPubkey: String
+  #Index<ContactEntity>([\.ownerPubkey, \.targetPubkey])
+
   var encryptedAlias: String
   var createdAt: Date
 

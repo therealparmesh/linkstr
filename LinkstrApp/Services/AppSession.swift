@@ -1942,10 +1942,11 @@ final class AppSession: ObservableObject {
         ownerPubkey: ownerPubkey,
         sessionID: post.conversationID
       )) ?? []
+    let senderHash = LocalDataCrypto.shared.digestHex(keypair.publicKey.hex)
     let currentlyActive = existingReactions.contains { reaction in
       reaction.postID == post.rootID
         && reaction.emoji == normalizedEmoji
-        && reaction.senderMatches(keypair.publicKey.hex)
+        && reaction.senderMatchesHash(senderHash)
         && reaction.isActive
     }
     let nextState = !currentlyActive
@@ -1977,7 +1978,8 @@ final class AppSession: ObservableObject {
       composeError = "you're signed out. sign in to manage this post."
       return nil
     }
-    guard post.senderMatches(keypair.publicKey.hex) else {
+    let senderHash = LocalDataCrypto.shared.digestHex(keypair.publicKey.hex)
+    guard post.senderMatchesHash(senderHash) else {
       composeError = "you can only delete posts you sent."
       return nil
     }
@@ -3378,7 +3380,8 @@ final class AppSession: ObservableObject {
         return .pending
       }
 
-      guard existingRoot.senderMatches(incoming.senderPubkey) else {
+      let incomingSenderHash = LocalDataCrypto.shared.digestHex(incoming.senderPubkey)
+      guard existingRoot.senderMatchesHash(incomingSenderHash) else {
         return .ignored
       }
 
