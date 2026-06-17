@@ -441,7 +441,7 @@ The `.xcodeproj` is generated from `project.yml` via [XcodeGen](https://github.c
 ### Open in Xcode
 
 ```bash
-open Linkstr.xcodeproj
+open linkstr.xcodeproj
 ```
 
 ### Run all tests
@@ -456,8 +456,8 @@ This runs both the iOS unit tests (via `xcodebuild`) and the push-service Go tes
 
 ```bash
 xcodebuild test \
-  -project Linkstr.xcodeproj \
-  -scheme Linkstr \
+  -project linkstr.xcodeproj \
+  -scheme linkstr \
   -destination 'platform=iOS Simulator,name=iPhone 16' \
   -quiet
 ```

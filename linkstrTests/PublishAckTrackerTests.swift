@@ -1,6 +1,6 @@
 import XCTest
 
-@testable import Linkstr
+@testable import linkstr
 
 final class PublishAckTrackerTests: XCTestCase {
   func testBatchSucceedsOnlyAfterEveryEventIsAcknowledged() {

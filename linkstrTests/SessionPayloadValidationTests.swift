@@ -1,7 +1,7 @@
 import NostrSDK
 import XCTest
 
-@testable import Linkstr
+@testable import linkstr
 
 final class SessionPayloadValidationTests: XCTestCase {
   func testSessionCreateValidationRequiresNameAndMembers() throws {

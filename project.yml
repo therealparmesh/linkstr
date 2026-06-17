@@ -1,4 +1,4 @@
-name: Linkstr
+name: linkstr
 options:
   deploymentTarget:
     iOS: 18.0
@@ -18,16 +18,16 @@ packages:
     url: https://github.com/danielsaidi/EmojiKit.git
     from: 2.0.0
 schemes:
-  Linkstr:
+  linkstr:
     build:
       targets:
-        Linkstr: all
+        linkstr: all
     run:
       config: Debug
     test:
       config: Debug
       targets:
-        - name: LinkstrTests
+        - name: linkstrTests
     profile:
       config: Release
     analyze:
@@ -35,12 +35,12 @@ schemes:
     archive:
       config: Release
 targets:
-  Linkstr:
+  linkstr:
     type: application
     platform: iOS
     deploymentTarget: 18.0
     sources:
-      - path: LinkstrApp
+      - path: linkstrApp
     dependencies:
       - package: NostrSDK
       - package: EmojiKit
@@ -50,16 +50,16 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
         CODE_SIGN_IDENTITY: Apple Development
         CODE_SIGN_STYLE: Automatic
-        INFOPLIST_FILE: LinkstrApp/Info.plist
+        INFOPLIST_FILE: linkstrApp/Info.plist
         DEVELOPMENT_TEAM: "7654L3CX5L"
         LINKSTR_PUSH_SERVICE_BASE_URL: "https://linkstr-push-service.fly.dev"
       configs:
         Debug:
-          CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]: LinkstrApp/Linkstr.Debug.entitlements
+          CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]: linkstrApp/linkstr.Debug.entitlements
         Release:
-          CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]: LinkstrApp/Linkstr.Release.entitlements
+          CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]: linkstrApp/linkstr.Release.entitlements
     info:
-      path: LinkstrApp/Info.plist
+      path: linkstrApp/Info.plist
       properties:
         CFBundleDisplayName: linkstr
         CFBundleShortVersionString: "1.2.1"
@@ -83,14 +83,14 @@ targets:
             CFBundleURLSchemes:
               - linkstr
 
-  LinkstrTests:
+  linkstrTests:
     type: bundle.unit-test
     platform: iOS
     deploymentTarget: 18.0
     sources:
-      - path: LinkstrTests
+      - path: linkstrTests
     dependencies:
-      - target: Linkstr
+      - target: linkstr
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES

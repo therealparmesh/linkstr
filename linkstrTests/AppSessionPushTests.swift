@@ -2,7 +2,7 @@ import NostrSDK
 import SwiftData
 import XCTest
 
-@testable import Linkstr
+@testable import linkstr
 
 @MainActor
 final class AppSessionPushTests: AppSessionTestCase {

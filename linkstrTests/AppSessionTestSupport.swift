@@ -2,7 +2,7 @@ import NostrSDK
 import SwiftData
 import XCTest
 
-@testable import Linkstr
+@testable import linkstr
 
 @MainActor
 class AppSessionTestCase: XCTestCase {
@@ -25,7 +25,7 @@ class AppSessionTestCase: XCTestCase {
   }
 
   func makeRelaySettingsUserDefaults() -> UserDefaults {
-    let suiteName = "LinkstrTests.RelaySettings.\(UUID().uuidString)"
+    let suiteName = "linkstrTests.RelaySettings.\(UUID().uuidString)"
     relaySettingsSuiteNames.append(suiteName)
     let userDefaults = UserDefaults(suiteName: suiteName) ?? UserDefaults()
     userDefaults.removePersistentDomain(forName: suiteName)

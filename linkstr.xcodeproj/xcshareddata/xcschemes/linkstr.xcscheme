@@ -15,10 +15,10 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "497D2EB9507055FF99220B43"
-               BuildableName = "Linkstr.app"
-               BlueprintName = "Linkstr"
-               ReferencedContainer = "container:Linkstr.xcodeproj">
+               BlueprintIdentifier = "412402EE1136DB3B772FE2FC"
+               BuildableName = "linkstr.app"
+               BlueprintName = "linkstr"
+               ReferencedContainer = "container:linkstr.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -32,10 +32,10 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "497D2EB9507055FF99220B43"
-            BuildableName = "Linkstr.app"
-            BlueprintName = "Linkstr"
-            ReferencedContainer = "container:Linkstr.xcodeproj">
+            BlueprintIdentifier = "412402EE1136DB3B772FE2FC"
+            BuildableName = "linkstr.app"
+            BlueprintName = "linkstr"
+            ReferencedContainer = "container:linkstr.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
       <Testables>
@@ -44,10 +44,10 @@
             parallelizable = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "6BF8600421065DD9761060ED"
-               BuildableName = "LinkstrTests.xctest"
-               BlueprintName = "LinkstrTests"
-               ReferencedContainer = "container:Linkstr.xcodeproj">
+               BlueprintIdentifier = "EB91DB0D80A97659389B4178"
+               BuildableName = "linkstrTests.xctest"
+               BlueprintName = "linkstrTests"
+               ReferencedContainer = "container:linkstr.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
@@ -68,10 +68,10 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "497D2EB9507055FF99220B43"
-            BuildableName = "Linkstr.app"
-            BlueprintName = "Linkstr"
-            ReferencedContainer = "container:Linkstr.xcodeproj">
+            BlueprintIdentifier = "412402EE1136DB3B772FE2FC"
+            BuildableName = "linkstr.app"
+            BlueprintName = "linkstr"
+            ReferencedContainer = "container:linkstr.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
       <CommandLineArguments>
@@ -87,10 +87,10 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "497D2EB9507055FF99220B43"
-            BuildableName = "Linkstr.app"
-            BlueprintName = "Linkstr"
-            ReferencedContainer = "container:Linkstr.xcodeproj">
+            BlueprintIdentifier = "412402EE1136DB3B772FE2FC"
+            BuildableName = "linkstr.app"
+            BlueprintName = "linkstr"
+            ReferencedContainer = "container:linkstr.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
       <CommandLineArguments>

@@ -16,8 +16,8 @@ echo -e "\n${BOLD}Running iOS unit tests…${RESET}\n"
 
 AVAILABLE_DESTINATIONS="$(
   xcodebuild -showdestinations \
-    -project "$ROOT/Linkstr.xcodeproj" \
-    -scheme Linkstr 2>/dev/null || true
+    -project "$ROOT/linkstr.xcodeproj" \
+    -scheme linkstr 2>/dev/null || true
 )"
 
 derive_destination() {
@@ -101,8 +101,8 @@ else
   rm -rf "$RESULT_BUNDLE_PATH"
 
   if xcodebuild test \
-    -project "$ROOT/Linkstr.xcodeproj" \
-    -scheme Linkstr \
+    -project "$ROOT/linkstr.xcodeproj" \
+    -scheme linkstr \
     -destination "$SIMULATOR_DESTINATION" \
     -resultBundlePath "$RESULT_BUNDLE_PATH" \
     -quiet; then

@@ -11,4 +11,4 @@ fi
 echo "▸ Generating Xcode project from project.yml…"
 xcodegen generate
 
-echo "✔ Linkstr.xcodeproj generated"
+echo "✔ linkstr.xcodeproj generated"

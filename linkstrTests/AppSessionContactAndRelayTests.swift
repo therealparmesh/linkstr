@@ -4,7 +4,7 @@ import SwiftUI
 import UIKit
 import XCTest
 
-@testable import Linkstr
+@testable import linkstr
 
 @MainActor
 final class AppSessionContactAndRelayTests: AppSessionTestCase {

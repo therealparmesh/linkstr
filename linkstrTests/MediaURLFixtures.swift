@@ -1,6 +1,6 @@
 import Foundation
 
-@testable import Linkstr
+@testable import linkstr
 
 enum MediaURLFixtures {
   enum StrategyKind {

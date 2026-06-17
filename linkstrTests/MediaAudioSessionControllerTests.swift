@@ -1,7 +1,7 @@
 import AVFoundation
 import XCTest
 
-@testable import Linkstr
+@testable import linkstr
 
 @MainActor
 final class MediaAudioSessionControllerTests: XCTestCase {

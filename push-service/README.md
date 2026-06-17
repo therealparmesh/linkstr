@@ -56,7 +56,7 @@ You will use those values as:
 ## Xcode steps
 
 1. Open the project in Xcode.
-2. Select the `Linkstr` app target.
+2. Select the `linkstr` app target.
 3. Open `Signing & Capabilities`.
 4. Confirm `Push Notifications` is present.
 5. Confirm the correct Apple team is selected for signing.
@@ -91,7 +91,7 @@ Without `APNS_DISABLE=1`, the service expects a complete APNs configuration and 
 
 ### App setup for local development
 
-1. Open the `Linkstr` run scheme in Xcode.
+1. Open the `linkstr` run scheme in Xcode.
 2. Add `LINKSTR_PUSH_SERVICE_BASE_URL=http://127.0.0.1:8787` if you are using the simulator.
 3. If you are running the app on a physical iPhone against your laptop, use your machine's LAN IP instead, for example `http://192.168.1.50:8787`.
 4. Launch the app.

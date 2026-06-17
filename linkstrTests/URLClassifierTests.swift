@@ -1,6 +1,6 @@
 import XCTest
 
-@testable import Linkstr
+@testable import linkstr
 
 final class URLClassifierTests: XCTestCase {
   func testRepresentativeURLClassificationAndMediaStrategies() {

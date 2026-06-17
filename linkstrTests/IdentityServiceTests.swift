@@ -1,6 +1,6 @@
 import XCTest
 
-@testable import Linkstr
+@testable import linkstr
 
 @MainActor
 final class IdentityServiceTests: XCTestCase {
