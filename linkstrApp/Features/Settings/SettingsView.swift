@@ -371,8 +371,9 @@ struct SettingsView: View {
   private func refreshStorageUsage() {
     isRefreshingStorageUsage = true
     Task { @MainActor in
-      clearableStorageBytes = session.clearableCachedMediaBytes()
-      clearableMetadataBytes = session.clearableMetadataBytes()
+      let usage = session.clearableStorageUsage()
+      clearableStorageBytes = usage.cachedMediaBytes
+      clearableMetadataBytes = usage.previewBytes
       isRefreshingStorageUsage = false
     }
   }

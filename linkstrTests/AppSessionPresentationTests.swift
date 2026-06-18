@@ -212,6 +212,12 @@ final class AppSessionPresentationTests: XCTestCase {
     XCTAssertLessThan(first, 6)
   }
 
+  func testStableTaskIDIsDeterministicAndOrderIndependent() {
+    XCTAssertEqual(["b", "a", "a"].stableTaskID, ["a", "b"].stableTaskID)
+    XCTAssertEqual(Set(["b", "a"]).stableTaskID, ["a", "b"].stableTaskID)
+    XCTAssertNotEqual(["ab"].stableTaskID, ["a", "b"].stableTaskID)
+  }
+
   private func jsonObject(from raw: String) throws -> [String: Any] {
     let data = try XCTUnwrap(raw.data(using: .utf8))
     return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])

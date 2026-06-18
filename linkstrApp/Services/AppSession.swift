@@ -2740,13 +2740,15 @@ final class AppSession: ObservableObject {
   }
 
   func clearableCachedMediaBytes() -> Int64 {
-    let usage = (try? messageStore.managedStorageUsage()) ?? .zero
-    return usage.cachedMediaBytes
+    clearableStorageUsage().cachedMediaBytes
   }
 
   func clearableMetadataBytes() -> Int64 {
-    let usage = (try? messageStore.managedStorageUsage()) ?? .zero
-    return usage.previewBytes
+    clearableStorageUsage().previewBytes
+  }
+
+  func clearableStorageUsage() -> ManagedStorageUsage {
+    (try? messageStore.managedStorageUsage()) ?? .zero
   }
 
   @discardableResult

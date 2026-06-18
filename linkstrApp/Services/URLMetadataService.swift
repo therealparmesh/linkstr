@@ -163,7 +163,9 @@ final class URLMetadataService {
   private func thumbnailPath(for url: URL, remoteImageURL: URL?) async throws -> String? {
     guard let remoteImageURL else { return nil }
 
-    let (data, response) = try await URLSession.shared.data(from: remoteImageURL)
+    var request = URLRequest(url: remoteImageURL)
+    request.timeoutInterval = URLMetadataTimingDefaults.providerTimeout
+    let (data, response) = try await URLSession.shared.data(for: request)
     guard let httpResponse = response as? HTTPURLResponse,
       (200..<300).contains(httpResponse.statusCode)
     else {

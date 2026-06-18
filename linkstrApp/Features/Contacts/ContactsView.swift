@@ -16,12 +16,15 @@ struct ContactsView: View {
 
   private var scopedContacts: [ContactEntity] {
     guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
-    return contacts.filter { $0.ownerPubkey == ownerPubkey }
-      .sorted {
-        session.resolvedIdentity(for: $0).displayName.localizedCaseInsensitiveCompare(
-          session.resolvedIdentity(for: $1).displayName
-        ) == .orderedAscending
+    return contacts
+      .filter { $0.ownerPubkey == ownerPubkey }
+      .map { contact in
+        (contact: contact, displayName: session.resolvedIdentity(for: contact).displayName)
       }
+      .sorted {
+        $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+      }
+      .map(\.contact)
   }
 
   private var visibleContacts: [ContactEntity] {
