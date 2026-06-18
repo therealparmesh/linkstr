@@ -94,6 +94,47 @@ final class SocialPostParserTests: XCTestCase {
     XCTAssertNil(preview)
   }
 
+  func testInstagramMediaKindDetectsOpenGraphVideo() {
+    let html = """
+      <html><head>
+      <meta property="og:type" content="video" />
+      <meta name="medium" content="video" />
+      <meta property="og:video:secure_url" content="https://cdn.example.com/video.mp4?token=one&amp;expires=soon" />
+      <meta name="twitter:title" content="Creator &#x2022; Instagram video" />
+      </head></html>
+      """
+
+    XCTAssertEqual(SocialPostHTMLParser.instagramMediaKind(from: html), .video)
+    XCTAssertEqual(
+      SocialVideoExtractionService.extractOGVideoURLs(fromHTML: html).first?.absoluteString,
+      "https://cdn.example.com/video.mp4?token=one&expires=soon"
+    )
+  }
+
+  func testInstagramMediaKindDetectsPhotoPost() {
+    let html = """
+      <html><head>
+      <meta property="og:type" content="instapp:photo" />
+      <meta name="medium" content="image" />
+      <meta name="twitter:title" content="Creator &#x2022; Instagram photo" />
+      <meta property="og:image" content="https://cdn.example.com/photo.jpg" />
+      </head></html>
+      """
+
+    XCTAssertEqual(SocialPostHTMLParser.instagramMediaKind(from: html), .nonVideo)
+    XCTAssertTrue(SocialVideoExtractionService.extractOGVideoURLs(fromHTML: html).isEmpty)
+  }
+
+  func testInstagramMediaKindIsUnknownWithoutMediaSignals() {
+    let html = """
+      <html><head>
+      <meta property="og:site_name" content="Instagram" />
+      </head></html>
+      """
+
+    XCTAssertEqual(SocialPostHTMLParser.instagramMediaKind(from: html), .unknown)
+  }
+
   func testInstagramPreviewDecodesHTMLEntities() {
     let html = """
       <html><head>

@@ -50,7 +50,7 @@ enum URLClassifier {
         return .extractionPreferred(embedURL: embedURL(for: url, linkType: linkType) ?? url)
       }
       if SocialURLHeuristics.isInstagramVideoPostURL(url) {
-        return .embedOnly(embedURL: embedURL(for: url, linkType: linkType) ?? url)
+        return .extractionPreferred(embedURL: embedURL(for: url, linkType: linkType) ?? url)
       }
       return .link
     case .facebook:

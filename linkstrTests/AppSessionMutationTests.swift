@@ -380,7 +380,7 @@ final class AppSessionMutationTests: AppSessionTestCase {
     formerMember.isActive = false
     try container.mainContext.save()
 
-    let rootPost = makeMessage(
+    let rootPost = try makeMessage(
       eventID: "root-delete-fanout",
       conversationID: sessionID,
       rootID: "root-delete-fanout",
@@ -434,7 +434,7 @@ final class AppSessionMutationTests: AppSessionTestCase {
     try Data("thumbnail".utf8).write(to: thumbnailURL, options: .atomic)
     try Data("media".utf8).write(to: cachedMediaURL, options: .atomic)
 
-    let rootPost = makeMessage(
+    let rootPost = try makeMessage(
       eventID: "root-delete-files",
       conversationID: sessionID,
       rootID: "root-delete-files",
@@ -481,7 +481,7 @@ final class AppSessionMutationTests: AppSessionTestCase {
     try Data("thumbnail".utf8).write(to: thumbnailURL, options: .atomic)
     try Data("media".utf8).write(to: cachedMediaURL, options: .atomic)
 
-    let rootPost = makeMessage(
+    let rootPost = try makeMessage(
       eventID: "root-delete-unmanaged-files",
       conversationID: sessionID,
       rootID: "root-delete-unmanaged-files",
@@ -531,7 +531,7 @@ final class AppSessionMutationTests: AppSessionTestCase {
       sessionID: sessionID
     )
 
-    let rootPost = makeMessage(
+    let rootPost = try makeMessage(
       eventID: "legacy-root-delete",
       conversationID: sessionID,
       rootID: "legacy-root-delete",
@@ -580,7 +580,7 @@ final class AppSessionMutationTests: AppSessionTestCase {
     try Data("thumbnail".utf8).write(to: thumbnailURL, options: .atomic)
     try Data("media".utf8).write(to: cachedMediaURL, options: .atomic)
 
-    let rootPost = makeMessage(
+    let rootPost = try makeMessage(
       eventID: "root-session-delete-local",
       conversationID: sessionID,
       rootID: "root-session-delete-local",
@@ -703,7 +703,7 @@ final class AppSessionMutationTests: AppSessionTestCase {
     formerMember.isActive = false
     try container.mainContext.save()
 
-    let rootPost = makeMessage(
+    let rootPost = try makeMessage(
       eventID: "root-session-delete-fanout",
       conversationID: sessionID,
       rootID: "root-session-delete-fanout",
@@ -771,7 +771,7 @@ final class AppSessionMutationTests: AppSessionTestCase {
       memberPubkeys: [myPubkey, peerPubkey],
       sessionID: sessionID
     )
-    let rootPost = makeMessage(
+    let rootPost = try makeMessage(
       eventID: "root-session-delete-no-kind5",
       conversationID: sessionID,
       rootID: "root-session-delete-no-kind5",
@@ -1017,7 +1017,7 @@ final class AppSessionMutationTests: AppSessionTestCase {
       sessionID: sessionID
     )
 
-    let post = makeMessage(
+    let post = try makeMessage(
       eventID: "react-target",
       conversationID: sessionID,
       rootID: "react-target",

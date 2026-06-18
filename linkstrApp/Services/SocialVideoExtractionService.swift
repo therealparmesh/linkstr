@@ -30,6 +30,43 @@ private enum TwitterEmbedTimingDefaults {
   }
 }
 
+private enum HTMLTextDecoder {
+  static func decodeHTMLEntities(_ text: String) -> String {
+    var result =
+      text
+      .replacingOccurrences(of: "&amp;", with: "&")
+      .replacingOccurrences(of: "&lt;", with: "<")
+      .replacingOccurrences(of: "&gt;", with: ">")
+      .replacingOccurrences(of: "&quot;", with: "\"")
+      .replacingOccurrences(of: "&apos;", with: "'")
+    result = replaceNumericHTMLEntities(result)
+    return result
+  }
+
+  private static func replaceNumericHTMLEntities(_ text: String) -> String {
+    guard let regex = try? NSRegularExpression(pattern: #"&#x([0-9A-Fa-f]+);|&#(\d+);"#) else {
+      return text
+    }
+    let nsText = text as NSString
+    let fullRange = NSRange(location: 0, length: nsText.length)
+    var result = text
+    for match in regex.matches(in: text, range: fullRange).reversed() {
+      guard let matchRange = Range(match.range, in: result) else { continue }
+      let scalar: UInt32?
+      if let hexRange = Range(match.range(at: 1), in: result) {
+        scalar = UInt32(result[hexRange], radix: 16)
+      } else if let decRange = Range(match.range(at: 2), in: result) {
+        scalar = UInt32(result[decRange], radix: 10)
+      } else {
+        scalar = nil
+      }
+      guard let scalar, let unicode = Unicode.Scalar(scalar) else { continue }
+      result.replaceSubrange(matchRange, with: String(unicode))
+    }
+    return result
+  }
+}
+
 final class SocialVideoExtractionService: NSObject {
   static let shared = SocialVideoExtractionService()
 
@@ -55,6 +92,22 @@ final class SocialVideoExtractionService: NSObject {
     if SocialURLHeuristics.isInstagramHost(sourceURL),
       let embedPageURL = instagramEmbedPageURL(from: sourceURL)
     {
+      if let pageSummary = await instagramPageMediaSummary(from: sourceURL) {
+        let ranked = rankCandidates(pageSummary.videoURLs, sourceURL: sourceURL)
+        if let resolved = resolvePlayableMedia(
+          from: ranked,
+          sourceURL: sourceURL,
+          userAgent: Self.desktopUserAgent,
+          cookies: []
+        ) {
+          return resolved
+        }
+
+        if pageSummary.mediaKind == .nonVideo {
+          return .cannotExtract("this Instagram post does not include a playable video.")
+        }
+      }
+
       let sniffResult = await sniffMediaURLs(
         from: embedPageURL, userAgent: Self.desktopUserAgent)
       let ranked = rankCandidates(sniffResult.urls, sourceURL: sourceURL)
@@ -249,10 +302,46 @@ final class SocialVideoExtractionService: NSObject {
     return canonical.appendingPathComponent("embed")
   }
 
-  // MARK: - Facebook og:video extraction
+  private func instagramPageMediaSummary(from sourceURL: URL) async -> (
+    videoURLs: [URL], mediaKind: SocialPostHTMLParser.InstagramMediaKind
+  )? {
+    guard let canonicalURL = SocialURLHeuristics.instagramCanonicalURL(for: sourceURL)
+    else { return nil }
 
-  /// Extracts direct CDN video URLs from Facebook's `og:video` meta tags.
-  /// Facebook embeds the playable `.mp4` URL in server-rendered HTML when
+    var request = URLRequest(url: canonicalURL)
+    request.httpMethod = "GET"
+    request.setValue(Self.desktopUserAgent, forHTTPHeaderField: "User-Agent")
+    request.setValue(
+      "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      forHTTPHeaderField: "Accept"
+    )
+    request.timeoutInterval = SocialVideoTimingDefaults.lightweightFetchTimeout
+
+    do {
+      let (data, response) = try await URLSession.shared.data(for: request)
+      if let httpResponse = response as? HTTPURLResponse,
+        !(200..<400).contains(httpResponse.statusCode)
+      {
+        return nil
+      }
+
+      guard
+        let html = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1)
+      else { return nil }
+
+      return (
+        videoURLs: Self.extractOGVideoURLs(fromHTML: html),
+        mediaKind: SocialPostHTMLParser.instagramMediaKind(from: html)
+      )
+    } catch {
+      return nil
+    }
+  }
+
+  // MARK: - Open Graph video extraction
+
+  /// Extracts direct CDN video URLs from `og:video` meta tags.
+  /// Some providers embed the playable `.mp4` URL in server-rendered HTML when
   /// fetched with a mobile user-agent, making this faster and more reliable
   /// than the generic scraper or headless WebView sniff.
   private func facebookOGVideoURLs(from sourceURL: URL) async -> [URL] {
@@ -285,7 +374,7 @@ final class SocialVideoExtractionService: NSObject {
 
   /// Parses `og:video`, `og:video:url`, and `og:video:secure_url` meta tags,
   /// decodes HTML entities in the extracted URL, and returns all valid URLs.
-  private static func extractOGVideoURLs(fromHTML html: String) -> [URL] {
+  static func extractOGVideoURLs(fromHTML html: String) -> [URL] {
     let patterns = [
       #"<meta[^>]+property=['"]og:video(?::secure_url|:url)?['"][^>]+content=['"]([^'"]+)['"][^>]*>"#,
       #"<meta[^>]+content=['"]([^'"]+)['"][^>]+property=['"]og:video(?::secure_url|:url)?['"][^>]*>"#,
@@ -307,7 +396,7 @@ final class SocialVideoExtractionService: NSObject {
         else { continue }
 
         let raw = String(html[captureRange])
-        let decoded = decodeHTMLEntities(raw)
+        let decoded = HTMLTextDecoder.decodeHTMLEntities(raw)
         let lower = decoded.lowercased()
 
         guard isLikelyMediaURLString(lower),
@@ -320,41 +409,6 @@ final class SocialVideoExtractionService: NSObject {
     }
 
     return urls
-  }
-
-  private static func decodeHTMLEntities(_ text: String) -> String {
-    var result =
-      text
-      .replacingOccurrences(of: "&amp;", with: "&")
-      .replacingOccurrences(of: "&lt;", with: "<")
-      .replacingOccurrences(of: "&gt;", with: ">")
-      .replacingOccurrences(of: "&quot;", with: "\"")
-      .replacingOccurrences(of: "&apos;", with: "'")
-    result = replaceNumericHTMLEntities(result)
-    return result
-  }
-
-  private static func replaceNumericHTMLEntities(_ text: String) -> String {
-    guard let regex = try? NSRegularExpression(pattern: #"&#x([0-9A-Fa-f]+);|&#(\d+);"#) else {
-      return text
-    }
-    let nsText = text as NSString
-    let fullRange = NSRange(location: 0, length: nsText.length)
-    var result = text
-    for match in regex.matches(in: text, range: fullRange).reversed() {
-      guard let matchRange = Range(match.range, in: result) else { continue }
-      let scalar: UInt32?
-      if let hexRange = Range(match.range(at: 1), in: result) {
-        scalar = UInt32(result[hexRange], radix: 16)
-      } else if let decRange = Range(match.range(at: 2), in: result) {
-        scalar = UInt32(result[decRange], radix: 10)
-      } else {
-        scalar = nil
-      }
-      guard let scalar, let unicode = Unicode.Scalar(scalar) else { continue }
-      result.replaceSubrange(matchRange, with: String(unicode))
-    }
-    return result
   }
 
   // MARK: - TikTok feed API
@@ -629,7 +683,7 @@ final class SocialVideoExtractionService: NSObject {
         var candidate = String(html[range]).trimmingCharacters(
           in: CharacterSet(charactersIn: ")]},"))
         // Decode HTML entities that survive in meta-tag or inline-JSON contexts
-        candidate = Self.decodeHTMLEntities(candidate)
+        candidate = HTMLTextDecoder.decodeHTMLEntities(candidate)
         let lower = candidate.lowercased()
         guard Self.isLikelyMediaURLString(lower), seen.insert(lower).inserted,
           let url = URL(string: candidate)
@@ -1803,12 +1857,53 @@ actor SocialPostResolutionService {
 }
 
 enum SocialPostHTMLParser {
+  enum InstagramMediaKind: Equatable {
+    case video
+    case nonVideo
+    case unknown
+  }
+
   static func instagramPreview(from html: String) -> SocialPostPreview? {
     let bodyText = instagramBodyText(from: html)
     let authorName = instagramAuthorName(from: html)
     let imageURL = instagramImageURL(from: html)
     guard bodyText != nil || authorName != nil || imageURL != nil else { return nil }
     return SocialPostPreview(bodyText: bodyText, authorName: authorName, imageURL: imageURL)
+  }
+
+  static func instagramMediaKind(from html: String) -> InstagramMediaKind {
+    let ogType = extractMetaContent(from: html, property: "og:type")?.lowercased()
+    let medium = extractMetaContent(from: html, name: "medium")?.lowercased()
+    let twitterTitle = extractMetaContent(from: html, name: "twitter:title")?.lowercased()
+
+    let videoSignals = [
+      extractMetaContent(from: html, property: "og:video"),
+      extractMetaContent(from: html, property: "og:video:url"),
+      extractMetaContent(from: html, property: "og:video:secure_url"),
+    ].contains { value in
+      guard let value else { return false }
+      return value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
+
+    if videoSignals
+      || ogType?.contains("video") == true
+      || medium?.contains("video") == true
+      || twitterTitle?.contains("instagram video") == true
+      || twitterTitle?.contains("instagram reel") == true
+    {
+      return .video
+    }
+
+    if ogType?.contains("photo") == true
+      || ogType?.contains("image") == true
+      || medium?.contains("photo") == true
+      || medium?.contains("image") == true
+      || twitterTitle?.contains("instagram photo") == true
+    {
+      return .nonVideo
+    }
+
+    return .unknown
   }
 
   static func tikTokPreview(from json: [String: Any]) -> SocialPostPreview? {
@@ -1963,13 +2058,13 @@ enum SocialPostHTMLParser {
     let forwardPattern =
       #"<meta\s+property="\#(escaped)"[^>]*?\s+content="([^"]*)"#
     if let result = firstRegexCapture(in: html, pattern: forwardPattern) {
-      return decodeHTMLEntities(result)
+      return HTMLTextDecoder.decodeHTMLEntities(result)
     }
     // Try content-first: <meta content="..." ... property="og:description" />
     let reversePattern =
       #"<meta\s+content="([^"]*)"[^>]*?\s+property="\#(escaped)""#
     return firstRegexCapture(in: html, pattern: reversePattern)
-      .map(decodeHTMLEntities)
+      .map(HTMLTextDecoder.decodeHTMLEntities)
   }
 
   private static func extractMetaContent(from html: String, name: String) -> String? {
@@ -1978,13 +2073,13 @@ enum SocialPostHTMLParser {
     let forwardPattern =
       #"<meta\s+name="\#(escaped)"[^>]*?\s+content="([^"]*)"#
     if let result = firstRegexCapture(in: html, pattern: forwardPattern) {
-      return decodeHTMLEntities(result)
+      return HTMLTextDecoder.decodeHTMLEntities(result)
     }
     // Try content-first: <meta content="..." ... name="twitter:title" />
     let reversePattern =
       #"<meta\s+content="([^"]*)"[^>]*?\s+name="\#(escaped)""#
     return firstRegexCapture(in: html, pattern: reversePattern)
-      .map(decodeHTMLEntities)
+      .map(HTMLTextDecoder.decodeHTMLEntities)
   }
 
   private static func firstRegexCapture(in text: String, pattern: String) -> String? {
@@ -1997,41 +2092,6 @@ enum SocialPostHTMLParser {
       let captureRange = Range(match.range(at: 1), in: text)
     else { return nil }
     return String(text[captureRange])
-  }
-
-  private static func decodeHTMLEntities(_ text: String) -> String {
-    var result =
-      text
-      .replacingOccurrences(of: "&amp;", with: "&")
-      .replacingOccurrences(of: "&lt;", with: "<")
-      .replacingOccurrences(of: "&gt;", with: ">")
-      .replacingOccurrences(of: "&quot;", with: "\"")
-      .replacingOccurrences(of: "&apos;", with: "'")
-    result = replaceNumericHTMLEntities(result)
-    return result
-  }
-
-  private static func replaceNumericHTMLEntities(_ text: String) -> String {
-    guard let regex = try? NSRegularExpression(pattern: #"&#x([0-9A-Fa-f]+);|&#(\d+);"#) else {
-      return text
-    }
-    let nsText = text as NSString
-    let fullRange = NSRange(location: 0, length: nsText.length)
-    var result = text
-    for match in regex.matches(in: text, range: fullRange).reversed() {
-      guard let matchRange = Range(match.range, in: result) else { continue }
-      let scalar: UInt32?
-      if let hexRange = Range(match.range(at: 1), in: result) {
-        scalar = UInt32(result[hexRange], radix: 16)
-      } else if let decRange = Range(match.range(at: 2), in: result) {
-        scalar = UInt32(result[decRange], radix: 10)
-      } else {
-        scalar = nil
-      }
-      guard let scalar, let unicode = Unicode.Scalar(scalar) else { continue }
-      result.replaceSubrange(matchRange, with: String(unicode))
-    }
-    return result
   }
 
   private static func normalizedText(_ value: String?) -> String? {

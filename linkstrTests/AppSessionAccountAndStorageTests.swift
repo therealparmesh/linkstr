@@ -19,7 +19,7 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     let didAdd = await session.addContact(npub: npub, alias: "Alice")
     XCTAssertTrue(didAdd)
 
-    let message = makeMessage(
+    let message = try makeMessage(
       eventID: "message-1",
       conversationID: "conversation-1",
       rootID: "message-1",
@@ -47,7 +47,7 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     let didAdd = await session.addContact(npub: npub, alias: "Alice")
     XCTAssertTrue(didAdd)
 
-    let message = makeMessage(
+    let message = try makeMessage(
       eventID: "message-2",
       conversationID: "conversation-2",
       rootID: "message-2",
@@ -94,7 +94,7 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     let didAdd = await session.addContact(npub: npub, alias: "Alice")
     XCTAssertTrue(didAdd)
 
-    let message = makeMessage(
+    let message = try makeMessage(
       eventID: "message-delete-account",
       conversationID: "conversation-delete-account",
       rootID: "message-delete-account",
@@ -155,7 +155,7 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
 
     let didAdd = await session.addContact(npub: npub, alias: "Alice")
     XCTAssertTrue(didAdd)
-    let message = makeMessage(
+    let message = try makeMessage(
       eventID: "message-delete-account-online",
       conversationID: "conversation-delete-account-online",
       rootID: "message-delete-account-online",
@@ -195,7 +195,7 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
 
     let didAdd = await session.addContact(npub: npub, alias: "Alice")
     XCTAssertTrue(didAdd)
-    let message = makeMessage(
+    let message = try makeMessage(
       eventID: "message-delete-account-failure",
       conversationID: "conversation-delete-account-failure",
       rootID: "message-delete-account-failure",
@@ -477,7 +477,7 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     let thumbnailURL = makeManagedThumbnailURL()
     try Data("thumbnail".utf8).write(to: thumbnailURL, options: .atomic)
 
-    let message = makeMessage(
+    let message = try makeMessage(
       eventID: "message-thumbnail",
       conversationID: "conversation-thumbnail",
       rootID: "message-thumbnail",
@@ -505,7 +505,7 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     let cachedMediaURL = makeManagedVideoURL()
     try Data("media".utf8).write(to: cachedMediaURL, options: .atomic)
 
-    let message = makeMessage(
+    let message = try makeMessage(
       eventID: "message-video",
       conversationID: "conversation-video",
       rootID: "message-video",
@@ -538,7 +538,7 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     defer { try? FileManager.default.removeItem(at: thumbnailURL) }
     try Data("thumbnail".utf8).write(to: thumbnailURL, options: .atomic)
 
-    let message = makeMessage(
+    let message = try makeMessage(
       eventID: "message-unmanaged-thumbnail",
       conversationID: "conversation-unmanaged-thumbnail",
       rootID: "message-unmanaged-thumbnail",
@@ -786,7 +786,7 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     try session.identityService.createNewIdentity()
     let ownerPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
 
-    let message = makeMessage(
+    let message = try makeMessage(
       eventID: "message-refresh-metadata",
       conversationID: "conversation-refresh-metadata",
       rootID: "message-refresh-metadata",
@@ -820,7 +820,7 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     try session.identityService.createNewIdentity()
     let ownerPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
 
-    let message = makeMessage(
+    let message = try makeMessage(
       eventID: "message-refresh-noop",
       conversationID: "conversation-refresh-noop",
       rootID: "message-refresh-noop",
@@ -935,7 +935,7 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     try session.identityService.createNewIdentity()
     let firstOwner = try XCTUnwrap(session.identityService.pubkeyHex)
 
-    let firstMessage = makeMessage(
+    let firstMessage = try makeMessage(
       eventID: "shared-event-id",
       conversationID: "conversation-a",
       rootID: "shared-event-id",
@@ -953,7 +953,7 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     let secondOwner = try XCTUnwrap(session.identityService.pubkeyHex)
     XCTAssertNotEqual(firstOwner, secondOwner)
 
-    let secondMessage = makeMessage(
+    let secondMessage = try makeMessage(
       eventID: "shared-event-id",
       conversationID: "conversation-b",
       rootID: "shared-event-id",
@@ -996,7 +996,7 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
     )
     context.insert(contact)
 
-    let message = makeMessage(
+    let message = try makeMessage(
       eventID: "message-\(label)",
       conversationID: "session-\(label)",
       rootID: "message-\(label)",

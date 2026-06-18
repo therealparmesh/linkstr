@@ -44,9 +44,9 @@ enum MediaURLFixtures {
       name: "instagram video post",
       url: "https://www.instagram.com/p/C7x5mYfP0R1/",
       linkType: .instagram,
-      strategyKind: .embedOnly,
+      strategyKind: .extractionPreferred,
       embedExpectation: .exact("https://www.instagram.com/p/C7x5mYfP0R1/"),
-      allowsLocalPlayback: false
+      allowsLocalPlayback: true
     ),
     StrategyExpectation(
       name: "facebook reel",
@@ -175,9 +175,17 @@ enum MediaURLFixtures {
       name: "instagram shared post",
       url: "https://www.instagram.com/share/p/DUbRe_8EuQY/",
       linkType: .instagram,
-      strategyKind: .embedOnly,
+      strategyKind: .extractionPreferred,
       embedExpectation: .exact("https://www.instagram.com/p/DUbRe_8EuQY/"),
-      allowsLocalPlayback: false
+      allowsLocalPlayback: true
+    ),
+    StrategyExpectation(
+      name: "instagram post with language query",
+      url: "https://www.instagram.com/p/C-dH1fUNQwq/?l=1",
+      linkType: .instagram,
+      strategyKind: .extractionPreferred,
+      embedExpectation: .exact("https://www.instagram.com/p/C-dH1fUNQwq/"),
+      allowsLocalPlayback: true
     ),
     StrategyExpectation(
       name: "facebook shared video",

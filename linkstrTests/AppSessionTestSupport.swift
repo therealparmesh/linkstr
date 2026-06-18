@@ -261,27 +261,22 @@ class AppSessionTestCase: XCTestCase {
     receiverPubkey: String,
     ownerPubkey: String,
     publishedTransportEventIDs: [String] = []
-  ) -> SessionMessageEntity {
-    guard
-      let message = try? SessionMessageEntity(
-        eventID: eventID,
-        ownerPubkey: ownerPubkey,
-        conversationID: conversationID,
-        rootID: rootID,
-        kind: kind,
-        senderPubkey: senderPubkey,
-        receiverPubkey: receiverPubkey,
-        url: "https://example.com/\(eventID)",
-        note: "note-\(eventID)",
-        timestamp: .now,
-        readAt: nil,
-        linkType: .generic,
-        publishedTransportEventIDs: publishedTransportEventIDs
-      )
-    else {
-      fatalError("Failed building test message for \(eventID)")
-    }
-    return message
+  ) throws -> SessionMessageEntity {
+    try SessionMessageEntity(
+      eventID: eventID,
+      ownerPubkey: ownerPubkey,
+      conversationID: conversationID,
+      rootID: rootID,
+      kind: kind,
+      senderPubkey: senderPubkey,
+      receiverPubkey: receiverPubkey,
+      url: "https://example.com/\(eventID)",
+      note: "note-\(eventID)",
+      timestamp: .now,
+      readAt: nil,
+      linkType: .generic,
+      publishedTransportEventIDs: publishedTransportEventIDs
+    )
   }
 }
 

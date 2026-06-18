@@ -82,7 +82,7 @@ final class AppSessionPushTests: AppSessionTestCase {
       sessionID: sessionID
     )
 
-    let post = makeMessage(
+    let post = try makeMessage(
       eventID: "root-reaction-target",
       conversationID: sessionID,
       rootID: "root-reaction-target",

@@ -533,7 +533,7 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     let ownerPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
     let conversationID = "session-archive"
 
-    let rootInTargetSession = makeMessage(
+    let rootInTargetSession = try makeMessage(
       eventID: "root-1",
       conversationID: conversationID,
       rootID: "root-1",
@@ -542,7 +542,7 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
       receiverPubkey: "sender-b",
       ownerPubkey: ownerPubkey
     )
-    let rootInDifferentSession = makeMessage(
+    let rootInDifferentSession = try makeMessage(
       eventID: "root-2",
       conversationID: "session-other",
       rootID: "root-2",
@@ -600,7 +600,7 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
     let conversationID = "session-mark-root"
 
-    let inboundTargetRoot = makeMessage(
+    let inboundTargetRoot = try makeMessage(
       eventID: "root-inbound-target",
       conversationID: conversationID,
       rootID: "root-target",
@@ -609,7 +609,7 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
       receiverPubkey: myPubkey,
       ownerPubkey: myPubkey
     )
-    let outboundTargetRoot = makeMessage(
+    let outboundTargetRoot = try makeMessage(
       eventID: "root-outbound-target",
       conversationID: conversationID,
       rootID: "root-target",
@@ -618,7 +618,7 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
       receiverPubkey: peerPubkey,
       ownerPubkey: myPubkey
     )
-    let inboundOtherRoot = makeMessage(
+    let inboundOtherRoot = try makeMessage(
       eventID: "root-inbound-other",
       conversationID: conversationID,
       rootID: "root-other",
@@ -652,7 +652,7 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
       sessionID: "session-visible-read"
     )
 
-    let inboundRoot = makeMessage(
+    let inboundRoot = try makeMessage(
       eventID: "root-visible-read",
       conversationID: sessionEntity.sessionID,
       rootID: "root-visible-read",

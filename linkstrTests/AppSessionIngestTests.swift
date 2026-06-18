@@ -1123,7 +1123,7 @@ final class AppSessionIngestTests: AppSessionTestCase {
       sessionID: sessionID
     )
 
-    let rootPost = makeMessage(
+    let rootPost = try makeMessage(
       eventID: "root-delete-target",
       conversationID: sessionID,
       rootID: "root-delete-target",
@@ -1183,7 +1183,7 @@ final class AppSessionIngestTests: AppSessionTestCase {
       sessionID: sessionID
     )
 
-    let rootPost = makeMessage(
+    let rootPost = try makeMessage(
       eventID: "root-delete-tiebreak-target",
       conversationID: sessionID,
       rootID: "root-delete-tiebreak-target",
@@ -1469,7 +1469,7 @@ final class AppSessionIngestTests: AppSessionTestCase {
       sessionID: sessionID
     )
 
-    let rootPost = makeMessage(
+    let rootPost = try makeMessage(
       eventID: "root-mismatch-target",
       conversationID: sessionID,
       rootID: "root-mismatch-target",
@@ -1887,7 +1887,7 @@ final class AppSessionIngestTests: AppSessionTestCase {
       sessionID: sessionID
     )
 
-    let rootPost = makeMessage(
+    let rootPost = try makeMessage(
       eventID: "root-merge-wrapper",
       conversationID: sessionID,
       rootID: "root-merge-wrapper",
@@ -2012,7 +2012,7 @@ final class AppSessionIngestTests: AppSessionTestCase {
       sessionID: sessionID
     )
 
-    let rootPost = makeMessage(
+    let rootPost = try makeMessage(
       eventID: "root-session-delete-ingest",
       conversationID: sessionID,
       rootID: "root-session-delete-ingest",
