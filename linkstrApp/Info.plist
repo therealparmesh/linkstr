@@ -1,6 +1,5 @@
-<?xml version="1.0" encoding="UTF-8" ?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
@@ -18,7 +17,7 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.2.2</string>
+	<string>1.3.0</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -31,23 +30,24 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>12</string>
+	<string>13</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LinkstrPushServiceBaseURL</key>
 	<string>$(LINKSTR_PUSH_SERVICE_BASE_URL)</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoadsInWebContent</key>
-		<true />
+		<true/>
 	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>Camera access is used to scan Contact Key (npub) QR codes.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string
-    >Photo access is used only to save locally downloaded videos to your gallery.</string>
+	<string>Photo access is used only to save locally downloaded videos to your gallery.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
-		<false />
+		<false/>
 	</dict>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
@@ -58,7 +58,5 @@
 		<string>UIInterfaceOrientationPortrait</string>
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 	</array>
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<false />
 </dict>
 </plist>
