@@ -32,8 +32,8 @@ private enum EmbeddedWebViewTimingDefaults {
 
 struct EmbeddedWebView: UIViewRepresentable {
   let source: EmbeddedWebSource
-  var onIntrinsicHeightChange: ((CGFloat) -> Void)? = nil
-  var onContentReadyChange: ((Bool) -> Void)? = nil
+  var onIntrinsicHeightChange: ((CGFloat) -> Void)?
+  var onContentReadyChange: ((Bool) -> Void)?
 
   final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler, WKUIDelegate {
     static let metricsHandlerName = "linkstrEmbedMetrics"
@@ -95,8 +95,7 @@ struct EmbeddedWebView: UIViewRepresentable {
       windowFeatures: WKWindowFeatures
     ) -> WKWebView? {
       if let targetURL = navigationAction.request.url,
-        WebNavigationGuard.allowsNavigation(to: targetURL)
-      {
+        WebNavigationGuard.allowsNavigation(to: targetURL) {
         // For same-origin navigations (e.g. window.open or target="_blank"),
         // load in the existing webview so inline playback works instead of
         // bouncing to Safari.
@@ -192,8 +191,7 @@ struct EmbeddedWebView: UIViewRepresentable {
 
       if let json = payload as? String,
         let data = json.data(using: .utf8),
-        let dictionary = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-      {
+        let dictionary = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
         return (
           height: CGFloat((dictionary["height"] as? NSNumber)?.doubleValue ?? 0),
           ready: dictionary["ready"] as? Bool
@@ -268,8 +266,7 @@ struct EmbeddedWebView: UIViewRepresentable {
         host == "youtube.com"
           || host.hasSuffix(".youtube.com")
           || host == "youtube-nocookie.com"
-          || host.hasSuffix(".youtube-nocookie.com")
-      {
+          || host.hasSuffix(".youtube-nocookie.com") {
         let appIdentityURL = youtubeWebViewIdentityURL
         request.setValue(appIdentityURL.absoluteString, forHTTPHeaderField: "Referer")
         request.setValue(appIdentityURL.absoluteString, forHTTPHeaderField: "Origin")
@@ -294,8 +291,7 @@ struct EmbeddedWebView: UIViewRepresentable {
       .trimmingCharacters(in: .whitespacesAndNewlines)
       .lowercased(),
       !bundleID.isEmpty,
-      let url = URL(string: "https://\(bundleID)")
-    {
+      let url = URL(string: "https://\(bundleID)") {
       return url
     }
 

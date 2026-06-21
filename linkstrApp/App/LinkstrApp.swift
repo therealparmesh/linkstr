@@ -68,7 +68,7 @@ struct LinkstrAppMain: App {
     let itemAppearances = [
       tabBarAppearance.stackedLayoutAppearance,
       tabBarAppearance.inlineLayoutAppearance,
-      tabBarAppearance.compactInlineLayoutAppearance,
+      tabBarAppearance.compactInlineLayoutAppearance
     ]
     for itemAppearance in itemAppearances {
       itemAppearance.normal.iconColor = secondaryColor
@@ -88,90 +88,92 @@ struct LinkstrAppMain: App {
 
   var body: some Scene {
     WindowGroup {
-      switch bootstrap.startupState {
-      case .ready(let readyContext, let recoveryMessage, let isUsingTemporaryStore):
-        Group {
-          if let recoveryMessage, !isUsingTemporaryStore {
-            LinkstrStorageRecoveryView(
-              title: "local storage unavailable",
-              message: recoveryMessage,
-              primaryActionTitle: "continue temporarily",
-              onPrimaryAction: {
-                bootstrap.continueWithTemporaryStore()
-              },
-              secondaryActionTitle: "retry startup",
-              onSecondaryAction: {
-                bootstrap.reload()
-              }
-            )
-          } else {
-            RootView()
-              .environmentObject(readyContext.session)
-              .environmentObject(deepLinkHandler)
-              .onAppear {
-                Task {
-                  await readyContext.session.boot()
+      Group {
+        switch bootstrap.startupState {
+        case .ready(let readyContext, let recoveryMessage, let isUsingTemporaryStore):
+          Group {
+            if let recoveryMessage, !isUsingTemporaryStore {
+              LinkstrStorageRecoveryView(
+                title: "local storage unavailable",
+                message: recoveryMessage,
+                primaryActionTitle: "continue temporarily",
+                onPrimaryAction: {
+                  bootstrap.continueWithTemporaryStore()
+                },
+                secondaryActionTitle: "retry startup",
+                onSecondaryAction: {
+                  bootstrap.reload()
                 }
-                consumePendingPushConversationNavigationIfNeeded(for: readyContext.session)
-              }
-              .onOpenURL { url in
-                deepLinkHandler.handle(url: url)
-              }
-              .onReceive(
-                NotificationCenter.default.publisher(
-                  for: UIApplication.protectedDataDidBecomeAvailableNotification
-                )
-              ) { _ in
-                readyContext.session.handleProtectedDataDidBecomeAvailable()
-              }
-              .onReceive(
-                NotificationCenter.default.publisher(
-                  for: .linkstrPushDeviceTokenDidChange
-                )
-              ) { _ in
-                readyContext.session.handlePushDeviceTokenDidChange()
-              }
-              .onReceive(
-                PushNotificationService.shared.$pendingConversationID
-              ) { _ in
-                consumePendingPushConversationNavigationIfNeeded(for: readyContext.session)
-              }
-              .onChange(of: scenePhase) { _, newValue in
-                switch newValue {
-                case .active:
+              )
+            } else {
+              RootView()
+                .environmentObject(readyContext.session)
+                .environmentObject(deepLinkHandler)
+                .onAppear {
+                  Task {
+                    await readyContext.session.boot()
+                  }
                   consumePendingPushConversationNavigationIfNeeded(for: readyContext.session)
-                  readyContext.session.handleAppDidBecomeActive()
-                case .inactive, .background:
-                  readyContext.session.handleAppDidLeaveForeground()
-                @unknown default:
-                  break
                 }
-              }
+                .onReceive(
+                  NotificationCenter.default.publisher(
+                    for: UIApplication.protectedDataDidBecomeAvailableNotification
+                  )
+                ) { _ in
+                  readyContext.session.handleProtectedDataDidBecomeAvailable()
+                }
+                .onReceive(
+                  NotificationCenter.default.publisher(
+                    for: .linkstrPushDeviceTokenDidChange
+                  )
+                ) { _ in
+                  readyContext.session.handlePushDeviceTokenDidChange()
+                }
+                .onReceive(
+                  PushNotificationService.shared.$pendingConversationID
+                ) { _ in
+                  consumePendingPushConversationNavigationIfNeeded(for: readyContext.session)
+                }
+                .onChange(of: scenePhase) { _, newValue in
+                  switch newValue {
+                  case .active:
+                    consumePendingPushConversationNavigationIfNeeded(for: readyContext.session)
+                    readyContext.session.handleAppDidBecomeActive()
+                  case .inactive, .background:
+                    readyContext.session.handleAppDidLeaveForeground()
+                  @unknown default:
+                    break
+                  }
+                }
+            }
           }
-        }
-        .modelContainer(readyContext.container)
-      case .fatal(let fatalStartupMessage):
-        LinkstrStorageRecoveryView(
-          title: "startup failed",
-          message: fatalStartupMessage,
-          primaryActionTitle: "retry startup",
-          onPrimaryAction: {
-            bootstrap.reload()
-          },
-          secondaryActionTitle: nil,
-          onSecondaryAction: nil
-        )
-      case .loading:
-        ZStack {
-          LinkstrBackgroundView()
-          VStack(spacing: LinkstrTheme.sectionStackSpacing) {
-            LinkstrAppIconBadge(size: 72)
+          .modelContainer(readyContext.container)
+        case .fatal(let fatalStartupMessage):
+          LinkstrStorageRecoveryView(
+            title: "startup failed",
+            message: fatalStartupMessage,
+            primaryActionTitle: "retry startup",
+            onPrimaryAction: {
+              bootstrap.reload()
+            },
+            secondaryActionTitle: nil,
+            onSecondaryAction: nil
+          )
+        case .loading:
+          ZStack {
+            LinkstrBackgroundView()
+            VStack(spacing: LinkstrTheme.sectionStackSpacing) {
+              LinkstrAppIconBadge(size: 72)
 
-            ProgressView()
-              .tint(LinkstrTheme.accent)
+              ProgressView()
+                .tint(LinkstrTheme.accent)
+            }
           }
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+      }
+      .onOpenURL { url in
+        deepLinkHandler.handle(url: url)
       }
     }
   }
@@ -268,11 +270,19 @@ final class AppBootstrapState: ObservableObject {
     let description = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
     if description.isEmpty {
       return
-        "linkstr couldn't open its local storage on this device. you can retry startup or continue in a temporary in-memory mode. temporary changes won't persist after the app closes."
+        "linkstr couldn't open its local storage on this device. "
+        + "you can retry startup or continue in a temporary in-memory "
+        + "mode. temporary changes won't persist after the app closes."
     }
 
     return
-      "linkstr couldn't open its local storage on this device. you can retry startup or continue in a temporary in-memory mode. temporary changes won't persist after the app closes.\n\nstorage error: \(description)"
+      """
+      linkstr couldn't open its local storage on this device. you can retry \
+      startup or continue in a temporary in-memory mode. temporary changes \
+      won't persist after the app closes.
+
+      storage error: \(description)
+      """
   }
 
   private static func fatalStartupMessage(
@@ -287,7 +297,14 @@ final class AppBootstrapState: ObservableObject {
     )
 
     return
-      "linkstr couldn't start because both persistent and temporary local storage failed to initialize.\n\npersistent store error: \(persistentDescription)\n\ntemporary store error: \(fallbackDescription)"
+      """
+      linkstr couldn't start because both persistent and temporary local \
+      storage failed to initialize.
+
+      persistent store error: \(persistentDescription)
+
+      temporary store error: \(fallbackDescription)
+      """
   }
 }
 
@@ -302,7 +319,7 @@ enum LinkstrAppBootstrapConfiguration {
     SessionReactionEntity.self,
     SessionDeletionTombstoneEntity.self,
     SessionPostDeletionEntity.self,
-    SessionMessageEntity.self,
+    SessionMessageEntity.self
   ])
 }
 

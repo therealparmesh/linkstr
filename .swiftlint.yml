@@ -1,0 +1,11 @@
+included:
+  - linkstrApp
+  - linkstrShareExtension
+  - linkstrTests
+
+excluded:
+  - .build
+  - build
+
+strict: true
+reporter: xcode

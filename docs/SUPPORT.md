@@ -1,6 +1,6 @@
 # linkstr support
 
-_Last updated: April 6, 2026_
+_Last updated: June 21, 2026_
 
 linkstr is a private link-sharing app built on [Nostr](https://nostr.com). You create or join private sessions, share links inside those sessions, and react with emoji. This page describes the current shipped behavior in plain language.
 
@@ -61,17 +61,19 @@ The bottom footer shows validation and relay status only. The keyboard return ke
 
 ### React, delete, rename, archive, and manage members
 
-| Action                         | How                                                                                                                                                                                     |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| React to a post                | Open a post and tap 👍, 👎, 👀, or **…** for the emoji picker.                                                                                                                          |
-| Remove a reaction              | Tap the same emoji again.                                                                                                                                                               |
-| Share a deep link              | Open post detail and tap the share button in the top-right corner. The shared link carries only the normalized URL; linkstr fetches preview metadata again when the recipient opens it. |
-| Delete your own post           | Long-press the post row in the session view.                                                                                                                                            |
-| Archive or unarchive a session | Open a session, tap the members button, and use **Archive Session** or **Unarchive Session**.                                                                                           |
-| View archived sessions         | Tap the archive icon in the sessions header.                                                                                                                                            |
-| Rename a session               | Open a session, tap the members button, and edit the session name.                                                                                                                      |
-| Delete a session               | Open a session, tap the members button, and use **Delete Session** in the manage sheet.                                                                                                 |
-| Add or remove members          | Open a session and use the members button.                                                                                                                                              |
+| Action                         | How                                                                                                                                                                                             |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| React to a post                | Open a post and tap 👍, 👎, 👀, or **…** for the emoji picker.                                                                                                                                  |
+| Remove a reaction              | Tap the same emoji again.                                                                                                                                                                       |
+| Share into linkstr             | Use the iOS share sheet from another app, choose linkstr, then choose share link. linkstr opens with the link prefilled, an optional note, and a separate searchable picker of active sessions. |
+| Save shared media              | Use the iOS share sheet from another app, choose linkstr, then choose save media. linkstr saves supported media directly to your photo library.                                                 |
+| Share a deep link              | Open post detail and tap the share button in the top-right corner. The shared link carries only the normalized URL; linkstr fetches preview metadata again when the recipient opens it.         |
+| Delete your own post           | Long-press the post row in the session view.                                                                                                                                                    |
+| Archive or unarchive a session | Open a session, tap the members button, and use **Archive Session** or **Unarchive Session**.                                                                                                   |
+| View archived sessions         | Tap the archive icon in the sessions header.                                                                                                                                                    |
+| Rename a session               | Open a session, tap the members button, and edit the session name.                                                                                                                              |
+| Delete a session               | Open a session, tap the members button, and use **Delete Session** in the manage sheet.                                                                                                         |
+| Add or remove members          | Open a session and use the members button.                                                                                                                                                      |
 
 Only the session creator can rename sessions, delete them, or change session membership.
 
@@ -245,7 +247,7 @@ In the device keychain, with iOS-controlled protection. Simulator fallback stora
 
 ### Where are videos and previews stored?
 
-Downloaded media and generated previews are stored in app-owned local storage. Video cache is treated as disposable device cache and trims itself automatically. Settings can clear downloaded videos or saved preview metadata if you want to free space or force a preview rebuild.
+Downloaded media and generated previews are stored in app-owned local storage. Video cache is treated as disposable device cache and trims itself automatically. Media saved via the share sheet goes to your photo library. Settings can clear cached videos or saved preview metadata if you want to free space or force a preview rebuild.
 
 ### What permissions does linkstr ask for?
 
@@ -282,7 +284,7 @@ Historical replay depends on relay retention. linkstr can retry out-of-order pos
 
 1. Check your network connection.
 2. Switch between **Try local playback** and **Try embed playback**.
-3. If a downloaded copy was auto-trimmed, try local playback again to re-download it.
+3. If a cached copy was auto-trimmed, try local playback again to re-cache it.
 4. Try local playback again to clear a stale local failure and force a fresh retry.
 5. Use the refresh button in post detail if that post's metadata seems stale or missing.
 6. Use **Open in browser** if the provider blocks embedded playback.
@@ -309,9 +311,9 @@ Historical replay depends on relay retention. linkstr can retry out-of-order pos
 
 ## Legal
 
-By using linkstr, you agree to respect content creators' intellectual property rights and comply with applicable laws and platform terms when downloading or sharing content.
+By using linkstr, you agree to respect content creators' intellectual property rights and comply with applicable laws and platform terms when saving or sharing content.
 
-linkstr is provided as-is. The developer is not responsible for user-generated content or misuse of downloading features.
+linkstr is provided as-is. The developer is not responsible for user-generated content or misuse of saving features.
 
 ---
 

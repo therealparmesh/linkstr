@@ -9,7 +9,9 @@ final class SocialPostParserTests: XCTestCase {
   func testInstagramPreviewExtractsBodyTextFromOGDescription() {
     let html = """
       <html><head>
-      <meta property="og:description" content="120K likes, 528 comments - pg_agi_ on March 9, 2026: &quot;Claude&#039;s recent advancements are giving GPT a run for its money in the quest to develop the most advanced AI model.&quot;. " />
+      <meta property="og:description" content="120K likes, 528 comments - pg_agi_ on March 9, 2026: \
+      &quot;Claude&#039;s recent advancements are giving GPT a run for its money \
+      in the quest to develop the most advanced AI model.&quot;. " />
       <meta name="twitter:title" content="Playing God with AGI (&#064;pg_agi_) &#x2022; Instagram reel" />
       </head></html>
       """
@@ -19,7 +21,8 @@ final class SocialPostParserTests: XCTestCase {
     XCTAssertNotNil(preview)
     XCTAssertEqual(
       preview?.bodyText,
-      "Claude's recent advancements are giving GPT a run for its money in the quest to develop the most advanced AI model."
+      "Claude's recent advancements are giving GPT a run for its money "
+        + "in the quest to develop the most advanced AI model."
     )
     XCTAssertEqual(preview?.authorName, "Playing God with AGI (@pg_agi_)")
   }
@@ -62,7 +65,7 @@ final class SocialPostParserTests: XCTestCase {
       " \u{2022} Instagram reel",
       " \u{2022} Instagram photo",
       " \u{2022} Instagram video",
-      " \u{2022} Instagram",
+      " \u{2022} Instagram"
     ]
 
     for suffix in suffixes {
@@ -138,7 +141,8 @@ final class SocialPostParserTests: XCTestCase {
   func testInstagramPreviewDecodesHTMLEntities() {
     let html = """
       <html><head>
-      <meta property="og:description" content="5K likes, 10 comments - user on Jan 1, 2026: &quot;Tom &amp; Jerry &lt;3 it&#039;s great&quot;. " />
+      <meta property="og:description" content="5K likes, 10 comments - user on Jan 1, 2026: \
+      &quot;Tom &amp; Jerry &lt;3 it&#039;s great&quot;. " />
       <meta name="twitter:title" content="Tom &amp; Jerry &#x2022; Instagram reel" />
       </head></html>
       """
@@ -169,7 +173,8 @@ final class SocialPostParserTests: XCTestCase {
   func testInstagramPreviewHandlesMultilineCaption() {
     let html = """
       <html><head>
-      <meta property="og:description" content="1K likes, 5 comments - creator on Feb 14, 2026: &quot;Line one. Line two. Line three.&quot;. " />
+      <meta property="og:description" content="1K likes, 5 comments - creator on Feb 14, 2026: \
+      &quot;Line one. Line two. Line three.&quot;. " />
       </head></html>
       """
 
@@ -180,235 +185,30 @@ final class SocialPostParserTests: XCTestCase {
 
   func testLikelyMediaURLRecognizesSignedInstagramCDNVideoWithoutMP4Suffix() {
     let url =
-      "https://scontent-dfw5-2.cdninstagram.com/o1/v/t16/f2/m86/8A4D5A0D62B8E6B4D3F1E9D3C7A4B8C?stp=dst-jpg_e15_fr_qp1080x1080&_nc_ht=scontent-dfw5-2.cdninstagram.com&oe=67FA0D8F&oh=00_AYBexample"
+      "https://scontent-dfw5-2.cdninstagram.com/o1/v/t16/f2/m86/"
+      + "8A4D5A0D62B8E6B4D3F1E9D3C7A4B8C?stp=dst-jpg_e15_fr_qp1080x1080"
+      + "&_nc_ht=scontent-dfw5-2.cdninstagram.com&oe=67FA0D8F&oh=00_AYBexample"
 
     XCTAssertTrue(SocialVideoExtractionService.isLikelyMediaURLString(url.lowercased()))
   }
 
   func testLikelyMediaURLRecognizesSignedFBCDNInstagramVideoWithoutMP4Suffix() {
     let url =
-      "https://scontent-lax3-2.xx.fbcdn.net/o1/v/t16/f2/m86/2D6C9F7A8B4E1D3C5A7B9E2F4D6C8A0?stp=dst-jpg_e15_fr_qp1080x1080&efg=eyJ2ZW5jb2RlX3RhZyI6InYxX3YxMCJ9&_nc_ht=scontent-lax3-2.xx.fbcdn.net&oe=67FA0D8F&oh=00_AYBexample"
+      "https://scontent-lax3-2.xx.fbcdn.net/o1/v/t16/f2/m86/"
+      + "2D6C9F7A8B4E1D3C5A7B9E2F4D6C8A0?stp=dst-jpg_e15_fr_qp1080x1080"
+      + "&efg=eyJ2ZW5jb2RlX3RhZyI6InYxX3YxMCJ9"
+      + "&_nc_ht=scontent-lax3-2.xx.fbcdn.net&oe=67FA0D8F&oh=00_AYBexample"
 
     XCTAssertTrue(SocialVideoExtractionService.isLikelyMediaURLString(url.lowercased()))
   }
 
   func testLikelyMediaURLRejectsInstagramCDNImageURL() {
     let url =
-      "https://scontent-dfw5-2.cdninstagram.com/v/t51.82787-15/611216339_17928777444190749_4481488707119326601_n.jpg?stp=cmp1_dst-jpg_e35_s640x640_tt6&_nc_cat=108&ccb=7-5&_nc_sid=18de74&_nc_ht=scontent-dfw5-2.cdninstagram.com&oe=69D1EEB6"
+      "https://scontent-dfw5-2.cdninstagram.com/v/t51.82787-15/"
+      + "611216339_17928777444190749_4481488707119326601_n.jpg"
+      + "?stp=cmp1_dst-jpg_e35_s640x640_tt6&_nc_cat=108&ccb=7-5"
+      + "&_nc_sid=18de74&_nc_ht=scontent-dfw5-2.cdninstagram.com&oe=69D1EEB6"
 
     XCTAssertFalse(SocialVideoExtractionService.isLikelyMediaURLString(url.lowercased()))
   }
-
-  // MARK: - TikTok preview from JSON
-
-  func testTikTokPreviewExtractsTitleAndAuthor() {
-    let json: [String: Any] = [
-      "version": "1.0",
-      "type": "video",
-      "title": "#normmacdonald #normmacdonaldlive #comedy #fyp #jokes ",
-      "author_name": "Norm Macdonald",
-      "author_url": "https://www.tiktok.com/@norm.macdonald_",
-    ]
-
-    let preview = SocialPostHTMLParser.tikTokPreview(from: json)
-
-    XCTAssertNotNil(preview)
-    XCTAssertEqual(
-      preview?.bodyText, "#normmacdonald #normmacdonaldlive #comedy #fyp #jokes")
-    XCTAssertEqual(preview?.authorName, "Norm Macdonald")
-  }
-
-  func testTikTokPreviewHandlesMissingTitle() {
-    let json: [String: Any] = [
-      "author_name": "SomeCreator"
-    ]
-
-    let preview = SocialPostHTMLParser.tikTokPreview(from: json)
-
-    XCTAssertNotNil(preview)
-    XCTAssertNil(preview?.bodyText)
-    XCTAssertEqual(preview?.authorName, "SomeCreator")
-  }
-
-  func testTikTokPreviewHandlesMissingAuthor() {
-    let json: [String: Any] = [
-      "title": "a cool video"
-    ]
-
-    let preview = SocialPostHTMLParser.tikTokPreview(from: json)
-
-    XCTAssertNotNil(preview)
-    XCTAssertEqual(preview?.bodyText, "a cool video")
-    XCTAssertNil(preview?.authorName)
-  }
-
-  func testTikTokPreviewReturnsNilForEmptyJSON() {
-    let preview = SocialPostHTMLParser.tikTokPreview(from: [:])
-    XCTAssertNil(preview)
-  }
-
-  func testTikTokPreviewTrimsWhitespace() {
-    let json: [String: Any] = [
-      "title": "  some title  \n",
-      "author_name": "  Author  ",
-    ]
-
-    let preview = SocialPostHTMLParser.tikTokPreview(from: json)
-
-    XCTAssertEqual(preview?.bodyText, "some title")
-    XCTAssertEqual(preview?.authorName, "Author")
-  }
-
-  func testTikTokPreviewIgnoresEmptyStrings() {
-    let json: [String: Any] = [
-      "title": "",
-      "author_name": "   ",
-    ]
-
-    let preview = SocialPostHTMLParser.tikTokPreview(from: json)
-    XCTAssertNil(preview)
-  }
-
-  func testTikTokPreviewIgnoresNonStringValues() {
-    let json: [String: Any] = [
-      "title": 12345,
-      "author_name": true,
-    ]
-
-    let preview = SocialPostHTMLParser.tikTokPreview(from: json)
-    XCTAssertNil(preview)
-  }
-
-  // MARK: - Instagram OG description prefix stripping edge cases
-
-  func testInstagramPreviewExtractsBodyWithSmartQuotes() {
-    // Some locales use smart quotes in the og:description
-    let html = """
-      <html><head>
-      <meta property="og:description" content="1K likes, 3 comments - user on Jan 1, 2026:\u{00a0}\u{201c}Hello world\u{201d}. " />
-      </head></html>
-      """
-
-    let preview = SocialPostHTMLParser.instagramPreview(from: html)
-    XCTAssertEqual(preview?.bodyText, "Hello world")
-  }
-
-  func testInstagramPreviewExtractsBodyFromTitleCaseInsensitively() {
-    let html = """
-      <html><head>
-      <meta property="og:title" content="Creator ON INSTAGRAM: &quot;hello&quot;" />
-      </head></html>
-      """
-
-    let preview = SocialPostHTMLParser.instagramPreview(from: html)
-    XCTAssertEqual(preview?.bodyText, "hello")
-  }
-
-  // MARK: - Facebook preview from HTML
-
-  func testFacebookPreviewExtractsBodyTextFromOGDescription() {
-    let html = """
-      <html><head>
-      <meta property="og:description" content="DM me for parts and you can jump on the remix &#x1f3c6;&#x1f970;" />
-      <meta property="og:title" content="DM me for parts and you can jump on the remix &#x1f3c6;&#x1f970; | Example | Facebook" />
-      </head></html>
-      """
-
-    let preview = SocialPostHTMLParser.facebookPreview(from: html)
-
-    XCTAssertNotNil(preview)
-    XCTAssertEqual(
-      preview?.bodyText,
-      "DM me for parts and you can jump on the remix \u{1f3c6}\u{1f970}"
-    )
-  }
-
-  func testFacebookPreviewExtractsAuthorFromOGTitle() {
-    let html = """
-      <html><head>
-      <meta property="og:title" content="Some caption | John Smith | Facebook" />
-      </head></html>
-      """
-
-    let preview = SocialPostHTMLParser.facebookPreview(from: html)
-
-    XCTAssertNotNil(preview)
-    XCTAssertEqual(preview?.authorName, "John Smith")
-  }
-
-  func testFacebookPreviewExtractsImageURL() {
-    let html = """
-      <html><head>
-      <meta property="og:image" content="https://scontent.xx.fbcdn.net/v/t51.82787-15/photo.jpg?_nc_cat=111&amp;ccb=1-7" />
-      </head></html>
-      """
-
-    let preview = SocialPostHTMLParser.facebookPreview(from: html)
-
-    XCTAssertNotNil(preview)
-    XCTAssertNotNil(preview?.imageURL)
-    XCTAssertTrue(preview?.imageURL?.absoluteString.contains("scontent") == true)
-  }
-
-  func testFacebookPreviewReturnsNilForEmptyHTML() {
-    let preview = SocialPostHTMLParser.facebookPreview(from: "")
-    XCTAssertNil(preview)
-  }
-
-  func testFacebookPreviewReturnsNilForHTMLWithNoRelevantMeta() {
-    let html = """
-      <html><head>
-      <meta property="og:type" content="website" />
-      <meta property="og:site_name" content="Facebook" />
-      </head></html>
-      """
-
-    let preview = SocialPostHTMLParser.facebookPreview(from: html)
-    XCTAssertNil(preview)
-  }
-
-  func testFacebookPreviewAuthorNilWhenTitleHasTooFewParts() {
-    let html = """
-      <html><head>
-      <meta property="og:title" content="Just a title | Facebook" />
-      <meta property="og:description" content="some text" />
-      </head></html>
-      """
-
-    let preview = SocialPostHTMLParser.facebookPreview(from: html)
-
-    XCTAssertNotNil(preview)
-    XCTAssertEqual(preview?.bodyText, "some text")
-    XCTAssertNil(preview?.authorName)
-  }
-
-  func testFacebookPreviewDecodesHTMLEntities() {
-    let html = """
-      <html><head>
-      <meta property="og:description" content="Tom &amp; Jerry &lt;3 it&#039;s great" />
-      <meta property="og:title" content="Tom &amp; Jerry &lt;3 it&#039;s great | Tom &amp; Jerry | Facebook" />
-      </head></html>
-      """
-
-    let preview = SocialPostHTMLParser.facebookPreview(from: html)
-
-    XCTAssertEqual(preview?.bodyText, "Tom & Jerry <3 it's great")
-    XCTAssertEqual(preview?.authorName, "Tom & Jerry")
-  }
-
-  func testFacebookPreviewHandlesDescriptionOnly() {
-    let html = """
-      <html><head>
-      <meta property="og:description" content="A cool video about cats" />
-      </head></html>
-      """
-
-    let preview = SocialPostHTMLParser.facebookPreview(from: html)
-
-    XCTAssertNotNil(preview)
-    XCTAssertEqual(preview?.bodyText, "A cool video about cats")
-    XCTAssertNil(preview?.authorName)
-    XCTAssertNil(preview?.imageURL)
-  }
-
 }

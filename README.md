@@ -1,6 +1,6 @@
 # linkstr
 
-_Last updated: April 6, 2026_
+_Last updated: June 21, 2026_
 
 linkstr is an iOS app for private link sharing on [Nostr](https://nostr.com). You create private sessions, share links with people you trust, react with emojis, and play supported video directly inside the app when a provider allows it.
 
@@ -369,12 +369,17 @@ Embedded web playback allows provider-element fullscreen when supported.
 
 ### Deep links
 
-- Format: `linkstr://open?url=…`
-- Valid deep links open a full-screen shared-link detail surface.
+- Shared-link detail format: `linkstr://open?url=…`
+- Share composer format: `linkstr://share?url=…&note=…`
+- Media download format: `linkstr://download?url=…`
+- Valid deep links open a full-screen shared-link detail, share composer, or media-download surface.
 - Post detail can share the current post as a deep link through the native iOS share sheet.
+- The iOS share extension accepts web URLs, webpages, or text containing a web link, then offers `share link` or `download media`.
+- `share link` opens a full-screen share composer with the link prefilled, any surrounding text as the optional note, and a separate searchable active-session picker.
+- `download media` opens linkstr to cache downloadable media for valid links. Shares without a valid web link close without an error.
 - Shared deep links carry only the normalized web URL; title, thumbnail, and provider-specific preview text are fetched when the recipient opens the link.
 - Shared-link detail reuses the same adaptive local/embed controls as post detail when the URL supports in-app playback.
-- Dismissing shared-link detail clears pending deep-link state.
+- Dismissing shared-link detail, the share composer, or the media-download surface clears pending deep-link state.
 
 ### Local data and security
 
@@ -451,6 +456,14 @@ open linkstr.xcodeproj
 ```
 
 This runs both the iOS unit tests (via `xcodebuild`) and the push-service Go tests in one pass.
+
+### Lint
+
+```bash
+./scripts/lint.sh
+```
+
+Runs [SwiftLint](https://github.com/realm/SwiftLint) across all Swift sources.
 
 ### Run iOS tests only
 

@@ -10,7 +10,7 @@ final class ContactKeyParserTests: XCTestCase {
       ("raw value", npub),
       ("nostr prefix", "nostr:\(npub)"),
       ("query item", "https://example.com/add?npub=\(npub)"),
-      ("freeform text", "Add this contact: \(npub) thanks"),
+      ("freeform text", "Add this contact: \(npub) thanks")
     ]
 
     for (label, input) in cases {

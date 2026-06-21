@@ -93,7 +93,7 @@ class AppSessionTestCase: XCTestCase {
       SessionReactionEntity.self,
       SessionDeletionTombstoneEntity.self,
       SessionPostDeletionEntity.self,
-      SessionMessageEntity.self,
+      SessionMessageEntity.self
     ])
     let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
     let container = try ModelContainer(for: schema, configurations: [configuration])
@@ -178,9 +178,9 @@ class AppSessionTestCase: XCTestCase {
       FetchDescriptor<SessionPostDeletionEntity>(sortBy: [SortDescriptor(\.updatedAt)]))
   }
 
-  func fetchSessionDeletionTombstones(in context: ModelContext) throws
-    -> [SessionDeletionTombstoneEntity]
-  {
+  func fetchSessionDeletionTombstones(
+    in context: ModelContext
+  ) throws -> [SessionDeletionTombstoneEntity] {
     try context.fetch(
       FetchDescriptor<SessionDeletionTombstoneEntity>(sortBy: [SortDescriptor(\.updatedAt)]))
   }
@@ -208,47 +208,32 @@ class AppSessionTestCase: XCTestCase {
       .appendingPathComponent("\(prefix)-\(UUID().uuidString).\(fileExtension)")
   }
 
-  func makeIncomingMessage(
-    eventID: String,
-    transportEventID: String? = nil,
-    senderPubkey: String,
-    createdAt: Date,
-    payload: LinkstrPayload,
-    source: DirectMessageIngestSource = .live
-  ) -> ReceivedDirectMessage {
-    return ReceivedDirectMessage(
-      eventID: eventID,
-      transportEventID: transportEventID,
-      senderPubkey: senderPubkey,
-      payload: payload,
-      createdAt: createdAt,
-      source: source
-    )
+  struct MessageSpec {
+    var eventID: String
+    var conversationID: String
+    var rootID: String
+    var kind: SessionMessageKind
+    var senderPubkey: String
+    var receiverPubkey: String?
+    var ownerPubkey: String
+    var publishedTransportEventIDs: [String] = []
   }
 
-  func makeIncomingProfileMetadata(
-    eventID: String,
-    authorPubkey: String,
-    createdAt: Date,
-    chosenName: String?,
-    rawContent: String? = nil
-  ) throws -> ReceivedProfileMetadata {
-    let resolvedContent: String
-    if let rawContent {
-      resolvedContent = rawContent
-    } else {
-      resolvedContent = try NostrProfileMetadata.mergedContent(
-        existingContent: nil,
-        chosenName: chosenName
-      )
-    }
-
-    return ReceivedProfileMetadata(
-      eventID: eventID,
-      authorPubkey: authorPubkey,
-      chosenName: chosenName,
-      rawContent: resolvedContent,
-      createdAt: createdAt
+  func makeMessage(_ spec: MessageSpec) throws -> SessionMessageEntity {
+    try SessionMessageEntity(
+      eventID: spec.eventID,
+      ownerPubkey: spec.ownerPubkey,
+      conversationID: spec.conversationID,
+      rootID: spec.rootID,
+      kind: spec.kind,
+      senderPubkey: spec.senderPubkey,
+      receiverPubkey: spec.receiverPubkey,
+      url: "https://example.com/\(spec.eventID)",
+      note: "note-\(spec.eventID)",
+      timestamp: .now,
+      readAt: nil,
+      linkType: .generic,
+      publishedTransportEventIDs: spec.publishedTransportEventIDs
     )
   }
 
@@ -256,27 +241,23 @@ class AppSessionTestCase: XCTestCase {
     eventID: String,
     conversationID: String,
     rootID: String,
-    kind: SessionMessageKind,
+    kind: SessionMessageKind = .root,
     senderPubkey: String,
-    receiverPubkey: String,
+    receiverPubkey: String? = nil,
     ownerPubkey: String,
     publishedTransportEventIDs: [String] = []
   ) throws -> SessionMessageEntity {
-    try SessionMessageEntity(
-      eventID: eventID,
-      ownerPubkey: ownerPubkey,
-      conversationID: conversationID,
-      rootID: rootID,
-      kind: kind,
-      senderPubkey: senderPubkey,
-      receiverPubkey: receiverPubkey,
-      url: "https://example.com/\(eventID)",
-      note: "note-\(eventID)",
-      timestamp: .now,
-      readAt: nil,
-      linkType: .generic,
-      publishedTransportEventIDs: publishedTransportEventIDs
-    )
+    try makeMessage(
+      MessageSpec(
+        eventID: eventID,
+        conversationID: conversationID,
+        rootID: rootID,
+        kind: kind,
+        senderPubkey: senderPubkey,
+        receiverPubkey: receiverPubkey,
+        ownerPubkey: ownerPubkey,
+        publishedTransportEventIDs: publishedTransportEventIDs
+      ))
   }
 }
 

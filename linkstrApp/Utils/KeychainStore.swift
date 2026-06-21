@@ -55,8 +55,7 @@ final class KeychainStore {
     }
 
     if setFallbackIfRecoverable(localStatus, value: value, for: key)
-      || setFallbackIfRecoverable(syncStatus, value: value, for: key)
-    {
+      || setFallbackIfRecoverable(syncStatus, value: value, for: key) {
       return
     }
 
@@ -77,7 +76,7 @@ final class KeychainStore {
     let statuses: [OSStatus] = [
       SecItemDelete(query(for: key, synchronizableQuery: kCFBooleanTrue) as CFDictionary),
       SecItemDelete(query(for: key, synchronizableQuery: kCFBooleanFalse) as CFDictionary),
-      SecItemDelete(query(for: key, synchronizableQuery: nil) as CFDictionary),
+      SecItemDelete(query(for: key, synchronizableQuery: nil) as CFDictionary)
     ]
 
     if statuses.contains(errSecSuccess) || statuses.allSatisfy({ $0 == errSecItemNotFound }) {
@@ -109,7 +108,7 @@ final class KeychainStore {
     let deleteQueries: [[String: Any]] = [
       query(for: key, synchronizableQuery: kCFBooleanTrue),
       query(for: key, synchronizableQuery: kCFBooleanFalse),
-      query(for: key, synchronizableQuery: nil),
+      query(for: key, synchronizableQuery: nil)
     ]
     for deleteQuery in deleteQueries {
       SecItemDelete(deleteQuery as CFDictionary)
@@ -144,7 +143,7 @@ final class KeychainStore {
     var baseQuery: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrService as String: service,
-      kSecAttrAccount as String: key,
+      kSecAttrAccount as String: key
     ]
     if let synchronizableQuery {
       baseQuery[kSecAttrSynchronizable as String] = synchronizableQuery
@@ -152,8 +151,7 @@ final class KeychainStore {
     return baseQuery
   }
 
-  private func setFallbackIfRecoverable(_ status: OSStatus, value: String, for key: String) -> Bool
-  {
+  private func setFallbackIfRecoverable(_ status: OSStatus, value: String, for key: String) -> Bool {
     #if targetEnvironment(simulator)
       guard isSimulatorRecoverableStatus(status) else { return false }
       UserDefaults.standard.set(value, forKey: fallbackKey(for: key))

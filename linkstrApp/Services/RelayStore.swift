@@ -154,8 +154,7 @@ final class ContactStore {
   }
 
   private func fetchContacts(ownerPubkey: String, sortedByDisplayName: Bool = false) throws
-    -> [ContactEntity]
-  {
+    -> [ContactEntity] {
     let descriptor = FetchDescriptor<ContactEntity>(
       predicate: #Predicate { $0.ownerPubkey == ownerPubkey },
       sortBy: [SortDescriptor(\.createdAt)]
@@ -250,19 +249,6 @@ final class ContactStore {
       throw ContactStoreError.contactNotFound
     }
     try updateAlias(contact, ownerPubkey: ownerPubkey, alias: alias)
-  }
-
-  static func contactName(for pubkeyHex: String, contacts: [ContactEntity]) -> String {
-    let canonicalPubkey = NostrValueNormalizer.normalizedPubkeyHex(pubkeyHex) ?? pubkeyHex
-    for contact in contacts where contact.targetPubkey == canonicalPubkey {
-      return contact.displayName
-    }
-    if let normalizedPubkey = NostrValueNormalizer.normalizedPubkeyHex(pubkeyHex),
-      let npub = PublicKey(hex: normalizedPubkey)?.npub
-    {
-      return npub
-    }
-    return String(pubkeyHex.prefix(12))
   }
 }
 

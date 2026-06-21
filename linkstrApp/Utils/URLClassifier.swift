@@ -43,24 +43,11 @@ enum URLClassifier {
     let linkType = classify(url)
     switch linkType {
     case .tiktok:
-      guard SocialURLHeuristics.isTikTokVideoLikeURL(url) else { return .link }
-      return .extractionPreferred(embedURL: embedURL(for: url, linkType: linkType) ?? url)
+      return tiktokMediaStrategy(for: url, linkType: linkType)
     case .instagram:
-      if SocialURLHeuristics.isInstagramReelURL(url) {
-        return .extractionPreferred(embedURL: embedURL(for: url, linkType: linkType) ?? url)
-      }
-      if SocialURLHeuristics.isInstagramVideoPostURL(url) {
-        return .extractionPreferred(embedURL: embedURL(for: url, linkType: linkType) ?? url)
-      }
-      return .link
+      return instagramMediaStrategy(for: url, linkType: linkType)
     case .facebook:
-      if SocialURLHeuristics.isFacebookReelURL(url) {
-        return .extractionPreferred(embedURL: embedURL(for: url, linkType: linkType) ?? url)
-      }
-      if SocialURLHeuristics.isFacebookVideoURL(url) {
-        return .embedOnly(embedURL: embedURL(for: url, linkType: linkType) ?? url)
-      }
-      return .link
+      return facebookMediaStrategy(for: url, linkType: linkType)
     case .twitter:
       guard SocialURLHeuristics.isTwitterStatusURL(url) else { return .link }
       return .extractionPreferred(embedURL: embedURL(for: url, linkType: linkType) ?? url)
@@ -73,6 +60,31 @@ enum URLClassifier {
     case .generic:
       return .link
     }
+  }
+
+  private static func tiktokMediaStrategy(for url: URL, linkType: LinkType) -> MediaStrategy {
+    guard SocialURLHeuristics.isTikTokVideoLikeURL(url) else { return .link }
+    return .extractionPreferred(embedURL: embedURL(for: url, linkType: linkType) ?? url)
+  }
+
+  private static func instagramMediaStrategy(for url: URL, linkType: LinkType) -> MediaStrategy {
+    if SocialURLHeuristics.isInstagramReelURL(url) {
+      return .extractionPreferred(embedURL: embedURL(for: url, linkType: linkType) ?? url)
+    }
+    if SocialURLHeuristics.isInstagramVideoPostURL(url) {
+      return .extractionPreferred(embedURL: embedURL(for: url, linkType: linkType) ?? url)
+    }
+    return .link
+  }
+
+  private static func facebookMediaStrategy(for url: URL, linkType: LinkType) -> MediaStrategy {
+    if SocialURLHeuristics.isFacebookReelURL(url) {
+      return .extractionPreferred(embedURL: embedURL(for: url, linkType: linkType) ?? url)
+    }
+    if SocialURLHeuristics.isFacebookVideoURL(url) {
+      return .embedOnly(embedURL: embedURL(for: url, linkType: linkType) ?? url)
+    }
+    return .link
   }
 
   static func preferredMediaAspectRatio(for sourceURL: URL, strategy: MediaStrategy) -> CGFloat {
@@ -164,7 +176,7 @@ enum URLClassifier {
       URLQueryItem(name: "show_text", value: "false"),
       URLQueryItem(name: "width", value: width),
       URLQueryItem(name: "height", value: height),
-      URLQueryItem(name: "autoplay", value: "false"),
+      URLQueryItem(name: "autoplay", value: "false")
     ]
     return components.url ?? canonicalURL
   }
@@ -194,7 +206,7 @@ enum URLClassifier {
 
     var embedQueryItems = [
       URLQueryItem(name: "playsinline", value: "1"),
-      URLQueryItem(name: "rel", value: "0"),
+      URLQueryItem(name: "rel", value: "0")
     ]
     if let startTime = queryItems?.first(where: { $0.name == "t" })?.value {
       embedQueryItems.append(URLQueryItem(name: "start", value: startTime))

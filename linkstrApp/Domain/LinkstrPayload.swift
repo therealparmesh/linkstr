@@ -82,43 +82,58 @@ struct LinkstrPayload: Codable, Hashable {
 
     switch kind {
     case .root:
-      guard let url, LinkstrURLValidator.normalizedWebURL(from: url) != nil else {
-        throw LinkstrPayloadError.invalidRootURL
-      }
-    case .rootDelete:
-      let trimmedRootID = rootID.trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !trimmedRootID.isEmpty else {
-        throw LinkstrPayloadError.invalidRootID
-      }
-    case .sessionDelete:
-      let trimmedRootID = rootID.trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !trimmedRootID.isEmpty else {
-        throw LinkstrPayloadError.invalidRootID
-      }
+      try validateRoot()
+    case .rootDelete, .sessionDelete:
+      try validateRequiresRootID()
     case .sessionCreate:
-      let trimmedName = sessionName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-      guard !trimmedName.isEmpty else {
-        throw LinkstrPayloadError.invalidSessionName
-      }
-      guard let memberPubkeys = normalizedMemberPubkeys(), !memberPubkeys.isEmpty else {
-        throw LinkstrPayloadError.invalidMembers
-      }
+      try validateSessionCreate()
     case .sessionMembers:
-      guard let memberPubkeys = normalizedMemberPubkeys(), !memberPubkeys.isEmpty else {
-        throw LinkstrPayloadError.invalidMembers
-      }
+      try validateSessionMembers()
     case .reaction:
-      let trimmedRootID = rootID.trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !trimmedRootID.isEmpty else {
-        throw LinkstrPayloadError.invalidRootID
-      }
-      let trimmedEmoji = emoji?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-      guard !trimmedEmoji.isEmpty else {
-        throw LinkstrPayloadError.invalidReactionEmoji
-      }
-      guard reactionActive != nil else {
-        throw LinkstrPayloadError.invalidReactionState
-      }
+      try validateReaction()
+    }
+  }
+
+  private func validateRoot() throws {
+    guard let url, LinkstrURLValidator.normalizedWebURL(from: url) != nil else {
+      throw LinkstrPayloadError.invalidRootURL
+    }
+  }
+
+  private func validateRequiresRootID() throws {
+    let trimmedRootID = rootID.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedRootID.isEmpty else {
+      throw LinkstrPayloadError.invalidRootID
+    }
+  }
+
+  private func validateSessionCreate() throws {
+    let trimmedName = sessionName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    guard !trimmedName.isEmpty else {
+      throw LinkstrPayloadError.invalidSessionName
+    }
+    guard let memberPubkeys = normalizedMemberPubkeys(), !memberPubkeys.isEmpty else {
+      throw LinkstrPayloadError.invalidMembers
+    }
+  }
+
+  private func validateSessionMembers() throws {
+    guard let memberPubkeys = normalizedMemberPubkeys(), !memberPubkeys.isEmpty else {
+      throw LinkstrPayloadError.invalidMembers
+    }
+  }
+
+  private func validateReaction() throws {
+    let trimmedRootID = rootID.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedRootID.isEmpty else {
+      throw LinkstrPayloadError.invalidRootID
+    }
+    let trimmedEmoji = emoji?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    guard !trimmedEmoji.isEmpty else {
+      throw LinkstrPayloadError.invalidReactionEmoji
+    }
+    guard reactionActive != nil else {
+      throw LinkstrPayloadError.invalidReactionState
     }
   }
 

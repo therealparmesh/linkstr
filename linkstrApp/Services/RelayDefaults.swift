@@ -6,6 +6,6 @@ enum RelayDefaults {
     "wss://relay.primal.net",
     "wss://nos.lol",
     "wss://nostr.mom",
-    "wss://nostr.satoshisfrens.win",
+    "wss://nostr.satoshisfrens.win"
   ]
 }

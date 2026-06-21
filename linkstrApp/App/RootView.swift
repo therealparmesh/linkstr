@@ -12,6 +12,55 @@ struct RootView: View {
   @State private var toastIsSuccess: Bool = false
   @State private var toastDisplayID = UUID()
 
+  private var sharedLinkDetailBinding: Binding<Bool> {
+    Binding(
+      get: { deepLinkHandler.pendingURLString != nil },
+      set: { isPresented in
+        if !isPresented {
+          deepLinkHandler.clearSharedLinkDetail()
+        }
+      }
+    )
+  }
+
+  private var shareDraftBinding: Binding<LinkstrDeepLinkCodec.ShareDraft?> {
+    Binding(
+      get: {
+        guard canPresentShareComposer else { return nil }
+        return deepLinkHandler.pendingShareDraft
+      },
+      set: { draft in
+        if draft == nil {
+          deepLinkHandler.clearShareDraft()
+        }
+      }
+    )
+  }
+
+  private var mediaSaveDraftBinding: Binding<LinkstrDeepLinkCodec.MediaSaveDraft?> {
+    Binding(
+      get: {
+        guard canPresentMediaSave else { return nil }
+        return deepLinkHandler.pendingMediaSaveDraft
+      },
+      set: { draft in
+        if draft == nil {
+          deepLinkHandler.clearMediaSaveDraft()
+        }
+      }
+    )
+  }
+
+  private var canPresentShareComposer: Bool {
+    session.didFinishBoot
+      && !session.shouldShowOnboarding
+      && session.identityService.pubkeyHex != nil
+  }
+
+  private var canPresentMediaSave: Bool {
+    session.didFinishBoot
+  }
+
   var body: some View {
     ZStack {
       LinkstrBackgroundView()
@@ -69,19 +118,13 @@ struct RootView: View {
     .task(id: toastDisplayID) {
       guard toastMessage != nil else { return }
       try? await Task.sleep(for: .seconds(RootViewTimingDefaults.toastDisplayDuration))
+      guard !Task.isCancelled else { return }
       withAnimation(.easeOut(duration: RootViewTimingDefaults.toastAnimationDuration)) {
         toastMessage = nil
       }
     }
     .fullScreenCover(
-      isPresented: Binding(
-        get: { deepLinkHandler.pendingURLString != nil },
-        set: { isPresented in
-          if !isPresented {
-            deepLinkHandler.clear()
-          }
-        }
-      )
+      isPresented: sharedLinkDetailBinding
     ) {
       if let urlString = deepLinkHandler.pendingURLString {
         NavigationStack {
@@ -90,7 +133,7 @@ struct RootView: View {
             .toolbar {
               ToolbarItem(placement: .topBarLeading) {
                 Button {
-                  deepLinkHandler.clear()
+                  deepLinkHandler.clearSharedLinkDetail()
                 } label: {
                   Image(systemName: "xmark")
                     .linkstrToolbarIconLabel()
@@ -104,6 +147,16 @@ struct RootView: View {
       } else {
         EmptyView()
       }
+    }
+    .fullScreenCover(item: shareDraftBinding) { draft in
+      if let ownerPubkey = session.identityService.pubkeyHex {
+        ShareComposerView(draft: draft, ownerPubkey: ownerPubkey)
+      } else {
+        EmptyView()
+      }
+    }
+    .fullScreenCover(item: mediaSaveDraftBinding) { draft in
+      ShareMediaSaveView(draft: draft)
     }
   }
 }

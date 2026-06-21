@@ -38,7 +38,7 @@ final class MediaAudioSessionControllerTests: XCTestCase {
       backend.activeCalls,
       [
         .init(active: true, options: []),
-        .init(active: false, options: [.notifyOthersOnDeactivation]),
+        .init(active: false, options: [.notifyOthersOnDeactivation])
       ]
     )
   }
@@ -74,7 +74,7 @@ final class MediaAudioSessionControllerTests: XCTestCase {
       backend.activeCalls,
       [
         .init(active: true, options: []),
-        .init(active: true, options: []),
+        .init(active: true, options: [])
       ]
     )
   }

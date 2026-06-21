@@ -36,24 +36,23 @@ struct ReceivedProfileMetadata {
   let createdAt: Date
 }
 
-private enum NostrDMTimingDefaults {
+enum NostrDMTimingDefaults {
   static let reconnectDelayNanoseconds: UInt64 = 2_000_000_000
   static let profileLookupTimeoutNanoseconds: UInt64 = 3_000_000_000
   static let relayAcceptanceTimeoutSeconds: TimeInterval = 8
   static let minimumRelayAcceptanceTimeoutSeconds: TimeInterval = 0.1
   /// NIP-59 gift-wrap `created_at` is randomized up to 2 days in the past.
-  /// Live subscription `since` must account for this to avoid filtering out new messages.
   static let giftWrapTimestampObfuscationSeconds: Int = 172800
 }
 
 @MainActor
 final class NostrDMService: NSObject, ObservableObject, EventCreating {
-  private enum BackfillSubscriptionKind: String {
+  enum BackfillSubscriptionKind: String {
     case recipient
     case author
   }
 
-  private struct BackfillState {
+  struct BackfillState {
     let kind: BackfillSubscriptionKind
     var page: Int
     let until: Int?
@@ -64,45 +63,46 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     var receivedGiftWrapCount = 0
   }
 
-  private var relayPool: RelayPool?
+  var relayPool: RelayPool?
   private var eventCancellable: AnyCancellable?
-  private var processedEventIDs = Set<String>()
-  private var processedEventIDOrder: [String] = []
-  private var processedEventIDHead = 0
-  private var processedGiftWrapEventIDs = Set<String>()
-  private var processedGiftWrapEventIDOrder: [String] = []
-  private var processedGiftWrapEventIDHead = 0
+  var processedEventIDs = Set<String>()
+  var processedEventIDOrder: [String] = []
+  var processedEventIDHead = 0
+  var processedGiftWrapEventIDs = Set<String>()
+  var processedGiftWrapEventIDOrder: [String] = []
+  var processedGiftWrapEventIDHead = 0
   private var recipientFilter: Filter?
   private var authorFilter: Filter?
-  private var reconnectTask: Task<Void, Never>?
-  private var shouldMaintainConnection = false
-  private var publishAckTracker = PublishAckTracker()
-  private var pendingPublishContinuations: [UUID: CheckedContinuation<Void, Error>] = [:]
-  private var pendingPublishBatchTimeoutTasks: [UUID: Task<Void, Never>] = [:]
-  private var liveSubscriptionSince: Int?
+  var reconnectTask: Task<Void, Never>?
+  var shouldMaintainConnection = false
+  var publishAckTracker = PublishAckTracker()
+  var pendingPublishContinuations: [UUID: CheckedContinuation<Void, Error>] = [:]
+  var pendingPublishBatchTimeoutTasks: [UUID: Task<Void, Never>] = [:]
+  var liveSubscriptionSince: Int?
 
-  private var keypair: Keypair?
-  private var onIncoming: ((ReceivedDirectMessage) -> Void)?
-  private var onFollowList: ((ReceivedFollowList) -> Void)?
-  private var onProfileMetadata: ((ReceivedProfileMetadata) -> Void)?
-  private var onRelayStatus: ((String, RelayHealthStatus, String?) -> Void)?
-  private var onInitialBackfillComplete: (() -> Void)?
-  private var configuredRelayURLs = Set<String>()
-  private var didNotifyInitialBackfillCompletion = false
+  var keypair: Keypair?
+  var onIncoming: ((ReceivedDirectMessage) -> Void)?
+  var onFollowList: ((ReceivedFollowList) -> Void)?
+  var onProfileMetadata: ((ReceivedProfileMetadata) -> Void)?
+  var onRelayStatus: ((String, RelayHealthStatus, String?) -> Void)?
+  var onInitialBackfillComplete: (() -> Void)?
+  var configuredRelayURLs = Set<String>()
+  var didNotifyInitialBackfillCompletion = false
 
-  private let recipientSubscriptionID = "linkstr-giftwrap-recipient"
-  private let authorSubscriptionID = "linkstr-giftwrap-author"
+  let recipientSubscriptionID = "linkstr-giftwrap-recipient"
+  let authorSubscriptionID = "linkstr-giftwrap-author"
   private let followListSubscriptionID = "linkstr-follow-list-self"
-  private let backfillPageSize = 500
-  private let processedEventIDLimit = 10_000
-  private var activeBackfillStates: [String: BackfillState] = [:]
-  private var completedBackfillKinds = Set<BackfillSubscriptionKind>()
-  private var currentBackfillRelayURLs = Set<String>()
-  private var completedBackfillRelayURLs = Set<String>()
+  let backfillPageSize = 500
+  let processedEventIDLimit = 10_000
+  var activeBackfillStates: [String: BackfillState] = [:]
+  var completedBackfillKinds = Set<BackfillSubscriptionKind>()
+  var currentBackfillRelayURLs = Set<String>()
+  var completedBackfillRelayURLs = Set<String>()
   private var followListFilter: Filter?
-  private let payloadDecoder = JSONDecoder()
-  // App-specific rumor kind carried inside NIP-59 gift wrap events.
-  private let linkstrRumorKind = EventKind.unknown(44_001)
+  let payloadDecoder = JSONDecoder()
+  let linkstrRumorKind = EventKind.unknown(44_001)
+
+  // MARK: - Configuration
 
   func isConfigured(
     for keypair: Keypair,
@@ -135,12 +135,46 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     stop()
     shouldMaintainConnection = true
 
-    self.keypair = keypair
+    applyCallbacks(
+      onIncoming: onIncoming,
+      onRelayStatus: onRelayStatus,
+      onInitialBackfillComplete: onInitialBackfillComplete,
+      onFollowList: onFollowList,
+      onProfileMetadata: onProfileMetadata
+    )
+    resetBackfillState(keypair: keypair, relayURLs: relayURLs)
+
+    let validRelayURLs = reportInvalidRelays(relayURLs: relayURLs, onRelayStatus: onRelayStatus)
+    guard !validRelayURLs.isEmpty else {
+      onRelayStatus(
+        relayURLs.first ?? "relays",
+        .failed,
+        "no valid relay urls are configured."
+      )
+      return
+    }
+
+    configureRelayPool(
+      validRelayURLs: validRelayURLs, keypair: keypair, relayURLs: relayURLs,
+      onRelayStatus: onRelayStatus)
+  }
+
+  private func applyCallbacks(
+    onIncoming: @escaping (ReceivedDirectMessage) -> Void,
+    onRelayStatus: @escaping (String, RelayHealthStatus, String?) -> Void,
+    onInitialBackfillComplete: (() -> Void)?,
+    onFollowList: ((ReceivedFollowList) -> Void)?,
+    onProfileMetadata: ((ReceivedProfileMetadata) -> Void)?
+  ) {
     self.onIncoming = onIncoming
     self.onRelayStatus = onRelayStatus
     self.onInitialBackfillComplete = onInitialBackfillComplete
     self.onFollowList = onFollowList
     self.onProfileMetadata = onProfileMetadata
+  }
+
+  private func resetBackfillState(keypair: Keypair, relayURLs: [String]) {
+    self.keypair = keypair
     configuredRelayURLs = Set(relayURLs)
     activeBackfillStates = [:]
     completedBackfillKinds = []
@@ -150,7 +184,12 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     liveSubscriptionSince =
       Int(Date.now.timeIntervalSince1970)
       - NostrDMTimingDefaults.giftWrapTimestampObfuscationSeconds
+  }
 
+  private func reportInvalidRelays(
+    relayURLs: [String],
+    onRelayStatus: @escaping (String, RelayHealthStatus, String?) -> Void
+  ) -> Set<URL> {
     let parsedRelayURLs = relayURLs.map { ($0, URL(string: $0)) }
     let validRelayURLs = Set(parsedRelayURLs.compactMap(\.1))
     let invalidRelayURLs = parsedRelayURLs.compactMap { rawValue, parsedURL in
@@ -164,16 +203,15 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
         "invalid relay url format: \(invalidRelay)"
       )
     }
+    return validRelayURLs
+  }
 
-    guard !validRelayURLs.isEmpty else {
-      onRelayStatus(
-        relayURLs.first ?? "relays",
-        .failed,
-        "no valid relay urls are configured."
-      )
-      return
-    }
-
+  private func configureRelayPool(
+    validRelayURLs: Set<URL>,
+    keypair: Keypair,
+    relayURLs: [String],
+    onRelayStatus: @escaping (String, RelayHealthStatus, String?) -> Void
+  ) {
     do {
       let relayPool = try RelayPool(relayURLs: validRelayURLs, delegate: self)
       self.relayPool = relayPool
@@ -191,7 +229,6 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
         limit: backfillPageSize
       )
 
-      // Compatibility fallback: some clients/relays may expose gift-wrap queries better by author.
       authorFilter = Filter(
         authors: [keypair.publicKey.hex],
         kinds: [EventKind.giftWrap.rawValue],
@@ -213,72 +250,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     }
   }
 
-  #if DEBUG
-    func simulateInitialBackfillCompletionForTesting() {
-      activeBackfillStates.removeAll()
-      completedBackfillKinds = [.recipient, .author]
-      completedBackfillRelayURLs = configuredRelayURLs
-      currentBackfillRelayURLs.removeAll()
-      didNotifyInitialBackfillCompletion = false
-      notifyInitialBackfillCompletionIfNeeded()
-    }
-
-    func seedBackfillCoverageForTesting(
-      activeRelayURLs: [String] = [],
-      completedRelayURLs: [String] = [],
-      hasActiveBackfill: Bool,
-      isCompleted: Bool
-    ) {
-      currentBackfillRelayURLs = Set(activeRelayURLs)
-      completedBackfillRelayURLs = Set(completedRelayURLs)
-      completedBackfillKinds = isCompleted ? [.recipient, .author] : []
-      if hasActiveBackfill {
-        activeBackfillStates = [
-          "test-backfill": BackfillState(
-            kind: .recipient,
-            page: 0,
-            until: nil,
-            pageSize: backfillPageSize,
-            expectedRelayURLs: Set(activeRelayURLs)
-          )
-        ]
-      } else {
-        activeBackfillStates.removeAll()
-      }
-    }
-
-    func simulateLateRelayConnectionForTesting(_ relayURL: String) {
-      maybeRestartBackfillForLateRelay(relayURL: relayURL)
-    }
-
-    func simulateBackfillCoverageFinalizationForTesting(
-      relayURLs: [String],
-      initialCompletionAlreadyNotified: Bool
-    ) {
-      currentBackfillRelayURLs = Set(relayURLs)
-      activeBackfillStates.removeAll()
-      completedBackfillKinds = [.recipient, .author]
-      didNotifyInitialBackfillCompletion = initialCompletionAlreadyNotified
-      finalizeBackfillCoverageIfNeeded()
-      notifyInitialBackfillCompletionIfNeeded()
-    }
-
-    var testingCurrentBackfillRelayURLs: Set<String> {
-      currentBackfillRelayURLs
-    }
-
-    var testingCompletedBackfillRelayURLs: Set<String> {
-      completedBackfillRelayURLs
-    }
-
-    var testingActiveBackfillCount: Int {
-      activeBackfillStates.count
-    }
-
-    var testingCompletedBackfillKindCount: Int {
-      completedBackfillKinds.count
-    }
-  #endif
+  // MARK: - Lifecycle
 
   func stop() {
     shouldMaintainConnection = false
@@ -320,7 +292,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     configuredRelayURLs.removeAll()
   }
 
-  private func scheduleReconnect() {
+  func scheduleReconnect() {
     guard shouldMaintainConnection else { return }
     guard reconnectTask == nil else { return }
 
@@ -334,476 +306,9 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     }
   }
 
-  func sendAwaitingRelayAcceptance(
-    payload: LinkstrPayload,
-    toMany recipientPubkeyHexes: [String],
-    timeoutSeconds: TimeInterval = NostrDMTimingDefaults.relayAcceptanceTimeoutSeconds
-  ) async throws -> SentPayloadReceipt {
-    guard relayPool != nil else {
-      throw NostrServiceError.relayUnavailable
-    }
+  // MARK: - Connection management
 
-    let events = try buildRumorAndGiftWrapEvents(
-      payload: payload, recipientPubkeyHexes: recipientPubkeyHexes)
-    let publishedEvents =
-      events.giftWrapForRecipients
-      + (events.giftWrapForSender.map { [$0] } ?? [])
-    guard !publishedEvents.isEmpty else {
-      throw NostrServiceError.relayUnavailable
-    }
-    let publishedEventIDs = try await publishEventsAwaitingRelayAcceptance(
-      publishedEvents,
-      timeoutSeconds: timeoutSeconds
-    )
-
-    return SentPayloadReceipt(
-      rumorEventID: events.rumorEvent.id,
-      publishedEventIDs: publishedEventIDs
-    )
-  }
-
-  func publishFollowListAwaitingRelayAcceptance(
-    followedPubkeyHexes: [String],
-    timeoutSeconds: TimeInterval = NostrDMTimingDefaults.relayAcceptanceTimeoutSeconds
-  ) async throws -> String {
-    guard relayPool != nil else {
-      throw NostrServiceError.relayUnavailable
-    }
-    guard let keypair else {
-      throw NostrServiceError.missingIdentity
-    }
-
-    let parsedPubkeys = try parsePublicKeys(followedPubkeyHexes)
-    let followEvent = try followList(withPubkeys: parsedPubkeys.map(\.hex), signedBy: keypair)
-    _ = try await publishEventsAwaitingRelayAcceptance(
-      [followEvent],
-      timeoutSeconds: timeoutSeconds
-    )
-
-    return followEvent.id
-  }
-
-  func publishEventAwaitingRelayAcceptance(
-    _ event: NostrEvent,
-    timeoutSeconds: TimeInterval = NostrDMTimingDefaults.relayAcceptanceTimeoutSeconds
-  ) async throws -> String {
-    guard relayPool != nil else {
-      throw NostrServiceError.relayUnavailable
-    }
-
-    _ = try await publishEventsAwaitingRelayAcceptance(
-      [event],
-      timeoutSeconds: timeoutSeconds
-    )
-
-    return event.id
-  }
-
-  @discardableResult
-  func requestProfileMetadata(pubkeyHexes: [String]) -> Bool {
-    guard let relayPool else { return false }
-    let normalizedPubkeys = NostrValueNormalizer.dedupedNormalizedPubkeyHexes(pubkeyHexes)
-    guard !normalizedPubkeys.isEmpty else { return false }
-    let expectedRelayURLs = connectedRelayURLs()
-    guard !expectedRelayURLs.isEmpty else { return false }
-    guard
-      let filter = Filter(
-        authors: normalizedPubkeys,
-        kinds: [EventKind.metadata.rawValue]
-      )
-    else {
-      return false
-    }
-
-    let subscriptionID = "linkstr-profile-lookup-\(UUID().uuidString.lowercased())"
-    _ = relayPool.subscribe(with: filter, subscriptionId: subscriptionID)
-    Task { @MainActor [weak self] in
-      guard let self else { return }
-      try? await Task.sleep(nanoseconds: NostrDMTimingDefaults.profileLookupTimeoutNanoseconds)
-      guard !Task.isCancelled else { return }
-      self.relayPool?.closeSubscription(with: subscriptionID)
-    }
-    return true
-  }
-
-  private func parsePublicKeys(_ pubkeyHexes: [String]) throws -> [PublicKey] {
-    guard let normalizedPubkeys = NostrValueNormalizer.validatedNormalizedPubkeyHexes(pubkeyHexes)
-    else {
-      throw NostrServiceError.invalidPubkey
-    }
-    var parsedPublicKeys: [PublicKey] = []
-    parsedPublicKeys.reserveCapacity(normalizedPubkeys.count)
-    for normalizedPubkey in normalizedPubkeys {
-      guard let key = PublicKey(hex: normalizedPubkey) else {
-        throw NostrServiceError.invalidPubkey
-      }
-      parsedPublicKeys.append(key)
-    }
-    return parsedPublicKeys
-  }
-
-  private func buildRumorAndGiftWrapEvents(
-    payload: LinkstrPayload,
-    recipientPubkeyHexes: [String]
-  ) throws -> (
-    rumorEvent: NostrEvent,
-    giftWrapForRecipients: [NostrEvent],
-    giftWrapForSender: NostrEvent?
-  ) {
-    guard let keypair else {
-      throw NostrServiceError.missingIdentity
-    }
-
-    try payload.validated()
-
-    let contentData = try JSONEncoder().encode(payload)
-    guard let content = String(data: contentData, encoding: .utf8) else {
-      throw NostrServiceError.payloadEncodingFailed
-    }
-
-    let builder = NostrEvent.Builder<NostrEvent>(kind: linkstrRumorKind)
-      .content(content)
-
-    if payload.kind == .reaction || payload.kind == .rootDelete {
-      let rootTag = try EventTag(eventId: payload.rootID, marker: .root)
-      builder.appendTags(rootTag.tag)
-    }
-
-    let rumorEvent = builder.build(pubkey: keypair.publicKey)
-    let recipientPublicKeys = try parsePublicKeys(recipientPubkeyHexes)
-    guard !recipientPublicKeys.isEmpty else {
-      throw NostrServiceError.invalidPubkey
-    }
-
-    var giftWrapForRecipients: [NostrEvent] = []
-    giftWrapForRecipients.reserveCapacity(recipientPublicKeys.count)
-    for recipientPublicKey in recipientPublicKeys {
-      let giftWrap = try giftWrap(
-        withRumor: rumorEvent,
-        toRecipient: recipientPublicKey,
-        signedBy: keypair
-      )
-      giftWrapForRecipients.append(giftWrap)
-    }
-
-    let senderNeedsEcho = recipientPublicKeys.contains { $0.hex == keypair.publicKey.hex } == false
-    let giftWrapForSender: NostrEvent?
-    if senderNeedsEcho {
-      giftWrapForSender = try giftWrap(
-        withRumor: rumorEvent,
-        toRecipient: keypair.publicKey,
-        signedBy: keypair
-      )
-    } else {
-      giftWrapForSender = nil
-    }
-    return (rumorEvent, giftWrapForRecipients, giftWrapForSender)
-  }
-
-  private func backfillSubscriptionID(kind: BackfillSubscriptionKind, page: Int, until: Int?)
-    -> String
-  {
-    if let until {
-      return "linkstr-backfill-\(kind.rawValue)-\(page)-\(until)"
-    }
-    return "linkstr-backfill-\(kind.rawValue)-\(page)-latest"
-  }
-
-  private func makeBackfillFilter(kind: BackfillSubscriptionKind, pubkey: String, until: Int?)
-    -> Filter?
-  {
-    switch kind {
-    case .recipient:
-      return Filter(
-        kinds: [EventKind.giftWrap.rawValue],
-        pubkeys: [pubkey],
-        until: until,
-        limit: backfillPageSize
-      )
-    case .author:
-      return Filter(
-        authors: [pubkey],
-        kinds: [EventKind.giftWrap.rawValue],
-        until: until,
-        limit: backfillPageSize
-      )
-    }
-  }
-
-  private func connectedRelayURLs() -> Set<String> {
-    guard let relayPool else { return [] }
-    return Set(
-      relayPool.relays.compactMap { relay in
-        if case .connected = relay.state {
-          return relay.url.absoluteString
-        }
-        return nil
-      }
-    )
-  }
-
-  private func publishEventsAwaitingRelayAcceptance(
-    _ events: [NostrEvent],
-    timeoutSeconds: TimeInterval = NostrDMTimingDefaults.relayAcceptanceTimeoutSeconds
-  ) async throws -> [String] {
-    let eventIDs = events.map(\.id)
-    guard !eventIDs.isEmpty else {
-      throw NostrServiceError.relayUnavailable
-    }
-
-    let expectedRelayURLs = connectedRelayURLs()
-    guard !expectedRelayURLs.isEmpty else {
-      throw NostrServiceError.relayUnavailable
-    }
-
-    try await withCheckedThrowingContinuation {
-      (continuation: CheckedContinuation<Void, Error>) in
-      let batchID = publishAckTracker.registerBatch(
-        eventIDs: eventIDs,
-        expectedRelayURLs: expectedRelayURLs
-      )
-      pendingPublishContinuations[batchID] = continuation
-      pendingPublishBatchTimeoutTasks[batchID] = Task { @MainActor [weak self] in
-        guard let self else { return }
-        try? await Task.sleep(
-          for: .seconds(
-            max(
-              NostrDMTimingDefaults.minimumRelayAcceptanceTimeoutSeconds,
-              timeoutSeconds
-            )
-          )
-        )
-        guard !Task.isCancelled else { return }
-        self.finishPendingPublishBatch(
-          batchID: batchID,
-          result: .failure(NostrServiceError.publishTimedOut)
-        )
-      }
-
-      for event in events {
-        relayPool?.publishEvent(event)
-      }
-    }
-
-    return eventIDs
-  }
-
-  private func finishPendingPublishBatch(
-    batchID: UUID,
-    result: Result<Void, Error>,
-    removeFromTracker: Bool = true
-  ) {
-    if removeFromTracker {
-      publishAckTracker.removeBatch(batchID)
-    }
-    pendingPublishBatchTimeoutTasks.removeValue(forKey: batchID)?.cancel()
-    guard let continuation = pendingPublishContinuations.removeValue(forKey: batchID) else {
-      return
-    }
-
-    switch result {
-    case .success:
-      continuation.resume()
-    case .failure(let error):
-      continuation.resume(throwing: error)
-    }
-  }
-
-  private func handlePublishAck(
-    relayURL: String,
-    eventID: String,
-    success: Bool,
-    message: String
-  ) {
-    guard
-      let completion = publishAckTracker.acknowledge(
-        relayURL: relayURL,
-        eventID: eventID,
-        success: success,
-        message: message
-      )
-    else {
-      return
-    }
-
-    switch completion.outcome {
-    case .succeeded:
-      finishPendingPublishBatch(
-        batchID: completion.batchID, result: .success(()), removeFromTracker: false)
-    case .failed(let failureMessage):
-      finishPendingPublishBatch(
-        batchID: completion.batchID,
-        result: .failure(NostrServiceError.publishRejected(failureMessage)),
-        removeFromTracker: false
-      )
-    }
-  }
-
-  private func pruneRelayFromPublishWaitlists(relayURL: String) {
-    for completion in publishAckTracker.pruneRelay(relayURL) {
-      switch completion.outcome {
-      case .succeeded:
-        finishPendingPublishBatch(
-          batchID: completion.batchID, result: .success(()), removeFromTracker: false)
-      case .failed(let failureMessage):
-        finishPendingPublishBatch(
-          batchID: completion.batchID,
-          result: .failure(NostrServiceError.publishRejected(failureMessage)),
-          removeFromTracker: false
-        )
-      }
-    }
-  }
-
-  private func startBackfillIfNeeded() {
-    guard let keypair else { return }
-    guard activeBackfillStates.isEmpty else { return }
-    guard completedBackfillKinds.count < 2 else { return }
-    let expectedRelayURLs = connectedRelayURLs()
-    guard !expectedRelayURLs.isEmpty else { return }
-    currentBackfillRelayURLs = expectedRelayURLs
-    if !completedBackfillKinds.contains(.recipient) {
-      beginBackfill(kind: .recipient, page: 0, until: nil, pubkey: keypair.publicKey.hex)
-    }
-    if !completedBackfillKinds.contains(.author) {
-      beginBackfill(kind: .author, page: 0, until: nil, pubkey: keypair.publicKey.hex)
-    }
-  }
-
-  private func beginBackfill(
-    kind: BackfillSubscriptionKind,
-    page: Int,
-    until: Int?,
-    pubkey: String
-  ) {
-    let currentlyConnectedRelayURLs = connectedRelayURLs()
-    let expectedRelayURLs: Set<String>
-    if currentBackfillRelayURLs.isEmpty {
-      expectedRelayURLs = currentlyConnectedRelayURLs
-    } else {
-      expectedRelayURLs = currentBackfillRelayURLs.intersection(currentlyConnectedRelayURLs)
-    }
-    guard !expectedRelayURLs.isEmpty else { return }
-    guard let relayPool, let filter = makeBackfillFilter(kind: kind, pubkey: pubkey, until: until)
-    else {
-      markBackfillKindCompleted(kind)
-      return
-    }
-    let subscriptionID = backfillSubscriptionID(kind: kind, page: page, until: until)
-    activeBackfillStates[subscriptionID] = BackfillState(
-      kind: kind,
-      page: page,
-      until: until,
-      pageSize: backfillPageSize,
-      expectedRelayURLs: expectedRelayURLs
-    )
-    _ = relayPool.subscribe(with: filter, subscriptionId: subscriptionID)
-  }
-
-  private func completeBackfillPage(subscriptionID: String) {
-    guard var state = activeBackfillStates.removeValue(forKey: subscriptionID) else { return }
-    relayPool?.closeSubscription(with: subscriptionID)
-
-    guard let keypair else {
-      markBackfillKindCompleted(state.kind)
-      return
-    }
-
-    guard state.receivedGiftWrapCount >= state.pageSize else {
-      markBackfillKindCompleted(state.kind)
-      return
-    }
-    guard let oldestCreatedAt = state.oldestCreatedAt, oldestCreatedAt > 0 else {
-      markBackfillKindCompleted(state.kind)
-      return
-    }
-
-    let nextUntil = Int(oldestCreatedAt - 1)
-    if let priorUntil = state.until, nextUntil >= priorUntil {
-      markBackfillKindCompleted(state.kind)
-      return
-    }
-
-    state.page += 1
-    beginBackfill(
-      kind: state.kind, page: state.page, until: nextUntil, pubkey: keypair.publicKey.hex)
-  }
-
-  private func markBackfillKindCompleted(_ kind: BackfillSubscriptionKind) {
-    completedBackfillKinds.insert(kind)
-    finalizeBackfillCoverageIfNeeded()
-    notifyInitialBackfillCompletionIfNeeded()
-  }
-
-  private func finalizeBackfillCoverageIfNeeded() {
-    guard activeBackfillStates.isEmpty else { return }
-    guard completedBackfillKinds.count == 2 else { return }
-    completedBackfillRelayURLs = currentBackfillRelayURLs
-    currentBackfillRelayURLs.removeAll()
-  }
-
-  private func notifyInitialBackfillCompletionIfNeeded() {
-    guard !didNotifyInitialBackfillCompletion else { return }
-    guard activeBackfillStates.isEmpty else { return }
-    guard completedBackfillKinds.count == 2 else { return }
-    didNotifyInitialBackfillCompletion = true
-    onInitialBackfillComplete?()
-  }
-
-  private func handleBackfillEOSE(relayURL: String, subscriptionID: String) {
-    guard var state = activeBackfillStates[subscriptionID] else { return }
-
-    if state.expectedRelayURLs.isEmpty {
-      state.expectedRelayURLs = connectedRelayURLs()
-    }
-    state.eoseRelayURLs.insert(relayURL)
-    activeBackfillStates[subscriptionID] = state
-
-    guard !state.expectedRelayURLs.isEmpty else {
-      completeBackfillPage(subscriptionID: subscriptionID)
-      return
-    }
-    if state.eoseRelayURLs.isSuperset(of: state.expectedRelayURLs) {
-      completeBackfillPage(subscriptionID: subscriptionID)
-    }
-  }
-
-  private func pruneRelayFromBackfillWaitlists(relayURL: String) {
-    currentBackfillRelayURLs.remove(relayURL)
-    for key in Array(activeBackfillStates.keys) {
-      guard var state = activeBackfillStates[key] else { continue }
-      guard state.expectedRelayURLs.remove(relayURL) != nil else { continue }
-      activeBackfillStates[key] = state
-      if state.expectedRelayURLs.isEmpty {
-        completeBackfillPage(subscriptionID: key)
-      }
-    }
-  }
-
-  private func resetBackfillProgressForLateRelay() {
-    for subscriptionID in activeBackfillStates.keys {
-      relayPool?.closeSubscription(with: subscriptionID)
-    }
-    activeBackfillStates.removeAll()
-    completedBackfillKinds.removeAll()
-    currentBackfillRelayURLs.removeAll()
-    completedBackfillRelayURLs.removeAll()
-  }
-
-  private func maybeRestartBackfillForLateRelay(relayURL: String) {
-    if !activeBackfillStates.isEmpty {
-      guard !currentBackfillRelayURLs.isEmpty else { return }
-      guard !currentBackfillRelayURLs.contains(relayURL) else { return }
-      resetBackfillProgressForLateRelay()
-      return
-    }
-
-    guard completedBackfillKinds.count == 2 else { return }
-    guard !completedBackfillRelayURLs.contains(relayURL) else { return }
-    resetBackfillProgressForLateRelay()
-  }
-
-  private func installSubscriptions() {
+  func installSubscriptions() {
     guard let relayPool else { return }
     if let recipientFilter {
       _ = relayPool.subscribe(with: recipientFilter, subscriptionId: recipientSubscriptionID)
@@ -816,278 +321,9 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     }
   }
 
-  private func directMessageSource(for subscriptionID: String) -> DirectMessageIngestSource {
-    if subscriptionID.hasPrefix("linkstr-backfill-") {
-      return .historical
-    }
-    return .live
-  }
-
-  private func handleIncomingEvent(_ relayEvent: RelayEvent) {
-    guard let keypair else { return }
-    let event = relayEvent.event
-    if event.kind == .followList {
-      guard let followListEvent = event as? FollowListEvent else { return }
-      guard rememberProcessedEventIDIfNeeded(followListEvent.id) else { return }
-      let followedPubkeys = followListEvent.followedPubkeys.compactMap { followed in
-        NostrValueNormalizer.normalizedPubkeyHex(followed)
-      }
-      onFollowList?(
-        ReceivedFollowList(
-          eventID: followListEvent.id,
-          authorPubkey: followListEvent.pubkey,
-          followedPubkeys: followedPubkeys,
-          createdAt: followListEvent.createdDate
-        ))
-      return
-    }
-
-    if event.kind == .metadata {
-      guard let metadataEvent = event as? MetadataEvent else { return }
-      guard rememberProcessedEventIDIfNeeded(metadataEvent.id) else { return }
-      onProfileMetadata?(
-        ReceivedProfileMetadata(
-          eventID: metadataEvent.id,
-          authorPubkey: metadataEvent.pubkey,
-          chosenName: NostrProfileMetadata.chosenName(from: metadataEvent),
-          rawContent: metadataEvent.content,
-          createdAt: metadataEvent.createdDate
-        )
-      )
-      return
-    }
-
-    guard event.kind == .giftWrap else { return }
-
-    if var backfill = activeBackfillStates[relayEvent.subscriptionId] {
-      backfill.receivedGiftWrapCount += 1
-      let createdAt = Int64(event.createdAt)
-      if let oldest = backfill.oldestCreatedAt {
-        backfill.oldestCreatedAt = min(oldest, createdAt)
-      } else {
-        backfill.oldestCreatedAt = createdAt
-      }
-      activeBackfillStates[relayEvent.subscriptionId] = backfill
-    }
-
-    guard let wrapped = event as? GiftWrapEvent else {
-      return
-    }
-    guard rememberProcessedGiftWrapEventIDIfNeeded(wrapped.id) else { return }
-
-    guard let rumor = try? wrapped.unsealedRumor(using: keypair.privateKey) else {
-      return
-    }
-
-    guard rumor.kind == linkstrRumorKind else { return }
-
-    guard let payload = decodeValidatedPayload(from: rumor.content) else {
-      return
-    }
-
-    let alreadyProcessedRumor = processedEventIDs.contains(rumor.id)
-    guard !alreadyProcessedRumor || payload.kind == .root else { return }
-    if !alreadyProcessedRumor {
-      rememberProcessedEventID(rumor.id)
-    }
-
-    onIncoming?(
-      ReceivedDirectMessage(
-        eventID: rumor.id,
-        transportEventID: wrapped.id,
-        senderPubkey: rumor.pubkey,
-        payload: payload,
-        createdAt: rumor.createdDate,
-        source: directMessageSource(for: relayEvent.subscriptionId)
-      ))
-  }
-
-  private func decodeValidatedPayload(from content: String) -> LinkstrPayload? {
-    guard let data = content.data(using: .utf8),
-      let payload = try? payloadDecoder.decode(LinkstrPayload.self, from: data),
-      (try? payload.validated()) != nil
-    else {
-      return nil
-    }
-    return payload
-  }
-
-  @discardableResult
-  private func rememberProcessedEventIDIfNeeded(_ eventID: String) -> Bool {
-    guard processedEventIDs.insert(eventID).inserted else { return false }
-    processedEventIDOrder.append(eventID)
-    trimProcessedIDStorageIfNeeded(
-      ids: &processedEventIDs,
-      order: &processedEventIDOrder,
-      head: &processedEventIDHead,
-      limit: processedEventIDLimit
-    )
-    return true
-  }
-
-  private func rememberProcessedEventID(_ eventID: String) {
-    _ = rememberProcessedEventIDIfNeeded(eventID)
-  }
-
-  @discardableResult
-  private func rememberProcessedGiftWrapEventIDIfNeeded(_ eventID: String) -> Bool {
-    guard processedGiftWrapEventIDs.insert(eventID).inserted else { return false }
-    processedGiftWrapEventIDOrder.append(eventID)
-    trimProcessedIDStorageIfNeeded(
-      ids: &processedGiftWrapEventIDs,
-      order: &processedGiftWrapEventIDOrder,
-      head: &processedGiftWrapEventIDHead,
-      limit: processedEventIDLimit
-    )
-    return true
-  }
-
-  private func trimProcessedIDStorageIfNeeded(
-    ids: inout Set<String>,
-    order: inout [String],
-    head: inout Int,
-    limit: Int
-  ) {
-    let activeCount = order.count - head
-    let overflowCount = activeCount - limit
-    guard overflowCount > 0 else { return }
-
-    let trimEnd = head + overflowCount
-    for index in head..<trimEnd {
-      ids.remove(order[index])
-    }
-    head = trimEnd
-
-    // Compact rarely to avoid frequent O(n) array shifts while still bounding memory growth.
-    if head >= 2_048, head * 2 >= order.count {
-      order.removeFirst(head)
-      head = 0
-    }
-  }
-
-  private func handleRelayStateDidChange(relayURL: String, state: Relay.State) {
-    switch state {
-    case .connected:
-      // Retry installs after each relay connection. Initial install can race with socket startup.
-      reconnectTask?.cancel()
-      reconnectTask = nil
-      installSubscriptions()
-      maybeRestartBackfillForLateRelay(relayURL: relayURL)
-      startBackfillIfNeeded()
-      onRelayStatus?(relayURL, .connected, nil)
-    case .connecting:
-      onRelayStatus?(relayURL, .connecting, nil)
-    case .notConnected:
-      pruneRelayFromBackfillWaitlists(relayURL: relayURL)
-      pruneRelayFromPublishWaitlists(relayURL: relayURL)
-      onRelayStatus?(relayURL, .disconnected, nil)
-      scheduleReconnect()
-    case .error(let error):
-      pruneRelayFromBackfillWaitlists(relayURL: relayURL)
-      pruneRelayFromPublishWaitlists(relayURL: relayURL)
-      onRelayStatus?(relayURL, .failed, error.localizedDescription)
-      scheduleReconnect()
-    }
-  }
-
-  private func handleRelayResponse(
-    relayURL: String,
-    eoseSubscriptionID: String?,
-    closedSubscriptionID: String?,
-    readOnlyMessage: String?,
-    okEventID: String?,
-    okSuccess: Bool?,
-    okMessage: String?
-  ) {
-    if let eoseSubscriptionID {
-      if activeBackfillStates[eoseSubscriptionID] != nil {
-        handleBackfillEOSE(relayURL: relayURL, subscriptionID: eoseSubscriptionID)
-      }
-    }
-    if let closedSubscriptionID {
-      if activeBackfillStates[closedSubscriptionID] != nil {
-        completeBackfillPage(subscriptionID: closedSubscriptionID)
-      }
-    }
-    if let readOnlyMessage {
-      onRelayStatus?(relayURL, .readOnly, readOnlyMessage)
-    }
-    if let okEventID, let okSuccess, let okMessage {
-      handlePublishAck(
-        relayURL: relayURL,
-        eventID: okEventID,
-        success: okSuccess,
-        message: okMessage
-      )
-    }
-  }
 }
 
-extension NostrDMService: RelayDelegate {
-  nonisolated func relayStateDidChange(_ relay: Relay, state: Relay.State) {
-    let relayURL = relay.url.absoluteString
-    Task { @MainActor [weak self] in
-      guard let self else { return }
-      self.handleRelayStateDidChange(relayURL: relayURL, state: state)
-    }
-  }
-
-  nonisolated func relay(_ relay: Relay, didReceive response: RelayResponse) {
-    let relayURL = relay.url.absoluteString
-    var eoseSubscriptionID: String?
-    var closedSubscriptionID: String?
-    var readOnlyMessage: String?
-    var okEventID: String?
-    var okSuccess: Bool?
-    var okMessage: String?
-
-    switch response {
-    case .eose(let subscriptionID):
-      eoseSubscriptionID = subscriptionID
-    case .closed(let subscriptionID, _):
-      closedSubscriptionID = subscriptionID
-    case .ok(let eventID, let success, let message):
-      okEventID = eventID
-      okSuccess = success
-      okMessage = message.message
-      if !success {
-        switch message.prefix {
-        case .authRequired, .restricted:
-          readOnlyMessage = message.message
-        default:
-          // Non-auth publish failures can be relay policy/content checks while the socket is still healthy.
-          break
-        }
-      }
-    default:
-      break
-    }
-
-    guard
-      eoseSubscriptionID != nil
-        || closedSubscriptionID != nil
-        || readOnlyMessage != nil
-        || okEventID != nil
-    else {
-      return
-    }
-
-    Task { @MainActor [weak self] in
-      guard let self else { return }
-      self.handleRelayResponse(
-        relayURL: relayURL,
-        eoseSubscriptionID: eoseSubscriptionID,
-        closedSubscriptionID: closedSubscriptionID,
-        readOnlyMessage: readOnlyMessage,
-        okEventID: okEventID,
-        okSuccess: okSuccess,
-        okMessage: okMessage
-      )
-    }
-  }
-
-  nonisolated func relay(_ relay: Relay, didReceive event: RelayEvent) {}
-}
+// MARK: - Errors
 
 enum NostrServiceError: Error, LocalizedError {
   case missingIdentity

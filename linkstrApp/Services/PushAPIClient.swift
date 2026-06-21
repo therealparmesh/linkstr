@@ -36,6 +36,48 @@ enum PushAPIClientError: LocalizedError {
   }
 }
 
+private struct RegisterDeviceRequestBody: Encodable {
+  let deviceToken: String
+  let apnsEnvironment: String
+
+  enum CodingKeys: String, CodingKey {
+    case deviceToken = "device_token"
+    case apnsEnvironment = "apns_environment"
+  }
+}
+
+private struct UnregisterDeviceRequestBody: Encodable {
+  let deviceToken: String
+
+  enum CodingKeys: String, CodingKey {
+    case deviceToken = "device_token"
+  }
+}
+
+private struct SyncArchivedConversationsRequestBody: Encodable {
+  let archivedConversationIDs: [String]
+
+  enum CodingKeys: String, CodingKey {
+    case archivedConversationIDs = "archived_conversation_ids"
+  }
+}
+
+private struct EnqueuePushRequestBody: Encodable {
+  let notificationType: String
+  let eventID: String
+  let conversationID: String
+  let recipientPubkeys: [String]
+  let emoji: String?
+
+  enum CodingKeys: String, CodingKey {
+    case notificationType = "notification_type"
+    case eventID = "event_id"
+    case conversationID = "conversation_id"
+    case recipientPubkeys = "recipient_pubkeys"
+    case emoji
+  }
+}
+
 @MainActor
 final class PushAPIClient {
   static let shared = PushAPIClient()
@@ -47,22 +89,11 @@ final class PushAPIClient {
   }
 
   func registerDevice(_ registration: PushDeviceRegistration, signedBy keypair: Keypair)
-    async throws
-  {
-    struct RequestBody: Encodable {
-      let deviceToken: String
-      let apnsEnvironment: String
-
-      enum CodingKeys: String, CodingKey {
-        case deviceToken = "device_token"
-        case apnsEnvironment = "apns_environment"
-      }
-    }
-
+    async throws {
     try await performRequest(
       path: "/v1/devices/register",
       method: "POST",
-      body: RequestBody(
+      body: RegisterDeviceRequestBody(
         deviceToken: registration.deviceToken,
         apnsEnvironment: registration.apnsEnvironment
       ),
@@ -71,62 +102,29 @@ final class PushAPIClient {
   }
 
   func unregisterDevice(deviceToken: String, signedBy keypair: Keypair) async throws {
-    struct RequestBody: Encodable {
-      let deviceToken: String
-
-      enum CodingKeys: String, CodingKey {
-        case deviceToken = "device_token"
-      }
-    }
-
     try await performRequest(
       path: "/v1/devices/unregister",
       method: "POST",
-      body: RequestBody(deviceToken: deviceToken),
+      body: UnregisterDeviceRequestBody(deviceToken: deviceToken),
       signedBy: keypair
     )
   }
 
   func syncArchivedConversations(_ conversationIDs: [String], signedBy keypair: Keypair)
-    async throws
-  {
-    struct RequestBody: Encodable {
-      let archivedConversationIDs: [String]
-
-      enum CodingKeys: String, CodingKey {
-        case archivedConversationIDs = "archived_conversation_ids"
-      }
-    }
-
+    async throws {
     try await performRequest(
       path: "/v1/conversations/archive-state",
       method: "PUT",
-      body: RequestBody(archivedConversationIDs: conversationIDs),
+      body: SyncArchivedConversationsRequestBody(archivedConversationIDs: conversationIDs),
       signedBy: keypair
     )
   }
 
   func enqueuePush(_ request: PushEnqueueRequest, signedBy keypair: Keypair) async throws {
-    struct RequestBody: Encodable {
-      let notificationType: String
-      let eventID: String
-      let conversationID: String
-      let recipientPubkeys: [String]
-      let emoji: String?
-
-      enum CodingKeys: String, CodingKey {
-        case notificationType = "notification_type"
-        case eventID = "event_id"
-        case conversationID = "conversation_id"
-        case recipientPubkeys = "recipient_pubkeys"
-        case emoji
-      }
-    }
-
     try await performRequest(
       path: "/v1/push",
       method: "POST",
-      body: RequestBody(
+      body: EnqueuePushRequestBody(
         notificationType: request.notificationType,
         eventID: request.eventID,
         conversationID: request.conversationID,

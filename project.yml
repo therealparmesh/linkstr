@@ -42,6 +42,7 @@ targets:
     sources:
       - path: linkstrApp
     dependencies:
+      - target: linkstrShareExtension
       - package: NostrSDK
       - package: EmojiKit
     settings:
@@ -82,6 +83,38 @@ targets:
           - CFBundleURLName: com.parmscript.linkstr.deeplink
             CFBundleURLSchemes:
               - linkstr
+
+  linkstrShareExtension:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: 18.0
+    sources:
+      - path: linkstrShareExtension
+      - path: linkstrApp/Domain/LinkstrURLValidator.swift
+      - path: linkstrApp/Domain/LinkstrDeepLinkCodec.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.parmscript.linkstr.ShareExtension
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_IDENTITY: Apple Development
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: "7654L3CX5L"
+        INFOPLIST_FILE: linkstrShareExtension/Info.plist
+        APPLICATION_EXTENSION_API_ONLY: YES
+    info:
+      path: linkstrShareExtension/Info.plist
+      properties:
+        CFBundleDisplayName: linkstr
+        CFBundleShortVersionString: "1.3.0"
+        CFBundleVersion: "13"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsWebURLWithMaxCount: 1
+              NSExtensionActivationSupportsWebPageWithMaxCount: 1
+              NSExtensionActivationSupportsText: true
 
   linkstrTests:
     type: bundle.unit-test

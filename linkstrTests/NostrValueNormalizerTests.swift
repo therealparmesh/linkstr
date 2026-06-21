@@ -15,7 +15,7 @@ final class NostrValueNormalizerTests: XCTestCase {
     XCTAssertNil(
       NostrValueNormalizer.validatedNormalizedPubkeyHexes([
         keypair.publicKey.hex,
-        "not-a-pubkey",
+        "not-a-pubkey"
       ]))
   }
 
@@ -25,7 +25,7 @@ final class NostrValueNormalizerTests: XCTestCase {
       NostrValueNormalizer.dedupedNormalizedPubkeyHexes([
         keypair.publicKey.hex.uppercased(),
         keypair.publicKey.hex,
-        "not-a-pubkey",
+        "not-a-pubkey"
       ]),
       [keypair.publicKey.hex]
     )

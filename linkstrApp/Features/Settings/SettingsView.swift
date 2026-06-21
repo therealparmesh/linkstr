@@ -3,18 +3,18 @@ import UIKit
 
 struct SettingsView: View {
   @Environment(\.scenePhase) private var scenePhase
-  @EnvironmentObject private var session: AppSession
+  @EnvironmentObject var session: AppSession
 
   @State private var relayURL = ""
-  @State private var revealedNsec = ""
-  @State private var isNsecVisible = false
-  @State private var isPresentingLogoutOptions = false
-  @State private var isPresentingDeleteAccountConfirm = false
-  @State private var isPresentingDeleteAccountFinalConfirm = false
-  @State private var isDeletingAccount = false
-  @State private var clearableStorageBytes: Int64?
-  @State private var clearableMetadataBytes: Int64?
-  @State private var isRefreshingStorageUsage = false
+  @State var revealedNsec = ""
+  @State var isNsecVisible = false
+  @State var isPresentingLogoutOptions = false
+  @State var isPresentingDeleteAccountConfirm = false
+  @State var isPresentingDeleteAccountFinalConfirm = false
+  @State var isDeletingAccount = false
+  @State var clearableStorageBytes: Int64?
+  @State var clearableMetadataBytes: Int64?
+  @State var isRefreshingStorageUsage = false
 
   var body: some View {
     ZStack {
@@ -60,7 +60,8 @@ struct SettingsView: View {
       Button("cancel", role: .cancel) {}
     } message: {
       Text(
-        "choose whether to keep this account's local sessions, posts, and contacts on this device or remove them before logging out."
+        "choose whether to keep this account's local sessions, posts, and "
+          + "contacts on this device or remove them before logging out."
       )
     }
     .alert("delete account", isPresented: $isPresentingDeleteAccountConfirm) {
@@ -70,7 +71,9 @@ struct SettingsView: View {
       Button("cancel", role: .cancel) {}
     } message: {
       Text(
-        "this asks your active relays to delete this account, clears this account's local data on this device, and logs you out. if you keep the secret key, you can still sign in again."
+        "this asks your active relays to delete this account, clears this "
+          + "account's local data on this device, and logs you out. if you keep "
+          + "the secret key, you can still sign in again."
       )
     }
     .alert("are you absolutely sure?", isPresented: $isPresentingDeleteAccountFinalConfirm) {
@@ -90,7 +93,9 @@ struct SettingsView: View {
       Button("cancel", role: .cancel) {}
     } message: {
       Text(
-        "this removes contacts, sessions, posts, reactions, cached media, and local encryption keys for this account after the relay deletion request succeeds."
+        "this removes contacts, sessions, posts, reactions, cached media, "
+          + "and local encryption keys for this account after the relay "
+          + "deletion request succeeds."
       )
     }
   }
@@ -211,175 +216,4 @@ struct SettingsView: View {
     }
   }
 
-  private var storageSection: some View {
-    LinkstrInsetSection(
-      title: "storage",
-      footer: storageUsageHint
-    ) {
-      Button(role: .destructive) {
-        UINotificationFeedbackGenerator().notificationOccurred(.warning)
-        session.clearCachedMedia()
-        refreshStorageUsage()
-      } label: {
-        LinkstrActionButtonLabel(title: "clear downloaded videos")
-      }
-      .linkstrDestructiveButton()
-
-      Button(role: .destructive) {
-        UINotificationFeedbackGenerator().notificationOccurred(.warning)
-        session.clearCachedMetadata()
-        refreshStorageUsage()
-      } label: {
-        LinkstrActionButtonLabel(title: "clear metadata")
-      }
-      .linkstrDestructiveButton()
-    }
-  }
-
-  private var storageUsageHint: String? {
-    if isRefreshingStorageUsage
-      && clearableStorageBytes == nil
-      && clearableMetadataBytes == nil
-    {
-      return "measuring local storage..."
-    }
-    let segments = [
-      storageUsageHintSegment(
-        label: "downloaded videos",
-        clearableBytes: clearableStorageBytes
-      ),
-      storageUsageHintSegment(
-        label: "metadata previews",
-        clearableBytes: clearableMetadataBytes
-      ),
-    ]
-    .compactMap { $0 }
-    guard !segments.isEmpty else { return "nothing to clear right now." }
-    return segments.joined(separator: ". ") + "."
-  }
-
-  private func storageUsageHintSegment(label: String, clearableBytes: Int64?) -> String? {
-    guard let clearableBytes else { return nil }
-    guard clearableBytes > 0 else { return nil }
-    let size = ByteCountFormatter.string(
-      fromByteCount: clearableBytes,
-      countStyle: .file
-    ).lowercased()
-    return "clearing \(label) would free ~\(size)"
-  }
-
-  private var identitySection: some View {
-    LinkstrInsetSection(title: "identity") {
-      if session.identityService.keypair != nil {
-        HStack(spacing: LinkstrTheme.buttonRowSpacing) {
-          Button {
-            if isNsecVisible {
-              hideSensitiveIdentityContent()
-            } else {
-              revealedNsec = (try? session.identityService.revealNsec()) ?? ""
-              isNsecVisible = true
-            }
-          } label: {
-            LinkstrActionButtonLabel(
-              title: isNsecVisible ? "hide secret key" : "reveal secret key",
-              systemImage: "key.fill"
-            )
-          }
-          .linkstrCautionButton()
-
-          if isNsecVisible {
-            Button {
-              guard !revealedNsec.isEmpty else { return }
-              UIPasteboard.general.string = revealedNsec
-              LinkstrToast.showSuccess("copied to clipboard")
-            } label: {
-              LinkstrActionButtonLabel(title: "copy", systemImage: "doc.on.doc")
-            }
-            .linkstrCautionButton()
-            .disabled(revealedNsec.isEmpty)
-          }
-        }
-
-        if isNsecVisible {
-          Text(revealedNsec.isEmpty ? "unable to reveal secret key (nsec)." : revealedNsec)
-            .font(LinkstrTheme.body(13))
-            .foregroundStyle(LinkstrTheme.textSecondary)
-            .textSelection(.enabled)
-            .privacySensitive()
-            .linkstrInputField()
-        }
-
-        Button(role: .destructive) {
-          isPresentingLogoutOptions = true
-        } label: {
-          LinkstrActionButtonLabel(
-            title: "log out",
-            systemImage: "rectangle.portrait.and.arrow.right"
-          )
-        }
-        .linkstrSecondaryButton()
-
-        Button(role: .destructive) {
-          isPresentingDeleteAccountConfirm = true
-        } label: {
-          LinkstrActionButtonLabel(
-            title: isDeletingAccount ? "deleting account..." : "delete account",
-            systemImage: "person.crop.circle.badge.xmark"
-          )
-        }
-        .linkstrDestructiveButton(prominent: true)
-        .disabled(isDeletingAccount)
-      } else {
-        Text("no account found. sign in with a secret key (nsec) or create one.")
-          .font(LinkstrTheme.body(13))
-          .foregroundStyle(LinkstrTheme.textSecondary)
-      }
-    }
-  }
-
-  private var connectedRelayCount: Int {
-    session.connectedRelayCount(for: session.configuredRelays)
-  }
-
-  private func statusDotColor(for relay: RelayEntity) -> Color {
-    if relay.isEnabled == false {
-      return LinkstrTheme.textSecondary.opacity(0.45)
-    }
-
-    let status = session.relayStatus(for: relay)
-    switch status {
-    case .connected:
-      return LinkstrTheme.statusSuccess
-    case .connecting:
-      return LinkstrTheme.accent
-    case .failed:
-      return LinkstrTheme.destructive
-    case .readOnly:
-      return LinkstrTheme.amber
-    case .disconnected:
-      return LinkstrTheme.textSecondary
-    }
-  }
-
-  private var sortedRelays: [RelayEntity] {
-    session.configuredRelays.sorted {
-      $0.url.localizedCaseInsensitiveCompare($1.url) == .orderedAscending
-    }
-  }
-
-  @MainActor
-  private func refreshStorageUsage() {
-    isRefreshingStorageUsage = true
-    Task { @MainActor in
-      let usage = session.clearableStorageUsage()
-      clearableStorageBytes = usage.cachedMediaBytes
-      clearableMetadataBytes = usage.previewBytes
-      isRefreshingStorageUsage = false
-    }
-  }
-
-  private func hideSensitiveIdentityContent() {
-    isNsecVisible = false
-    revealedNsec = ""
-  }
 }

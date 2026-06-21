@@ -24,7 +24,7 @@ final class SessionMembershipTimelineBuilderTests: XCTestCase {
           memberPubkey: "carol",
           startAt: addedAt,
           endAt: nil
-        ),
+        )
       ]
     )
 
@@ -40,7 +40,7 @@ final class SessionMembershipTimelineBuilderTests: XCTestCase {
           memberPubkey: "carol",
           timestamp: addedAt,
           kind: .joined
-        ),
+        )
       ]
     )
   }
@@ -66,7 +66,7 @@ final class SessionMembershipTimelineBuilderTests: XCTestCase {
           memberPubkey: "bob",
           startAt: readdedAt,
           endAt: nil
-        ),
+        )
       ]
     )
 
@@ -82,7 +82,7 @@ final class SessionMembershipTimelineBuilderTests: XCTestCase {
           memberPubkey: "bob",
           timestamp: readdedAt,
           kind: .joined
-        ),
+        )
       ]
     )
   }

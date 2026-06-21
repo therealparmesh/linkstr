@@ -110,67 +110,7 @@ final class AppSessionPresentationTests: XCTestCase {
   }
 
   func testLinkMetadataRefreshPolicyCases() {
-    struct TestCase {
-      let title: String
-      let linkType: LinkType
-      let metadataTitle: String?
-      let thumbnailPath: String?
-      let fileExists: (String) -> Bool
-      let expectedNeedsRefresh: Bool
-    }
-
-    let cases: [TestCase] = [
-      TestCase(
-        title: "missing title refreshes",
-        linkType: .generic,
-        metadataTitle: "   ",
-        thumbnailPath: "/tmp/thumb.png",
-        fileExists: { _ in true },
-        expectedNeedsRefresh: true
-      ),
-      TestCase(
-        title: "tiktok missing thumbnail refreshes lazily",
-        linkType: .tiktok,
-        metadataTitle: "some creator",
-        thumbnailPath: nil,
-        fileExists: { _ in false },
-        expectedNeedsRefresh: true
-      ),
-      TestCase(
-        title: "twitter missing thumbnail refreshes lazily",
-        linkType: .twitter,
-        metadataTitle: "frankie (@FrankieIsLost)",
-        thumbnailPath: nil,
-        fileExists: { _ in false },
-        expectedNeedsRefresh: true
-      ),
-      TestCase(
-        title: "generic missing thumbnail still skips refresh",
-        linkType: .generic,
-        metadataTitle: "Example title",
-        thumbnailPath: nil,
-        fileExists: { _ in false },
-        expectedNeedsRefresh: false
-      ),
-      TestCase(
-        title: "existing missing file refreshes lazily",
-        linkType: .instagram,
-        metadataTitle: "Example title",
-        thumbnailPath: "/tmp/thumb.png",
-        fileExists: { _ in false },
-        expectedNeedsRefresh: true
-      ),
-      TestCase(
-        title: "title and thumbnail present skips refresh",
-        linkType: .twitter,
-        metadataTitle: "AlphaFox (@alphafox)",
-        thumbnailPath: "/tmp/thumb.png",
-        fileExists: { _ in true },
-        expectedNeedsRefresh: false
-      ),
-    ]
-
-    for testCase in cases {
+    for testCase in linkMetadataRefreshPolicyCases {
       XCTAssertEqual(
         LinkMetadataRefreshPolicy.needsRefresh(
           linkType: testCase.linkType,
@@ -223,3 +163,63 @@ final class AppSessionPresentationTests: XCTestCase {
     return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
   }
 }
+
+private struct LinkMetadataRefreshTestCase {
+  let title: String
+  let linkType: LinkType
+  let metadataTitle: String?
+  let thumbnailPath: String?
+  let fileExists: (String) -> Bool
+  let expectedNeedsRefresh: Bool
+}
+
+private let linkMetadataRefreshPolicyCases: [LinkMetadataRefreshTestCase] = [
+  LinkMetadataRefreshTestCase(
+    title: "missing title refreshes",
+    linkType: .generic,
+    metadataTitle: "   ",
+    thumbnailPath: "/tmp/thumb.png",
+    fileExists: { _ in true },
+    expectedNeedsRefresh: true
+  ),
+  LinkMetadataRefreshTestCase(
+    title: "tiktok missing thumbnail refreshes lazily",
+    linkType: .tiktok,
+    metadataTitle: "some creator",
+    thumbnailPath: nil,
+    fileExists: { _ in false },
+    expectedNeedsRefresh: true
+  ),
+  LinkMetadataRefreshTestCase(
+    title: "twitter missing thumbnail refreshes lazily",
+    linkType: .twitter,
+    metadataTitle: "frankie (@FrankieIsLost)",
+    thumbnailPath: nil,
+    fileExists: { _ in false },
+    expectedNeedsRefresh: true
+  ),
+  LinkMetadataRefreshTestCase(
+    title: "generic missing thumbnail still skips refresh",
+    linkType: .generic,
+    metadataTitle: "Example title",
+    thumbnailPath: nil,
+    fileExists: { _ in false },
+    expectedNeedsRefresh: false
+  ),
+  LinkMetadataRefreshTestCase(
+    title: "existing missing file refreshes lazily",
+    linkType: .instagram,
+    metadataTitle: "Example title",
+    thumbnailPath: "/tmp/thumb.png",
+    fileExists: { _ in false },
+    expectedNeedsRefresh: true
+  ),
+  LinkMetadataRefreshTestCase(
+    title: "title and thumbnail present skips refresh",
+    linkType: .twitter,
+    metadataTitle: "AlphaFox (@alphafox)",
+    thumbnailPath: "/tmp/thumb.png",
+    fileExists: { _ in true },
+    expectedNeedsRefresh: false
+  )
+]

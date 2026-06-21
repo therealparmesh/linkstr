@@ -1,6 +1,13 @@
 import Foundation
 import SwiftData
 
+struct ProfileMetadataSnapshot {
+  let chosenName: String?
+  let content: String?
+  let createdAt: Date?
+  let eventID: String?
+}
+
 @MainActor
 final class AccountStateStore {
   private let modelContext: ModelContext
@@ -29,20 +36,15 @@ final class AccountStateStore {
     try modelContext.save()
   }
 
-  func profileMetadata(ownerPubkey: String) throws -> (
-    chosenName: String?,
-    content: String?,
-    createdAt: Date?,
-    eventID: String?
-  ) {
+  func profileMetadata(ownerPubkey: String) throws -> ProfileMetadataSnapshot {
     guard let state = try accountState(ownerPubkey: ownerPubkey) else {
-      return (nil, nil, nil, nil)
+      return ProfileMetadataSnapshot(chosenName: nil, content: nil, createdAt: nil, eventID: nil)
     }
-    return (
-      state.nostrProfileName,
-      state.profileMetadataContent,
-      state.profileMetadataUpdatedAt,
-      NostrValueNormalizer.normalizedEventID(state.profileMetadataEventID)
+    return ProfileMetadataSnapshot(
+      chosenName: state.nostrProfileName,
+      content: state.profileMetadataContent,
+      createdAt: state.profileMetadataUpdatedAt,
+      eventID: NostrValueNormalizer.normalizedEventID(state.profileMetadataEventID)
     )
   }
 
@@ -62,8 +64,7 @@ final class AccountStateStore {
       state.profileMetadataContent
         == (normalizedContent?.isEmpty == true ? nil : normalizedContent),
       state.profileMetadataUpdatedAt == createdAt,
-      state.profileMetadataEventID == normalizedEventID
-    {
+      state.profileMetadataEventID == normalizedEventID {
       return
     }
 

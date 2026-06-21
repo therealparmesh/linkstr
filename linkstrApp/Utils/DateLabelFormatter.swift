@@ -53,8 +53,7 @@ enum DateLabelFormatter {
   }()
 
   static func listTimestamp(for date: Date, now: Date = .now, calendar: Calendar = .current)
-    -> String
-  {
+    -> String {
     if calendar.isDateInToday(date) {
       return timeFormatter.string(from: date)
     }

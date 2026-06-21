@@ -17,7 +17,7 @@ enum LocalFileMetrics {
   private static let fileResourceKeys: Set<URLResourceKey> = [
     .isDirectoryKey,
     .fileSizeKey,
-    .contentModificationDateKey,
+    .contentModificationDateKey
   ]
 
   static func allocatedSize(at url: URL, fileManager: FileManager = .default) -> Int64 {
@@ -127,10 +127,6 @@ actor VideoCacheService {
   func touchCachedMedia(at fileURL: URL) {
     guard let normalizedURL = normalizedVideoCacheURL(fileURL) else { return }
     LocalFileMetrics.touch(normalizedURL, fileManager: fileManager)
-  }
-
-  func enforceVideoCacheLimit() {
-    enforceVideoCacheLimitIfNeeded(preserving: nil)
   }
 
   private func cachedFileURL(for remoteURL: URL, preferredExtension: String) -> URL {

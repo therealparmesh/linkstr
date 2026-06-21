@@ -138,8 +138,7 @@ final class URLMetadataService {
   }
 
   private func thumbnailPath(for url: URL, provider: NSItemProvider?) async throws
-    -> String?
-  {
+    -> String? {
     guard let provider else { return nil }
     guard provider.canLoadObject(ofClass: UIImage.self) else { return nil }
 

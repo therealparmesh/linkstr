@@ -11,7 +11,7 @@ final class ContactEntity {
   var encryptedAlias: String
   var createdAt: Date
 
-  @Transient private var _localAlias: String?? = nil
+  @Transient private var _localAlias: String??
   var localAlias: String? {
     if let cached = _localAlias { return cached }
     let decrypted = LocalDataCrypto.shared.decryptString(encryptedAlias, ownerPubkey: ownerPubkey)
@@ -39,8 +39,7 @@ final class ContactEntity {
     alias: String? = nil,
     createdAt: Date = .now
   )
-    throws
-  {
+    throws {
     self.ownerPubkey = ownerPubkey
     self.targetPubkey = targetPubkey
     self.encryptedAlias = ""
