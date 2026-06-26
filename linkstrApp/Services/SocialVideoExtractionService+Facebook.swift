@@ -118,6 +118,10 @@ actor URLCanonicalizationService {
   }
 
   private func resolveUncached(_ sourceURL: URL) async -> URL {
+    if let instagramCanonicalURL = SocialURLHeuristics.instagramCanonicalURL(for: sourceURL) {
+      return instagramCanonicalURL
+    }
+
     let isFacebookShare = SocialURLHeuristics.isFacebookShareURL(sourceURL)
     let isFbWatch = sourceURL.host?.lowercased().hasSuffix("fb.watch") == true
     guard isFacebookShare || isFbWatch else {

@@ -140,6 +140,32 @@ final class URLClassifierTests: XCTestCase {
     )
   }
 
+  func testCanonicalPlaybackURLIgnoresInstagramQueriesForPostIdentity() async throws {
+    let shareTokenURL = try XCTUnwrap(
+      URL(string: "https://www.instagram.com/reel/DaBh1TUP5sC/?igsh=MmFyM2E2anAyMXdt")
+    )
+    let languageURL = try XCTUnwrap(
+      URL(string: "https://www.instagram.com/reel/DaBh1TUP5sC/?l=1")
+    )
+    let arbitraryQueryURL = try XCTUnwrap(
+      URL(string: "https://www.instagram.com/reel/DaBh1TUP5sC/?anything=goes&x=1")
+    )
+
+    let canonicalShareTokenURL =
+      await URLCanonicalizationService.shared.canonicalPlaybackURL(for: shareTokenURL)
+    let canonicalLanguageURL =
+      await URLCanonicalizationService.shared.canonicalPlaybackURL(for: languageURL)
+    let canonicalArbitraryQueryURL =
+      await URLCanonicalizationService.shared.canonicalPlaybackURL(for: arbitraryQueryURL)
+
+    XCTAssertEqual(
+      canonicalShareTokenURL.absoluteString,
+      "https://www.instagram.com/reel/DaBh1TUP5sC/"
+    )
+    XCTAssertEqual(canonicalShareTokenURL, canonicalLanguageURL)
+    XCTAssertEqual(canonicalShareTokenURL, canonicalArbitraryQueryURL)
+  }
+
   private func assertURLClassificationAndStrategy(
     _ expectation: MediaURLFixtures.StrategyExpectation
   ) {

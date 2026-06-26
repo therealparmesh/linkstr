@@ -3,16 +3,18 @@ import Foundation
 extension SocialVideoExtractionService {
   func extractFromInstagram(sourceURL: URL) async -> ExtractionState? {
     guard SocialURLHeuristics.isInstagramHost(sourceURL),
-      let embedPageURL = instagramEmbedPageURL(from: sourceURL)
+      SocialURLHeuristics.isInstagramReelURL(sourceURL)
+        || SocialURLHeuristics.isInstagramVideoPostURL(sourceURL),
+      let canonicalSourceURL = SocialURLHeuristics.instagramCanonicalURL(for: sourceURL)
     else {
       return nil
     }
 
-    if let pageSummary = await instagramPageMediaSummary(from: sourceURL) {
-      let ranked = rankCandidates(pageSummary.videoURLs, sourceURL: sourceURL)
+    if let pageSummary = await instagramPageMediaSummary(from: canonicalSourceURL) {
+      let ranked = rankCandidates(pageSummary.videoURLs, sourceURL: canonicalSourceURL)
       if let resolved = resolvePlayableMedia(
         from: ranked,
-        sourceURL: sourceURL,
+        sourceURL: canonicalSourceURL,
         userAgent: Self.desktopUserAgent,
         cookies: []
       ) {
@@ -24,15 +26,52 @@ extension SocialVideoExtractionService {
       }
     }
 
-    let sniffResult = await sniffMediaURLs(
-      from: embedPageURL, userAgent: Self.desktopUserAgent)
-    let ranked = rankCandidates(sniffResult.urls, sourceURL: sourceURL)
-    return resolvePlayableMedia(
-      from: ranked,
+    let lightweightProbeURL = Self.instagramLightweightPlaybackURL(for: canonicalSourceURL)
+    for probeURL in Self.instagramPlaybackProbeURLs(
       sourceURL: sourceURL,
-      userAgent: Self.desktopUserAgent,
-      cookies: sniffResult.cookies
-    )
+      canonicalURL: canonicalSourceURL
+    ) {
+      let attempts = probeURL == lightweightProbeURL ? 2 : 1
+      for attempt in 0..<attempts {
+        let state = await extractViaGenericSniff(sourceURL: probeURL)
+        if case .ready = state {
+          return state
+        }
+        if attempt + 1 < attempts {
+          try? await Task.sleep(for: .milliseconds(300))
+        }
+      }
+    }
+
+    return .cannotExtract("could not find a usable video stream for this post.")
+  }
+
+  static func instagramPlaybackProbeURLs(sourceURL: URL, canonicalURL: URL) -> [URL] {
+    var urls: [URL] = []
+    var seen = Set<String>()
+
+    appendUnique(Self.instagramLightweightPlaybackURL(for: canonicalURL), to: &urls, seen: &seen)
+    appendUnique(sourceURL, to: &urls, seen: &seen)
+    appendUnique(canonicalURL, to: &urls, seen: &seen)
+    appendUnique(canonicalURL.appendingPathComponent("embed"), to: &urls, seen: &seen)
+
+    return urls
+  }
+
+  private static func instagramLightweightPlaybackURL(for canonicalURL: URL) -> URL? {
+    guard var components = URLComponents(url: canonicalURL, resolvingAgainstBaseURL: false) else {
+      return nil
+    }
+    // Some Instagram share-token pages hide video resources that this public page still exposes.
+    components.queryItems = [URLQueryItem(name: "l", value: "1")]
+    return components.url
+  }
+
+  private static func appendUnique(_ url: URL?, to urls: inout [URL], seen: inout Set<String>) {
+    guard let url else { return }
+    let key = url.absoluteString.lowercased()
+    guard seen.insert(key).inserted else { return }
+    urls.append(url)
   }
 
   func instagramIDScore(
@@ -52,22 +91,9 @@ extension SocialVideoExtractionService {
 
   // MARK: - Instagram embed page
 
-  private func instagramEmbedPageURL(from sourceURL: URL) -> URL? {
-    guard
-      SocialURLHeuristics.isInstagramReelURL(sourceURL)
-        || SocialURLHeuristics.isInstagramVideoPostURL(sourceURL),
-      let canonical = SocialURLHeuristics.instagramCanonicalURL(for: sourceURL)
-    else { return nil }
-
-    return canonical.appendingPathComponent("embed")
-  }
-
-  private func instagramPageMediaSummary(from sourceURL: URL) async -> (
+  private func instagramPageMediaSummary(from canonicalURL: URL) async -> (
     videoURLs: [URL], mediaKind: SocialPostHTMLParser.InstagramMediaKind
   )? {
-    guard let canonicalURL = SocialURLHeuristics.instagramCanonicalURL(for: sourceURL)
-    else { return nil }
-
     var request = URLRequest(url: canonicalURL)
     request.httpMethod = "GET"
     request.setValue(Self.desktopUserAgent, forHTTPHeaderField: "User-Agent")

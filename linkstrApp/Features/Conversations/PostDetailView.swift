@@ -321,6 +321,7 @@ struct PostDetailView: View {
   @State var loadedMembers: [SessionMemberEntity] = []
   @State var remotePostText: String?
   @State var isRefreshingMetadata = false
+  @State var mediaReloadID = 0
 
   init(
     ownerPubkey: String,

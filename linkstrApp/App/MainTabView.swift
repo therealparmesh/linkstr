@@ -41,6 +41,7 @@ struct MainTabView: View {
   @State private var isPresentingAddContact = false
   @State private var isShowingArchivedSessions = false
   @State private var selectedSessionTarget: SessionNavigationTarget?
+  @State private var sessionNavigationResetTask: Task<Void, Never>?
 
   @Query(sort: [SortDescriptor(\SessionEntity.updatedAt, order: .reverse)])
   private var allSessions: [SessionEntity]
@@ -115,6 +116,10 @@ struct MainTabView: View {
     }
     .onChange(of: scopedSessions.map(\.sessionID).stableTaskID) { _, _ in
       navigateToPendingSessionIfNeeded()
+    }
+    .onDisappear {
+      sessionNavigationResetTask?.cancel()
+      sessionNavigationResetTask = nil
     }
     .sheet(isPresented: $isPresentingNewSession) {
       NewSessionSheet()
@@ -195,7 +200,21 @@ struct MainTabView: View {
 
   private func openSession(_ sessionID: String) {
     selectedTab = .sessions
-    selectedSessionTarget = SessionNavigationTarget(sessionID: sessionID)
+    let target = SessionNavigationTarget(sessionID: sessionID)
+    sessionNavigationResetTask?.cancel()
+
+    guard selectedSessionTarget != nil else {
+      selectedSessionTarget = target
+      return
+    }
+
+    selectedSessionTarget = nil
+    sessionNavigationResetTask = Task { @MainActor in
+      await Task.yield()
+      guard !Task.isCancelled else { return }
+      selectedSessionTarget = target
+      sessionNavigationResetTask = nil
+    }
   }
 
   private func navigateToPendingSessionIfNeeded() {

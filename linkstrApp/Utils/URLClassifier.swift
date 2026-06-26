@@ -143,17 +143,7 @@ enum URLClassifier {
   }
 
   private static func instagramEmbedURL(for sourceURL: URL) -> URL? {
-    let parts = sourceURL.pathComponents.filter { $0 != "/" }
-    guard parts.count >= 2 else { return sourceURL }
-
-    for index in 0..<(parts.count - 1) {
-      let marker = parts[index].lowercased()
-      let shortcode = parts[index + 1].trimmingCharacters(in: .whitespacesAndNewlines)
-      guard ["reel", "reels", "p", "tv"].contains(marker), !shortcode.isEmpty else { continue }
-      let normalizedMarker = (marker == "reels") ? "reel" : marker
-      return URL(string: "https://www.instagram.com/\(normalizedMarker)/\(shortcode)/")
-    }
-    return sourceURL
+    SocialURLHeuristics.instagramCanonicalURL(for: sourceURL) ?? sourceURL
   }
 
   private static func facebookEmbedURL(for sourceURL: URL) -> URL? {

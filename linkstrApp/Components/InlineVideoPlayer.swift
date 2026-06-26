@@ -19,7 +19,6 @@ struct InlineVideoPlayer: View {
       Group {
         if let player {
           VideoPlayer(player: player)
-            .onAppear { player.play() }
             .scopedPlaybackAudioSession()
         } else {
           ProgressView()
@@ -68,7 +67,9 @@ struct InlineVideoPlayer: View {
           Task { @MainActor in onPlaybackFailed?() }
         }
       }
-      player = AVPlayer(playerItem: item)
+      let newPlayer = AVPlayer(playerItem: item)
+      player = newPlayer
+      newPlayer.play()
     }
     .onDisappear {
       player?.pause()
@@ -133,6 +134,7 @@ struct AdaptiveVideoPlaybackView: View {
   let resolveCachedLocalMedia: ((URL) -> PlayableMedia?)?
   let persistLocalMedia: ((URL, PlayableMedia) -> Void)?
   let clearPersistedLocalMedia: (() -> Void)?
+  let reloadID: Int
 
   @State var canonicalSourceURL: URL?
   @State var preferredEmbedSource: EmbeddedWebSource?
@@ -157,7 +159,8 @@ struct AdaptiveVideoPlaybackView: View {
     openSourceAction: (() -> Void)? = nil,
     resolveCachedLocalMedia: ((URL) -> PlayableMedia?)? = nil,
     persistLocalMedia: ((URL, PlayableMedia) -> Void)? = nil,
-    clearPersistedLocalMedia: (() -> Void)? = nil
+    clearPersistedLocalMedia: (() -> Void)? = nil,
+    reloadID: Int = 0
   ) {
     self.sourceURL = sourceURL
     self.showOpenSourceButtonInEmbedMode = showOpenSourceButtonInEmbedMode
@@ -165,12 +168,13 @@ struct AdaptiveVideoPlaybackView: View {
     self.resolveCachedLocalMedia = resolveCachedLocalMedia
     self.persistLocalMedia = persistLocalMedia
     self.clearPersistedLocalMedia = clearPersistedLocalMedia
+    self.reloadID = reloadID
   }
 
   var body: some View {
     content
       .frame(maxWidth: .infinity, alignment: .leading)
-      .task(id: sourceURL.absoluteString) {
+      .task(id: playbackReloadTaskID) {
         localCacheTask?.cancel()
         localCacheTask = nil
         cachedLocalMedia = nil
@@ -274,6 +278,44 @@ struct AdaptiveVideoPlaybackView: View {
 struct LocalMediaExportTarget {
   let fileURL: URL
   let allowsPhotoSave: Bool
+}
+
+extension AdaptiveVideoPlaybackView {
+  var playbackReloadTaskID: String {
+    "\(sourceURL.absoluteString)#\(reloadID)"
+  }
+
+  func scheduleLocalCachingIfNeeded(sourceURL: URL, media: PlayableMedia) {
+    guard !media.isLocalFile else { return }
+    guard cachedLocalMedia == nil else { return }
+
+    localCacheTask?.cancel()
+    localCacheTask = Task {
+      guard
+        let localMedia = await SocialVideoExtractionService.shared.cachePlayableMediaLocally(media)
+      else { return }
+      guard !Task.isCancelled else { return }
+
+      await MainActor.run {
+        cachedLocalMedia = localMedia
+        persistLocalMedia?(sourceURL, localMedia)
+      }
+    }
+  }
+
+  func clearFailedLocalPlaybackState() {
+    localCacheTask?.cancel()
+    localCacheTask = nil
+
+    if clearPersistedLocalMedia == nil,
+      let cachedLocalMedia,
+      cachedLocalMedia.isLocalFile {
+      try? FileManager.default.removeItem(at: cachedLocalMedia.playbackURL)
+    }
+
+    cachedLocalMedia = nil
+    clearPersistedLocalMedia?()
+  }
 }
 
 struct LocalFileExportItem: Identifiable {

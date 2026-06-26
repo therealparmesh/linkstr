@@ -201,7 +201,7 @@ extension AdaptiveVideoPlaybackView {
 
   func retryLocalPlayback() {
     Task {
-      if extractionFallbackReason != nil {
+      if extractionFallbackReason != nil, cachedLocalMedia == nil {
         clearFailedLocalPlaybackState()
       }
       localPlaybackMode = .localPreferred
@@ -310,38 +310,6 @@ extension AdaptiveVideoPlaybackView {
       extractionFallbackReason = reason
       localPlaybackMode = .embedPreferred
     }
-  }
-
-  func scheduleLocalCachingIfNeeded(sourceURL: URL, media: PlayableMedia) {
-    guard !media.isLocalFile else { return }
-    guard cachedLocalMedia == nil else { return }
-
-    localCacheTask?.cancel()
-    localCacheTask = Task {
-      guard
-        let localMedia = await SocialVideoExtractionService.shared.cachePlayableMediaLocally(media)
-      else { return }
-      guard !Task.isCancelled else { return }
-
-      await MainActor.run {
-        cachedLocalMedia = localMedia
-        persistLocalMedia?(sourceURL, localMedia)
-      }
-    }
-  }
-
-  func clearFailedLocalPlaybackState() {
-    localCacheTask?.cancel()
-    localCacheTask = nil
-
-    if clearPersistedLocalMedia == nil,
-      let cachedLocalMedia,
-      cachedLocalMedia.isLocalFile {
-      try? FileManager.default.removeItem(at: cachedLocalMedia.playbackURL)
-    }
-
-    cachedLocalMedia = nil
-    clearPersistedLocalMedia?()
   }
 
   var effectiveSourceURL: URL {

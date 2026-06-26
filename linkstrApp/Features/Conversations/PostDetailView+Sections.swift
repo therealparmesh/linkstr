@@ -218,11 +218,11 @@ extension PostDetailView {
         },
         clearPersistedLocalMedia: {
           clearPersistedLocalMedia(for: post)
-        }
+        },
+        reloadID: mediaReloadID
       )
     }
   }
-
   func toggleReaction(_ emoji: String) {
     UIImpactFeedbackGenerator(style: .light).impactOccurred()
     Task { @MainActor in
@@ -231,17 +231,20 @@ extension PostDetailView {
       await loadContent()
     }
   }
-
   func refreshPostMetadata(_ post: SessionMessageEntity) {
     guard !isRefreshingMetadata else { return }
     isRefreshingMetadata = true
     Task { @MainActor in
+      defer { isRefreshingMetadata = false }
+      if let urlString = post.url, let url = URL(string: urlString) {
+        await session.invalidateTransientMediaCaches(for: url)
+      }
+      clearPersistedLocalMedia(for: post)
+      mediaReloadID += 1
       _ = await session.refreshPostMetadata(post)
       await loadContent()
-      isRefreshingMetadata = false
     }
   }
-
   func metadataRefreshButton(for post: SessionMessageEntity) -> some View {
     Button {
       refreshPostMetadata(post)
@@ -261,7 +264,6 @@ extension PostDetailView {
     .disabled(isRefreshingMetadata)
     .tint(LinkstrTheme.accent)
   }
-
   func shareDeepLinkButton(for url: URL) -> some View {
     ShareLink(item: url) {
       Image(systemName: "square.and.arrow.up")

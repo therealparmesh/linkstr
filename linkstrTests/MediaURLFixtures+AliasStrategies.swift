@@ -53,6 +53,14 @@ extension MediaURLFixtures {
       allowsLocalPlayback: true
     ),
     StrategyExpectation(
+      name: "instagram reel with share token query",
+      url: "https://www.instagram.com/reel/DaBh1TUP5sC/?igsh=MmFyM2E2anAyMXdt",
+      linkType: .instagram,
+      strategyKind: .extractionPreferred,
+      embedExpectation: .exact("https://www.instagram.com/reel/DaBh1TUP5sC/"),
+      allowsLocalPlayback: true
+    ),
+    StrategyExpectation(
       name: "facebook shared video",
       url: "https://www.facebook.com/share/v/10153231379946729/",
       linkType: .facebook,
