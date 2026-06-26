@@ -143,7 +143,7 @@ struct ShareSessionPickerSheet: View {
       )
       .frame(maxWidth: .infinity, minHeight: 180)
     } else {
-      LazyVStack(spacing: 0) {
+      VStack(spacing: 0) {
         ForEach(visibleSessions, id: \.storageID) { sessionEntity in
           Button {
             selectedSessionID = sessionEntity.sessionID
@@ -155,7 +155,10 @@ struct ShareSessionPickerSheet: View {
             )
           }
           .buttonStyle(.plain)
-          .contentShape(Rectangle())
+
+          if sessionEntity.storageID != visibleSessions.last?.storageID {
+            LinkstrListRowDivider(leadingInset: 54)
+          }
         }
       }
     }
@@ -232,9 +235,7 @@ struct ShareSessionPickerRow: View {
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(.vertical, LinkstrTheme.listRowVerticalPadding)
-    .overlay(alignment: .bottom) {
-      LinkstrListRowDivider(leadingInset: 54)
-    }
+    .contentShape(Rectangle())
     .accessibilityElement(children: .combine)
     .accessibilityLabel("\(session.name), \(isSelected ? "selected" : "not selected")")
   }
