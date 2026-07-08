@@ -181,46 +181,83 @@ enum SocialPostHTMLParser {
   // MARK: - HTML meta tag extraction
 
   static func extractMetaContent(from html: String, property: String) -> String? {
-    let escaped = NSRegularExpression.escapedPattern(for: property)
-    let forwardPattern =
-      #"<meta\s+property="\#(escaped)"[^>]*?\s+content="([^"]*)"#
-    if let result = firstRegexCapture(in: html, pattern: forwardPattern) {
-      return HTMLTextDecoder.decodeHTMLEntities(result)
-    }
-    let reversePattern =
-      #"<meta\s+content="([^"]*)"[^>]*?\s+property="\#(escaped)""#
-    return firstRegexCapture(in: html, pattern: reversePattern)
-      .map(HTMLTextDecoder.decodeHTMLEntities)
+    extractMetaContent(from: html, attributeName: "property", attributeValue: property)
   }
 
   static func extractMetaContent(from html: String, name: String) -> String? {
-    let escaped = NSRegularExpression.escapedPattern(for: name)
-    let forwardPattern =
-      #"<meta\s+name="\#(escaped)"[^>]*?\s+content="([^"]*)"#
-    if let result = firstRegexCapture(in: html, pattern: forwardPattern) {
-      return HTMLTextDecoder.decodeHTMLEntities(result)
-    }
-    let reversePattern =
-      #"<meta\s+content="([^"]*)"[^>]*?\s+name="\#(escaped)""#
-    return firstRegexCapture(in: html, pattern: reversePattern)
-      .map(HTMLTextDecoder.decodeHTMLEntities)
+    extractMetaContent(from: html, attributeName: "name", attributeValue: name)
   }
 
-  private static func firstRegexCapture(in text: String, pattern: String) -> String? {
-    guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else {
-      return nil
+  private static func extractMetaContent(
+    from html: String,
+    attributeName: String,
+    attributeValue: String
+  ) -> String? {
+    let expectedAttributeName = attributeName.lowercased()
+    let expectedAttributeValue = attributeValue.lowercased()
+
+    for attributes in HTMLTagAttributeScanner.attributes(inTagsNamed: "meta", html: html) {
+      let actualValue = attributes[expectedAttributeName]?
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .lowercased()
+      guard actualValue == expectedAttributeValue,
+        let content = attributes["content"]
+      else { continue }
+      return HTMLTextDecoder.decodeHTMLEntities(content)
     }
-    let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
-    guard let match = regex.firstMatch(in: text, range: nsRange),
-      match.numberOfRanges > 1,
-      let captureRange = Range(match.range(at: 1), in: text)
-    else { return nil }
-    return String(text[captureRange])
+    return nil
   }
 
   static func normalizedText(_ value: String?) -> String? {
     guard let value else { return nil }
     let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
     return trimmed.isEmpty ? nil : trimmed
+  }
+}
+
+enum HTMLTagAttributeScanner {
+  static func attributes(inTagsNamed tagName: String, html: String) -> [[String: String]] {
+    let escapedTagName = NSRegularExpression.escapedPattern(for: tagName)
+    guard let tagRegex = try? NSRegularExpression(
+      pattern: #"<\s*\#(escapedTagName)\b[^>]*>"#,
+      options: [.caseInsensitive, .dotMatchesLineSeparators]
+    ) else {
+      return []
+    }
+
+    let range = NSRange(html.startIndex..<html.endIndex, in: html)
+    return tagRegex.matches(in: html, range: range).compactMap { match in
+      guard let tagRange = Range(match.range, in: html) else { return nil }
+      return attributes(in: String(html[tagRange]))
+    }
+  }
+
+  private static func attributes(in tag: String) -> [String: String] {
+    guard let attributeRegex = try? NSRegularExpression(
+      pattern: #"([A-Za-z_:][-A-Za-z0-9_:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>]+))"#,
+      options: [.dotMatchesLineSeparators]
+    ) else {
+      return [:]
+    }
+
+    var attributes: [String: String] = [:]
+    let range = NSRange(tag.startIndex..<tag.endIndex, in: tag)
+    for match in attributeRegex.matches(in: tag, range: range) {
+      guard let nameRange = Range(match.range(at: 1), in: tag) else { continue }
+      let name = String(tag[nameRange]).lowercased()
+
+      for captureIndex in 2...4 {
+        let captureRange = match.range(at: captureIndex)
+        guard captureRange.location != NSNotFound,
+          let valueRange = Range(captureRange, in: tag)
+        else {
+          continue
+        }
+
+        attributes[name] = String(tag[valueRange])
+        break
+      }
+    }
+    return attributes
   }
 }

@@ -38,6 +38,20 @@ extension SocialPostParserTests {
     XCTAssertEqual(preview?.authorName, "John Smith")
   }
 
+  func testFacebookPreviewParsesSingleQuotedMetaAttributes() {
+    let html = """
+      <html><head>
+      <meta content='Single quoted text' property='og:description' />
+      <meta content='Single quoted title | Jane Smith | Facebook' property='og:title' />
+      </head></html>
+      """
+
+    let preview = SocialPostHTMLParser.facebookPreview(from: html)
+
+    XCTAssertEqual(preview?.bodyText, "Single quoted text")
+    XCTAssertEqual(preview?.authorName, "Jane Smith")
+  }
+
   func testFacebookPreviewExtractsImageURL() {
     let html = """
       <html><head>

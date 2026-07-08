@@ -54,9 +54,8 @@ extension URLCanonicalizationService {
   }
 
   static func normalizedEmbeddedURL(_ raw: String) -> String {
-    raw
+    HTMLTextDecoder.decodeHTMLEntities(raw)
       .trimmingCharacters(in: .whitespacesAndNewlines)
-      .replacingOccurrences(of: "&amp;", with: "&")
       .replacingOccurrences(of: "\\/", with: "/")
   }
 }

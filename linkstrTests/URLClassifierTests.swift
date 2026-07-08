@@ -65,6 +65,20 @@ final class URLClassifierTests: XCTestCase {
     )
   }
 
+  func testTikTokQueryVideoIDUsesCanonicalEmbedURL() {
+    let sourceURL = "https://www.tiktok.com/?aweme_id=7596114833477537054"
+    let strategy = URLClassifier.mediaStrategy(for: sourceURL)
+
+    XCTAssertEqual(
+      SocialURLHeuristics.tikTokVideoID(from: URL(string: sourceURL)!),
+      "7596114833477537054"
+    )
+    guard case .extractionPreferred(let embedURL) = strategy else {
+      return XCTFail("Expected extractionPreferred for TikTok query video IDs")
+    }
+    XCTAssertEqual(embedURL.absoluteString, "https://www.tiktok.com/@_/video/7596114833477537054")
+  }
+
   func testComposerAvailabilityHintMatchesMediaStrategy() {
     XCTAssertEqual(
       NewPostSheet.composerAvailabilityHint(
@@ -130,6 +144,21 @@ final class URLClassifierTests: XCTestCase {
     let html = """
       <html><head>
       <link rel="canonical" href="https://m.facebook.com/watch/?v=10153231379946729&amp;foo=bar" />
+      </head></html>
+      """
+
+    let candidate = URLCanonicalizationService.facebookCanonicalCandidateURL(fromHTML: html)
+    XCTAssertEqual(
+      candidate?.absoluteString,
+      "https://m.facebook.com/watch/?v=10153231379946729&foo=bar"
+    )
+  }
+
+  func testFacebookCanonicalCandidateURLParsesSingleQuotedCanonicalLink() {
+    let html = """
+      <html><head>
+      <link href='https://m.facebook.com/watch/?v=10153231379946729&amp;foo=bar' \
+      rel='canonical alternate' />
       </head></html>
       """
 

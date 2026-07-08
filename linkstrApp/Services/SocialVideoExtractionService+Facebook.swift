@@ -232,15 +232,26 @@ actor URLCanonicalizationService {
   }
 
   static func facebookCanonicalCandidateURL(fromHTML html: String) -> URL? {
-    let patterns = [
-      #"<meta[^>]+property=['"]og:url['"][^>]+content=['"]([^'"]+)['"][^>]*>"#,
-      #"<meta[^>]+content=['"]([^'"]+)['"][^>]+property=['"]og:url['"][^>]*>"#,
-      #"<link[^>]+rel=['"]canonical['"][^>]+href=['"]([^'"]+)['"][^>]*>"#,
-      #"<link[^>]+href=['"]([^'"]+)['"][^>]+rel=['"]canonical['"][^>]*>"#
-    ]
+    let metaCandidates = HTMLTagAttributeScanner.attributes(inTagsNamed: "meta", html: html)
+      .compactMap { attributes -> String? in
+        guard let property = attributes["property"]?
+          .trimmingCharacters(in: .whitespacesAndNewlines),
+          property.caseInsensitiveCompare("og:url") == .orderedSame
+        else {
+          return nil
+        }
+        return attributes["content"]
+      }
 
-    for pattern in patterns {
-      guard let raw = firstCapturedGroup(in: html, pattern: pattern) else { continue }
+    let linkCandidates = HTMLTagAttributeScanner.attributes(inTagsNamed: "link", html: html)
+      .compactMap { attributes -> String? in
+        guard let rel = attributes["rel"] else { return nil }
+        let relTokens = rel.lowercased().split(whereSeparator: \.isWhitespace).map(String.init)
+        guard relTokens.contains("canonical") else { return nil }
+        return attributes["href"]
+      }
+
+    for raw in metaCandidates + linkCandidates {
       let normalized = normalizedEmbeddedURL(raw)
       if let url = URL(string: normalized) {
         return url
@@ -248,19 +259,6 @@ actor URLCanonicalizationService {
     }
 
     return nil
-  }
-
-  private static func firstCapturedGroup(in text: String, pattern: String) -> String? {
-    guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
-      return nil
-    }
-    let range = NSRange(text.startIndex..<text.endIndex, in: text)
-    guard let match = regex.firstMatch(in: text, range: range), match.numberOfRanges > 1,
-      let captureRange = Range(match.range(at: 1), in: text)
-    else {
-      return nil
-    }
-    return String(text[captureRange])
   }
 
   private func rumbleEmbedURL(from sourceURL: URL) async -> URL? {
@@ -297,10 +295,10 @@ actor URLCanonicalizationService {
 
       let payload = try JSONDecoder().decode(RumbleOEmbedPayload.self, from: data)
       guard
-        let rawEmbedURL = Self.firstCapturedGroup(
-          in: payload.html,
-          pattern: #"<iframe[^>]*\ssrc=['"]([^'"]+)['"][^>]*>"#
-        )
+        let rawEmbedURL = HTMLTagAttributeScanner.attributes(
+          inTagsNamed: "iframe",
+          html: payload.html
+        ).compactMap({ $0["src"] }).first
       else {
         return nil
       }

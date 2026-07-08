@@ -16,6 +16,8 @@ enum SocialURLHeuristics {
     regex(#"(?:aweme_id|item_id|group_id|video_id)=(\d{8,})"#)
   ]
 
+  static let tikTokVideoIDQueryKeys = ["aweme_id", "item_id", "group_id", "video_id"]
+
   static let igCacheKeyPattern = regex(#"([A-Za-z0-9_-]{5,})"#)
 
   static let instagramPostPattern = regex(#"/(?:reel|reels|p|tv)/([A-Za-z0-9_-]{5,})"#)
@@ -82,8 +84,7 @@ enum SocialURLHeuristics {
       return false
     }
     return queryItems.contains { item in
-      let key = item.name.lowercased()
-      return key == "aweme_id" || key == "video_id" || key == "item_id"
+      tikTokVideoIDQueryKeys.contains(item.name.lowercased())
     }
   }
 

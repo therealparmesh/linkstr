@@ -8,18 +8,23 @@ extension SocialURLHeuristics {
       let digits = candidate.filter(\.isNumber)
       if digits.count >= 8 { return digits }
     }
+    return tikTokVideoIDFromQuery(sourceURL)
+  }
+
+  private static func tikTokVideoIDFromQuery(_ url: URL) -> String? {
+    guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+      let queryItems = components.queryItems
+    else { return nil }
+
+    for item in queryItems where tikTokVideoIDQueryKeys.contains(item.name.lowercased()) {
+      let digits = (item.value ?? "").filter(\.isNumber)
+      if digits.count >= 8 { return digits }
+    }
     return nil
   }
 
   static func tikTokVideoID(fromCandidateURL url: URL) -> String? {
-    let queryKeys = ["aweme_id", "item_id", "group_id", "video_id"]
-    if let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-      let queryItems = components.queryItems {
-      for item in queryItems where queryKeys.contains(item.name.lowercased()) {
-        let digits = (item.value ?? "").filter(\.isNumber)
-        if digits.count >= 8 { return digits }
-      }
-    }
+    if let id = tikTokVideoID(from: url) { return id }
 
     let raw = url.absoluteString
 

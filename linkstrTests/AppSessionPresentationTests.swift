@@ -109,6 +109,30 @@ final class AppSessionPresentationTests: XCTestCase {
     )
   }
 
+  func testTwitterStatusResponseParserFindsNestedVideoURLs() throws {
+    let json: [String: Any] = [
+      "tweet": [
+        "media": [
+          "unexpected_shape": [
+            [
+              "nested": [
+                "source": "https://video.twimg.com/ext_tw_video/20/pu/vid/1280x720/sample.mp4"
+              ]
+            ]
+          ]
+        ]
+      ]
+    ]
+
+    let summary = TwitterStatusResponseParser.mediaSummary(from: json)
+
+    XCTAssertTrue(summary.hasVideo)
+    XCTAssertEqual(
+      summary.candidateURLs.map(\.absoluteString),
+      ["https://video.twimg.com/ext_tw_video/20/pu/vid/1280x720/sample.mp4"]
+    )
+  }
+
   func testLinkMetadataRefreshPolicyCases() {
     for testCase in linkMetadataRefreshPolicyCases {
       XCTAssertEqual(

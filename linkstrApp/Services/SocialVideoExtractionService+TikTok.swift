@@ -3,14 +3,20 @@ import Foundation
 extension SocialVideoExtractionService {
   func extractFromTikTok(sourceURL: URL) async -> ExtractionState? {
     guard SocialURLHeuristics.isTikTokHost(sourceURL),
-      SocialURLHeuristics.tikTokVideoID(from: sourceURL) != nil
+      SocialURLHeuristics.isTikTokVideoLikeURL(sourceURL)
     else {
       return nil
     }
-    let directTikTokCandidates = await loadTikTokAPIPlayURLs(from: sourceURL)
+
+    let playbackSourceURL = await resolvedTikTokVideoPageURL(from: sourceURL)
+    guard SocialURLHeuristics.tikTokVideoID(from: playbackSourceURL) != nil else {
+      return nil
+    }
+
+    let directTikTokCandidates = await loadTikTokAPIPlayURLs(from: playbackSourceURL)
     return resolvePlayableMedia(
       from: directTikTokCandidates,
-      sourceURL: sourceURL,
+      sourceURL: playbackSourceURL,
       userAgent: Self.tikTokAPIUserAgent,
       cookies: []
     )
@@ -47,13 +53,41 @@ extension SocialVideoExtractionService {
     return []
   }
 
+  private func resolvedTikTokVideoPageURL(from sourceURL: URL) async -> URL {
+    guard SocialURLHeuristics.tikTokVideoID(from: sourceURL) == nil else {
+      return sourceURL
+    }
+
+    var request = URLRequest(url: sourceURL)
+    request.httpMethod = "GET"
+    request.setValue(Self.mobileUserAgent, forHTTPHeaderField: "User-Agent")
+    request.setValue(
+      "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      forHTTPHeaderField: "Accept"
+    )
+    request.timeoutInterval = SocialVideoTimingDefaults.lightweightFetchTimeout
+
+    do {
+      let (_, response) = try await URLSession.shared.data(for: request)
+      guard let resolvedURL = response.url,
+        SocialURLHeuristics.isTikTokHost(resolvedURL),
+        SocialURLHeuristics.tikTokVideoID(from: resolvedURL) != nil
+      else {
+        return sourceURL
+      }
+      return resolvedURL
+    } catch {
+      return sourceURL
+    }
+  }
+
   private func loadTikTokFeedURLs(endpoint feedEndpoint: String, awemeID: String) async -> [URL] {
     guard var components = URLComponents(string: feedEndpoint) else { return [] }
     components.queryItems = [URLQueryItem(name: "aweme_id", value: awemeID)]
     guard let endpoint = components.url else { return [] }
 
     var request = URLRequest(url: endpoint)
-    request.httpMethod = "OPTIONS"
+    request.httpMethod = "GET"
     request.setValue(Self.tikTokAPIUserAgent, forHTTPHeaderField: "User-Agent")
     request.setValue("application/json", forHTTPHeaderField: "Accept")
     request.timeoutInterval = SocialVideoTimingDefaults.apiRequestTimeout

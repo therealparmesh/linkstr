@@ -40,6 +40,11 @@ enum TwitterStatusResponseParser {
       }
     }
 
+    collectNestedMediaURLs(from: json, into: &candidateURLs, seen: &seen)
+    if !candidateURLs.isEmpty {
+      hasVideo = true
+    }
+
     return TwitterStatusMediaSummary(
       candidateURLs: candidateURLs,
       hasVideo: hasVideo,
@@ -205,6 +210,28 @@ enum TwitterStatusResponseParser {
       return
     }
     urls.append(url)
+  }
+
+  private static func collectNestedMediaURLs(
+    from value: Any,
+    into urls: inout [URL],
+    seen: inout Set<String>
+  ) {
+    if let dictionary = value as? [String: Any] {
+      for nestedValue in dictionary.values {
+        collectNestedMediaURLs(from: nestedValue, into: &urls, seen: &seen)
+      }
+      return
+    }
+
+    if let array = value as? [Any] {
+      for nestedValue in array {
+        collectNestedMediaURLs(from: nestedValue, into: &urls, seen: &seen)
+      }
+      return
+    }
+
+    collectMediaURL(value, into: &urls, seen: &seen)
   }
 
   private static func validatedPreviewURL(from rawValue: String?) -> URL? {

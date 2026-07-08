@@ -129,6 +129,20 @@ final class SocialPostParserTests: XCTestCase {
     )
   }
 
+  func testOpenGraphVideoExtractionHandlesSingleQuotedAttributes() {
+    let html = """
+      <html><head>
+      <meta content='https://cdn.example.com/video.mp4?token=one&amp;expires=soon' \
+      property='og:video:secure_url' />
+      </head></html>
+      """
+
+    XCTAssertEqual(
+      SocialVideoExtractionService.extractOGVideoURLs(fromHTML: html).first?.absoluteString,
+      "https://cdn.example.com/video.mp4?token=one&expires=soon"
+    )
+  }
+
   func testInstagramMediaKindDetectsPhotoPost() {
     let html = """
       <html><head>

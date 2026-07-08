@@ -128,37 +128,27 @@ extension SocialVideoExtractionService {
   /// Parses `og:video`, `og:video:url`, and `og:video:secure_url` meta tags,
   /// decodes HTML entities in the extracted URL, and returns all valid URLs.
   static func extractOGVideoURLs(fromHTML html: String) -> [URL] {
-    let patterns = [
-      #"<meta[^>]+property=['"]og:video(?::secure_url|:url)?['"][^>]+content=['"]([^'"]+)['"][^>]*>"#,
-      #"<meta[^>]+content=['"]([^'"]+)['"][^>]+property=['"]og:video(?::secure_url|:url)?['"][^>]*>"#
-    ]
-
+    let videoProperties = Set(["og:video", "og:video:url", "og:video:secure_url"])
     var seen = Set<String>()
     var urls: [URL] = []
 
-    for pattern in patterns {
-      guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
+    for attributes in HTMLTagAttributeScanner.attributes(inTagsNamed: "meta", html: html) {
+      guard let property = attributes["property"]?
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .lowercased(),
+        videoProperties.contains(property),
+        let raw = attributes["content"]
       else { continue }
 
-      let nsRange = NSRange(html.startIndex..<html.endIndex, in: html)
-      let matches = regex.matches(in: html, range: nsRange)
+      let decoded = HTMLTextDecoder.decodeHTMLEntities(raw)
+      let lower = decoded.lowercased()
 
-      for match in matches {
-        guard match.numberOfRanges > 1,
-          let captureRange = Range(match.range(at: 1), in: html)
-        else { continue }
+      guard isLikelyMediaURLString(lower),
+        seen.insert(lower).inserted,
+        let url = URL(string: decoded)
+      else { continue }
 
-        let raw = String(html[captureRange])
-        let decoded = HTMLTextDecoder.decodeHTMLEntities(raw)
-        let lower = decoded.lowercased()
-
-        guard isLikelyMediaURLString(lower),
-          seen.insert(lower).inserted,
-          let url = URL(string: decoded)
-        else { continue }
-
-        urls.append(url)
-      }
+      urls.append(url)
     }
 
     return urls
