@@ -56,6 +56,21 @@ final class SocialPostParserTests: XCTestCase {
     XCTAssertEqual(preview?.authorName, "NASA Artemis (@nasaartemis)")
   }
 
+  func testInstagramPreviewExtractsAuthorFromOGTitleWhenTwitterTitleMissing() {
+    let html = """
+      <html><head>
+      <meta property="og:title" content="STV News on Instagram: &quot;A long reel caption&quot;" />
+      <meta property="og:description" content="397K likes, 22K comments - stvnews \
+      on July 6, 2026: &quot;A long reel caption&quot;. " />
+      </head></html>
+      """
+
+    let preview = SocialPostHTMLParser.instagramPreview(from: html)
+
+    XCTAssertEqual(preview?.authorName, "STV News")
+    XCTAssertEqual(preview?.bodyText, "A long reel caption")
+  }
+
   func testInstagramPreviewStripsVariousInstagramSuffixes() {
     let suffixes = [
       " • Instagram reel",
@@ -128,6 +143,18 @@ final class SocialPostParserTests: XCTestCase {
     XCTAssertTrue(SocialVideoExtractionService.extractOGVideoURLs(fromHTML: html).isEmpty)
   }
 
+  func testInstagramMediaKindDoesNotTreatImageMediumAsDefinitive() {
+    let html = """
+      <html><head>
+      <meta property="og:type" content="article" />
+      <meta name="medium" content="image" />
+      <meta property="og:image" content="https://cdn.example.com/poster.jpg" />
+      </head></html>
+      """
+
+    XCTAssertEqual(SocialPostHTMLParser.instagramMediaKind(from: html), .unknown)
+  }
+
   func testInstagramMediaKindIsUnknownWithoutMediaSignals() {
     let html = """
       <html><head>
@@ -183,32 +210,26 @@ final class SocialPostParserTests: XCTestCase {
     XCTAssertEqual(preview?.bodyText, "Line one. Line two. Line three.")
   }
 
-  func testLikelyMediaURLRecognizesSignedInstagramCDNVideoWithoutMP4Suffix() {
-    let url =
-      "https://scontent-dfw5-2.cdninstagram.com/o1/v/t16/f2/m86/"
-      + "8A4D5A0D62B8E6B4D3F1E9D3C7A4B8C?stp=dst-jpg_e15_fr_qp1080x1080"
-      + "&_nc_ht=scontent-dfw5-2.cdninstagram.com&oe=67FA0D8F&oh=00_AYBexample"
+  func testInstagramPreviewExtractsBodyWithSmartQuotes() {
+    let html = """
+      <html><head>
+      <meta property="og:description" content="1K likes, 3 comments - \
+      user on Jan 1, 2026:\u{00a0}\u{201c}Hello world\u{201d}. " />
+      </head></html>
+      """
 
-    XCTAssertTrue(SocialVideoExtractionService.isLikelyMediaURLString(url.lowercased()))
+    let preview = SocialPostHTMLParser.instagramPreview(from: html)
+    XCTAssertEqual(preview?.bodyText, "Hello world")
   }
 
-  func testLikelyMediaURLRecognizesSignedFBCDNInstagramVideoWithoutMP4Suffix() {
-    let url =
-      "https://scontent-lax3-2.xx.fbcdn.net/o1/v/t16/f2/m86/"
-      + "2D6C9F7A8B4E1D3C5A7B9E2F4D6C8A0?stp=dst-jpg_e15_fr_qp1080x1080"
-      + "&efg=eyJ2ZW5jb2RlX3RhZyI6InYxX3YxMCJ9"
-      + "&_nc_ht=scontent-lax3-2.xx.fbcdn.net&oe=67FA0D8F&oh=00_AYBexample"
+  func testInstagramPreviewExtractsBodyFromTitleCaseInsensitively() {
+    let html = """
+      <html><head>
+      <meta property="og:title" content="Creator ON INSTAGRAM: &quot;hello&quot;" />
+      </head></html>
+      """
 
-    XCTAssertTrue(SocialVideoExtractionService.isLikelyMediaURLString(url.lowercased()))
-  }
-
-  func testLikelyMediaURLRejectsInstagramCDNImageURL() {
-    let url =
-      "https://scontent-dfw5-2.cdninstagram.com/v/t51.82787-15/"
-      + "611216339_17928777444190749_4481488707119326601_n.jpg"
-      + "?stp=cmp1_dst-jpg_e35_s640x640_tt6&_nc_cat=108&ccb=7-5"
-      + "&_nc_sid=18de74&_nc_ht=scontent-dfw5-2.cdninstagram.com&oe=69D1EEB6"
-
-    XCTAssertFalse(SocialVideoExtractionService.isLikelyMediaURLString(url.lowercased()))
+    let preview = SocialPostHTMLParser.instagramPreview(from: html)
+    XCTAssertEqual(preview?.bodyText, "hello")
   }
 }

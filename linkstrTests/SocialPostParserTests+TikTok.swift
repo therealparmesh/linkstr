@@ -84,29 +84,4 @@ extension SocialPostParserTests {
     XCTAssertNil(preview)
   }
 
-  // MARK: - Instagram OG description prefix stripping edge cases
-
-  func testInstagramPreviewExtractsBodyWithSmartQuotes() {
-    // Some locales use smart quotes in the og:description
-    let html = """
-      <html><head>
-      <meta property="og:description" content="1K likes, 3 comments - \
-      user on Jan 1, 2026:\u{00a0}\u{201c}Hello world\u{201d}. " />
-      </head></html>
-      """
-
-    let preview = SocialPostHTMLParser.instagramPreview(from: html)
-    XCTAssertEqual(preview?.bodyText, "Hello world")
-  }
-
-  func testInstagramPreviewExtractsBodyFromTitleCaseInsensitively() {
-    let html = """
-      <html><head>
-      <meta property="og:title" content="Creator ON INSTAGRAM: &quot;hello&quot;" />
-      </head></html>
-      """
-
-    let preview = SocialPostHTMLParser.instagramPreview(from: html)
-    XCTAssertEqual(preview?.bodyText, "hello")
-  }
 }

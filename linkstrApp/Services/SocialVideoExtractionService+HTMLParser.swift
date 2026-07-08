@@ -40,7 +40,6 @@ enum SocialPostHTMLParser {
     if ogType?.contains("photo") == true
       || ogType?.contains("image") == true
       || medium?.contains("photo") == true
-      || medium?.contains("image") == true
       || twitterTitle?.contains("instagram photo") == true {
       return .nonVideo
     }
@@ -134,6 +133,12 @@ enum SocialPostHTMLParser {
         .replacingOccurrences(of: " • Instagram video", with: "")
         .replacingOccurrences(of: " • Instagram", with: "")
       return normalizedText(cleaned)
+    }
+    if let ogTitle = extractMetaContent(from: html, property: "og:title") {
+      let marker = " on Instagram: "
+      if let range = ogTitle.range(of: marker, options: .caseInsensitive) {
+        return normalizedText(String(ogTitle[..<range.lowerBound]))
+      }
     }
     return nil
   }

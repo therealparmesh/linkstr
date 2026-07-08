@@ -4,9 +4,7 @@ import XCTest
 
 final class SocialVideoExtractionServiceTests: XCTestCase {
   func testInstagramPlaybackProbesTryLightweightURLBeforeShareToken() throws {
-    let sourceURL = try XCTUnwrap(
-      URL(string: "https://www.instagram.com/reel/DaBh1TUP5sC/?igsh=MmFyM2E2anAyMXdt")
-    )
+    let sourceURL = try XCTUnwrap(URL(string: MediaURLFixtures.instagramShareTokenReelURL))
     let canonicalURL = try XCTUnwrap(SocialURLHeuristics.instagramCanonicalURL(for: sourceURL))
 
     let probeURLs = SocialVideoExtractionService.instagramPlaybackProbeURLs(
@@ -17,10 +15,10 @@ final class SocialVideoExtractionServiceTests: XCTestCase {
     XCTAssertEqual(
       probeURLs.map(\.absoluteString),
       [
-        "https://www.instagram.com/reel/DaBh1TUP5sC/?l=1",
-        "https://www.instagram.com/reel/DaBh1TUP5sC/?igsh=MmFyM2E2anAyMXdt",
-        "https://www.instagram.com/reel/DaBh1TUP5sC/",
-        "https://www.instagram.com/reel/DaBh1TUP5sC/embed"
+        MediaURLFixtures.instagramLanguageReelURL,
+        MediaURLFixtures.instagramShareTokenReelURL,
+        MediaURLFixtures.instagramCanonicalReelURL,
+        MediaURLFixtures.instagramCanonicalReelURL + "embed"
       ]
     )
     XCTAssertEqual(Set(probeURLs.map(\.absoluteString)).count, probeURLs.count)
@@ -52,5 +50,34 @@ final class SocialVideoExtractionServiceTests: XCTestCase {
     let first = try XCTUnwrap(media.first)
     XCTAssertEqual(first.playbackURL, url)
     XCTAssertFalse(first.isLocalFile)
+  }
+
+  func testLikelyMediaURLRecognizesSignedInstagramCDNVideoWithoutMP4Suffix() {
+    let url =
+      "https://scontent-dfw5-2.cdninstagram.com/o1/v/t16/f2/m86/"
+      + "8A4D5A0D62B8E6B4D3F1E9D3C7A4B8C?stp=dst-jpg_e15_fr_qp1080x1080"
+      + "&_nc_ht=scontent-dfw5-2.cdninstagram.com&oe=67FA0D8F&oh=00_AYBexample"
+
+    XCTAssertTrue(SocialVideoExtractionService.isLikelyMediaURLString(url.lowercased()))
+  }
+
+  func testLikelyMediaURLRecognizesSignedFBCDNInstagramVideoWithoutMP4Suffix() {
+    let url =
+      "https://scontent-lax3-2.xx.fbcdn.net/o1/v/t16/f2/m86/"
+      + "2D6C9F7A8B4E1D3C5A7B9E2F4D6C8A0?stp=dst-jpg_e15_fr_qp1080x1080"
+      + "&efg=eyJ2ZW5jb2RlX3RhZyI6InYxX3YxMCJ9"
+      + "&_nc_ht=scontent-lax3-2.xx.fbcdn.net&oe=67FA0D8F&oh=00_AYBexample"
+
+    XCTAssertTrue(SocialVideoExtractionService.isLikelyMediaURLString(url.lowercased()))
+  }
+
+  func testLikelyMediaURLRejectsInstagramCDNImageURL() {
+    let url =
+      "https://scontent-dfw5-2.cdninstagram.com/v/t51.82787-15/"
+      + "611216339_17928777444190749_4481488707119326601_n.jpg"
+      + "?stp=cmp1_dst-jpg_e35_s640x640_tt6&_nc_cat=108&ccb=7-5"
+      + "&_nc_sid=18de74&_nc_ht=scontent-dfw5-2.cdninstagram.com&oe=69D1EEB6"
+
+    XCTAssertFalse(SocialVideoExtractionService.isLikelyMediaURLString(url.lowercased()))
   }
 }

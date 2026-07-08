@@ -54,10 +54,10 @@ extension MediaURLFixtures {
     ),
     StrategyExpectation(
       name: "instagram reel with share token query",
-      url: "https://www.instagram.com/reel/DaBh1TUP5sC/?igsh=MmFyM2E2anAyMXdt",
+      url: instagramShareTokenReelURL,
       linkType: .instagram,
       strategyKind: .extractionPreferred,
-      embedExpectation: .exact("https://www.instagram.com/reel/DaBh1TUP5sC/"),
+      embedExpectation: .exact(instagramCanonicalReelURL),
       allowsLocalPlayback: true
     ),
     StrategyExpectation(

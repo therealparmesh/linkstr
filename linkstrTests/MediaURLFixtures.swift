@@ -3,6 +3,13 @@ import Foundation
 @testable import linkstr
 
 enum MediaURLFixtures {
+  static let instagramShareTokenReelURL =
+    "https://www.instagram.com/reel/DaBh1TUP5sC/?igsh=MmFyM2E2anAyMXdt"
+  static let instagramLanguageReelURL = "https://www.instagram.com/reel/DaBh1TUP5sC/?l=1"
+  static let instagramArbitraryQueryReelURL =
+    "https://www.instagram.com/reel/DaBh1TUP5sC/?anything=goes&x=1"
+  static let instagramCanonicalReelURL = "https://www.instagram.com/reel/DaBh1TUP5sC/"
+
   enum StrategyKind {
     case extractionPreferred
     case embedOnly
