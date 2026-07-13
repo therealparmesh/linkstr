@@ -1,4 +1,3 @@
-import NostrSDK
 import SwiftData
 import SwiftUI
 import UIKit
@@ -11,8 +10,8 @@ struct NewSessionSheet: View {
 
   @Environment(\.dismiss) var dismiss
   @EnvironmentObject var session: AppSession
-  @Query(sort: [SortDescriptor(\ContactEntity.createdAt)])
-  var allContacts: [ContactEntity]
+  @Query
+  var contacts: [ContactEntity]
 
   @State var sessionName = ""
   @State var query = ""
@@ -20,6 +19,15 @@ struct NewSessionSheet: View {
   @State var isCreating = false
   @State var mutationFeedback = LinkstrSheetMutationFeedback()
   @FocusState var focusedField: Field?
+
+  init(ownerPubkey: String) {
+    _contacts = Query(
+      filter: #Predicate<ContactEntity> { contact in
+        contact.ownerPubkey == ownerPubkey
+      },
+      sort: [SortDescriptor(\ContactEntity.createdAt)]
+    )
+  }
 
   var body: some View {
     NavigationStack {
@@ -33,7 +41,7 @@ struct NewSessionSheet: View {
                 .font(LinkstrTheme.body(15))
                 .focused($focusedField, equals: .sessionName)
                 .textInputAutocapitalization(.words)
-                .submitLabel(scopedContacts.isEmpty ? .done : .next)
+                .submitLabel(contacts.isEmpty ? .done : .next)
                 .onSubmit(handleSessionNameSubmit)
                 .linkstrInputField()
             }
@@ -50,7 +58,7 @@ struct NewSessionSheet: View {
               )
               .focused($focusedField, equals: .search)
 
-              if scopedContacts.isEmpty {
+              if contacts.isEmpty {
                 Text("no contacts yet. solo still works.")
                   .font(LinkstrTheme.body(13))
                   .foregroundStyle(LinkstrTheme.textSecondary)
@@ -162,10 +170,10 @@ struct SessionManagementSheet: View {
 
   @Environment(\.dismiss) var dismiss
   @EnvironmentObject var session: AppSession
-  @Query(sort: [SortDescriptor(\ContactEntity.createdAt)])
-  var allContacts: [ContactEntity]
-  @Query(sort: [SortDescriptor(\SessionMemberEntity.createdAt)])
-  var allMembers: [SessionMemberEntity]
+  @Query
+  var contacts: [ContactEntity]
+  @Query
+  var activeMembers: [SessionMemberEntity]
 
   let sessionEntity: SessionEntity
 
@@ -177,6 +185,26 @@ struct SessionManagementSheet: View {
   @State var isPresentingDeleteConfirmation = false
   @State var mutationFeedback = LinkstrSheetMutationFeedback()
   @FocusState var focusedField: Field?
+
+  init(sessionEntity: SessionEntity) {
+    self.sessionEntity = sessionEntity
+    let ownerPubkey = sessionEntity.ownerPubkey
+    let sessionID = sessionEntity.sessionID
+    _contacts = Query(
+      filter: #Predicate<ContactEntity> { contact in
+        contact.ownerPubkey == ownerPubkey
+      },
+      sort: [SortDescriptor(\ContactEntity.createdAt)]
+    )
+    _activeMembers = Query(
+      filter: #Predicate<SessionMemberEntity> { member in
+        member.ownerPubkey == ownerPubkey
+          && member.sessionID == sessionID
+          && member.isActive == true
+      },
+      sort: [SortDescriptor(\SessionMemberEntity.createdAt)]
+    )
+  }
 
   var body: some View {
     NavigationStack {

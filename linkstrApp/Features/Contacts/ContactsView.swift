@@ -1,4 +1,3 @@
-import AVFoundation
 import SwiftData
 import SwiftUI
 import UIKit
@@ -6,7 +5,7 @@ import UIKit
 struct ContactsView: View {
   @EnvironmentObject private var session: AppSession
 
-  @Query(sort: [SortDescriptor(\ContactEntity.createdAt)])
+  @Query
   private var contacts: [ContactEntity]
 
   @State private var selectedContact: ContactEntity?
@@ -14,11 +13,18 @@ struct ContactsView: View {
   @State private var isRemovingContact = false
   @State private var query = ""
 
-  private var scopedContacts: [ContactEntity] {
-    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
+  init(ownerPubkey: String) {
+    _contacts = Query(
+      filter: #Predicate<ContactEntity> { contact in
+        contact.ownerPubkey == ownerPubkey
+      },
+      sort: [SortDescriptor(\ContactEntity.createdAt)]
+    )
+  }
+
+  private var sortedContacts: [ContactEntity] {
     return
       contacts
-      .filter { $0.ownerPubkey == ownerPubkey }
       .map { contact in
         (contact: contact, displayName: session.resolvedIdentity(for: contact).displayName)
       }
@@ -30,9 +36,9 @@ struct ContactsView: View {
 
   private var visibleContacts: [ContactEntity] {
     let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !normalizedQuery.isEmpty else { return scopedContacts }
+    guard !normalizedQuery.isEmpty else { return sortedContacts }
     return RecipientSearchLogic.filteredContacts(
-      scopedContacts,
+      sortedContacts,
       query: normalizedQuery,
       displayName: { session.resolvedIdentity(for: $0).displayName },
       npub: \.npub,
@@ -41,7 +47,7 @@ struct ContactsView: View {
   }
 
   private var profileLookupPubkeys: [String] {
-    scopedContacts.map(\.targetPubkey)
+    sortedContacts.map(\.targetPubkey)
   }
 
   var body: some View {
@@ -68,7 +74,7 @@ struct ContactsView: View {
 
   @ViewBuilder
   private var content: some View {
-    if scopedContacts.isEmpty {
+    if sortedContacts.isEmpty {
       VStack(spacing: 0) {
         LinkstrScreenTitle(title: "contacts")
           .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
@@ -96,10 +102,11 @@ struct ContactsView: View {
           } else {
             LazyVStack(spacing: 0) {
               ForEach(visibleContacts) { contact in
+                let identity = session.resolvedIdentity(for: contact)
                 Button {
                   selectedContact = contact
                 } label: {
-                  ContactRowView(contact: contact)
+                  ContactRowView(identity: identity)
                 }
                 .buttonStyle(.plain)
                 .contentShape(Rectangle())
@@ -164,11 +171,9 @@ struct ContactsView: View {
 }
 
 private struct ContactRowView: View {
-  @EnvironmentObject private var session: AppSession
-  let contact: ContactEntity
+  let identity: LinkstrResolvedIdentity
 
   var body: some View {
-    let identity = session.resolvedIdentity(for: contact)
     HStack(spacing: LinkstrTheme.rowSpacing) {
       LinkstrContactAvatar(name: identity.displayName, size: 48)
 

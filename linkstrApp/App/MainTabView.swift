@@ -3,6 +3,7 @@ import SwiftUI
 
 struct MainTabView: View {
   @EnvironmentObject private var session: AppSession
+  private let ownerPubkey: String
 
   private struct SessionNavigationTarget: Identifiable, Hashable {
     let id = UUID()
@@ -43,16 +44,20 @@ struct MainTabView: View {
   @State private var selectedSessionTarget: SessionNavigationTarget?
   @State private var sessionNavigationResetTask: Task<Void, Never>?
 
-  @Query(sort: [SortDescriptor(\SessionEntity.updatedAt, order: .reverse)])
-  private var allSessions: [SessionEntity]
+  @Query private var sessions: [SessionEntity]
 
-  private var scopedSessions: [SessionEntity] {
-    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
-    return allSessions.filter { $0.ownerPubkey == ownerPubkey }
+  init(ownerPubkey: String) {
+    self.ownerPubkey = ownerPubkey
+    _sessions = Query(
+      filter: #Predicate<SessionEntity> { session in
+        session.ownerPubkey == ownerPubkey
+      },
+      sort: [SortDescriptor(\SessionEntity.updatedAt, order: .reverse)]
+    )
   }
 
   private var archivedSessionCount: Int {
-    scopedSessions.filter(\.isArchived).count
+    sessions.filter(\.isArchived).count
   }
 
   var body: some View {
@@ -85,7 +90,7 @@ struct MainTabView: View {
 
     .navigationDestination(item: $selectedSessionTarget) { target in
       SessionPostsView(
-        ownerPubkey: session.identityService.pubkeyHex ?? "",
+        ownerPubkey: ownerPubkey,
         sessionID: target.sessionID
       )
     }
@@ -114,7 +119,7 @@ struct MainTabView: View {
     .onChange(of: session.pendingSessionNavigationRequest?.id) { _, _ in
       navigateToPendingSessionIfNeeded()
     }
-    .onChange(of: scopedSessions.map(\.sessionID).stableTaskID) { _, _ in
+    .onChange(of: sessions.map(\.sessionID).stableTaskID) { _, _ in
       navigateToPendingSessionIfNeeded()
     }
     .onDisappear {
@@ -122,7 +127,7 @@ struct MainTabView: View {
       sessionNavigationResetTask = nil
     }
     .sheet(isPresented: $isPresentingNewSession) {
-      NewSessionSheet()
+      NewSessionSheet(ownerPubkey: ownerPubkey)
     }
     .sheet(isPresented: $isPresentingAddContact) {
       AddContactSheet()
@@ -185,12 +190,12 @@ struct MainTabView: View {
     switch tab {
     case .sessions:
       ConversationsView(
-        ownerPubkey: session.identityService.pubkeyHex ?? "",
+        ownerPubkey: ownerPubkey,
         isShowingArchivedSessions: $isShowingArchivedSessions,
         openSession: openSession
       )
     case .contacts:
-      ContactsView()
+      ContactsView(ownerPubkey: ownerPubkey)
     case .you:
       YouView()
     case .settings:
@@ -219,7 +224,7 @@ struct MainTabView: View {
 
   private func navigateToPendingSessionIfNeeded() {
     guard let request = session.pendingSessionNavigationRequest else { return }
-    guard scopedSessions.contains(where: { $0.sessionID == request.sessionID }) else { return }
+    guard sessions.contains(where: { $0.sessionID == request.sessionID }) else { return }
     openSession(request.sessionID)
     session.clearPendingSessionNavigationRequest()
   }

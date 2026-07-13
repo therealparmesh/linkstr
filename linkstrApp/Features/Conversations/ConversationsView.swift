@@ -1,7 +1,5 @@
-import NostrSDK
 import SwiftData
 import SwiftUI
-import UIKit
 
 private struct SessionSummary: Identifiable {
   let id: String
@@ -12,17 +10,10 @@ private struct SessionSummary: Identifiable {
   let hasUnread: Bool
 }
 
-private struct ConversationsContentState {
-  let hasSessions: Bool
-  let visibleSummaries: [SessionSummary]
-}
-
 struct ConversationsView: View {
-  @EnvironmentObject private var session: AppSession
   @Binding var isShowingArchivedSessions: Bool
   let openSession: (String) -> Void
   private let ownerPubkeyHash: String
-  @State private var query = ""
 
   @Query private var sessions: [SessionEntity]
 
@@ -52,97 +43,24 @@ struct ConversationsView: View {
     )
   }
 
-  private var contentState: ConversationsContentState {
+  private var summaries: [SessionSummary] {
     let summaries = makeSummaries(
       sessions: sessions,
       messages: rootMessages,
       ownerPubkeyHash: ownerPubkeyHash
     )
-    let archiveFilteredSummaries = summaries.filter { summary in
+    return summaries.filter { summary in
       isShowingArchivedSessions ? summary.session.isArchived : !summary.session.isArchived
     }
-
-    let visibleSummaries: [SessionSummary]
-    let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).localizedLowercase
-    if normalizedQuery.isEmpty {
-      visibleSummaries = archiveFilteredSummaries
-    } else {
-      visibleSummaries = archiveFilteredSummaries.filter { summary in
-        summary.session.name.localizedLowercase.contains(normalizedQuery)
-          || summary.latestPreview.localizedLowercase.contains(normalizedQuery)
-          || (summary.latestNote?.localizedLowercase.contains(normalizedQuery) ?? false)
-      }
-    }
-
-    return ConversationsContentState(
-      hasSessions: !sessions.isEmpty,
-      visibleSummaries: visibleSummaries
-    )
   }
 
   var body: some View {
-    let contentState = contentState
-    ZStack {
-      LinkstrBackgroundView()
-      content(contentState)
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-    .scrollContentBackground(.hidden)
-  }
-
-  @ViewBuilder
-  private func content(_ contentState: ConversationsContentState) -> some View {
-    if !contentState.hasSessions {
-      VStack(spacing: 0) {
-        LinkstrScreenTitle(title: "sessions")
-          .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-          .padding(.top, LinkstrTheme.screenTopPadding)
-        LinkstrCenteredEmptyStateView(
-          title: "no sessions",
-          systemImage: "rectangle.stack.badge.plus",
-          description: "start a session. links you share will show up here."
-        )
-      }
-    } else {
-      ScrollView {
-        VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
-          LinkstrScreenTitle(title: isShowingArchivedSessions ? "archived" : "sessions")
-
-          LinkstrSearchField(
-            prompt: isShowingArchivedSessions ? "search archived sessions" : "search sessions",
-            text: $query
-          )
-
-          if contentState.visibleSummaries.isEmpty {
-            LinkstrCenteredEmptyStateView(
-              title: isShowingArchivedSessions ? "no archived sessions" : "no sessions found",
-              systemImage: isShowingArchivedSessions ? "archivebox" : "magnifyingglass",
-              description: isShowingArchivedSessions
-                ? "archive a session to move it here."
-                : "try a different search or create a new session."
-            )
-            .frame(maxWidth: .infinity, minHeight: 220)
-          } else {
-            LazyVStack(spacing: 0) {
-              ForEach(contentState.visibleSummaries) { summary in
-                Button {
-                  openSession(summary.session.sessionID)
-                } label: {
-                  SessionRowView(summary: summary)
-                }
-                .buttonStyle(.plain)
-                .contentShape(Rectangle())
-                .frame(maxWidth: .infinity, alignment: .leading)
-              }
-            }
-          }
-        }
-        .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-        .padding(.top, LinkstrTheme.screenTopPadding)
-        .padding(.bottom, LinkstrTheme.screenBottomPadding)
-      }
-      .linkstrTabBarContentInset()
-    }
+    ConversationsContentView(
+      hasSessions: !sessions.isEmpty,
+      summaries: summaries,
+      isShowingArchivedSessions: isShowingArchivedSessions,
+      openSession: openSession
+    )
   }
 
   private func hasUnreadIncomingRootPost(
@@ -215,6 +133,89 @@ struct ConversationsView: View {
         )
       }
       .sorted { $0.latestTimestamp > $1.latestTimestamp }
+  }
+}
+
+private struct ConversationsContentView: View {
+  let hasSessions: Bool
+  let summaries: [SessionSummary]
+  let isShowingArchivedSessions: Bool
+  let openSession: (String) -> Void
+
+  @State private var query = ""
+
+  private var visibleSummaries: [SessionSummary] {
+    let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).localizedLowercase
+    guard !normalizedQuery.isEmpty else { return summaries }
+    return summaries.filter { summary in
+      summary.session.name.localizedLowercase.contains(normalizedQuery)
+        || summary.latestPreview.localizedLowercase.contains(normalizedQuery)
+        || (summary.latestNote?.localizedLowercase.contains(normalizedQuery) ?? false)
+    }
+  }
+
+  var body: some View {
+    ZStack {
+      LinkstrBackgroundView()
+      content
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    .scrollContentBackground(.hidden)
+  }
+
+  @ViewBuilder
+  private var content: some View {
+    if !hasSessions {
+      VStack(spacing: 0) {
+        LinkstrScreenTitle(title: "sessions")
+          .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+          .padding(.top, LinkstrTheme.screenTopPadding)
+        LinkstrCenteredEmptyStateView(
+          title: "no sessions",
+          systemImage: "rectangle.stack.badge.plus",
+          description: "start a session. links you share will show up here."
+        )
+      }
+    } else {
+      ScrollView {
+        VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
+          LinkstrScreenTitle(title: isShowingArchivedSessions ? "archived" : "sessions")
+
+          LinkstrSearchField(
+            prompt: isShowingArchivedSessions ? "search archived sessions" : "search sessions",
+            text: $query
+          )
+
+          if visibleSummaries.isEmpty {
+            LinkstrCenteredEmptyStateView(
+              title: isShowingArchivedSessions ? "no archived sessions" : "no sessions found",
+              systemImage: isShowingArchivedSessions ? "archivebox" : "magnifyingglass",
+              description: isShowingArchivedSessions
+                ? "archive a session to move it here."
+                : "try a different search or create a new session."
+            )
+            .frame(maxWidth: .infinity, minHeight: 220)
+          } else {
+            LazyVStack(spacing: 0) {
+              ForEach(visibleSummaries) { summary in
+                Button {
+                  openSession(summary.session.sessionID)
+                } label: {
+                  SessionRowView(summary: summary)
+                }
+                .buttonStyle(.plain)
+                .contentShape(Rectangle())
+                .frame(maxWidth: .infinity, alignment: .leading)
+              }
+            }
+          }
+        }
+        .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+        .padding(.top, LinkstrTheme.screenTopPadding)
+        .padding(.bottom, LinkstrTheme.screenBottomPadding)
+      }
+      .linkstrTabBarContentInset()
+    }
   }
 }
 

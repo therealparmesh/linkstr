@@ -10,13 +10,8 @@ extension NewSessionSheet {
     !sessionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
   }
 
-  var scopedContacts: [ContactEntity] {
-    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
-    return allContacts.filter { $0.ownerPubkey == ownerPubkey }
-  }
-
   var profileLookupPubkeys: [String] {
-    scopedContacts.map(\.targetPubkey)
+    contacts.map(\.targetPubkey)
   }
 
   var footerStatus: LinkstrSheetFooterStatus? {
@@ -29,7 +24,7 @@ extension NewSessionSheet {
 
   var filteredContacts: [ContactEntity] {
     RecipientSearchLogic.filteredContacts(
-      scopedContacts,
+      contacts,
       query: query,
       displayName: { session.resolvedIdentity(for: $0).displayName },
       npub: \.npub,
@@ -71,7 +66,7 @@ extension NewSessionSheet {
   }
 
   func handleSessionNameSubmit() {
-    if scopedContacts.isEmpty {
+    if contacts.isEmpty {
       createSession()
     } else {
       focusedField = .search
@@ -91,7 +86,7 @@ extension SessionManagementSheet {
     LinkstrInsetSection(title: "add from contacts") {
       LinkstrSearchField(prompt: "search contacts", text: $query)
 
-      if scopedContacts.isEmpty {
+      if sortedContacts.isEmpty {
         Text("no contacts yet.")
           .font(LinkstrTheme.body(13))
           .foregroundStyle(LinkstrTheme.textSecondary)
@@ -203,11 +198,9 @@ extension SessionManagementSheet {
     }
   }
 
-  var scopedContacts: [ContactEntity] {
-    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
+  var sortedContacts: [ContactEntity] {
     return
-      allContacts
-      .filter { $0.ownerPubkey == ownerPubkey }
+      contacts
       .map { contact in
         (contact: contact, displayName: session.resolvedIdentity(for: contact).displayName)
       }
@@ -215,13 +208,6 @@ extension SessionManagementSheet {
         $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
       }
       .map(\.contact)
-  }
-
-  var activeMembers: [SessionMemberEntity] {
-    guard let ownerPubkey = session.identityService.pubkeyHex else { return [] }
-    return allMembers.filter {
-      $0.ownerPubkey == ownerPubkey && $0.sessionID == sessionEntity.sessionID && $0.isActive
-    }
   }
 
   var canManageSession: Bool {
@@ -261,15 +247,15 @@ extension SessionManagementSheet {
         return memberHex != myPubkey
       }
       .sorted {
-        session.displayName(for: $0, contacts: scopedContacts).localizedCaseInsensitiveCompare(
-          session.displayName(for: $1, contacts: scopedContacts)
+        session.displayName(for: $0, contacts: sortedContacts).localizedCaseInsensitiveCompare(
+          session.displayName(for: $1, contacts: sortedContacts)
         ) == .orderedAscending
       }
   }
 
   var filteredContacts: [ContactEntity] {
     RecipientSearchLogic.filteredContacts(
-      scopedContacts,
+      sortedContacts,
       query: query,
       displayName: { session.resolvedIdentity(for: $0).displayName },
       npub: \.npub,
@@ -278,19 +264,19 @@ extension SessionManagementSheet {
   }
 
   var profileLookupPubkeys: [String] {
-    var pubkeys = scopedContacts.map(\.targetPubkey)
+    var pubkeys = sortedContacts.map(\.targetPubkey)
     pubkeys.append(contentsOf: visibleCurrentMembers)
     return NostrValueNormalizer.dedupedNormalizedPubkeyHexes(pubkeys)
   }
 
   func memberIdentity(for pubkeyHex: String) -> LinkstrResolvedIdentity? {
     guard pubkeyHex != session.identityService.pubkeyHex else { return nil }
-    return session.resolvedIdentity(for: pubkeyHex, contacts: scopedContacts)
+    return session.resolvedIdentity(for: pubkeyHex, contacts: sortedContacts)
   }
 
   func saveSession() {
     guard canManageSession else {
-      composeCreatorOnlyError()
+      session.composeError = "only the session creator can manage this session."
       return
     }
     guard !isSaving, !isDeletingSession, canSave else { return }
@@ -322,10 +308,6 @@ extension SessionManagementSheet {
     let trimmed = sessionName.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty, trimmed != sessionEntity.name else { return nil }
     return trimmed
-  }
-
-  func composeCreatorOnlyError() {
-    session.composeError = "only the session creator can manage this session."
   }
 
   func syncStateIfNeeded() {

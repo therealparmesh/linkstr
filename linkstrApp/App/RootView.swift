@@ -73,7 +73,7 @@ struct RootView: View {
             .transition(.opacity)
         } else {
           NavigationStack {
-            MainTabView()
+            MainTabView(ownerPubkey: session.identityService.pubkeyHex ?? "")
           }
           .transition(.opacity)
         }
