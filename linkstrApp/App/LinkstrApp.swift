@@ -184,6 +184,18 @@ final class AppBootstrapState: ObservableObject {
   typealias ContainerFactory = (_ schema: Schema, _ isStoredInMemoryOnly: Bool) throws ->
     ModelContainer
   typealias SessionFactory = @MainActor (_ modelContext: ModelContext) -> AppSession
+  private static let schema = Schema([
+    AccountStateEntity.self,
+    ContactEntity.self,
+    RelayEntity.self,
+    SessionEntity.self,
+    SessionMemberEntity.self,
+    SessionMemberIntervalEntity.self,
+    SessionReactionEntity.self,
+    SessionDeletionTombstoneEntity.self,
+    SessionPostDeletionEntity.self,
+    SessionMessageEntity.self
+  ])
 
   struct ReadyContext {
     let container: ModelContainer
@@ -211,7 +223,7 @@ final class AppBootstrapState: ObservableObject {
   }
 
   func reload() {
-    let schema = LinkstrAppBootstrapConfiguration.schema
+    let schema = Self.schema
     startupState = .loading
 
     do {
@@ -306,21 +318,6 @@ final class AppBootstrapState: ObservableObject {
       temporary store error: \(fallbackDescription)
       """
   }
-}
-
-enum LinkstrAppBootstrapConfiguration {
-  static let schema = Schema([
-    AccountStateEntity.self,
-    ContactEntity.self,
-    RelayEntity.self,
-    SessionEntity.self,
-    SessionMemberEntity.self,
-    SessionMemberIntervalEntity.self,
-    SessionReactionEntity.self,
-    SessionDeletionTombstoneEntity.self,
-    SessionPostDeletionEntity.self,
-    SessionMessageEntity.self
-  ])
 }
 
 struct LinkstrStorageRecoveryView: View {

@@ -1,5 +1,3 @@
-import Foundation
-
 extension TwitterEmbedDocumentBuilder {
   static func embedJavaScriptRenderer() -> String {
     let postRenderRefreshDelays = TwitterEmbedTimingDefaults.javascriptArray(

@@ -42,15 +42,6 @@ final class SessionMessageEntity {
     return value
   }
 
-  @Transient private var _receiverPubkey: String?
-  var receiverPubkey: String {
-    if let cached = _receiverPubkey { return cached }
-    let value =
-      LocalDataCrypto.shared.decryptString(encryptedReceiverPubkey, ownerPubkey: ownerPubkey) ?? ""
-    _receiverPubkey = value
-    return value
-  }
-
   @Transient private var _url: String??
   var url: String? {
     if let cached = _url { return cached }

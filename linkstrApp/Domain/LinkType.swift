@@ -1,5 +1,3 @@
-import Foundation
-
 enum LinkType: String, Codable, CaseIterable {
   case tiktok
   case instagram

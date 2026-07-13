@@ -1,5 +1,5 @@
 import CoreImage.CIFilterBuiltins
-import SwiftUI
+import UIKit
 
 enum QRCodeGenerator {
   private static let context = CIContext()

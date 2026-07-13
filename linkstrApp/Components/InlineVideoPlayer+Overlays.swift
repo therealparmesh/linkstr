@@ -1,6 +1,4 @@
-import AVFoundation
 import Photos
-import SwiftUI
 
 #if canImport(UIKit)
   import UIKit

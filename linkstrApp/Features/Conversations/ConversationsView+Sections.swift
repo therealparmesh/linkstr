@@ -1,4 +1,3 @@
-import NostrSDK
 import SwiftData
 import SwiftUI
 import UIKit

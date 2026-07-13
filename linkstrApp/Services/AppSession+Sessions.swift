@@ -1,6 +1,5 @@
 import Foundation
 import NostrSDK
-import SwiftData
 
 // MARK: - Session Create / Update / Delete
 
@@ -232,7 +231,7 @@ extension AppSession {
       ownerPubkey: ownerPubkey,
       activeOnly: true
     ).map(\.memberPubkey)
-    return mergedPubkeys(priorActiveMembers, members)
+    return NostrValueNormalizer.dedupedNormalizedPubkeyHexes(priorActiveMembers + members)
   }
 
   @discardableResult

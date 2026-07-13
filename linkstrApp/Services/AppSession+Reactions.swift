@@ -1,6 +1,5 @@
 import Foundation
 import NostrSDK
-import SwiftData
 
 // MARK: - Reactions
 
@@ -278,10 +277,6 @@ extension AppSession {
       composeError = error.localizedDescription
       return nil
     }
-  }
-
-  func mergedPubkeys(_ first: [String], _ second: [String]) -> [String] {
-    NostrValueNormalizer.dedupedNormalizedPubkeyHexes(first + second)
   }
 
   func existingSessionName(for sessionID: String, ownerPubkey: String) -> String {

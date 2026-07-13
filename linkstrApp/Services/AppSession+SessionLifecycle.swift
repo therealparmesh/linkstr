@@ -1,5 +1,4 @@
 import Foundation
-import NostrSDK
 import SwiftData
 
 // MARK: - Boot & Lifecycle

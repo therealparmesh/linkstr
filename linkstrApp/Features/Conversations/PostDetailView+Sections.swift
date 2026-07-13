@@ -5,18 +5,6 @@ import UIKit
 // MARK: - PostDetailView Sections
 
 extension PostDetailView {
-  var post: SessionMessageEntity? {
-    loadedPost
-  }
-
-  var reactions: [SessionReactionEntity] {
-    loadedReactions
-  }
-
-  var members: [SessionMemberEntity] {
-    loadedMembers
-  }
-
   var loadRequestID: String {
     "\(ownerPubkey)|\(sessionID)|\(postID)"
   }
@@ -330,10 +318,10 @@ extension PostDetailView {
 
   @MainActor
   func loadContent() async {
-    loadedPost = try? fetchPost()
-    loadedReactions = (try? fetchReactions()) ?? []
-    loadedMembers = (try? fetchMembers()) ?? []
-    loadedContacts = (try? fetchContacts(senderPubkeys: Set(reactions.map(\.senderPubkey)))) ?? []
+    post = try? fetchPost()
+    reactions = (try? fetchReactions()) ?? []
+    members = (try? fetchMembers()) ?? []
+    contacts = (try? fetchContacts(senderPubkeys: Set(reactions.map(\.senderPubkey)))) ?? []
   }
 
   func fetchPost() throws -> SessionMessageEntity? {

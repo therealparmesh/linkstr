@@ -1,5 +1,4 @@
 import Foundation
-import NostrSDK
 import SwiftData
 
 // MARK: - Incoming Reaction Persistence

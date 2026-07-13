@@ -170,20 +170,8 @@ extension AppSession {
       persistIncoming(incoming)
     }
 
-    func simulateInitialHistoricalRestoreCompletionForTesting() {
-      finishInitialHistoricalRestore()
-    }
-
     var testingPendingMetadataRefreshCount: Int {
       pendingMetadataRefreshes.count
-    }
-
-    func enqueuePendingIncomingForTesting(_ incoming: ReceivedDirectMessage) {
-      enqueuePendingIncomingMessage(PendingIncomingMessage(incoming))
-    }
-
-    func beginForegroundCycleForTesting() {
-      beginForegroundCycle()
     }
 
     func simulateRuntimeRelayStatusForTesting(

@@ -11,7 +11,6 @@ struct ShareComposerView: View {
     case note
   }
 
-  @Environment(\.dismiss) private var dismiss
   @EnvironmentObject var appSession: AppSession
   @EnvironmentObject var deepLinkHandler: DeepLinkHandler
 

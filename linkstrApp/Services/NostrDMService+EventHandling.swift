@@ -1,4 +1,3 @@
-import Combine
 import Foundation
 import NostrSDK
 
@@ -52,7 +51,7 @@ extension NostrDMService {
     let alreadyProcessedRumor = processedEventIDs.contains(rumor.id)
     guard !alreadyProcessedRumor || payload.kind == .root else { return }
     if !alreadyProcessedRumor {
-      rememberProcessedEventID(rumor.id)
+      _ = rememberProcessedEventIDIfNeeded(rumor.id)
     }
 
     onIncoming?(
@@ -118,10 +117,6 @@ extension NostrDMService {
       limit: processedEventIDLimit
     )
     return true
-  }
-
-  func rememberProcessedEventID(_ eventID: String) {
-    _ = rememberProcessedEventIDIfNeeded(eventID)
   }
 
   @discardableResult
@@ -225,15 +220,6 @@ extension NostrDMService {
   // MARK: - Testing
 
   #if DEBUG
-    func simulateInitialBackfillCompletionForTesting() {
-      activeBackfillStates.removeAll()
-      completedBackfillKinds = [.recipient, .author]
-      completedBackfillRelayURLs = configuredRelayURLs
-      currentBackfillRelayURLs.removeAll()
-      didNotifyInitialBackfillCompletion = false
-      notifyInitialBackfillCompletionIfNeeded()
-    }
-
     func seedBackfillCoverageForTesting(
       activeRelayURLs: [String] = [],
       completedRelayURLs: [String] = [],

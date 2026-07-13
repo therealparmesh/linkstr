@@ -1,4 +1,3 @@
-import NostrSDK
 import SwiftData
 import XCTest
 
@@ -211,7 +210,7 @@ extension AppSessionContactAndRelayTests {
     container.mainContext.insert(relay)
     try container.mainContext.save()
 
-    session.beginForegroundCycleForTesting()
+    session.beginForegroundCycle()
     session.simulateRuntimeRelayStatusForTesting(relayURL: relay.url, status: .connected)
     session.simulateRuntimeRelayStatusForTesting(
       relayURL: relay.url,
@@ -249,7 +248,7 @@ extension AppSessionContactAndRelayTests {
     container.mainContext.insert(relay)
     try container.mainContext.save()
 
-    session.beginForegroundCycleForTesting()
+    session.beginForegroundCycle()
     session.simulateRuntimeRelayStatusForTesting(relayURL: relay.url, status: .connected)
     session.simulateRuntimeRelayStatusForTesting(
       relayURL: relay.url,
@@ -265,7 +264,7 @@ extension AppSessionContactAndRelayTests {
     XCTAssertEqual(session.composeError, "you're offline. waiting for a relay connection.")
 
     session.composeError = nil
-    session.beginForegroundCycleForTesting()
+    session.beginForegroundCycle()
     session.simulateRuntimeRelayStatusForTesting(relayURL: relay.url, status: .connected)
     session.simulateRuntimeRelayStatusForTesting(
       relayURL: relay.url,
@@ -288,7 +287,7 @@ extension AppSessionContactAndRelayTests {
     container.mainContext.insert(relay)
     try container.mainContext.save()
 
-    session.beginForegroundCycleForTesting()
+    session.beginForegroundCycle()
     session.simulateRuntimeRelayStatusForTesting(relayURL: relay.url, status: .connected)
     session.simulateRuntimeRelayStatusForTesting(
       relayURL: relay.url,
@@ -313,7 +312,7 @@ extension AppSessionContactAndRelayTests {
 
     session.composeError = "you're offline. waiting for a relay connection."
 
-    session.beginForegroundCycleForTesting()
+    session.beginForegroundCycle()
 
     XCTAssertNil(session.composeError)
   }

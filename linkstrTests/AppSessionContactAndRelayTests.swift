@@ -1,7 +1,5 @@
 import NostrSDK
 import SwiftData
-import SwiftUI
-import UIKit
 import XCTest
 
 @testable import linkstr

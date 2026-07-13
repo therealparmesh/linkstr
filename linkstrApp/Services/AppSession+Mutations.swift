@@ -1,6 +1,5 @@
 import Foundation
 import NostrSDK
-import SwiftData
 
 // MARK: - Post Creation & Deletion
 

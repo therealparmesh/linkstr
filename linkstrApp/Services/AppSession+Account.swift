@@ -1,5 +1,4 @@
 import Foundation
-import NostrSDK
 
 // MARK: - Account Management
 
@@ -219,14 +218,6 @@ extension AppSession {
     } catch {
       report(error: error)
     }
-  }
-
-  func clearableCachedMediaBytes() -> Int64 {
-    clearableStorageUsage().cachedMediaBytes
-  }
-
-  func clearableMetadataBytes() -> Int64 {
-    clearableStorageUsage().previewBytes
   }
 
   func clearableStorageUsage() -> ManagedStorageUsage {

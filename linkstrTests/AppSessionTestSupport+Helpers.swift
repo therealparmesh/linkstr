@@ -1,5 +1,4 @@
-import NostrSDK
-import XCTest
+import Foundation
 
 @testable import linkstr
 

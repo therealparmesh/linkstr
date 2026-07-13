@@ -1,6 +1,4 @@
 import Foundation
-import NostrSDK
-import SwiftData
 
 // MARK: - Persistence Helpers
 

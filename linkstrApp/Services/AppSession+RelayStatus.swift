@@ -1,5 +1,4 @@
 import Foundation
-import NostrSDK
 
 // MARK: - Relay Status & Connectivity
 

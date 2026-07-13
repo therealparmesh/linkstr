@@ -54,8 +54,7 @@ extension SessionMessageStore {
 
     let storedFileURLs = try purgeSessionDataRecords(
       ownerPubkey: ownerPubkey,
-      sessionID: sessionID,
-      shouldSave: false
+      sessionID: sessionID
     )
     if didChange || !storedFileURLs.isEmpty {
       try modelContext.save()
@@ -179,20 +178,9 @@ extension SessionMessageStore {
     }
   }
 
-  func purgeSessionData(ownerPubkey: String, sessionID: String) throws {
-    let storedFileURLs = try purgeSessionDataRecords(
-      ownerPubkey: ownerPubkey,
-      sessionID: sessionID,
-      shouldSave: true
-    )
-    removeManagedFiles(at: storedFileURLs)
-  }
-
-  @discardableResult
   func purgeSessionDataRecords(
     ownerPubkey: String,
-    sessionID: String,
-    shouldSave: Bool
+    sessionID: String
   ) throws -> Set<URL> {
     let messages = try modelContext.fetch(
       FetchDescriptor<SessionMessageEntity>(
@@ -241,9 +229,6 @@ extension SessionMessageStore {
     intervals.forEach(modelContext.delete)
     reactions.forEach(modelContext.delete)
     deletions.forEach(modelContext.delete)
-    if shouldSave {
-      try modelContext.save()
-    }
     return storedFileURLs
   }
 

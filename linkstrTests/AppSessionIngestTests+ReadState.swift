@@ -52,7 +52,7 @@ extension AppSessionIngestTests {
       name: "Post Restore Historical Unread",
       members: [creatorPubkey, myPubkey, peerPubkey], source: .historical)
 
-    session.simulateInitialHistoricalRestoreCompletionForTesting()
+    session.finishInitialHistoricalRestore()
 
     ingestRoot(
       session,

@@ -1,5 +1,3 @@
-import Foundation
-
 extension Collection where Element == String {
   var stableTaskID: String {
     Set(self)

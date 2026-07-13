@@ -1,5 +1,4 @@
 import Foundation
-import WebKit
 
 struct PlayableMedia {
   let playbackURL: URL
@@ -174,7 +173,6 @@ final class SocialVideoExtractionService: NSObject {
 
     var score = 0
     score += formatScore(value: value)
-    score += semanticPathScore(value: value)
     score += cdnHostScore(value: value, host: host)
     score += sourceHostBonus(host: host, sourceURL: sourceURL)
     score += providerIDScore(url: url, value: value, host: host, sourceURL: sourceURL)
@@ -206,10 +204,6 @@ final class SocialVideoExtractionService: NSObject {
       score += 15
     }
     return score
-  }
-
-  private func semanticPathScore(value: String) -> Int {
-    return 0
   }
 
   private func sourceHostBonus(host: String, sourceURL: URL) -> Int {

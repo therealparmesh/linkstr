@@ -85,7 +85,7 @@ extension AppSessionAccountAndStorageTests {
       cachedMediaURL: secondCachedMediaURL
     )
 
-    let clearableStorageBytes = session.clearableCachedMediaBytes()
+    let clearableStorageBytes = session.clearableStorageUsage().cachedMediaBytes
 
     XCTAssertEqual(clearableStorageBytes, Int64(firstVideoData.count + secondVideoData.count))
   }
@@ -125,7 +125,7 @@ extension AppSessionAccountAndStorageTests {
       cachedMediaURL: secondCachedMediaURL
     )
 
-    let clearableMetadataBytes = session.clearableMetadataBytes()
+    let clearableMetadataBytes = session.clearableStorageUsage().previewBytes
 
     XCTAssertEqual(
       clearableMetadataBytes,

@@ -17,11 +17,6 @@ final class RelayEntity {
   var lastError: String?
   var createdAt: Date
 
-  var status: RelayHealthStatus {
-    get { RelayHealthStatus(rawValue: statusRaw) ?? .disconnected }
-    set { statusRaw = newValue.rawValue }
-  }
-
   init(
     url: String, isEnabled: Bool = true, status: RelayHealthStatus = .disconnected,
     lastError: String? = nil, createdAt: Date = .now

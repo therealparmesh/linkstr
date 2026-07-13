@@ -1,7 +1,6 @@
 import EmojiKit
 import SwiftData
 import SwiftUI
-import UIKit
 
 struct ReactionSummary: Identifiable, Hashable {
   let emoji: String
@@ -315,10 +314,10 @@ struct PostDetailView: View {
   let sessionName: String
 
   @State var isPresentingEmojiPicker = false
-  @State var loadedPost: SessionMessageEntity?
-  @State var loadedContacts: [ContactEntity] = []
-  @State var loadedReactions: [SessionReactionEntity] = []
-  @State var loadedMembers: [SessionMemberEntity] = []
+  @State var post: SessionMessageEntity?
+  @State var contacts: [ContactEntity] = []
+  @State var reactions: [SessionReactionEntity] = []
+  @State var members: [SessionMemberEntity] = []
   @State var remotePostText: String?
   @State var isRefreshingMetadata = false
   @State var mediaReloadID = 0
@@ -333,10 +332,6 @@ struct PostDetailView: View {
     self.sessionID = sessionID
     self.postID = postID
     self.sessionName = sessionName
-  }
-
-  var contacts: [ContactEntity] {
-    loadedContacts
   }
 
   var body: some View {

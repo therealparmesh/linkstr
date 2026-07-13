@@ -1,5 +1,3 @@
-import Foundation
-
 enum RelayDefaults {
   static let urls: [String] = [
     "wss://relay.damus.io",
