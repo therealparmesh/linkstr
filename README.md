@@ -371,15 +371,15 @@ Embedded web playback allows provider-element fullscreen when supported.
 
 - Shared-link detail format: `linkstr://open?url=…`
 - Share composer format: `linkstr://share?url=…&note=…`
-- Media download format: `linkstr://download?url=…`
-- Valid deep links open a full-screen shared-link detail, share composer, or media-download surface.
+- Media save format: `linkstr://save?url=…`
+- Valid deep links open a full-screen shared-link detail, share composer, or media-save surface.
 - Post detail can share the current post as a deep link through the native iOS share sheet.
-- The iOS share extension accepts web URLs, webpages, or text containing a web link, then offers `share link` or `download media`.
+- The iOS share extension accepts web URLs, webpages, or text containing a web link, then offers `share link` or `save media`.
 - `share link` opens a full-screen share composer with the link prefilled, any surrounding text as the optional note, and a separate searchable active-session picker.
-- `download media` opens linkstr to cache downloadable media for valid links. Shares without a valid web link close without an error.
+- `save media` opens linkstr to cache supported media and offer Photos or Files as the destination. Shares without a valid web link close without an error.
 - Shared deep links carry only the normalized web URL; title, thumbnail, and provider-specific preview text are fetched when the recipient opens the link.
 - Shared-link detail reuses the same adaptive local/embed controls as post detail when the URL supports in-app playback.
-- Dismissing shared-link detail, the share composer, or the media-download surface clears pending deep-link state.
+- Dismissing shared-link detail, the share composer, or the media-save surface clears pending deep-link state.
 
 ### Local data and security
 

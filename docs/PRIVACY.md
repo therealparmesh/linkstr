@@ -23,7 +23,7 @@ linkstr stores app data locally for the signed-in account, including:
 
 Sensitive local fields are encrypted at rest with per-account local keys. Operational identifiers and timestamps may remain plaintext locally for indexing and query purposes.
 
-Downloaded videos and generated previews are device-local. Video cache is treated as disposable cache and may be trimmed automatically with least-recently-used eviction once local video cache reaches about 1 GB. Media saved via the share sheet goes to your photo library.
+Downloaded videos and generated previews are device-local. Video cache is treated as disposable cache and may be trimmed automatically with least-recently-used eviction once local video cache reaches about 1 GB. Media saved via the share sheet goes to Photos or a Files location you choose.
 
 ### In temporary runtime memory
 
@@ -100,7 +100,7 @@ If encrypted local app data is restored without the matching local key material,
 
 When you share or open links from third-party platforms such as TikTok, Instagram, Facebook, YouTube, X, or Rumble, those providers may receive standard network metadata such as your IP address, user agent, and request timing. Their own terms and privacy policies apply.
 
-Downloaded media from those providers is stored locally on your device only, unless you save it to your photo library via the share sheet.
+Downloaded media from those providers is stored locally on your device only, unless you save it to Photos or a Files location via the share sheet.
 
 ## Data retention
 

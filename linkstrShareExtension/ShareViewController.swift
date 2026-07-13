@@ -1,6 +1,4 @@
-import Foundation
 import UIKit
-import UniformTypeIdentifiers
 
 final class ShareViewController: UIViewController {
   enum ShareAction {
@@ -16,10 +14,7 @@ final class ShareViewController: UIViewController {
     static let accent = UIColor(red: 0.49, green: 0.67, blue: 0.99, alpha: 1)
     static let textPrimary = UIColor(red: 0.92, green: 0.94, blue: 0.99, alpha: 1)
     static let textSecondary = UIColor(red: 0.66, green: 0.71, blue: 0.84, alpha: 1)
-    static let textTertiary = UIColor(red: 0.48, green: 0.53, blue: 0.67, alpha: 1)
-
     static let screenHorizontalPadding: CGFloat = 16
-    static let screenTopPadding: CGFloat = 16
     static let sectionSpacing: CGFloat = 18
     static let compactSpacing: CGFloat = 8
     static let fieldHorizontalPadding: CGFloat = 14
@@ -138,7 +133,7 @@ final class ShareViewController: UIViewController {
     configureActionRow(
       saveButton,
       title: "save media",
-      subtitle: "save supported media to your photo library",
+      subtitle: "save supported media to photos or files",
       systemImage: "arrow.down.circle.fill",
       action: #selector(performSaveMedia)
     )

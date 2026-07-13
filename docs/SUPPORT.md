@@ -66,7 +66,7 @@ The bottom footer shows validation and relay status only. The keyboard return ke
 | React to a post                | Open a post and tap 👍, 👎, 👀, or **…** for the emoji picker.                                                                                                                                  |
 | Remove a reaction              | Tap the same emoji again.                                                                                                                                                                       |
 | Share into linkstr             | Use the iOS share sheet from another app, choose linkstr, then choose share link. linkstr opens with the link prefilled, an optional note, and a separate searchable picker of active sessions. |
-| Save shared media              | Use the iOS share sheet from another app, choose linkstr, then choose save media. linkstr saves supported media directly to your photo library.                                                 |
+| Save shared media              | Use the iOS share sheet from another app, choose linkstr, then choose save media. linkstr prepares supported media and lets you choose Photos or Files.                                         |
 | Share a deep link              | Open post detail and tap the share button in the top-right corner. The shared link carries only the normalized URL; linkstr fetches preview metadata again when the recipient opens it.         |
 | Delete your own post           | Long-press the post row in the session view.                                                                                                                                                    |
 | Archive or unarchive a session | Open a session, tap the members button, and use **Archive Session** or **Unarchive Session**.                                                                                                   |
@@ -247,7 +247,7 @@ In the device keychain, with iOS-controlled protection. Simulator fallback stora
 
 ### Where are videos and previews stored?
 
-Downloaded media and generated previews are stored in app-owned local storage. Video cache is treated as disposable device cache and trims itself automatically. Media saved via the share sheet goes to your photo library. Settings can clear cached videos or saved preview metadata if you want to free space or force a preview rebuild.
+Downloaded media and generated previews are stored in app-owned local storage. Video cache is treated as disposable device cache and trims itself automatically. Media saved via the share sheet goes to Photos or a Files location you choose. Settings can clear cached videos or saved preview metadata if you want to free space or force a preview rebuild.
 
 ### What permissions does linkstr ask for?
 
