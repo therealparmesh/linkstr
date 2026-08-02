@@ -8,6 +8,8 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+const pushDedupeTTL = 30 * 24 * time.Hour
+
 type store struct {
 	db *sql.DB
 }
@@ -26,22 +28,29 @@ func newStore(db *sql.DB) (*store, error) {
 }
 
 func (s *store) migrate(ctx context.Context) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := migrateDevices(ctx, tx); err != nil {
+		return err
+	}
+
 	statements := []string{
-		`CREATE TABLE IF NOT EXISTS devices (
-			pubkey TEXT NOT NULL,
-			device_token TEXT NOT NULL,
-			apns_environment TEXT NOT NULL,
-			updated_at INTEGER NOT NULL,
-			disabled_at INTEGER,
-			last_error TEXT,
-			PRIMARY KEY (pubkey, device_token)
-		);`,
+		`CREATE INDEX IF NOT EXISTS devices_device_token_idx
+			ON devices (device_token);`,
 		`CREATE TABLE IF NOT EXISTS archived_conversations (
 			pubkey TEXT NOT NULL,
 			conversation_id TEXT NOT NULL,
 			updated_at INTEGER NOT NULL,
 			PRIMARY KEY (pubkey, conversation_id)
 		);`,
+		`DELETE FROM archived_conversations
+			WHERE NOT EXISTS (
+				SELECT 1 FROM devices WHERE devices.pubkey = archived_conversations.pubkey
+			);`,
 		`CREATE TABLE IF NOT EXISTS push_dedupe (
 				event_id TEXT NOT NULL,
 				notification_type TEXT NOT NULL,
@@ -49,20 +58,92 @@ func (s *store) migrate(ctx context.Context) error {
 				created_at INTEGER NOT NULL,
 				PRIMARY KEY (event_id, notification_type, recipient_pubkey)
 			);`,
+		`CREATE INDEX IF NOT EXISTS push_dedupe_created_at_idx
+			ON push_dedupe (created_at);`,
 		`CREATE TABLE IF NOT EXISTS auth_nonces (
 				pubkey TEXT NOT NULL,
 				nonce TEXT NOT NULL,
 				created_at INTEGER NOT NULL,
 				PRIMARY KEY (pubkey, nonce)
 			);`,
+		`CREATE INDEX IF NOT EXISTS auth_nonces_created_at_idx
+			ON auth_nonces (created_at);`,
 	}
 
 	for _, statement := range statements {
-		if _, err := s.db.ExecContext(ctx, statement); err != nil {
+		if _, err := tx.ExecContext(ctx, statement); err != nil {
 			return err
 		}
 	}
+	if _, err := tx.ExecContext(
+		ctx,
+		`DELETE FROM push_dedupe WHERE created_at < ?;`,
+		time.Now().Add(-pushDedupeTTL).Unix(),
+	); err != nil {
+		return err
+	}
 
+	return tx.Commit()
+}
+
+func migrateDevices(ctx context.Context, tx *sql.Tx) error {
+	rows, err := tx.QueryContext(ctx, `PRAGMA table_info(devices);`)
+	if err != nil {
+		return err
+	}
+
+	hasLegacyColumns := false
+	for rows.Next() {
+		var columnID, notNull, primaryKey int
+		var name, columnType string
+		var defaultValue any
+		if err := rows.Scan(&columnID, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			rows.Close()
+			return err
+		}
+		if name == "disabled_at" || name == "last_error" {
+			hasLegacyColumns = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+
+	if !hasLegacyColumns {
+		_, err := tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS devices (
+			pubkey TEXT NOT NULL,
+			device_token TEXT NOT NULL,
+			apns_environment TEXT NOT NULL,
+			updated_at INTEGER NOT NULL,
+			PRIMARY KEY (pubkey, device_token)
+		);`)
+		return err
+	}
+
+	statements := []string{
+		`ALTER TABLE devices RENAME TO devices_legacy;`,
+		`CREATE TABLE devices (
+			pubkey TEXT NOT NULL,
+			device_token TEXT NOT NULL,
+			apns_environment TEXT NOT NULL,
+			updated_at INTEGER NOT NULL,
+			PRIMARY KEY (pubkey, device_token)
+		);`,
+		`INSERT INTO devices (pubkey, device_token, apns_environment, updated_at)
+			SELECT pubkey, device_token, apns_environment, updated_at
+			FROM devices_legacy
+			WHERE disabled_at IS NULL;`,
+		`DROP TABLE devices_legacy;`,
+	}
+	for _, statement := range statements {
+		if _, err := tx.ExecContext(ctx, statement); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -70,51 +151,78 @@ func (s *store) upsertDevice(ctx context.Context, pubkey, deviceToken, apnsEnvir
 	ctx, cancel := withTimeoutContext(ctx)
 	defer cancel()
 
-	_, err := s.db.ExecContext(
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(
 		ctx,
-		`INSERT INTO devices (pubkey, device_token, apns_environment, updated_at, disabled_at, last_error)
-		 VALUES (?, ?, ?, ?, NULL, NULL)
+		`DELETE FROM devices WHERE device_token = ? AND pubkey <> ?;`,
+		deviceToken,
+		pubkey,
+	); err != nil {
+		return err
+	}
+
+	if _, err := tx.ExecContext(
+		ctx,
+		`INSERT INTO devices (pubkey, device_token, apns_environment, updated_at)
+		 VALUES (?, ?, ?, ?)
 		 ON CONFLICT(pubkey, device_token) DO UPDATE SET
 		   apns_environment = excluded.apns_environment,
-		   updated_at = excluded.updated_at,
-		   disabled_at = NULL,
-		   last_error = NULL;`,
+		   updated_at = excluded.updated_at;`,
 		pubkey,
 		deviceToken,
 		apnsEnvironment,
 		time.Now().Unix(),
-	)
-	return err
+	); err != nil {
+		return err
+	}
+
+	if _, err := tx.ExecContext(
+		ctx,
+		`DELETE FROM archived_conversations
+		 WHERE NOT EXISTS (
+			SELECT 1 FROM devices WHERE devices.pubkey = archived_conversations.pubkey
+		 );`,
+	); err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 func (s *store) deleteDevice(ctx context.Context, pubkey, deviceToken string) error {
 	ctx, cancel := withTimeoutContext(ctx)
 	defer cancel()
 
-	_, err := s.db.ExecContext(
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(
 		ctx,
 		`DELETE FROM devices WHERE pubkey = ? AND device_token = ?;`,
 		pubkey,
 		deviceToken,
-	)
-	return err
-}
-
-func (s *store) disableDevice(ctx context.Context, pubkey, deviceToken, lastError string) error {
-	ctx, cancel := withTimeoutContext(ctx)
-	defer cancel()
-
-	_, err := s.db.ExecContext(
+	); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(
 		ctx,
-		`UPDATE devices
-		   SET disabled_at = ?, last_error = ?
-		 WHERE pubkey = ? AND device_token = ?;`,
-		time.Now().Unix(),
-		lastError,
+		`DELETE FROM archived_conversations
+		 WHERE pubkey = ?
+		   AND NOT EXISTS (SELECT 1 FROM devices WHERE pubkey = ?);`,
 		pubkey,
-		deviceToken,
-	)
-	return err
+		pubkey,
+	); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *store) replaceArchivedConversations(ctx context.Context, pubkey string, conversationIDs []string) error {
@@ -129,6 +237,17 @@ func (s *store) replaceArchivedConversations(ctx context.Context, pubkey string,
 
 	if _, err := tx.ExecContext(ctx, `DELETE FROM archived_conversations WHERE pubkey = ?;`, pubkey); err != nil {
 		return err
+	}
+	var hasDevice bool
+	if err := tx.QueryRowContext(
+		ctx,
+		`SELECT EXISTS(SELECT 1 FROM devices WHERE pubkey = ?);`,
+		pubkey,
+	).Scan(&hasDevice); err != nil {
+		return err
+	}
+	if !hasDevice {
+		return tx.Commit()
 	}
 
 	now := time.Now().Unix()
@@ -179,7 +298,7 @@ func (s *store) listDevices(ctx context.Context, pubkey string) ([]registeredDev
 		ctx,
 		`SELECT device_token, apns_environment
 		   FROM devices
-		  WHERE pubkey = ? AND disabled_at IS NULL;`,
+		  WHERE pubkey = ?;`,
 		pubkey,
 	)
 	if err != nil {
@@ -203,7 +322,21 @@ func (s *store) insertPushDedupe(ctx context.Context, eventID, notificationType,
 	ctx, cancel := withTimeoutContext(ctx)
 	defer cancel()
 
-	result, err := s.db.ExecContext(
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(
+		ctx,
+		`DELETE FROM push_dedupe WHERE created_at < ?;`,
+		time.Now().Add(-pushDedupeTTL).Unix(),
+	); err != nil {
+		return false, err
+	}
+
+	result, err := tx.ExecContext(
 		ctx,
 		`INSERT OR IGNORE INTO push_dedupe (
 			event_id,
@@ -222,6 +355,9 @@ func (s *store) insertPushDedupe(ctx context.Context, eventID, notificationType,
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
+		return false, err
+	}
+	if err := tx.Commit(); err != nil {
 		return false, err
 	}
 	return rowsAffected == 1, nil

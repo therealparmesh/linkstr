@@ -1,6 +1,6 @@
 # linkstr support
 
-_Last updated: June 21, 2026_
+_Last updated: August 1, 2026_
 
 linkstr is a private link-sharing app built on [Nostr](https://nostr.com). You create or join private sessions, share links inside those sessions, and react with emoji. This page describes the current shipped behavior in plain language.
 
@@ -149,7 +149,7 @@ Session content is end-to-end encrypted before it reaches relays. Only session m
 
 ### What goes through linkstr's push service?
 
-linkstr uses an APNs push service for iOS notifications. That service stores your APNs device token, your Nostr pubkey, archived conversation IDs used to suppress notifications for archived sessions, and lightweight push-dedupe bookkeeping so the same event is not pushed repeatedly.
+linkstr uses an APNs push service for iOS notifications. That service stores your APNs device token, your Nostr pubkey, archived conversation IDs used to suppress notifications for archived sessions, and lightweight push-dedupe bookkeeping so the same event is not pushed repeatedly. Dedupe records older than 30 days are removed when the service starts or handles a push request. Device tokens are removed when you unregister, switch the device to another account, or Apple permanently rejects them. Archive state is removed with the last registered token for an account.
 
 Push alerts use generic text. Tapping a push alert opens the relevant session. Old push notifications are not replayed during historical restore.
 

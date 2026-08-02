@@ -1,6 +1,6 @@
 # push-service
 
-_Last updated: March 12, 2026_
+_Last updated: August 1, 2026_
 
 Minimal linkstr push backend for iOS APNs delivery.
 
@@ -21,6 +21,7 @@ Every mutating request is authorized with a signed Nostr HTTP auth event.
 
 - The signature covers the HTTP method, request path, request body hash, and a random nonce.
 - The service stores recently used nonces for the current auth window and rejects reuse.
+- Expired nonces are removed during authenticated requests.
 
 That keeps a captured request from being replayed over and over during the normal auth TTL.
 
@@ -183,6 +184,19 @@ The health endpoint should answer:
 { "status": "ok" }
 ```
 
+The checked-in Fly configuration sizes the service as `shared-cpu-1x` with 256 MB of memory. It stops the Machine when idle, starts it for incoming requests, and keeps the 1 GB SQLite volume attached. The first request after an idle period may take longer while Fly starts the Machine.
+
+Fly deployment is manual from this directory. This repository does not contain a GitHub Actions deployment workflow.
+
+## Stored-data cleanup
+
+- Authentication nonces expire after five minutes.
+- Push-dedupe records older than 30 days are pruned on service startup and during push requests.
+- APNs tokens are deleted when Apple permanently rejects them.
+- A device unregister request deletes its token immediately.
+- Archived conversation IDs are stored only while their pubkey has a registered device and are removed with its last token.
+- Registering a device token to a different pubkey removes its previous association.
+
 ## Point the app at Fly
 
 Set the app's push backend URL to:
@@ -233,6 +247,8 @@ Backend:
 - Device registration.
 - Archive suppression.
 - Push dedupe.
+- Dedupe expiration and legacy device cleanup.
+- Permanent APNs rejection cleanup.
 - Self-send suppression.
 - Device unregistration.
 

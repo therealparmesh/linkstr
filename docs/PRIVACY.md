@@ -1,6 +1,6 @@
 # privacy policy
 
-Last updated: March 12, 2026
+Last updated: August 1, 2026
 
 ## Overview
 
@@ -49,7 +49,7 @@ If you allow notifications, linkstr sends limited routing data to a developer-op
 - Associations between your nostr pubkey and those device tokens.
 - Archived conversation IDs used to suppress notifications for archived sessions.
 
-The push service is used for notification routing, not message transport. Encrypted session content still travels through nostr relays, not through the push service.
+The push service is used for notification routing, not message transport. Encrypted session content still travels through nostr relays, not through the push service. Push-dedupe records older than 30 days are removed when the service starts or handles a push request, and authentication nonces expire after five minutes.
 
 The push service does not store decrypted post text, reaction text, or session payload plaintext. Push banners use generic notification text. Historical relay restore does not replay old push notifications.
 
@@ -107,7 +107,7 @@ Downloaded media from those providers is stored locally on your device only, unl
 - Local app data remains on your device until you delete it, log out and clear local data, or remove the app.
 - Media cache may also be removed automatically by cache eviction or iOS storage pressure.
 - Relay-side data retention depends on each relay operator.
-- Push-service routing data remains until you unregister, log out, APNs invalidates the token, or operational cleanup removes stale records.
+- APNs device tokens remain until you unregister, log out, switch the device to another account, or Apple permanently rejects the token. Archived conversation IDs are removed with the last registered token for a pubkey. Push-dedupe records older than 30 days are removed at the next service startup or push request.
 - If you delete your account in linkstr and relays are available, the app can publish an empty follow list and a nostr vanish request to enabled relays, but your `nsec` remains valid unless you discard it yourself.
 
 ## Your choices

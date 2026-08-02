@@ -8,11 +8,14 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	nostr "github.com/nbd-wtf/go-nostr"
@@ -22,8 +25,14 @@ const (
 	notificationTypeNewPost          = "new_post"
 	notificationTypeNewEmojiReaction = "new_emoji_reaction"
 	maxRequestBodyBytes              = 64 << 10
+	maxHeaderBytes                   = 16 << 10
 	authHeaderPrefix                 = "Nostr "
 	authTTL                          = 5 * time.Minute
+	readHeaderTimeout                = 5 * time.Second
+	readTimeout                      = 15 * time.Second
+	writeTimeout                     = 30 * time.Second
+	idleTimeout                      = 60 * time.Second
+	shutdownTimeout                  = 10 * time.Second
 )
 
 type config struct {
@@ -64,21 +73,26 @@ type pushRequest struct {
 
 func main() {
 	cfg := loadConfig()
+	if err := run(cfg); err != nil {
+		log.Fatal(err)
+	}
+}
 
+func run(cfg config) error {
 	db, err := openDatabase(cfg.databasePath)
 	if err != nil {
-		log.Fatalf("open database: %v", err)
+		return fmt.Errorf("open database: %w", err)
 	}
 	defer db.Close()
 
 	store, err := newStore(db)
 	if err != nil {
-		log.Fatalf("initialize store: %v", err)
+		return fmt.Errorf("initialize store: %w", err)
 	}
 
 	sender, err := newPushSender(cfg)
 	if err != nil {
-		log.Fatalf("initialize APNs sender: %v", err)
+		return fmt.Errorf("initialize APNs sender: %w", err)
 	}
 
 	server := &apiServer{
@@ -86,17 +100,52 @@ func main() {
 		sender: sender,
 	}
 
+	httpServer := &http.Server{
+		Addr:              cfg.listenAddr,
+		Handler:           newHTTPHandler(server),
+		ReadHeaderTimeout: readHeaderTimeout,
+		ReadTimeout:       readTimeout,
+		WriteTimeout:      writeTimeout,
+		IdleTimeout:       idleTimeout,
+		MaxHeaderBytes:    maxHeaderBytes,
+	}
+
+	shutdownSignal, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	listenResult := make(chan error, 1)
+	go func() {
+		listenResult <- httpServer.ListenAndServe()
+	}()
+
+	log.Printf("push service listening on %s", cfg.listenAddr)
+	select {
+	case err := <-listenResult:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return fmt.Errorf("listen: %w", err)
+	case <-shutdownSignal.Done():
+		shutdownContext, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cancel()
+		if err := httpServer.Shutdown(shutdownContext); err != nil {
+			return fmt.Errorf("shutdown: %w", err)
+		}
+		if err := <-listenResult; err != nil && !errors.Is(err, http.ErrServerClosed) {
+			return fmt.Errorf("listen: %w", err)
+		}
+		return nil
+	}
+}
+
+func newHTTPHandler(server *apiServer) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", server.handleHealthz)
 	mux.HandleFunc("POST /v1/devices/register", server.handleRegisterDevice)
 	mux.HandleFunc("POST /v1/devices/unregister", server.handleUnregisterDevice)
 	mux.HandleFunc("PUT /v1/conversations/archive-state", server.handleArchiveState)
 	mux.HandleFunc("POST /v1/push", server.handlePush)
-
-	log.Printf("push service listening on %s", cfg.listenAddr)
-	if err := http.ListenAndServe(cfg.listenAddr, mux); err != nil {
-		log.Fatalf("listen: %v", err)
-	}
+	return mux
 }
 
 func loadConfig() config {
@@ -268,13 +317,12 @@ func (s *apiServer) handlePush(w http.ResponseWriter, r *http.Request) {
 			if err := s.sender.send(r.Context(), device, push); err != nil {
 				var permanentErr permanentDeviceError
 				if errors.As(err, &permanentErr) {
-					if disableErr := s.store.disableDevice(
+					if deleteErr := s.store.deleteDevice(
 						r.Context(),
 						recipientPubkey,
 						device.DeviceToken,
-						permanentErr.Error(),
-					); disableErr != nil {
-						log.Printf("disable device failed for %s: %v", recipientPubkey, disableErr)
+					); deleteErr != nil {
+						log.Printf("delete invalid device failed for %s: %v", recipientPubkey, deleteErr)
 					}
 					continue
 				}
@@ -452,6 +500,8 @@ func openDatabase(databasePath string) (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
 
 	pragmas := []string{
 		"PRAGMA journal_mode = WAL;",

@@ -21,7 +21,8 @@ type sentPush struct {
 }
 
 type capturingSender struct {
-	sent []sentPush
+	sent    []sentPush
+	sendErr error
 }
 
 func (s *capturingSender) send(_ context.Context, device registeredDevice, push outboundPush) error {
@@ -29,7 +30,7 @@ func (s *capturingSender) send(_ context.Context, device registeredDevice, push 
 		device: device,
 		push:   push,
 	})
-	return nil
+	return s.sendErr
 }
 
 func TestRegisterDeviceAndPushSendsToNonArchivedRecipient(t *testing.T) {
@@ -209,6 +210,54 @@ func TestPushDedupeSuppressesRepeatDelivery(t *testing.T) {
 
 	if len(sender.sent) != 1 {
 		t.Fatalf("expected dedupe to keep a single send, got %d", len(sender.sent))
+	}
+}
+
+func TestPermanentAPNSErrorRemovesDevice(t *testing.T) {
+	mux, sender := newTestMux(t)
+	sender.sendErr = permanentDeviceError{reason: "apns rejection: Unregistered"}
+
+	senderSecret := nostr.GeneratePrivateKey()
+	recipientSecret := nostr.GeneratePrivateKey()
+	recipientPubkey, err := nostr.GetPublicKey(recipientSecret)
+	if err != nil {
+		t.Fatalf("get recipient pubkey: %v", err)
+	}
+
+	performSignedJSONRequest(
+		t,
+		mux,
+		"POST",
+		"/v1/devices/register",
+		registerDeviceRequest{
+			DeviceToken:     "invalid-device-token",
+			APNSEnvironment: "production",
+		},
+		recipientSecret,
+		http.StatusAccepted,
+		nil,
+	)
+
+	for _, eventID := range []string{"event-1", "event-2"} {
+		performSignedJSONRequest(
+			t,
+			mux,
+			"POST",
+			"/v1/push",
+			pushRequest{
+				NotificationType: notificationTypeNewPost,
+				EventID:          eventID,
+				ConversationID:   "conversation-1",
+				RecipientPubkeys: []string{recipientPubkey},
+			},
+			senderSecret,
+			http.StatusAccepted,
+			nil,
+		)
+	}
+
+	if len(sender.sent) != 1 {
+		t.Fatalf("expected invalid token to be removed after one send, got %d attempts", len(sender.sent))
 	}
 }
 
@@ -402,13 +451,7 @@ func newTestMux(t *testing.T) (*http.ServeMux, *capturingSender) {
 		sender: sender,
 	}
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", server.handleHealthz)
-	mux.HandleFunc("POST /v1/devices/register", server.handleRegisterDevice)
-	mux.HandleFunc("POST /v1/devices/unregister", server.handleUnregisterDevice)
-	mux.HandleFunc("PUT /v1/conversations/archive-state", server.handleArchiveState)
-	mux.HandleFunc("POST /v1/push", server.handlePush)
-	return mux, sender
+	return newHTTPHandler(server), sender
 }
 
 func performSignedJSONRequest(
