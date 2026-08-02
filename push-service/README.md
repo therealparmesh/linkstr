@@ -186,7 +186,7 @@ The health endpoint should answer:
 
 The checked-in Fly configuration sizes the service as `shared-cpu-1x` with 256 MB of memory. It stops the Machine when idle, starts it for incoming requests, and keeps the 1 GB SQLite volume attached. The first request after an idle period may take longer while Fly starts the Machine.
 
-Fly deployment is manual from this directory. This repository does not contain a GitHub Actions deployment workflow.
+Pushing `master` deploys this service through the Fly.io GitHub integration. The `fly deploy --config fly.toml` command above is the manual fallback; no duplicate GitHub Actions deployment workflow is checked in.
 
 ## Stored-data cleanup
 
