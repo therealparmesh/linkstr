@@ -247,7 +247,7 @@ Backend:
 - Device registration.
 - Archive suppression.
 - Push dedupe.
-- Dedupe expiration and legacy device cleanup.
+- Dedupe expiration and archive-state cleanup.
 - Permanent APNs rejection cleanup.
 - Self-send suppression.
 - Device unregistration.

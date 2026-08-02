@@ -25,14 +25,8 @@ const (
 	notificationTypeNewPost          = "new_post"
 	notificationTypeNewEmojiReaction = "new_emoji_reaction"
 	maxRequestBodyBytes              = 64 << 10
-	maxHeaderBytes                   = 16 << 10
 	authHeaderPrefix                 = "Nostr "
 	authTTL                          = 5 * time.Minute
-	readHeaderTimeout                = 5 * time.Second
-	readTimeout                      = 15 * time.Second
-	writeTimeout                     = 30 * time.Second
-	idleTimeout                      = 60 * time.Second
-	shutdownTimeout                  = 10 * time.Second
 )
 
 type config struct {
@@ -72,8 +66,7 @@ type pushRequest struct {
 }
 
 func main() {
-	cfg := loadConfig()
-	if err := run(cfg); err != nil {
+	if err := run(loadConfig()); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -95,19 +88,14 @@ func run(cfg config) error {
 		return fmt.Errorf("initialize APNs sender: %w", err)
 	}
 
-	server := &apiServer{
-		store:  store,
-		sender: sender,
-	}
-
 	httpServer := &http.Server{
 		Addr:              cfg.listenAddr,
-		Handler:           newHTTPHandler(server),
-		ReadHeaderTimeout: readHeaderTimeout,
-		ReadTimeout:       readTimeout,
-		WriteTimeout:      writeTimeout,
-		IdleTimeout:       idleTimeout,
-		MaxHeaderBytes:    maxHeaderBytes,
+		Handler:           newHTTPHandler(&apiServer{store: store, sender: sender}),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    16 << 10,
 	}
 
 	shutdownSignal, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -121,12 +109,12 @@ func run(cfg config) error {
 	log.Printf("push service listening on %s", cfg.listenAddr)
 	select {
 	case err := <-listenResult:
-		if errors.Is(err, http.ErrServerClosed) {
-			return nil
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			return fmt.Errorf("listen: %w", err)
 		}
-		return fmt.Errorf("listen: %w", err)
+		return nil
 	case <-shutdownSignal.Done():
-		shutdownContext, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		shutdownContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := httpServer.Shutdown(shutdownContext); err != nil {
 			return fmt.Errorf("shutdown: %w", err)
@@ -173,14 +161,8 @@ func (s *apiServer) handleHealthz(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *apiServer) handleRegisterDevice(w http.ResponseWriter, r *http.Request) {
-	pubkey, body, ok := s.authenticateRequest(w, r)
+	pubkey, req, ok := authenticatedJSON[registerDeviceRequest](s, w, r)
 	if !ok {
-		return
-	}
-
-	var req registerDeviceRequest
-	if err := json.Unmarshal(body, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
 
@@ -200,14 +182,8 @@ func (s *apiServer) handleRegisterDevice(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *apiServer) handleUnregisterDevice(w http.ResponseWriter, r *http.Request) {
-	pubkey, body, ok := s.authenticateRequest(w, r)
+	pubkey, req, ok := authenticatedJSON[unregisterDeviceRequest](s, w, r)
 	if !ok {
-		return
-	}
-
-	var req unregisterDeviceRequest
-	if err := json.Unmarshal(body, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
 
@@ -226,14 +202,8 @@ func (s *apiServer) handleUnregisterDevice(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *apiServer) handleArchiveState(w http.ResponseWriter, r *http.Request) {
-	pubkey, body, ok := s.authenticateRequest(w, r)
+	pubkey, req, ok := authenticatedJSON[archiveStateRequest](s, w, r)
 	if !ok {
-		return
-	}
-
-	var req archiveStateRequest
-	if err := json.Unmarshal(body, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
 
@@ -247,14 +217,8 @@ func (s *apiServer) handleArchiveState(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *apiServer) handlePush(w http.ResponseWriter, r *http.Request) {
-	senderPubkey, body, ok := s.authenticateRequest(w, r)
+	senderPubkey, req, ok := authenticatedJSON[pushRequest](s, w, r)
 	if !ok {
-		return
-	}
-
-	var req pushRequest
-	if err := json.Unmarshal(body, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
 
@@ -262,7 +226,6 @@ func (s *apiServer) handlePush(w http.ResponseWriter, r *http.Request) {
 		NotificationType: strings.TrimSpace(req.NotificationType),
 		EventID:          strings.TrimSpace(req.EventID),
 		ConversationID:   strings.TrimSpace(req.ConversationID),
-		SenderPubkey:     senderPubkey,
 		RecipientPubkeys: dedupeNonEmpty(req.RecipientPubkeys),
 		Emoji:            strings.TrimSpace(req.Emoji),
 	}
@@ -368,20 +331,24 @@ func validatePush(push outboundPush) error {
 	return nil
 }
 
-func (s *apiServer) authenticateRequest(w http.ResponseWriter, r *http.Request) (string, []byte, bool) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxRequestBodyBytes))
+func authenticatedJSON[T any](s *apiServer, w http.ResponseWriter, r *http.Request) (string, T, bool) {
+	var payload T
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxRequestBodyBytes))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "failed to read request body")
-		return "", nil, false
+		return "", payload, false
 	}
 
 	pubkey, err := s.verifyAuthorizationHeader(r, body)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, err.Error())
-		return "", nil, false
+		return "", payload, false
 	}
-
-	return pubkey, body, true
+	if err := json.Unmarshal(body, &payload); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return "", payload, false
+	}
+	return pubkey, payload, true
 }
 
 func (s *apiServer) verifyAuthorizationHeader(r *http.Request, body []byte) (string, error) {
@@ -490,9 +457,7 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 }
 
 func writeError(w http.ResponseWriter, status int, message string) {
-	writeJSON(w, status, map[string]string{
-		"error": message,
-	})
+	writeJSON(w, status, map[string]string{"error": message})
 }
 
 func openDatabase(databasePath string) (*sql.DB, error) {
@@ -501,23 +466,12 @@ func openDatabase(databasePath string) (*sql.DB, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
-
-	pragmas := []string{
-		"PRAGMA journal_mode = WAL;",
-		"PRAGMA synchronous = NORMAL;",
-		"PRAGMA foreign_keys = ON;",
+	if _, err := db.Exec(`
+		PRAGMA journal_mode = WAL;
+		PRAGMA synchronous = NORMAL;
+	`); err != nil {
+		_ = db.Close()
+		return nil, err
 	}
-	for _, pragma := range pragmas {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, err
-		}
-	}
-
 	return db, nil
-}
-
-func withTimeoutContext(parent context.Context) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(parent, 15*time.Second)
 }

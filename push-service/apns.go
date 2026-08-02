@@ -17,7 +17,6 @@ type outboundPush struct {
 	NotificationType string
 	EventID          string
 	ConversationID   string
-	SenderPubkey     string
 	RecipientPubkeys []string
 	Emoji            string
 }
@@ -28,9 +27,7 @@ type pushSender interface {
 
 type noOpSender struct{}
 
-type permanentDeviceError struct {
-	reason string
-}
+type permanentDeviceError string
 
 type apnsSender struct {
 	topic      string
@@ -39,7 +36,7 @@ type apnsSender struct {
 }
 
 func (e permanentDeviceError) Error() string {
-	return e.reason
+	return string(e)
 }
 
 func newPushSender(cfg config) (pushSender, error) {
@@ -107,15 +104,19 @@ func (s *apnsSender) send(ctx context.Context, device registeredDevice, push out
 	}
 
 	if isPermanentTokenReason(response.Reason) {
-		return permanentDeviceError{reason: fmt.Sprintf("apns rejection: %s", response.Reason)}
+		return permanentDeviceError("apns rejection: " + response.Reason)
 	}
 
 	return fmt.Errorf("apns rejection: status=%d reason=%s", response.StatusCode, response.Reason)
 }
 
 func buildPayload(push outboundPush) *payload.Payload {
+	title := "New post in linkstr"
+	if push.NotificationType == notificationTypeNewEmojiReaction {
+		title = "New reaction " + push.Emoji + " in linkstr"
+	}
 	builder := payload.NewPayload().
-		AlertTitle(alertTitle(push)).
+		AlertTitle(title).
 		AlertBody("Open linkstr to view").
 		Sound("default").
 		ThreadID(push.ConversationID).
@@ -128,15 +129,6 @@ func buildPayload(push outboundPush) *payload.Payload {
 	}
 
 	return builder
-}
-
-func alertTitle(push outboundPush) string {
-	switch push.NotificationType {
-	case notificationTypeNewEmojiReaction:
-		return "New reaction " + push.Emoji + " in linkstr"
-	default:
-		return "New post in linkstr"
-	}
 }
 
 func validateAPNSConfig(cfg config) error {
@@ -160,10 +152,7 @@ func validateAPNSConfig(cfg config) error {
 }
 
 func isPermanentTokenReason(reason string) bool {
-	switch reason {
-	case apns2.ReasonBadDeviceToken, apns2.ReasonDeviceTokenNotForTopic, apns2.ReasonUnregistered:
-		return true
-	default:
-		return false
-	}
+	return reason == apns2.ReasonBadDeviceToken ||
+		reason == apns2.ReasonDeviceTokenNotForTopic ||
+		reason == apns2.ReasonUnregistered
 }

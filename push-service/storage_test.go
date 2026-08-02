@@ -8,94 +8,9 @@ import (
 	"time"
 )
 
-func TestStoreMigrationRemovesLegacyDisabledDevices(t *testing.T) {
-	db, err := openDatabase(filepath.Join(t.TempDir(), "push-service.db"))
-	if err != nil {
-		t.Fatalf("open database: %v", err)
-	}
-	defer db.Close()
-
-	_, err = db.Exec(`CREATE TABLE devices (
-		pubkey TEXT NOT NULL,
-		device_token TEXT NOT NULL,
-		apns_environment TEXT NOT NULL,
-		updated_at INTEGER NOT NULL,
-		disabled_at INTEGER,
-		last_error TEXT,
-		PRIMARY KEY (pubkey, device_token)
-	);`)
-	if err != nil {
-		t.Fatalf("create legacy devices table: %v", err)
-	}
-	_, err = db.Exec(`INSERT INTO devices (
-		pubkey, device_token, apns_environment, updated_at, disabled_at, last_error
-	) VALUES
-		('active', 'active-token', 'production', 1, NULL, NULL),
-		('disabled', 'disabled-token', 'production', 1, 2, 'Unregistered');`)
-	if err != nil {
-		t.Fatalf("insert legacy devices: %v", err)
-	}
-
-	store, err := newStore(db)
-	if err != nil {
-		t.Fatalf("migrate store: %v", err)
-	}
-
-	activeDevices, err := store.listDevices(context.Background(), "active")
-	if err != nil {
-		t.Fatalf("list active devices: %v", err)
-	}
-	if len(activeDevices) != 1 || activeDevices[0].DeviceToken != "active-token" {
-		t.Fatalf("unexpected active devices: %#v", activeDevices)
-	}
-	disabledDevices, err := store.listDevices(context.Background(), "disabled")
-	if err != nil {
-		t.Fatalf("list disabled devices: %v", err)
-	}
-	if len(disabledDevices) != 0 {
-		t.Fatalf("expected disabled devices to be removed, got %#v", disabledDevices)
-	}
-
-	rows, err := db.Query(`PRAGMA table_info(devices);`)
-	if err != nil {
-		t.Fatalf("inspect migrated devices table: %v", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var columnID, notNull, primaryKey int
-		var name, columnType string
-		var defaultValue any
-		if err := rows.Scan(&columnID, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
-			t.Fatalf("scan device column: %v", err)
-		}
-		if name == "disabled_at" || name == "last_error" {
-			t.Fatalf("legacy column still exists: %s", name)
-		}
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("inspect device columns: %v", err)
-	}
-}
-
 func TestInsertPushDedupePrunesExpiredRows(t *testing.T) {
-	db, err := openDatabase(filepath.Join(t.TempDir(), "push-service.db"))
-	if err != nil {
-		t.Fatalf("open database: %v", err)
-	}
-	defer db.Close()
-
-	store, err := newStore(db)
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
-
-	expiredAt := time.Now().Add(-pushDedupeTTL - time.Hour).Unix()
-	_, err = db.Exec(`INSERT INTO push_dedupe (
-		event_id, notification_type, recipient_pubkey, created_at
-	) VALUES (?, ?, ?, ?);`, "expired-event", notificationTypeNewPost, "recipient", expiredAt)
-	if err != nil {
-		t.Fatalf("insert expired dedupe row: %v", err)
-	}
+	store, db := newTestStore(t)
+	insertExpiredDedupe(t, db)
 
 	inserted, err := store.insertPushDedupe(
 		context.Background(),
@@ -122,7 +37,7 @@ func TestInsertPushDedupePrunesExpiredRows(t *testing.T) {
 	}
 }
 
-func TestStoreStartupPrunesExpiredPushDedupeRows(t *testing.T) {
+func TestStoreStartupPrunesExpiredAndOrphanedRows(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "push-service.db")
 	db, err := openDatabase(dbPath)
 	if err != nil {
@@ -131,12 +46,12 @@ func TestStoreStartupPrunesExpiredPushDedupeRows(t *testing.T) {
 	if _, err := newStore(db); err != nil {
 		t.Fatalf("new store: %v", err)
 	}
-	expiredAt := time.Now().Add(-pushDedupeTTL - time.Hour).Unix()
-	_, err = db.Exec(`INSERT INTO push_dedupe (
-		event_id, notification_type, recipient_pubkey, created_at
-	) VALUES (?, ?, ?, ?);`, "expired-event", notificationTypeNewPost, "recipient", expiredAt)
-	if err != nil {
-		t.Fatalf("insert expired dedupe row: %v", err)
+	insertExpiredDedupe(t, db)
+	if _, err := db.Exec(
+		`INSERT INTO archived_conversations (pubkey, conversation_id, updated_at) VALUES (?, ?, ?)`,
+		"orphan", "conversation", time.Now().Unix(),
+	); err != nil {
+		t.Fatalf("insert orphaned archive row: %v", err)
 	}
 	if err := db.Close(); err != nil {
 		t.Fatalf("close database: %v", err)
@@ -161,19 +76,11 @@ func TestStoreStartupPrunesExpiredPushDedupeRows(t *testing.T) {
 	if expiredCount != 0 {
 		t.Fatalf("expected startup to prune expired dedupe row, got %d", expiredCount)
 	}
+	assertArchivedConversationCount(t, db, "orphan", 0)
 }
 
 func TestArchiveStateRequiresDeviceAndIsRemovedWithLastDevice(t *testing.T) {
-	db, err := openDatabase(filepath.Join(t.TempDir(), "push-service.db"))
-	if err != nil {
-		t.Fatalf("open database: %v", err)
-	}
-	defer db.Close()
-
-	store, err := newStore(db)
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	store, db := newTestStore(t)
 	ctx := context.Background()
 
 	if err := store.replaceArchivedConversations(ctx, "pubkey", []string{"conversation"}); err != nil {
@@ -184,6 +91,9 @@ func TestArchiveStateRequiresDeviceAndIsRemovedWithLastDevice(t *testing.T) {
 	if err := store.upsertDevice(ctx, "pubkey", "device-token", "production"); err != nil {
 		t.Fatalf("register device: %v", err)
 	}
+	if err := store.upsertDevice(ctx, "pubkey", "second-device-token", "sandbox"); err != nil {
+		t.Fatalf("register second device: %v", err)
+	}
 	if err := store.replaceArchivedConversations(ctx, "pubkey", []string{"conversation"}); err != nil {
 		t.Fatalf("replace archive state with device: %v", err)
 	}
@@ -192,20 +102,16 @@ func TestArchiveStateRequiresDeviceAndIsRemovedWithLastDevice(t *testing.T) {
 	if err := store.deleteDevice(ctx, "pubkey", "device-token"); err != nil {
 		t.Fatalf("delete device: %v", err)
 	}
+	assertArchivedConversationCount(t, db, "pubkey", 1)
+
+	if err := store.deleteDevice(ctx, "pubkey", "second-device-token"); err != nil {
+		t.Fatalf("delete last device: %v", err)
+	}
 	assertArchivedConversationCount(t, db, "pubkey", 0)
 }
 
 func TestDeviceTokenMovesToCurrentPubkey(t *testing.T) {
-	db, err := openDatabase(filepath.Join(t.TempDir(), "push-service.db"))
-	if err != nil {
-		t.Fatalf("open database: %v", err)
-	}
-	defer db.Close()
-
-	store, err := newStore(db)
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	store, db := newTestStore(t)
 	ctx := context.Background()
 	if err := store.upsertDevice(ctx, "old-pubkey", "device-token", "production"); err != nil {
 		t.Fatalf("register old pubkey: %v", err)
@@ -232,6 +138,36 @@ func TestDeviceTokenMovesToCurrentPubkey(t *testing.T) {
 		t.Fatalf("unexpected current pubkey devices: %#v", currentDevices)
 	}
 	assertArchivedConversationCount(t, db, "old-pubkey", 0)
+}
+
+func newTestStore(t *testing.T) (*store, *sql.DB) {
+	t.Helper()
+	db, err := openDatabase(filepath.Join(t.TempDir(), "push-service.db"))
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	store, err := newStore(db)
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	return store, db
+}
+
+func insertExpiredDedupe(t *testing.T, db *sql.DB) {
+	t.Helper()
+	_, err := db.Exec(
+		`INSERT INTO push_dedupe (
+			event_id, notification_type, recipient_pubkey, created_at
+		) VALUES (?, ?, ?, ?)`,
+		"expired-event",
+		notificationTypeNewPost,
+		"recipient",
+		time.Now().Add(-pushDedupeTTL-time.Hour).Unix(),
+	)
+	if err != nil {
+		t.Fatalf("insert expired dedupe row: %v", err)
+	}
 }
 
 func assertArchivedConversationCount(t *testing.T, db *sql.DB, pubkey string, expected int) {

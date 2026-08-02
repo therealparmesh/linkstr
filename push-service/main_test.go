@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"testing"
 
 	nostr "github.com/nbd-wtf/go-nostr"
@@ -26,50 +25,19 @@ type capturingSender struct {
 }
 
 func (s *capturingSender) send(_ context.Context, device registeredDevice, push outboundPush) error {
-	s.sent = append(s.sent, sentPush{
-		device: device,
-		push:   push,
-	})
+	s.sent = append(s.sent, sentPush{device: device, push: push})
 	return s.sendErr
 }
 
 func TestRegisterDeviceAndPushSendsToNonArchivedRecipient(t *testing.T) {
-	mux, sender := newTestMux(t)
+	handler, sender := newTestMux(t)
+	senderSecret, senderPubkey := testIdentity(t)
+	recipientSecret, recipientPubkey := testIdentity(t)
+	registerTestDevice(t, handler, recipientSecret, "device-token-1", "sandbox")
 
-	senderSecret := nostr.GeneratePrivateKey()
-	senderPubkey, err := nostr.GetPublicKey(senderSecret)
-	if err != nil {
-		t.Fatalf("get sender pubkey: %v", err)
-	}
-
-	recipientSecret := nostr.GeneratePrivateKey()
-	recipientPubkey, err := nostr.GetPublicKey(recipientSecret)
-	if err != nil {
-		t.Fatalf("get recipient pubkey: %v", err)
-	}
-
-	performSignedJSONRequest(
+	recorder := performSignedJSONRequest(
 		t,
-		mux,
-		"POST",
-		"/v1/devices/register",
-		registerDeviceRequest{
-			DeviceToken:     "device-token-1",
-			APNSEnvironment: "sandbox",
-		},
-		recipientSecret,
-		http.StatusAccepted,
-		nil,
-	)
-
-	var response struct {
-		Status           string `json:"status"`
-		RecipientCount   int    `json:"recipient_count"`
-		CandidateDevices int    `json:"candidate_devices"`
-	}
-	performSignedJSONRequest(
-		t,
-		mux,
+		handler,
 		"POST",
 		"/v1/push",
 		pushRequest{
@@ -80,76 +48,42 @@ func TestRegisterDeviceAndPushSendsToNonArchivedRecipient(t *testing.T) {
 		},
 		senderSecret,
 		http.StatusAccepted,
-		&response,
 	)
+	var response struct {
+		Status           string `json:"status"`
+		RecipientCount   int    `json:"recipient_count"`
+		CandidateDevices int    `json:"candidate_devices"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response body: %v", err)
+	}
 
-	if response.Status != "accepted" {
-		t.Fatalf("expected accepted status, got %#v", response)
+	if response.Status != "accepted" || response.RecipientCount != 1 || response.CandidateDevices != 1 {
+		t.Fatalf("unexpected push response: %#v", response)
 	}
-	if response.RecipientCount != 1 || response.CandidateDevices != 1 {
-		t.Fatalf("unexpected push counts: %#v", response)
-	}
-	if len(sender.sent) != 1 {
-		t.Fatalf("expected 1 delivered push, got %d", len(sender.sent))
-	}
-	if sender.sent[0].device.DeviceToken != "device-token-1" {
-		t.Fatalf("unexpected device token: %#v", sender.sent[0].device)
+	if len(sender.sent) != 1 || sender.sent[0].device.DeviceToken != "device-token-1" {
+		t.Fatalf("unexpected sends: %#v", sender.sent)
 	}
 	if sender.sent[0].push.NotificationType != notificationTypeNewPost {
-		t.Fatalf("unexpected notification type: %#v", sender.sent[0].push)
+		t.Fatalf("unexpected push: %#v", sender.sent[0].push)
 	}
 }
 
 func TestPushSkipsArchivedConversation(t *testing.T) {
-	mux, sender := newTestMux(t)
-
-	senderSecret := nostr.GeneratePrivateKey()
-	recipientSecret := nostr.GeneratePrivateKey()
-	recipientPubkey, err := nostr.GetPublicKey(recipientSecret)
-	if err != nil {
-		t.Fatalf("get recipient pubkey: %v", err)
-	}
-
+	handler, sender := newTestMux(t)
+	senderSecret, _ := testIdentity(t)
+	recipientSecret, recipientPubkey := testIdentity(t)
+	registerTestDevice(t, handler, recipientSecret, "device-token-1", "sandbox")
 	performSignedJSONRequest(
 		t,
-		mux,
-		"POST",
-		"/v1/devices/register",
-		registerDeviceRequest{
-			DeviceToken:     "device-token-1",
-			APNSEnvironment: "sandbox",
-		},
-		recipientSecret,
-		http.StatusAccepted,
-		nil,
-	)
-	performSignedJSONRequest(
-		t,
-		mux,
+		handler,
 		"PUT",
 		"/v1/conversations/archive-state",
-		archiveStateRequest{
-			ArchivedConversationIDs: []string{"conversation-1"},
-		},
+		archiveStateRequest{ArchivedConversationIDs: []string{"conversation-1"}},
 		recipientSecret,
 		http.StatusAccepted,
-		nil,
 	)
-	performSignedJSONRequest(
-		t,
-		mux,
-		"POST",
-		"/v1/push",
-		pushRequest{
-			NotificationType: notificationTypeNewPost,
-			EventID:          "event-1",
-			ConversationID:   "conversation-1",
-			RecipientPubkeys: []string{recipientPubkey},
-		},
-		senderSecret,
-		http.StatusAccepted,
-		nil,
-	)
+	sendTestPush(t, handler, senderSecret, recipientPubkey, "event-1")
 
 	if len(sender.sent) != 0 {
 		t.Fatalf("expected archived conversation to suppress push, got %d sends", len(sender.sent))
@@ -157,56 +91,21 @@ func TestPushSkipsArchivedConversation(t *testing.T) {
 }
 
 func TestPushDedupeSuppressesRepeatDelivery(t *testing.T) {
-	mux, sender := newTestMux(t)
+	handler, sender := newTestMux(t)
+	senderSecret, _ := testIdentity(t)
+	recipientSecret, recipientPubkey := testIdentity(t)
+	registerTestDevice(t, handler, recipientSecret, "device-token-1", "sandbox")
 
-	senderSecret := nostr.GeneratePrivateKey()
-	recipientSecret := nostr.GeneratePrivateKey()
-	recipientPubkey, err := nostr.GetPublicKey(recipientSecret)
-	if err != nil {
-		t.Fatalf("get recipient pubkey: %v", err)
-	}
-
-	performSignedJSONRequest(
-		t,
-		mux,
-		"POST",
-		"/v1/devices/register",
-		registerDeviceRequest{
-			DeviceToken:     "device-token-1",
-			APNSEnvironment: "sandbox",
-		},
-		recipientSecret,
-		http.StatusAccepted,
-		nil,
-	)
-
-	requestBody := pushRequest{
+	request := pushRequest{
 		NotificationType: notificationTypeNewEmojiReaction,
 		EventID:          "event-1",
 		ConversationID:   "conversation-1",
 		RecipientPubkeys: []string{recipientPubkey},
 		Emoji:            "🔥",
 	}
-	performSignedJSONRequest(
-		t,
-		mux,
-		"POST",
-		"/v1/push",
-		requestBody,
-		senderSecret,
-		http.StatusAccepted,
-		nil,
-	)
-	performSignedJSONRequest(
-		t,
-		mux,
-		"POST",
-		"/v1/push",
-		requestBody,
-		senderSecret,
-		http.StatusAccepted,
-		nil,
-	)
+	for range 2 {
+		performSignedJSONRequest(t, handler, "POST", "/v1/push", request, senderSecret, http.StatusAccepted)
+	}
 
 	if len(sender.sent) != 1 {
 		t.Fatalf("expected dedupe to keep a single send, got %d", len(sender.sent))
@@ -214,103 +113,35 @@ func TestPushDedupeSuppressesRepeatDelivery(t *testing.T) {
 }
 
 func TestPermanentAPNSErrorRemovesDevice(t *testing.T) {
-	mux, sender := newTestMux(t)
-	sender.sendErr = permanentDeviceError{reason: "apns rejection: Unregistered"}
-
-	senderSecret := nostr.GeneratePrivateKey()
-	recipientSecret := nostr.GeneratePrivateKey()
-	recipientPubkey, err := nostr.GetPublicKey(recipientSecret)
-	if err != nil {
-		t.Fatalf("get recipient pubkey: %v", err)
-	}
-
-	performSignedJSONRequest(
-		t,
-		mux,
-		"POST",
-		"/v1/devices/register",
-		registerDeviceRequest{
-			DeviceToken:     "invalid-device-token",
-			APNSEnvironment: "production",
-		},
-		recipientSecret,
-		http.StatusAccepted,
-		nil,
-	)
+	handler, sender := newTestMux(t)
+	sender.sendErr = permanentDeviceError("apns rejection: Unregistered")
+	senderSecret, _ := testIdentity(t)
+	recipientSecret, recipientPubkey := testIdentity(t)
+	registerTestDevice(t, handler, recipientSecret, "invalid-device-token", "production")
 
 	for _, eventID := range []string{"event-1", "event-2"} {
-		performSignedJSONRequest(
-			t,
-			mux,
-			"POST",
-			"/v1/push",
-			pushRequest{
-				NotificationType: notificationTypeNewPost,
-				EventID:          eventID,
-				ConversationID:   "conversation-1",
-				RecipientPubkeys: []string{recipientPubkey},
-			},
-			senderSecret,
-			http.StatusAccepted,
-			nil,
-		)
+		sendTestPush(t, handler, senderSecret, recipientPubkey, eventID)
 	}
-
 	if len(sender.sent) != 1 {
 		t.Fatalf("expected invalid token to be removed after one send, got %d attempts", len(sender.sent))
 	}
 }
 
 func TestUnregisterDeviceRemovesPushTarget(t *testing.T) {
-	mux, sender := newTestMux(t)
-
-	senderSecret := nostr.GeneratePrivateKey()
-	recipientSecret := nostr.GeneratePrivateKey()
-	recipientPubkey, err := nostr.GetPublicKey(recipientSecret)
-	if err != nil {
-		t.Fatalf("get recipient pubkey: %v", err)
-	}
-
+	handler, sender := newTestMux(t)
+	senderSecret, _ := testIdentity(t)
+	recipientSecret, recipientPubkey := testIdentity(t)
+	registerTestDevice(t, handler, recipientSecret, "device-token-1", "sandbox")
 	performSignedJSONRequest(
 		t,
-		mux,
-		"POST",
-		"/v1/devices/register",
-		registerDeviceRequest{
-			DeviceToken:     "device-token-1",
-			APNSEnvironment: "sandbox",
-		},
-		recipientSecret,
-		http.StatusAccepted,
-		nil,
-	)
-	performSignedJSONRequest(
-		t,
-		mux,
+		handler,
 		"POST",
 		"/v1/devices/unregister",
-		unregisterDeviceRequest{
-			DeviceToken: "device-token-1",
-		},
+		unregisterDeviceRequest{DeviceToken: "device-token-1"},
 		recipientSecret,
 		http.StatusAccepted,
-		nil,
 	)
-	performSignedJSONRequest(
-		t,
-		mux,
-		"POST",
-		"/v1/push",
-		pushRequest{
-			NotificationType: notificationTypeNewPost,
-			EventID:          "event-1",
-			ConversationID:   "conversation-1",
-			RecipientPubkeys: []string{recipientPubkey},
-		},
-		senderSecret,
-		http.StatusAccepted,
-		nil,
-	)
+	sendTestPush(t, handler, senderSecret, recipientPubkey, "event-1")
 
 	if len(sender.sent) != 0 {
 		t.Fatalf("expected no sends after unregister, got %d", len(sender.sent))
@@ -318,39 +149,17 @@ func TestUnregisterDeviceRemovesPushTarget(t *testing.T) {
 }
 
 func TestPushSkipsSelfSendRecipients(t *testing.T) {
-	mux, sender := newTestMux(t)
-
-	senderSecret := nostr.GeneratePrivateKey()
-	senderPubkey, err := nostr.GetPublicKey(senderSecret)
-	if err != nil {
-		t.Fatalf("get sender pubkey: %v", err)
-	}
-
-	performSignedJSONRequest(
-		t,
-		mux,
-		"POST",
-		"/v1/push",
-		pushRequest{
-			NotificationType: notificationTypeNewPost,
-			EventID:          "event-1",
-			ConversationID:   "conversation-1",
-			RecipientPubkeys: []string{senderPubkey},
-		},
-		senderSecret,
-		http.StatusAccepted,
-		nil,
-	)
-
+	handler, sender := newTestMux(t)
+	senderSecret, senderPubkey := testIdentity(t)
+	sendTestPush(t, handler, senderSecret, senderPubkey, "event-1")
 	if len(sender.sent) != 0 {
 		t.Fatalf("expected self-send recipients to be skipped, got %d sends", len(sender.sent))
 	}
 }
 
 func TestMissingAuthorizationIsRejected(t *testing.T) {
-	mux, _ := newTestMux(t)
-
-	requestBody, err := json.Marshal(registerDeviceRequest{
+	handler, _ := newTestMux(t)
+	body, err := json.Marshal(registerDeviceRequest{
 		DeviceToken:     "device-token-1",
 		APNSEnvironment: "sandbox",
 	})
@@ -358,25 +167,17 @@ func TestMissingAuthorizationIsRejected(t *testing.T) {
 		t.Fatalf("marshal request body: %v", err)
 	}
 
-	request := httptest.NewRequest(
-		"POST",
-		"/v1/devices/register",
-		bytes.NewReader(requestBody),
-	)
-	request.Header.Set("Content-Type", "application/json")
-
 	recorder := httptest.NewRecorder()
-	mux.ServeHTTP(recorder, request)
+	handler.ServeHTTP(recorder, httptest.NewRequest("POST", "/v1/devices/register", bytes.NewReader(body)))
 	if recorder.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401 for missing auth, got %d body=%s", recorder.Code, recorder.Body.String())
+		t.Fatalf("expected 401, got %d body=%s", recorder.Code, recorder.Body.String())
 	}
 }
 
 func TestAuthorizationNonceReplayIsRejected(t *testing.T) {
-	mux, _ := newTestMux(t)
-	secret := nostr.GeneratePrivateKey()
-
-	requestBody, err := json.Marshal(registerDeviceRequest{
+	handler, _ := newTestMux(t)
+	secret, _ := testIdentity(t)
+	body, err := json.Marshal(registerDeviceRequest{
 		DeviceToken:     "device-token-1",
 		APNSEnvironment: "sandbox",
 	})
@@ -384,36 +185,43 @@ func TestAuthorizationNonceReplayIsRejected(t *testing.T) {
 		t.Fatalf("marshal request body: %v", err)
 	}
 
-	firstRequest, err := signedJSONRequest("POST", "/v1/devices/register", requestBody, secret)
+	firstRequest, err := signedJSONRequest("POST", "/v1/devices/register", body, secret)
 	if err != nil {
 		t.Fatalf("build signed request: %v", err)
 	}
-	authHeader := firstRequest.Header.Get("Authorization")
-
 	firstRecorder := httptest.NewRecorder()
-	mux.ServeHTTP(firstRecorder, firstRequest)
+	handler.ServeHTTP(firstRecorder, firstRequest)
 	if firstRecorder.Code != http.StatusAccepted {
 		t.Fatalf("expected first request to succeed, got %d body=%s", firstRecorder.Code, firstRecorder.Body.String())
 	}
 
-	secondRequest := httptest.NewRequest(
-		"POST",
-		"/v1/devices/register",
-		bytes.NewReader(requestBody),
-	)
-	secondRequest.Header.Set("Content-Type", "application/json")
-	secondRequest.Header.Set("Authorization", authHeader)
-
+	secondRequest := httptest.NewRequest("POST", "/v1/devices/register", bytes.NewReader(body))
+	secondRequest.Header.Set("Authorization", firstRequest.Header.Get("Authorization"))
 	secondRecorder := httptest.NewRecorder()
-	mux.ServeHTTP(secondRecorder, secondRequest)
+	handler.ServeHTTP(secondRecorder, secondRequest)
 	if secondRecorder.Code != http.StatusUnauthorized {
 		t.Fatalf("expected replay to be rejected, got %d body=%s", secondRecorder.Code, secondRecorder.Body.String())
 	}
 }
 
+func TestOversizedRequestIsRejected(t *testing.T) {
+	handler, _ := newTestMux(t)
+	secret, _ := testIdentity(t)
+	body := bytes.Repeat([]byte("x"), maxRequestBodyBytes+1)
+	request, err := signedJSONRequest("POST", "/v1/devices/register", body, secret)
+	if err != nil {
+		t.Fatalf("build signed request: %v", err)
+	}
+
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("expected oversized request to be rejected, got %d", recorder.Code)
+	}
+}
+
 func TestNewPushSenderRequiresAPNSConfigWhenNotDisabled(t *testing.T) {
-	_, err := newPushSender(config{})
-	if err == nil {
+	if _, err := newPushSender(config{}); err == nil {
 		t.Fatal("expected missing APNs config to fail when APNS_DISABLE is not set")
 	}
 }
@@ -430,28 +238,50 @@ func TestNewPushSenderAllowsNoOpWhenDisabled(t *testing.T) {
 
 func newTestMux(t *testing.T) (*http.ServeMux, *capturingSender) {
 	t.Helper()
-
-	dbPath := filepath.Join(t.TempDir(), "push-service.db")
-	db, err := openDatabase(dbPath)
-	if err != nil {
-		t.Fatalf("open database: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = db.Close()
-	})
-
-	store, err := newStore(db)
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
-
+	store, _ := newTestStore(t)
 	sender := &capturingSender{}
-	server := &apiServer{
-		store:  store,
-		sender: sender,
-	}
+	return newHTTPHandler(&apiServer{store: store, sender: sender}), sender
+}
 
-	return newHTTPHandler(server), sender
+func testIdentity(t *testing.T) (string, string) {
+	t.Helper()
+	secret := nostr.GeneratePrivateKey()
+	pubkey, err := nostr.GetPublicKey(secret)
+	if err != nil {
+		t.Fatalf("get public key: %v", err)
+	}
+	return secret, pubkey
+}
+
+func registerTestDevice(t *testing.T, handler http.Handler, secret, deviceToken, environment string) {
+	t.Helper()
+	performSignedJSONRequest(
+		t,
+		handler,
+		"POST",
+		"/v1/devices/register",
+		registerDeviceRequest{DeviceToken: deviceToken, APNSEnvironment: environment},
+		secret,
+		http.StatusAccepted,
+	)
+}
+
+func sendTestPush(t *testing.T, handler http.Handler, secret, recipientPubkey, eventID string) {
+	t.Helper()
+	performSignedJSONRequest(
+		t,
+		handler,
+		"POST",
+		"/v1/push",
+		pushRequest{
+			NotificationType: notificationTypeNewPost,
+			EventID:          eventID,
+			ConversationID:   "conversation-1",
+			RecipientPubkeys: []string{recipientPubkey},
+		},
+		secret,
+		http.StatusAccepted,
+	)
 }
 
 func performSignedJSONRequest(
@@ -461,31 +291,22 @@ func performSignedJSONRequest(
 	body any,
 	secret string,
 	expectedStatus int,
-	responseBody any,
-) {
+) *httptest.ResponseRecorder {
 	t.Helper()
-
 	requestBody, err := json.Marshal(body)
 	if err != nil {
 		t.Fatalf("marshal request body: %v", err)
 	}
-
 	request, err := signedJSONRequest(method, path, requestBody, secret)
 	if err != nil {
 		t.Fatalf("build signed request: %v", err)
 	}
-
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, request)
 	if recorder.Code != expectedStatus {
 		t.Fatalf("unexpected status %d body=%s", recorder.Code, recorder.Body.String())
 	}
-
-	if responseBody != nil {
-		if err := json.Unmarshal(recorder.Body.Bytes(), responseBody); err != nil {
-			t.Fatalf("decode response body: %v", err)
-		}
-	}
+	return recorder
 }
 
 func signedJSONRequest(method, path string, body []byte, secret string) (*http.Request, error) {
@@ -504,17 +325,12 @@ func signedJSONRequest(method, path string, body []byte, secret string) (*http.R
 	if err := event.Sign(secret); err != nil {
 		return nil, err
 	}
-
 	authPayload, err := json.Marshal(event)
 	if err != nil {
 		return nil, err
 	}
-
 	request := httptest.NewRequest(method, path, bytes.NewReader(body))
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set(
-		"Authorization",
-		"Nostr "+base64.StdEncoding.EncodeToString(authPayload),
-	)
+	request.Header.Set("Authorization", "Nostr "+base64.StdEncoding.EncodeToString(authPayload))
 	return request, nil
 }
