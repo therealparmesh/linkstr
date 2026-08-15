@@ -43,6 +43,8 @@ final class AppSessionPresentationTests: XCTestCase {
     XCTAssertTrue(html.contains("createTweet(tweetID, container"))
     XCTAssertTrue(html.contains("tweet-container"))
     XCTAssertTrue(html.contains("platform.twitter.com/widgets.js"))
+    XCTAssertFalse(html.contains("postMetrics(false)"))
+    XCTAssertFalse(html.contains("attributes: true"))
   }
 
   func testTwitterStatusResponseParserExtractsPreviewFromVXPath() throws {
@@ -131,6 +133,48 @@ final class AppSessionPresentationTests: XCTestCase {
       summary.candidateURLs.map(\.absoluteString),
       ["https://video.twimg.com/ext_tw_video/20/pu/vid/1280x720/sample.mp4"]
     )
+  }
+
+  func testTwitterStatusResponseParserKeepsRootMediaVideoURLs() {
+    let videoURL = "https://video.twimg.com/ext_tw_video/20/pu/vid/1280x720/root.mp4"
+    let json: [String: Any] = [
+      "media_extended": [
+        ["type": "video", "url": videoURL]
+      ]
+    ]
+
+    let summary = TwitterStatusResponseParser.mediaSummary(from: json)
+
+    XCTAssertTrue(summary.hasVideo)
+    XCTAssertEqual(summary.candidateURLs.map(\.absoluteString), [videoURL])
+  }
+
+  func testTwitterStatusResponseParserIgnoresQuotedPostVideo() throws {
+    let json: [String: Any] = [
+      "tweet": [
+        "text": "outer post with a photo",
+        "media": [
+          "photos": [
+            ["type": "photo", "url": "https://pbs.twimg.com/media/outer.jpg"]
+          ]
+        ],
+        "quoted_tweet": [
+          "media": [
+            "videos": [
+              [
+                "type": "video",
+                "url": "https://video.twimg.com/ext_tw_video/99/pu/vid/quoted.mp4"
+              ]
+            ]
+          ]
+        ]
+      ]
+    ]
+
+    let summary = TwitterStatusResponseParser.mediaSummary(from: json)
+
+    XCTAssertFalse(summary.hasVideo)
+    XCTAssertTrue(summary.candidateURLs.isEmpty)
   }
 
   func testLinkMetadataRefreshPolicyCases() {

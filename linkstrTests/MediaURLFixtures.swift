@@ -34,7 +34,7 @@ enum MediaURLFixtures {
       url: "https://www.tiktok.com/@acct/video/7596114833477537054",
       linkType: .tiktok,
       strategyKind: .extractionPreferred,
-      embedExpectation: .exact("https://www.tiktok.com/@_/video/7596114833477537054"),
+      embedExpectation: .exact("https://www.tiktok.com/player/v1/7596114833477537054"),
       allowsLocalPlayback: true
     ),
     StrategyExpectation(
@@ -42,7 +42,7 @@ enum MediaURLFixtures {
       url: "https://www.instagram.com/reel/C7x5mYfP0R1/",
       linkType: .instagram,
       strategyKind: .extractionPreferred,
-      embedExpectation: .exact("https://www.instagram.com/reel/C7x5mYfP0R1/"),
+      embedExpectation: .exact("https://www.instagram.com/reel/C7x5mYfP0R1/embed"),
       allowsLocalPlayback: true
     ),
     StrategyExpectation(
@@ -50,7 +50,7 @@ enum MediaURLFixtures {
       url: "https://www.instagram.com/p/C7x5mYfP0R1/",
       linkType: .instagram,
       strategyKind: .extractionPreferred,
-      embedExpectation: .exact("https://www.instagram.com/p/C7x5mYfP0R1/"),
+      embedExpectation: .exact("https://www.instagram.com/p/C7x5mYfP0R1/embed"),
       allowsLocalPlayback: true
     ),
     StrategyExpectation(

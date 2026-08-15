@@ -73,7 +73,7 @@ actor URLCanonicalizationService {
   static let shared = URLCanonicalizationService()
 
   private var cache: [String: URL] = [:]
-  private var embedURLCache: [String: URL] = [:]
+  private var rumbleEmbedURLCache: [String: URL] = [:]
 
   func canonicalPlaybackURL(for sourceURL: URL) async -> URL {
     let cacheKey = sourceURL.absoluteString
@@ -91,22 +91,15 @@ actor URLCanonicalizationService {
     return resolved
   }
 
-  func preferredEmbedURL(for sourceURL: URL) async -> URL? {
+  func preferredRumbleEmbedURL(for sourceURL: URL) async -> URL? {
     let cacheKey = sourceURL.absoluteString
-    if let cached = embedURLCache[cacheKey] {
+    if let cached = rumbleEmbedURLCache[cacheKey] {
       return cached
     }
 
-    let resolved: URL?
-    switch URLClassifier.classify(sourceURL) {
-    case .rumble:
-      resolved = await rumbleEmbedURL(from: sourceURL)
-    case .tiktok, .instagram, .facebook, .youtube, .twitter, .generic:
-      resolved = nil
-    }
-
+    let resolved = await rumbleEmbedURL(from: sourceURL)
     if let resolved {
-      embedURLCache[cacheKey] = resolved
+      rumbleEmbedURLCache[cacheKey] = resolved
     }
     return resolved
   }
@@ -114,7 +107,7 @@ actor URLCanonicalizationService {
   func invalidate(for sourceURL: URL) {
     let cacheKey = sourceURL.absoluteString
     cache.removeValue(forKey: cacheKey)
-    embedURLCache.removeValue(forKey: cacheKey)
+    rumbleEmbedURLCache.removeValue(forKey: cacheKey)
   }
 
   private func resolveUncached(_ sourceURL: URL) async -> URL {

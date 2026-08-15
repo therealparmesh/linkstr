@@ -4,50 +4,21 @@ enum TwitterStatusResponseParser {
   static func mediaSummary(from json: [String: Any]) -> TwitterStatusMediaSummary {
     let mediaContainer = ((json["tweet"] as? [String: Any])?["media"] as? [String: Any]) ?? [:]
     let mediaEntries = mediaEntries(from: mediaContainer, fallbackJSON: json)
+    let videoTypes = ["video", "animated_gif", "gif"]
+    let hasTypedVideo = mediaEntries.contains { entry in
+      guard let type = (entry["type"] as? String)?.lowercased() else { return false }
+      return videoTypes.contains(type)
+    }
 
-    var hasVideo = false
     var candidateURLs: [URL] = []
     var seen = Set<String>()
 
-    for entry in mediaEntries {
-      let type = (entry["type"] as? String)?.lowercased() ?? ""
-      let isVideoLike =
-        type == "video"
-        || type == "animated_gif"
-        || type == "gif"
-      guard isVideoLike else { continue }
-      hasVideo = true
-
-      collectMediaURL(entry["url"], into: &candidateURLs, seen: &seen)
-
-      if let formats = entry["formats"] as? [[String: Any]] {
-        for format in formats {
-          collectMediaURL(format["url"], into: &candidateURLs, seen: &seen)
-        }
-      }
-
-      if let variants = entry["variants"] as? [[String: Any]] {
-        for variant in variants {
-          collectMediaURL(variant["url"], into: &candidateURLs, seen: &seen)
-        }
-      }
-
-      if let videoInfo = entry["video_info"] as? [String: Any],
-        let variants = videoInfo["variants"] as? [[String: Any]] {
-        for variant in variants {
-          collectMediaURL(variant["url"], into: &candidateURLs, seen: &seen)
-        }
-      }
-    }
-
-    collectNestedMediaURLs(from: json, into: &candidateURLs, seen: &seen)
-    if !candidateURLs.isEmpty {
-      hasVideo = true
-    }
+    collectNestedMediaURLs(from: mediaContainer, into: &candidateURLs, seen: &seen)
+    collectRootMediaURLs(from: json, into: &candidateURLs, seen: &seen)
 
     return TwitterStatusMediaSummary(
       candidateURLs: candidateURLs,
-      hasVideo: hasVideo,
+      hasVideo: hasTypedVideo || !candidateURLs.isEmpty,
       preview: preview(from: json)
     )
   }
@@ -232,6 +203,17 @@ enum TwitterStatusResponseParser {
     }
 
     collectMediaURL(value, into: &urls, seen: &seen)
+  }
+
+  private static func collectRootMediaURLs(
+    from json: [String: Any],
+    into urls: inout [URL],
+    seen: inout Set<String>
+  ) {
+    for key in ["media_extended", "mediaDetails", "media", "mediaURLs"] {
+      guard let rootMediaValue = json[key] else { continue }
+      collectNestedMediaURLs(from: rootMediaValue, into: &urls, seen: &seen)
+    }
   }
 
   private static func validatedPreviewURL(from rawValue: String?) -> URL? {

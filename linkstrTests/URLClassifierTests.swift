@@ -76,14 +76,14 @@ final class URLClassifierTests: XCTestCase {
     guard case .extractionPreferred(let embedURL) = strategy else {
       return XCTFail("Expected extractionPreferred for TikTok query video IDs")
     }
-    XCTAssertEqual(embedURL.absoluteString, "https://www.tiktok.com/@_/video/7596114833477537054")
+    XCTAssertEqual(embedURL.absoluteString, "https://www.tiktok.com/player/v1/7596114833477537054")
   }
 
   func testComposerAvailabilityHintMatchesMediaStrategy() {
     XCTAssertEqual(
       NewPostSheet.composerAvailabilityHint(
         for: URLClassifier.MediaStrategy.extractionPreferred(
-          embedURL: URL(string: "https://www.tiktok.com/@_/video/7596114833477537054")!
+          embedURL: URL(string: "https://www.tiktok.com/player/v1/7596114833477537054")!
         )
       ),
       "viewable in-app. may be saveable."

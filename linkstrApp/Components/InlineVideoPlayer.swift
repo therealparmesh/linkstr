@@ -9,9 +9,11 @@ import SwiftUI
 struct InlineVideoPlayer: View {
   let media: PlayableMedia
   var onPlaybackFailed: (() -> Void)?
+  var onAspectRatioChange: ((CGFloat) -> Void)?
   @State private var player: AVPlayer?
   @State private var isShowingFullscreenPlayer = false
   @State private var statusObservation: NSKeyValueObservation?
+  @State private var presentationSizeObservation: NSKeyValueObservation?
 
   var body: some View {
     ZStack(alignment: .topTrailing) {
@@ -51,6 +53,8 @@ struct InlineVideoPlayer: View {
     .task(id: media.playbackURL) {
       statusObservation?.invalidate()
       statusObservation = nil
+      presentationSizeObservation?.invalidate()
+      presentationSizeObservation = nil
       player?.pause()
 
       let item: AVPlayerItem
@@ -66,6 +70,15 @@ struct InlineVideoPlayer: View {
           Task { @MainActor in onPlaybackFailed?() }
         }
       }
+      presentationSizeObservation = item.observe(
+        \.presentationSize,
+        options: [.initial, .new]
+      ) { observed, _ in
+        guard let aspectRatio = MediaPresentationGeometry.aspectRatio(
+          for: observed.presentationSize
+        ) else { return }
+        Task { @MainActor in onAspectRatioChange?(aspectRatio) }
+      }
       let newPlayer = AVPlayer(playerItem: item)
       player = newPlayer
       newPlayer.play()
@@ -75,6 +88,8 @@ struct InlineVideoPlayer: View {
       player = nil
       statusObservation?.invalidate()
       statusObservation = nil
+      presentationSizeObservation?.invalidate()
+      presentationSizeObservation = nil
     }
   }
 }
@@ -151,6 +166,8 @@ struct AdaptiveVideoPlaybackView: View {
   @State var exportFeedbackMessage: String?
   @State var embeddedContentHeight: CGFloat?
   @State var isEmbeddedContentReady = false
+  @State var detectedMediaAspectRatio: CGFloat?
+  @State var embeddedLoadFailed = false
 
   init(
     sourceURL: URL,
@@ -195,14 +212,16 @@ struct AdaptiveVideoPlaybackView: View {
             )
           }
         }
-        if preferredEmbedSource == nil,
-          let preferredEmbedURL = await URLCanonicalizationService.shared.preferredEmbedURL(
+        if isRumble, preferredEmbedSource == nil,
+          let rumbleEmbedURL = await URLCanonicalizationService.shared.preferredRumbleEmbedURL(
             for: canonical) {
-          preferredEmbedSource = .url(preferredEmbedURL)
+          preferredEmbedSource = .url(rumbleEmbedURL)
         }
         isResolvingPresentation = false
         embeddedContentHeight = nil
         isEmbeddedContentReady = false
+        detectedMediaAspectRatio = nil
+        embeddedLoadFailed = false
         extractionState = nil
         extractionFallbackReason = nil
         playbackCandidateIndex = 0

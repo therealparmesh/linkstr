@@ -9,15 +9,6 @@ enum EmbeddedWebSource: Equatable {
   case url(URL)
   case html(document: String, baseURL: URL?)
 
-  var cacheKey: String {
-    switch self {
-    case .url(let url):
-      return "url:\(url.absoluteString)"
-    case .html(let document, let baseURL):
-      return "html:\(baseURL?.absoluteString ?? "nil"):\(document)"
-    }
-  }
-
   var usesManagedHTMLDocument: Bool {
     if case .html = self {
       return true
@@ -34,14 +25,15 @@ struct EmbeddedWebView: UIViewRepresentable {
   let source: EmbeddedWebSource
   var onIntrinsicHeightChange: ((CGFloat) -> Void)?
   var onContentReadyChange: ((Bool) -> Void)?
+  var onLoadFailure: (() -> Void)?
 
   final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler, WKUIDelegate {
     static let metricsHandlerName = "linkstrEmbedMetrics"
 
-    var loadedSourceKey: String?
     var source: EmbeddedWebSource?
     var onIntrinsicHeightChange: ((CGFloat) -> Void)?
     var onContentReadyChange: ((Bool) -> Void)?
+    var onLoadFailure: (() -> Void)?
 
     private var pendingMetricPolls: [DispatchWorkItem] = []
     private var lastReportedHeight: CGFloat = 0
@@ -109,7 +101,24 @@ struct EmbeddedWebView: UIViewRepresentable {
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+      guard source?.usesManagedHTMLDocument == true else { return }
       scheduleMetricPolling(for: webView)
+    }
+
+    func webView(
+      _ webView: WKWebView,
+      didFail navigation: WKNavigation!,
+      withError error: Error
+    ) {
+      reportLoadFailure(error)
+    }
+
+    func webView(
+      _ webView: WKWebView,
+      didFailProvisionalNavigation navigation: WKNavigation!,
+      withError error: Error
+    ) {
+      reportLoadFailure(error)
     }
 
     func prepareForNewLoad() {
@@ -123,6 +132,12 @@ struct EmbeddedWebView: UIViewRepresentable {
       cancelPendingMetricPolls()
       onIntrinsicHeightChange = nil
       onContentReadyChange = nil
+      onLoadFailure = nil
+    }
+
+    private func reportLoadFailure(_ error: Error) {
+      guard (error as? URLError)?.code != .cancelled else { return }
+      onLoadFailure?()
     }
 
     private func scheduleMetricPolling(for webView: WKWebView) {
@@ -144,7 +159,6 @@ struct EmbeddedWebView: UIViewRepresentable {
     }
 
     private func pollMetrics(from webView: WKWebView) {
-      let forceReady = source?.usesManagedHTMLDocument == false
       let script = """
           (() => {
             const root = document.documentElement;
@@ -157,7 +171,7 @@ struct EmbeddedWebView: UIViewRepresentable {
               root?.clientHeight ?? 0,
               body?.clientHeight ?? 0
             );
-            const ready = \(forceReady ? "true" : "(body?.classList.contains('linkstr-embed-ready') ?? false)");
+            const ready = body?.classList.contains('linkstr-embed-ready') ?? false;
             return JSON.stringify({ height: Math.ceil(height), ready });
           })();
         """
@@ -250,12 +264,13 @@ struct EmbeddedWebView: UIViewRepresentable {
   }
 
   func updateUIView(_ uiView: WKWebView, context: Context) {
+    let sourceChanged = context.coordinator.source != source
     context.coordinator.source = source
     context.coordinator.onIntrinsicHeightChange = onIntrinsicHeightChange
     context.coordinator.onContentReadyChange = onContentReadyChange
+    context.coordinator.onLoadFailure = onLoadFailure
 
-    guard context.coordinator.loadedSourceKey != source.cacheKey else { return }
-    context.coordinator.loadedSourceKey = source.cacheKey
+    guard sourceChanged else { return }
     context.coordinator.prepareForNewLoad()
 
     switch source {

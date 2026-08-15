@@ -23,7 +23,7 @@ extension MediaURLFixtures {
       url: "https://m.instagram.com/reel/C7x5mYfP0R1/",
       linkType: .instagram,
       strategyKind: .extractionPreferred,
-      embedExpectation: .exact("https://www.instagram.com/reel/C7x5mYfP0R1/"),
+      embedExpectation: .exact("https://www.instagram.com/reel/C7x5mYfP0R1/embed"),
       allowsLocalPlayback: true
     ),
     StrategyExpectation(
@@ -31,7 +31,7 @@ extension MediaURLFixtures {
       url: "https://www.instagram.com/share/reel/DUSWiOIDivu/",
       linkType: .instagram,
       strategyKind: .extractionPreferred,
-      embedExpectation: .exact("https://www.instagram.com/reel/DUSWiOIDivu/"),
+      embedExpectation: .exact("https://www.instagram.com/reel/DUSWiOIDivu/embed"),
       allowsLocalPlayback: true
     ),
     StrategyExpectation(
@@ -39,7 +39,7 @@ extension MediaURLFixtures {
       url: "https://www.instagram.com/share/p/DUbRe_8EuQY/",
       linkType: .instagram,
       strategyKind: .extractionPreferred,
-      embedExpectation: .exact("https://www.instagram.com/p/DUbRe_8EuQY/"),
+      embedExpectation: .exact("https://www.instagram.com/p/DUbRe_8EuQY/embed"),
       allowsLocalPlayback: true
     ),
     StrategyExpectation(
@@ -47,7 +47,7 @@ extension MediaURLFixtures {
       url: "https://www.instagram.com/p/C-dH1fUNQwq/?l=1",
       linkType: .instagram,
       strategyKind: .extractionPreferred,
-      embedExpectation: .exact("https://www.instagram.com/p/C-dH1fUNQwq/"),
+      embedExpectation: .exact("https://www.instagram.com/p/C-dH1fUNQwq/embed"),
       allowsLocalPlayback: true
     ),
     StrategyExpectation(
@@ -55,7 +55,7 @@ extension MediaURLFixtures {
       url: instagramShareTokenReelURL,
       linkType: .instagram,
       strategyKind: .extractionPreferred,
-      embedExpectation: .exact(instagramCanonicalReelURL),
+      embedExpectation: .exact("https://www.instagram.com/reel/DaBh1TUP5sC/embed"),
       allowsLocalPlayback: true
     ),
     StrategyExpectation(
@@ -87,7 +87,8 @@ extension MediaURLFixtures {
       url: "https://youtu.be/dQw4w9WgXcQ",
       linkType: .youtube,
       strategyKind: .embedOnly,
-      embedExpectation: .exact("https://www.youtube.com/embed/dQw4w9WgXcQ?playsinline=1&rel=0"),
+      embedExpectation: .exact(
+        "https://www.youtube.com/embed/dQw4w9WgXcQ?playsinline=1&rel=0"),
       allowsLocalPlayback: false
     ),
     StrategyExpectation(
@@ -112,7 +113,8 @@ extension MediaURLFixtures {
       url: "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ",
       linkType: .youtube,
       strategyKind: .embedOnly,
-      embedExpectation: .exact("https://www.youtube.com/embed/dQw4w9WgXcQ?playsinline=1&rel=0"),
+      embedExpectation: .exact(
+        "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?playsinline=1&rel=0"),
       allowsLocalPlayback: false
     ),
     StrategyExpectation(

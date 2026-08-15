@@ -193,7 +193,7 @@ enum TwitterEmbedDocumentBuilder {
 
                       const refresh = () => {
                         sizeRenderedTweet();
-                        postMetrics(false);
+                        postMetrics();
                         if (hasRenderedTweet()) {
                           markReady();
                         }

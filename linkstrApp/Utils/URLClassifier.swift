@@ -136,13 +136,16 @@ enum URLClassifier {
 
   private static func tikTokEmbedURL(for sourceURL: URL) -> URL? {
     if let id = SocialURLHeuristics.tikTokVideoID(from: sourceURL) {
-      return URL(string: "https://www.tiktok.com/@_/video/\(id)")
+      return URL(string: "https://www.tiktok.com/player/v1/\(id)")
     }
     return sourceURL
   }
 
   private static func instagramEmbedURL(for sourceURL: URL) -> URL? {
-    SocialURLHeuristics.instagramCanonicalURL(for: sourceURL) ?? sourceURL
+    guard let canonicalURL = SocialURLHeuristics.instagramCanonicalURL(for: sourceURL) else {
+      return sourceURL
+    }
+    return canonicalURL.appendingPathComponent("embed")
   }
 
   private static func facebookEmbedURL(for sourceURL: URL) -> URL? {
@@ -197,11 +200,18 @@ enum URLClassifier {
       URLQueryItem(name: "playsinline", value: "1"),
       URLQueryItem(name: "rel", value: "0")
     ]
-    if let startTime = queryItems?.first(where: { $0.name == "t" })?.value {
-      embedQueryItems.append(URLQueryItem(name: "start", value: startTime))
+    let rawStartTime = queryItems?.first(where: {
+      let name = $0.name.lowercased()
+      return name == "start" || name == "t"
+    })?.value
+    if let startSeconds = youtubeStartSeconds(from: rawStartTime) {
+      embedQueryItems.append(URLQueryItem(name: "start", value: String(startSeconds)))
     }
 
-    var components = URLComponents(string: "https://www.youtube.com/embed/\(id)")
+    let embedHost = SocialURLHeuristics.hostMatches(host, domain: "youtube-nocookie.com")
+      ? "www.youtube-nocookie.com"
+      : "www.youtube.com"
+    var components = URLComponents(string: "https://\(embedHost)/embed/\(id)")
     components?.queryItems = embedQueryItems
     return components?.url ?? sourceURL
   }
@@ -272,5 +282,43 @@ enum URLClassifier {
     components.user = nil
     components.password = nil
     return components.url ?? sourceURL
+  }
+}
+
+extension URLClassifier {
+  private static func youtubeStartSeconds(from rawValue: String?) -> Int? {
+    guard let value = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+      !value.isEmpty
+    else { return nil }
+    if let seconds = Int(value) {
+      return seconds > 0 ? seconds : nil
+    }
+
+    guard let match = value.wholeMatch(of: /(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?/)
+    else { return nil }
+    let hours = Double(match.1.map(String.init) ?? "") ?? 0
+    let minutes = Double(match.2.map(String.init) ?? "") ?? 0
+    let trailingSeconds = Double(match.3.map(String.init) ?? "") ?? 0
+    let seconds = hours * 3_600 + minutes * 60 + trailingSeconds
+    guard seconds.isFinite, seconds > 0, seconds <= Double(Int.max) else { return nil }
+    return Int(seconds)
+  }
+
+  static func isDedicatedEmbedURL(_ url: URL) -> Bool {
+    let parts = SocialURLHeuristics.normalizedPathComponents(for: url)
+    switch classify(url) {
+    case .tiktok:
+      return parts.starts(with: ["player", "v1"]) && parts.count >= 3
+    case .instagram:
+      return parts.last == "embed"
+    case .facebook:
+      return parts.starts(with: ["plugins", "video.php"])
+    case .youtube:
+      return parts.first == "embed" && parts.count >= 2
+    case .rumble:
+      return parts.first == "embed" && parts.count >= 2
+    case .twitter, .generic:
+      return false
+    }
   }
 }

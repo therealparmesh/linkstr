@@ -69,8 +69,7 @@ extension TwitterEmbedDocumentBuilder {
 
                   new MutationObserver(refresh).observe(body, {
                     subtree: true,
-                    childList: true,
-                    attributes: true
+                    childList: true
                   });
 
                   if (window.ResizeObserver) {

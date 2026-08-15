@@ -42,9 +42,7 @@ extension URLCanonicalizationService {
     case "r", "reel":
       return URL(string: "https://www.facebook.com/reel/\(token)/")
     case "v":
-      if !token.allSatisfy(\.isNumber) {
-        return URL(string: "https://www.facebook.com/reel/\(token)/")
-      }
+      guard token.allSatisfy(\.isNumber) else { return nil }
       var components = URLComponents(string: "https://www.facebook.com/watch/")
       components?.queryItems = [URLQueryItem(name: "v", value: token)]
       return components?.url

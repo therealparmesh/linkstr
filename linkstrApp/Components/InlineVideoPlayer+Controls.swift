@@ -59,7 +59,15 @@ extension AdaptiveVideoPlaybackView {
               media: media,
               onPlaybackFailed: {
                 handlePlaybackFailure(currentMedia: media, candidates: candidates)
-              })
+              },
+              onAspectRatioChange: { aspectRatio in
+                guard currentPlaybackCandidate(from: candidates)?.playbackURL == media.playbackURL
+                else { return }
+                if abs((detectedMediaAspectRatio ?? 0) - aspectRatio) > 0.001 {
+                  detectedMediaAspectRatio = aspectRatio
+                }
+              }
+            )
           }
           extractionReadyActions(exportFileURL: exportFileURL)
         }
@@ -89,32 +97,13 @@ extension AdaptiveVideoPlaybackView {
     allowsTryLocalPlayback: Bool
   ) -> some View {
     VStack(alignment: .leading, spacing: 8) {
-      mediaSurface(explicitHeight: embedSurfaceHeight(for: embedSource)) {
-        ZStack {
-          EmbeddedWebView(
-            source: embedSource,
-            onIntrinsicHeightChange: { height in
-              guard embedSource.usesManagedHTMLDocument else { return }
-              embeddedContentHeight = normalizedEmbedHeight(height)
-            },
-            onContentReadyChange: { isReady in
-              guard embedSource.usesManagedHTMLDocument else { return }
-              isEmbeddedContentReady = isReady
-            }
-          )
-          .scopedPlaybackAudioSession()
-          .opacity(shouldDeferEmbedReveal(for: embedSource) && !isEmbeddedContentReady ? 0 : 1)
-
-          if shouldDeferEmbedReveal(for: embedSource) && !isEmbeddedContentReady {
-            VStack(spacing: 8) {
-              ProgressView()
-              Text("loading post...")
-                .font(LinkstrTheme.body(12))
-                .foregroundStyle(LinkstrTheme.textSecondary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-          }
-        }
+      if isRenderableEmbedSource(embedSource), !embeddedLoadFailed {
+        embeddedPlayerSurface(embedSource)
+      } else {
+        Text("embedded playback unavailable. open the original post to view it.")
+          .font(LinkstrTheme.body(12))
+          .foregroundStyle(LinkstrTheme.textSecondary)
+          .frame(maxWidth: .infinity, alignment: .leading)
       }
 
       if let extractionFallbackReason {
@@ -137,6 +126,39 @@ extension AdaptiveVideoPlaybackView {
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  func embeddedPlayerSurface(_ embedSource: EmbeddedWebSource) -> some View {
+    mediaSurface(explicitHeight: embedSurfaceHeight(for: embedSource)) {
+      ZStack {
+        EmbeddedWebView(
+          source: embedSource,
+          onIntrinsicHeightChange: { height in
+            guard embedSource.usesManagedHTMLDocument else { return }
+            embeddedContentHeight = normalizedEmbedHeight(height)
+          },
+          onContentReadyChange: { isReady in
+            guard embedSource.usesManagedHTMLDocument else { return }
+            isEmbeddedContentReady = isReady
+          },
+          onLoadFailure: {
+            embeddedLoadFailed = true
+          }
+        )
+        .scopedPlaybackAudioSession()
+        .opacity(shouldDeferEmbedReveal(for: embedSource) && !isEmbeddedContentReady ? 0 : 1)
+
+        if shouldDeferEmbedReveal(for: embedSource) && !isEmbeddedContentReady {
+          VStack(spacing: 8) {
+            ProgressView()
+            Text("loading post...")
+              .font(LinkstrTheme.body(12))
+              .foregroundStyle(LinkstrTheme.textSecondary)
+          }
+          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        }
+      }
+    }
   }
 
   @ViewBuilder
@@ -205,6 +227,8 @@ extension AdaptiveVideoPlaybackView {
       playbackCandidateIndex = 0
       embeddedContentHeight = nil
       isEmbeddedContentReady = false
+      detectedMediaAspectRatio = nil
+      embeddedLoadFailed = false
       extractionState = nil
       extractionFallbackReason = nil
       await prepareMediaIfNeeded()
@@ -229,6 +253,7 @@ extension AdaptiveVideoPlaybackView {
   func advancePlaybackCandidate(candidates: [PlayableMedia]) {
     let nextIndex = playbackCandidateIndex + 1
     if nextIndex < candidates.count {
+      detectedMediaAspectRatio = nil
       playbackCandidateIndex = nextIndex
       let newMedia = candidates[nextIndex]
       if !newMedia.isLocalFile {
@@ -325,6 +350,15 @@ extension AdaptiveVideoPlaybackView {
     embedSource.usesManagedHTMLDocument
   }
 
+  func isRenderableEmbedSource(_ embedSource: EmbeddedWebSource) -> Bool {
+    switch embedSource {
+    case .html:
+      return true
+    case .url(let url):
+      return URLClassifier.isDedicatedEmbedURL(url)
+    }
+  }
+
   func embedSurfaceHeight(for embedSource: EmbeddedWebSource) -> CGFloat? {
     guard embedSource.usesManagedHTMLDocument else { return nil }
     return embeddedContentHeight
@@ -340,7 +374,10 @@ extension AdaptiveVideoPlaybackView {
   }
 
   var effectiveMediaAspectRatio: CGFloat {
-    URLClassifier.preferredMediaAspectRatio(
+    if localPlaybackMode == .localPreferred, let detectedMediaAspectRatio {
+      return detectedMediaAspectRatio
+    }
+    return URLClassifier.preferredMediaAspectRatio(
       for: effectiveSourceURL, strategy: effectiveMediaStrategy)
   }
 

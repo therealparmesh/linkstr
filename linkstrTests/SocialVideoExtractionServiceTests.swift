@@ -80,4 +80,62 @@ final class SocialVideoExtractionServiceTests: XCTestCase {
 
     XCTAssertFalse(SocialVideoExtractionService.isLikelyMediaURLString(url.lowercased()))
   }
+
+  func testYouTubeHumanTimestampBecomesSeconds() {
+    let strategy = URLClassifier.mediaStrategy(
+      for: "https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=1h2m3s"
+    )
+    guard case .embedOnly(let embedURL) = strategy else {
+      return XCTFail("Expected a YouTube embed")
+    }
+    XCTAssertEqual(
+      embedURL.absoluteString,
+      "https://www.youtube.com/embed/dQw4w9WgXcQ?playsinline=1&rel=0&start=3723"
+    )
+  }
+
+  func testDedicatedEmbedURLsRejectOrdinaryProviderPages() {
+    XCTAssertTrue(
+      URLClassifier.isDedicatedEmbedURL(
+        URL(string: "https://www.tiktok.com/player/v1/7596114833477537054")!
+      )
+    )
+    XCTAssertTrue(
+      URLClassifier.isDedicatedEmbedURL(
+        URL(string: "https://www.instagram.com/reel/C7x5mYfP0R1/embed")!
+      )
+    )
+    XCTAssertFalse(
+      URLClassifier.isDedicatedEmbedURL(
+        URL(string: "https://www.tiktok.com/@acct/video/7596114833477537054")!
+      )
+    )
+    XCTAssertFalse(
+      URLClassifier.isDedicatedEmbedURL(
+        URL(string: "https://rumble.com/v5h7abc-sample-title.html")!
+      )
+    )
+  }
+
+  func testMediaPresentationGeometryUsesOnlyValidReportedSizes() {
+    XCTAssertEqual(
+      MediaPresentationGeometry.aspectRatio(for: CGSize(width: 1_080, height: 1_920)) ?? 0,
+      CGFloat(9.0 / 16.0),
+      accuracy: 0.0001
+    )
+    XCTAssertEqual(
+      MediaPresentationGeometry.aspectRatio(for: CGSize(width: 1_920, height: 1_080)) ?? 0,
+      CGFloat(16.0 / 9.0),
+      accuracy: 0.0001
+    )
+    XCTAssertNil(MediaPresentationGeometry.aspectRatio(for: .zero))
+  }
+
+  func testFacebookOpaqueVideoShareTokenIsNotGuessedToBeAReel() async {
+    let sourceURL = URL(string: "https://www.facebook.com/share/v/1AnBCzUqak/")!
+    let fallback = await URLCanonicalizationService.shared.fallbackCanonicalFacebookURL(
+      from: sourceURL
+    )
+    XCTAssertNil(fallback)
+  }
 }

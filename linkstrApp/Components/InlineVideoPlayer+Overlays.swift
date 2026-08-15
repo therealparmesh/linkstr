@@ -4,6 +4,16 @@ import Photos
   import UIKit
 #endif
 
+enum MediaPresentationGeometry {
+  static func aspectRatio(for presentationSize: CGSize) -> CGFloat? {
+    let width = presentationSize.width
+    let height = presentationSize.height
+    guard width.isFinite, height.isFinite, width > 0, height > 0 else { return nil }
+    let ratio = width / height
+    return ratio.isFinite && ratio > 0 ? ratio : nil
+  }
+}
+
 // MARK: - AdaptiveVideoPlaybackView Export & Overlay Helpers
 
 extension AdaptiveVideoPlaybackView {
