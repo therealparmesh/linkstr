@@ -1,43 +1,41 @@
 import SwiftData
 import SwiftUI
 
+enum AppTab: String, Hashable {
+  case sessions
+  case contacts
+  case you
+  case settings
+
+  var title: String {
+    switch self {
+    case .sessions: return "sessions"
+    case .contacts: return "contacts"
+    case .you: return "you"
+    case .settings: return "settings"
+    }
+  }
+
+  var systemImage: String {
+    switch self {
+    case .sessions: return "bubble.left.and.bubble.right.fill"
+    case .contacts: return "person.2.fill"
+    case .you: return "qrcode.viewfinder"
+    case .settings: return "gearshape.fill"
+    }
+  }
+}
+
 struct MainTabView: View {
   @EnvironmentObject private var session: AppSession
   private let ownerPubkey: String
+  @Binding private var selectedTab: AppTab
 
   private struct SessionNavigationTarget: Identifiable, Hashable {
     let id = UUID()
     let sessionID: String
   }
 
-  private enum AppTab: String, CaseIterable, Identifiable {
-    case sessions
-    case contacts
-    case you
-    case settings
-
-    var id: String { rawValue }
-
-    var title: String {
-      switch self {
-      case .sessions: return "sessions"
-      case .contacts: return "contacts"
-      case .you: return "you"
-      case .settings: return "settings"
-      }
-    }
-
-    var systemImage: String {
-      switch self {
-      case .sessions: return "bubble.left.and.bubble.right.fill"
-      case .contacts: return "person.2.fill"
-      case .you: return "qrcode.viewfinder"
-      case .settings: return "gearshape.fill"
-      }
-    }
-  }
-
-  @State private var selectedTab: AppTab = .sessions
   @State private var isPresentingNewSession = false
   @State private var isPresentingAddContact = false
   @State private var isShowingArchivedSessions = false
@@ -46,8 +44,9 @@ struct MainTabView: View {
 
   @Query private var sessions: [SessionEntity]
 
-  init(ownerPubkey: String) {
+  init(ownerPubkey: String, selectedTab: Binding<AppTab>) {
     self.ownerPubkey = ownerPubkey
+    _selectedTab = selectedTab
     _sessions = Query(
       filter: #Predicate<SessionEntity> { session in
         session.ownerPubkey == ownerPubkey
@@ -106,6 +105,11 @@ struct MainTabView: View {
     .onChange(of: selectedTab) { oldValue, newValue in
       if oldValue == .sessions, newValue != .sessions {
         isShowingArchivedSessions = false
+      }
+      if newValue != .sessions {
+        sessionNavigationResetTask?.cancel()
+        sessionNavigationResetTask = nil
+        selectedSessionTarget = nil
       }
     }
     .onChange(of: archivedSessionCount) { _, count in

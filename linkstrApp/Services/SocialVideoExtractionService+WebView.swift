@@ -214,7 +214,7 @@ extension SocialVideoExtractionService {
       setInterval(() => {
         scanVideoElements();
         scanResources();
-      }, 600);
+      }, 500);
 
       scanVideoElements();
       scanResources();

@@ -1,6 +1,6 @@
 # linkstr support
 
-_Last updated: August 1, 2026_
+_Last updated: August 16, 2026_
 
 linkstr is a private link-sharing app built on [Nostr](https://nostr.com). You create or join private sessions, share links inside those sessions, and react with emoji. This page describes the current shipped behavior in plain language.
 
@@ -85,7 +85,8 @@ Open Settings to manage relays.
 - You can add your own relay URLs.
 - Enabled relays can be toggled on or off.
 - Relay rows can be removed.
-- **Reset defaults** puts you back on the current default relay set.
+- **Restore defaults** puts you back on the current default relay set.
+- Tapping a relay connection alert opens relay settings.
 
 ---
 
@@ -268,7 +269,7 @@ Archived sessions do not send notifications.
 
 1. Confirm your internet connection works.
 2. Open Settings and check that at least one relay is enabled.
-3. If needed, use **Reset defaults** in the relays section to go back to the current default relay set.
+3. If needed, use **Restore defaults** in the relays section to go back to the current default relay set.
 4. Bring the app back to the foreground and leave it open for a few seconds. linkstr treats this like a light reopen: it stops relay runtime whenever the app leaves the foreground and does one clean rebuild from a disconnected baseline when it becomes active again.
 5. If it still does not recover, force-quit and reopen the app.
 

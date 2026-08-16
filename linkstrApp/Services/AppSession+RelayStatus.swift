@@ -3,6 +3,14 @@ import Foundation
 // MARK: - Relay Status & Connectivity
 
 extension AppSession {
+  func isRelayConnectionAlertMessage(_ message: String) -> Bool {
+    message == noEnabledRelaysMessage
+      || message == relayOfflineMessage
+      || message == relayReadOnlyMessage
+      || message == relaySendTimeoutMessage
+      || message == NostrServiceError.publishTimedOut.localizedDescription
+  }
+
   func relayConnectivityState(for enabledRelays: [RelayEntity]) -> RelayConnectivityState {
     guard !enabledRelays.isEmpty else { return .noEnabledRelays }
 

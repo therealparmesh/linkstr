@@ -1,10 +1,10 @@
 import Foundation
 
 enum TwitterEmbedTimingDefaults {
-  static let readyTransitionDurationSeconds: TimeInterval = 0.18
-  static let postRenderRefreshDelaysMilliseconds = [40, 120, 260, 520, 1000, 1800]
-  static let bootstrapRefreshDelaysMilliseconds = [80, 220, 480, 900, 1600]
-  static let fallbackDelayMilliseconds = 3_200
+  static let readyTransitionDurationSeconds: TimeInterval = 0.2
+  static let postRenderRefreshDelaysMilliseconds = [50, 100, 250, 500, 1_000, 1_500]
+  static let bootstrapRefreshDelaysMilliseconds = [100, 250, 500, 1_000, 1_500]
+  static let fallbackDelayMilliseconds = 3_000
 
   static func javascriptArray(for values: [Int]) -> String {
     "[\(values.map(String.init).joined(separator: ", "))]"

@@ -9,16 +9,20 @@ extension AppSessionContactAndRelayTests {
 
     await session.boot()
 
-    XCTAssertEqual(session.configuredRelays.map(\.url), RelayDefaults.urls)
+    let expectedRelayURLs = [
+      "wss://nostr.bitcoiner.social", "wss://relay.primal.net", "wss://nos.lol",
+      "wss://nostr.mom", "wss://nostr.satoshisfrens.win"
+    ]
+    XCTAssertEqual(session.configuredRelays.map(\.url), expectedRelayURLs)
     XCTAssertTrue(try fetchPersistedRelays(in: container.mainContext).isEmpty)
   }
 
-  func testBootLeavesPersistedRelayRowsInPlaceUntilResetDefaults() async throws {
+  func testBootPreservesUnmarkedPersistedRelayRows() async throws {
     let relaySettingsUserDefaults = makeRelaySettingsUserDefaults()
     let (session, container) = try makeSession(
       relaySettingsUserDefaults: relaySettingsUserDefaults
     )
-    let persistedRelayURLs = [
+    let unmarkedPersistedRelayURLs = [
       "wss://relay.damus.io",
       "wss://relay.primal.net",
       "wss://nos.lol",
@@ -26,14 +30,14 @@ extension AppSessionContactAndRelayTests {
       "wss://nostr.satoshisfrens.win"
     ]
 
-    persistedRelayURLs.forEach { container.mainContext.insert(RelayEntity(url: $0)) }
+    unmarkedPersistedRelayURLs.forEach { container.mainContext.insert(RelayEntity(url: $0)) }
     try container.mainContext.save()
 
     await session.boot()
 
-    XCTAssertEqual(session.configuredRelays.map(\.url), persistedRelayURLs)
+    XCTAssertEqual(session.configuredRelays.map(\.url), unmarkedPersistedRelayURLs)
     XCTAssertEqual(
-      try fetchPersistedRelays(in: container.mainContext).map(\.url), persistedRelayURLs)
+      try fetchPersistedRelays(in: container.mainContext).map(\.url), unmarkedPersistedRelayURLs)
   }
 
   func testAddingCustomRelayMaterializesDefaultsAndRejectsDuplicates() throws {
@@ -85,7 +89,7 @@ extension AppSessionContactAndRelayTests {
     XCTAssertTrue(session.configuredRelays.isEmpty)
   }
 
-  func testResetDefaultRelaysReturnsToVirtualDefaults() async throws {
+  func testRestoreDefaultRelaysReturnsToVirtualDefaults() async throws {
     let (session, container) = try makeSession()
 
     await session.boot()
@@ -93,11 +97,27 @@ extension AppSessionContactAndRelayTests {
     var relays = try fetchPersistedRelays(in: container.mainContext)
     XCTAssertEqual(relays.count, RelayDefaults.urls.count + 1)
 
-    session.resetDefaultRelays()
+    session.restoreDefaultRelays()
     relays = try fetchPersistedRelays(in: container.mainContext)
 
     XCTAssertTrue(relays.isEmpty)
     XCTAssertEqual(session.configuredRelays.map(\.url), RelayDefaults.urls)
+  }
+
+  func testIdentifiesRelayConnectionAlertMessages() throws {
+    let (session, _) = try makeSession()
+
+    let connectionAlerts = [
+      session.relayOfflineMessage, session.noEnabledRelaysMessage,
+      session.relayReadOnlyMessage, session.relaySendTimeoutMessage,
+      NostrServiceError.publishTimedOut.localizedDescription
+    ]
+    for message in connectionAlerts {
+      XCTAssertTrue(session.isRelayConnectionAlertMessage(message), message)
+    }
+
+    let deletionWarning = "session deleted, but older relay copies of its posts may remain."
+    XCTAssertFalse(session.isRelayConnectionAlertMessage(deletionWarning))
   }
 
   func testBackgroundClearsRuntimeRelayStateBeforeForegroundRebuild() async throws {

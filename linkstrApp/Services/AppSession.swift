@@ -8,7 +8,7 @@ import SwiftData
 
 enum RelayMutationDefaults {
   static let timeoutSeconds: TimeInterval = 12
-  static let pollIntervalSeconds: TimeInterval = 0.35
+  static let pollIntervalSeconds: TimeInterval = 0.25
 }
 
 struct SessionSnapshotParams {
@@ -24,8 +24,8 @@ struct SessionSnapshotParams {
 
 enum AppSessionTimingDefaults {
   static let remoteProfileLookupRetryNanoseconds: UInt64 = 3_000_000_000
-  static let passiveOfflineToastGraceInterval: TimeInterval = 1.25
-  static let relayDisconnectGraceInterval: TimeInterval = 1.25
+  static let passiveOfflineToastGraceInterval: TimeInterval = 1
+  static let relayDisconnectGraceInterval: TimeInterval = 1
   static let identityRetryDelayNanoseconds: UInt64 = 250_000_000
 }
 

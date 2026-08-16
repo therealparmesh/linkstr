@@ -1,8 +1,9 @@
 import SwiftUI
 
 private enum RootViewTimingDefaults {
-  static let toastAnimationDuration: TimeInterval = 0.18
-  static let toastDisplayDuration: TimeInterval = 2.2
+  static let toastAnimationDuration: TimeInterval = 0.2
+  static let toastDisplayDuration: TimeInterval = 2
+  static let contentTransitionDuration: TimeInterval = 0.3
 }
 
 struct RootView: View {
@@ -10,7 +11,9 @@ struct RootView: View {
   @EnvironmentObject private var deepLinkHandler: DeepLinkHandler
   @State private var toastMessage: String?
   @State private var toastIsSuccess: Bool = false
+  @State private var toastOpensRelaySettings = false
   @State private var toastDisplayID = UUID()
+  @State private var selectedTab: AppTab = .sessions
 
   private var sharedLinkDetailBinding: Binding<Bool> {
     Binding(
@@ -73,36 +76,52 @@ struct RootView: View {
             .transition(.opacity)
         } else {
           NavigationStack {
-            MainTabView(ownerPubkey: session.identityService.pubkeyHex ?? "")
+            MainTabView(
+              ownerPubkey: session.identityService.pubkeyHex ?? "",
+              selectedTab: $selectedTab
+            )
           }
           .transition(.opacity)
         }
       }
-      .animation(.easeInOut(duration: 0.35), value: session.didFinishBoot)
-      .animation(.easeInOut(duration: 0.35), value: session.shouldShowOnboarding)
+      .animation(
+        .easeInOut(duration: RootViewTimingDefaults.contentTransitionDuration),
+        value: session.didFinishBoot
+      )
+      .animation(
+        .easeInOut(duration: RootViewTimingDefaults.contentTransitionDuration),
+        value: session.shouldShowOnboarding
+      )
     }
     .overlay(alignment: .top) {
       if let toastMessage {
-        LinkstrErrorToast(message: toastMessage, isSuccess: toastIsSuccess)
-          .padding(.top, LinkstrTheme.toastTopPadding)
-          .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-          .transition(.move(edge: .top).combined(with: .opacity))
-          .onTapGesture {
-            withAnimation(.easeOut(duration: RootViewTimingDefaults.toastAnimationDuration)) {
-              self.toastMessage = nil
-            }
-          }
+        Button(action: handleToastTap) {
+          LinkstrErrorToast(message: toastMessage, isSuccess: toastIsSuccess)
+        }
+        .buttonStyle(.plain)
+        .padding(.top, LinkstrTheme.toastTopPadding)
+        .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+        .transition(.move(edge: .top).combined(with: .opacity))
+        .accessibilityHint(
+          toastOpensRelaySettings ? "opens relay settings" : "dismisses notification"
+        )
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .preferredColorScheme(.dark)
     .tint(LinkstrTheme.accent)
+    .onChange(of: session.shouldShowOnboarding) { _, shouldShowOnboarding in
+      if shouldShowOnboarding {
+        selectedTab = .sessions
+      }
+    }
     .onChange(of: session.composeError) { _, newValue in
       guard let newValue, !newValue.isEmpty else { return }
       guard session.shouldPresentComposeErrorToast else { return }
       withAnimation(.easeIn(duration: RootViewTimingDefaults.toastAnimationDuration)) {
         toastIsSuccess = false
         toastMessage = newValue
+        toastOpensRelaySettings = session.isRelayConnectionAlertMessage(newValue)
       }
       session.composeError = nil
       toastDisplayID = UUID()
@@ -112,6 +131,7 @@ struct RootView: View {
       withAnimation(.easeIn(duration: RootViewTimingDefaults.toastAnimationDuration)) {
         toastIsSuccess = true
         toastMessage = message
+        toastOpensRelaySettings = false
       }
       toastDisplayID = UUID()
     }
@@ -119,9 +139,7 @@ struct RootView: View {
       guard toastMessage != nil else { return }
       try? await Task.sleep(for: .seconds(RootViewTimingDefaults.toastDisplayDuration))
       guard !Task.isCancelled else { return }
-      withAnimation(.easeOut(duration: RootViewTimingDefaults.toastAnimationDuration)) {
-        toastMessage = nil
-      }
+      dismissToast()
     }
     .fullScreenCover(
       isPresented: sharedLinkDetailBinding
@@ -158,6 +176,21 @@ struct RootView: View {
     .fullScreenCover(item: mediaSaveDraftBinding) { draft in
       ShareMediaSaveView(draft: draft)
     }
+  }
+
+  private func handleToastTap() {
+    let shouldOpenRelaySettings = toastOpensRelaySettings
+    dismissToast()
+    if shouldOpenRelaySettings {
+      selectedTab = .settings
+    }
+  }
+
+  private func dismissToast() {
+    withAnimation(.easeOut(duration: RootViewTimingDefaults.toastAnimationDuration)) {
+      toastMessage = nil
+    }
+    toastOpensRelaySettings = false
   }
 }
 

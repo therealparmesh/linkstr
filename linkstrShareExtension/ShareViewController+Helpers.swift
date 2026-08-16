@@ -1,6 +1,10 @@
 import Foundation
 import UIKit
 
+private enum ShareViewControllerTimingDefaults {
+  static let appHandoffCompletionDelay: TimeInterval = 0.5
+}
+
 // MARK: - ShareViewController Action Helpers
 
 extension ShareViewController {
@@ -86,7 +90,9 @@ extension ShareViewController {
           return
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+        DispatchQueue.main.asyncAfter(
+          deadline: .now() + ShareViewControllerTimingDefaults.appHandoffCompletionDelay
+        ) {
           extensionContext.completeRequest(returningItems: nil)
         }
       }

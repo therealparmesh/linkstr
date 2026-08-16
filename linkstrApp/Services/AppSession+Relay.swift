@@ -218,9 +218,9 @@ extension AppSession {
     }
   }
 
-  func resetDefaultRelays() {
+  func restoreDefaultRelays() {
     performRelayMutation {
-      try relayStore.resetDefaultRelays()
+      try relayStore.restoreDefaultRelays()
     }
   }
 

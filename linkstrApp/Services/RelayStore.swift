@@ -49,7 +49,7 @@ final class RelayStore {
     try modelContext.save()
   }
 
-  func resetDefaultRelays() throws {
+  func restoreDefaultRelays() throws {
     try deletePersistedRelays()
     clearCustomizedRelays()
   }

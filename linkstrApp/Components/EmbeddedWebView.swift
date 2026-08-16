@@ -18,7 +18,7 @@ enum EmbeddedWebSource: Equatable {
 }
 
 private enum EmbeddedWebViewTimingDefaults {
-  static let metricPollDelays: [TimeInterval] = [0.05, 0.18, 0.4, 0.9, 1.6]
+  static let metricPollDelays: [TimeInterval] = [0.05, 0.2, 0.5, 1, 1.5]
 }
 
 struct EmbeddedWebView: UIViewRepresentable {

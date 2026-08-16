@@ -1,6 +1,6 @@
 # linkstr
 
-_Last updated: June 21, 2026_
+_Last updated: August 16, 2026_
 
 linkstr is an iOS app for private link sharing on [Nostr](https://nostr.com). You create private sessions, share links with people you trust, react with emojis, and play supported video directly inside the app when a provider allows it.
 
@@ -216,11 +216,12 @@ linkstr is built around private sessions, not one-off direct messages. A session
 ### Relay settings and runtime
 
 - Relay management lives in settings.
-- Users can add a relay URL (`ws://` or `wss://`, valid host required), enable or disable a relay, remove a relay, or reset back to the current shipped default relays.
+- Users can add a relay URL (`ws://` or `wss://`, valid host required), enable or disable a relay, remove a relay, or restore the current shipped default relays.
 - The relay header shows `connected_or_readonly / total`.
 - Relay, storage, and identity controls remain visible without disclosure-group expansion.
 - Relay rows show a live status dot (`connecting`, `connected`, `read-only`, `failed`, `disabled`) and optional inline error text. Error rows reserve layout height to avoid jitter when status text appears or disappears.
 - Offline relay toast signaling is suppressed during initial connection and only shown after a previously healthy relay drops in the same foreground lifecycle.
+- Tapping a relay connection alert opens relay settings; tapping any other toast dismisses it.
 
 ### Relay send gating
 

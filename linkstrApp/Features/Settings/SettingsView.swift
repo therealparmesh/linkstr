@@ -141,9 +141,9 @@ struct SettingsView: View {
         .linkstrPrimaryButton()
 
         Button {
-          session.resetDefaultRelays()
+          session.restoreDefaultRelays()
         } label: {
-          LinkstrActionButtonLabel(title: "reset defaults")
+          LinkstrActionButtonLabel(title: "restore defaults")
         }
         .linkstrSecondaryButton()
       }
