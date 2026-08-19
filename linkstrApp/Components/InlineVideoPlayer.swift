@@ -8,6 +8,7 @@ import SwiftUI
 
 struct InlineVideoPlayer: View {
   let media: PlayableMedia
+  var onPlaybackReady: (() -> Void)?
   var onPlaybackFailed: (() -> Void)?
   var onAspectRatioChange: ((CGFloat) -> Void)?
   @State private var player: AVPlayer?
@@ -56,15 +57,27 @@ struct InlineVideoPlayer: View {
       presentationSizeObservation?.invalidate()
       presentationSizeObservation = nil
       player?.pause()
+      player = nil
 
-      let item: AVPlayerItem
-      if media.headers.isEmpty {
-        item = AVPlayerItem(url: media.playbackURL)
-      } else {
-        let asset = AVURLAsset(
-          url: media.playbackURL, options: ["AVURLAssetHTTPHeaderFieldsKey": media.headers])
-        item = AVPlayerItem(asset: asset)
+      let options = media.headers.isEmpty
+        ? nil
+        : ["AVURLAssetHTTPHeaderFieldsKey": media.headers]
+      let asset = AVURLAsset(url: media.playbackURL, options: options)
+      do {
+        let videoTracks = try await asset.loadTracks(withMediaType: .video)
+        guard !Task.isCancelled else { return }
+        guard !videoTracks.isEmpty else {
+          onPlaybackFailed?()
+          return
+        }
+      } catch {
+        guard !Task.isCancelled else { return }
+        onPlaybackFailed?()
+        return
       }
+      onPlaybackReady?()
+
+      let item = AVPlayerItem(asset: asset)
       statusObservation = item.observe(\.status, options: [.new]) { observed, _ in
         if observed.status == .failed {
           Task { @MainActor in onPlaybackFailed?() }
@@ -293,11 +306,6 @@ struct AdaptiveVideoPlaybackView: View {
   }
 }
 
-struct LocalMediaExportTarget {
-  let fileURL: URL
-  let allowsPhotoSave: Bool
-}
-
 extension AdaptiveVideoPlaybackView {
   var playbackReloadTaskID: String {
     "\(sourceURL.absoluteString)#\(reloadID)"
@@ -334,11 +342,6 @@ extension AdaptiveVideoPlaybackView {
     cachedLocalMedia = nil
     clearPersistedLocalMedia?()
   }
-}
-
-struct LocalFileExportItem: Identifiable {
-  let id = UUID()
-  let fileURL: URL
 }
 
 enum LocalFileExportResult {

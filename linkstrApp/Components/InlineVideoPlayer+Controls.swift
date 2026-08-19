@@ -57,6 +57,12 @@ extension AdaptiveVideoPlaybackView {
           mediaSurface {
             InlineVideoPlayer(
               media: media,
+              onPlaybackReady: {
+                guard currentPlaybackCandidate(from: candidates)?.playbackURL == media.playbackURL,
+                  !media.isLocalFile
+                else { return }
+                scheduleLocalCachingIfNeeded(sourceURL: effectiveSourceURL, media: media)
+              },
               onPlaybackFailed: {
                 handlePlaybackFailure(currentMedia: media, candidates: candidates)
               },
@@ -255,10 +261,6 @@ extension AdaptiveVideoPlaybackView {
     if nextIndex < candidates.count {
       detectedMediaAspectRatio = nil
       playbackCandidateIndex = nextIndex
-      let newMedia = candidates[nextIndex]
-      if !newMedia.isLocalFile {
-        scheduleLocalCachingIfNeeded(sourceURL: effectiveSourceURL, media: newMedia)
-      }
     } else {
       extractionFallbackReason = "none of the extracted video streams were playable."
       localPlaybackMode = .embedPreferred
@@ -324,8 +326,6 @@ extension AdaptiveVideoPlaybackView {
           }
           cachedLocalMedia = media
           persistLocalMedia?(playbackSourceURL, media)
-        } else {
-          scheduleLocalCachingIfNeeded(sourceURL: playbackSourceURL, media: media)
         }
       }
     case .cannotExtract(let reason):

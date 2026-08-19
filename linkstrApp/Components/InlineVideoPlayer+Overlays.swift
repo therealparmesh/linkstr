@@ -14,6 +14,16 @@ enum MediaPresentationGeometry {
   }
 }
 
+struct LocalMediaExportTarget {
+  let fileURL: URL
+  let allowsPhotoSave: Bool
+}
+
+struct LocalFileExportItem: Identifiable {
+  let id = UUID()
+  let fileURL: URL
+}
+
 // MARK: - AdaptiveVideoPlaybackView Export & Overlay Helpers
 
 extension AdaptiveVideoPlaybackView {
