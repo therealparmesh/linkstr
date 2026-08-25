@@ -84,7 +84,7 @@ struct ShareComposerView: View {
 
             LinkstrInsetSection(title: "link") {
               TextField("example.com", text: $link)
-                .font(LinkstrTheme.body(14))
+                .font(LinkstrTheme.font(.footnote))
                 .textInputAutocapitalization(.never)
                 .keyboardType(.URL)
                 .autocorrectionDisabled(true)
@@ -98,7 +98,7 @@ struct ShareComposerView: View {
                 .linkstrInputField()
 
               Text(linkFieldHint ?? " ")
-                .font(LinkstrTheme.body(12))
+                .font(LinkstrTheme.font(.caption))
                 .foregroundStyle(linkFieldHintColor)
                 .frame(maxWidth: .infinity, minHeight: 14, alignment: .leading)
                 .opacity(linkFieldHint == nil ? 0 : 1)
@@ -120,7 +120,7 @@ struct ShareComposerView: View {
               ZStack(alignment: .topLeading) {
                 if note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                   Text("note")
-                    .font(LinkstrTheme.body(14))
+                    .font(LinkstrTheme.font(.footnote))
                     .foregroundStyle(LinkstrTheme.textSecondary)
                     .padding(.top, LinkstrTheme.fieldVerticalPadding)
                     .padding(.leading, LinkstrTheme.fieldHorizontalPadding)
@@ -128,7 +128,7 @@ struct ShareComposerView: View {
                 }
 
                 TextEditor(text: $note)
-                  .font(LinkstrTheme.body(14))
+                  .font(LinkstrTheme.font(.footnote))
                   .foregroundStyle(LinkstrTheme.textPrimary)
                   .scrollContentBackground(.hidden)
                   .frame(minHeight: 112, maxHeight: 180)
@@ -142,6 +142,7 @@ struct ShareComposerView: View {
           .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
           .padding(.top, LinkstrTheme.screenTopPadding)
           .padding(.bottom, LinkstrTheme.screenBottomPadding)
+          .linkstrReadableContent()
         }
         .scrollDismissesKeyboard(.interactively)
       }

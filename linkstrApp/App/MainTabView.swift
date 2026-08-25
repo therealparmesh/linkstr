@@ -196,12 +196,16 @@ struct MainTabView: View {
       ConversationsView(
         ownerPubkey: ownerPubkey,
         isShowingArchivedSessions: $isShowingArchivedSessions,
+        createSession: { isPresentingNewSession = true },
         openSession: openSession
       )
     case .contacts:
-      ContactsView(ownerPubkey: ownerPubkey)
+      ContactsView(
+        ownerPubkey: ownerPubkey,
+        addContact: { isPresentingAddContact = true }
+      )
     case .you:
-      YouView()
+      YouView(openSettings: { selectedTab = .settings })
     case .settings:
       SettingsView()
     }

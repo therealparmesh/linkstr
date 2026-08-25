@@ -25,7 +25,6 @@ enum LinkstrTheme {
   static let buttonRowSpacing: CGFloat = 10
   static let listRowVerticalPadding: CGFloat = 10
   static let inputControlMinHeight: CGFloat = 44
-  static let tabBarContentBottomInset: CGFloat = 92
   static let screenHorizontalPadding: CGFloat = 16
   static let screenTopPadding: CGFloat = 16
   static let screenBottomPadding: CGFloat = 24
@@ -36,24 +35,12 @@ enum LinkstrTheme {
   static let inputAssistButtonSpacing: CGFloat = 14
   static let inputAssistIconSpacing: CGFloat = 6
   static let inputAssistBottomSpacing: CGFloat = 6
-  static let actionButtonLabelSpacing: CGFloat = 8
-  static let actionButtonIconWidth: CGFloat = 18
   static let fieldCornerRadius: CGFloat = 12
+  static let minimumInteractiveDimension: CGFloat = 44
+  static let readableContentMaxWidth: CGFloat = 680
 
-  static func font(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
-    .system(size: size, weight: weight)
-  }
-
-  static func title(_ size: CGFloat, weight: Font.Weight = .semibold) -> Font {
-    font(size, weight: weight)
-  }
-
-  static func body(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
-    font(size, weight: weight)
-  }
-
-  static func system(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
-    font(size, weight: weight)
+  static func font(_ style: Font.TextStyle, weight: Font.Weight = .regular) -> Font {
+    .system(style, design: .default, weight: weight)
   }
 }
 
@@ -131,40 +118,43 @@ private struct LinkstrActionButtonChrome: ViewModifier {
     switch tone {
     case .primary:
       content
-        .font(LinkstrTheme.body(15, weight: .semibold))
+        .font(LinkstrTheme.font(.subheadline, weight: .semibold))
         .buttonStyle(.borderedProminent)
         .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
         .tint(LinkstrTheme.accent)
+        .foregroundStyle(LinkstrTheme.background)
     case .secondary:
       content
-        .font(LinkstrTheme.body(15, weight: .semibold))
+        .font(LinkstrTheme.font(.subheadline, weight: .semibold))
         .buttonStyle(.bordered)
         .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
         .tint(LinkstrTheme.textSecondary)
     case .caution:
       content
-        .font(LinkstrTheme.body(15, weight: .semibold))
+        .font(LinkstrTheme.font(.subheadline, weight: .semibold))
         .buttonStyle(.bordered)
         .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
         .tint(LinkstrTheme.amber)
     case .cautionProminent:
       content
-        .font(LinkstrTheme.body(15, weight: .semibold))
+        .font(LinkstrTheme.font(.subheadline, weight: .semibold))
         .buttonStyle(.borderedProminent)
         .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
         .tint(LinkstrTheme.amber)
+        .foregroundStyle(LinkstrTheme.background)
     case .destructive:
       content
-        .font(LinkstrTheme.body(15, weight: .semibold))
+        .font(LinkstrTheme.font(.subheadline, weight: .semibold))
         .buttonStyle(.bordered)
         .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
         .tint(LinkstrTheme.destructive)
     case .destructiveProminent:
       content
-        .font(LinkstrTheme.body(15, weight: .semibold))
+        .font(LinkstrTheme.font(.subheadline, weight: .semibold))
         .buttonStyle(.borderedProminent)
         .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
         .tint(LinkstrTheme.destructive)
+        .foregroundStyle(LinkstrTheme.background)
     }
   }
 }
@@ -201,16 +191,14 @@ extension View {
     modifier(LinkstrActionButtonChrome(tone: prominent ? .destructiveProminent : .destructive))
   }
 
-  func linkstrTabBarContentInset() -> some View {
-    safeAreaInset(edge: .bottom) {
-      Color.clear
-        .frame(height: LinkstrTheme.tabBarContentBottomInset)
-    }
+  func linkstrToolbarIconLabel() -> some View {
+    font(LinkstrTheme.font(.body, weight: .semibold))
+      .frame(width: 30, height: 30, alignment: .center)
   }
 
-  func linkstrToolbarIconLabel() -> some View {
-    font(LinkstrTheme.system(17, weight: .semibold))
-      .frame(width: 30, height: 30, alignment: .center)
+  func linkstrReadableContent() -> some View {
+    frame(maxWidth: LinkstrTheme.readableContentMaxWidth, alignment: .leading)
+      .frame(maxWidth: .infinity, alignment: .center)
   }
 
   func linkstrBarChrome() -> some View {
@@ -228,18 +216,10 @@ struct LinkstrActionButtonLabel: View {
 
   var body: some View {
     if let systemImage {
-      HStack(spacing: LinkstrTheme.actionButtonLabelSpacing) {
-        Image(systemName: systemImage)
-          .frame(width: LinkstrTheme.actionButtonIconWidth, alignment: .center)
-
-        Text(title)
-          .lineLimit(2)
-          .multilineTextAlignment(.center)
-
-        Color.clear
-          .frame(width: LinkstrTheme.actionButtonIconWidth, height: 1)
-      }
-      .frame(maxWidth: .infinity)
+      Label(title, systemImage: systemImage)
+        .lineLimit(2)
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity)
     } else {
       Text(title)
         .lineLimit(2)
@@ -261,7 +241,7 @@ struct LinkstrSessionAvatar: View {
         Circle()
           .stroke(Color.white.opacity(0.12), lineWidth: 1)
       }
-      .accessibilityLabel("session avatar")
+      .accessibilityHidden(true)
   }
 }
 
@@ -275,5 +255,30 @@ struct LinkstrListRowDivider: View {
       .frame(height: 1)
       .padding(.leading, leadingInset)
       .padding(.trailing, trailingInset)
+  }
+}
+
+struct LinkstrAppIconBadge: View {
+  var size: CGFloat = 72
+
+  private var imageSize: CGFloat {
+    size - 10
+  }
+
+  var body: some View {
+    Circle()
+      .fill(LinkstrTheme.panelElevated)
+      .frame(width: size, height: size)
+      .overlay {
+        Image("LinkstrSplashIcon")
+          .resizable()
+          .scaledToFill()
+          .frame(width: imageSize, height: imageSize)
+          .clipShape(Circle())
+      }
+      .overlay {
+        Circle()
+          .stroke(LinkstrTheme.separator.opacity(2), lineWidth: 1)
+      }
   }
 }

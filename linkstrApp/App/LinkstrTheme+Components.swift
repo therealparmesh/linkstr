@@ -26,14 +26,14 @@ struct LinkstrInsetSection<Content: View>: View {
       if let title {
         HStack(alignment: .center, spacing: LinkstrTheme.compactSpacing) {
           Text(title)
-            .font(LinkstrTheme.body(11, weight: .medium))
+            .font(LinkstrTheme.font(.caption, weight: .medium))
             .foregroundStyle(LinkstrTheme.textSecondary)
 
           Spacer(minLength: 0)
 
           if let accessory, !accessory.isEmpty {
             Text(accessory)
-              .font(LinkstrTheme.body(11, weight: .medium))
+              .font(LinkstrTheme.font(.caption, weight: .medium))
               .foregroundStyle(LinkstrTheme.textTertiary)
           }
         }
@@ -49,7 +49,7 @@ struct LinkstrInsetSection<Content: View>: View {
 
       if let footer, !footer.isEmpty {
         Text(footer)
-          .font(LinkstrTheme.body(12))
+          .font(LinkstrTheme.font(.caption))
           .foregroundStyle(LinkstrTheme.textSecondary)
           .padding(.horizontal, 2)
       }
@@ -66,11 +66,11 @@ struct LinkstrSearchField: View {
   var body: some View {
     HStack(spacing: LinkstrTheme.compactSpacing) {
       Image(systemName: "magnifyingglass")
-        .font(LinkstrTheme.system(13, weight: .semibold))
+        .font(LinkstrTheme.font(.footnote, weight: .semibold))
         .foregroundStyle(LinkstrTheme.textTertiary)
 
       TextField(prompt, text: $text)
-        .font(LinkstrTheme.body(13))
+        .font(LinkstrTheme.font(.footnote))
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled(true)
         .submitLabel(submitLabel)
@@ -82,15 +82,19 @@ struct LinkstrSearchField: View {
         text = ""
       } label: {
         Image(systemName: "xmark.circle.fill")
-          .font(LinkstrTheme.system(13))
+          .font(LinkstrTheme.font(.footnote))
           .foregroundStyle(LinkstrTheme.textTertiary)
-          .frame(width: 18, height: 18)
+          .frame(
+            width: LinkstrTheme.minimumInteractiveDimension,
+            height: LinkstrTheme.minimumInteractiveDimension
+          )
           .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
       .opacity(text.isEmpty ? 0 : 1)
       .allowsHitTesting(!text.isEmpty)
       .accessibilityHidden(text.isEmpty)
+      .accessibilityLabel("clear search")
     }
     .linkstrInputField()
   }
@@ -139,8 +143,11 @@ struct LinkstrInputAssistRow: View {
         Image(systemName: systemImage)
         Text(title)
       }
-      .font(LinkstrTheme.body(12))
+      .font(LinkstrTheme.font(.caption))
       .foregroundStyle(tint)
+      .frame(minWidth: LinkstrTheme.minimumInteractiveDimension)
+      .frame(minHeight: LinkstrTheme.minimumInteractiveDimension)
+      .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
   }
@@ -152,7 +159,7 @@ struct LinkstrSheetStatusFooter: View {
 
   var body: some View {
     Text(message)
-      .font(LinkstrTheme.body(12))
+      .font(LinkstrTheme.font(.caption))
       .foregroundStyle(messageColor)
       .frame(maxWidth: .infinity, minHeight: 14, alignment: .center)
       .multilineTextAlignment(.center)
@@ -216,6 +223,25 @@ struct LinkstrCenteredEmptyStateView: View {
   let title: String
   let systemImage: String
   let description: String
+  var actionTitle: String?
+  var actionSystemImage: String?
+  var action: (() -> Void)?
+
+  init(
+    title: String,
+    systemImage: String,
+    description: String,
+    actionTitle: String? = nil,
+    actionSystemImage: String? = nil,
+    action: (() -> Void)? = nil
+  ) {
+    self.title = title
+    self.systemImage = systemImage
+    self.description = description
+    self.actionTitle = actionTitle
+    self.actionSystemImage = actionSystemImage
+    self.action = action
+  }
 
   var body: some View {
     VStack(spacing: 12) {
@@ -224,19 +250,28 @@ struct LinkstrCenteredEmptyStateView: View {
         .frame(width: 60, height: 60)
         .overlay {
           Image(systemName: systemImage)
-            .font(LinkstrTheme.system(22, weight: .semibold))
+            .font(LinkstrTheme.font(.title2, weight: .semibold))
             .foregroundStyle(LinkstrTheme.accent)
         }
 
       Text(title)
-        .font(LinkstrTheme.title(17))
+        .font(LinkstrTheme.font(.headline, weight: .semibold))
         .foregroundStyle(LinkstrTheme.textPrimary)
 
       Text(description)
-        .font(LinkstrTheme.body(13))
+        .font(LinkstrTheme.font(.footnote))
         .foregroundStyle(LinkstrTheme.textSecondary)
         .multilineTextAlignment(.center)
         .padding(.horizontal, 28)
+
+      if let actionTitle, let action {
+        Button(action: action) {
+          LinkstrActionButtonLabel(title: actionTitle, systemImage: actionSystemImage)
+        }
+        .linkstrPrimaryButton()
+        .frame(maxWidth: 280)
+        .padding(.top, LinkstrTheme.metaSpacing)
+      }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     .padding(.horizontal, 24)
@@ -248,7 +283,7 @@ struct LinkstrScreenTitle: View {
 
   var body: some View {
     Text(title)
-      .font(LinkstrTheme.title(28, weight: .bold))
+      .font(LinkstrTheme.font(.largeTitle, weight: .bold))
       .foregroundStyle(LinkstrTheme.textPrimary)
       .frame(maxWidth: .infinity, alignment: .leading)
   }
@@ -260,11 +295,11 @@ struct LinkstrReadOnlyBanner: View {
   var body: some View {
     HStack(alignment: .top, spacing: 10) {
       Image(systemName: "person.crop.circle.badge.xmark")
-        .font(LinkstrTheme.system(14, weight: .semibold))
+        .font(LinkstrTheme.font(.footnote, weight: .semibold))
         .foregroundStyle(LinkstrTheme.textSecondary)
 
       Text(message)
-        .font(LinkstrTheme.body(12))
+        .font(LinkstrTheme.font(.caption))
         .foregroundStyle(LinkstrTheme.textSecondary)
         .fixedSize(horizontal: false, vertical: true)
     }
@@ -285,31 +320,6 @@ struct LinkstrReadOnlyBanner: View {
       )
       .stroke(LinkstrTheme.separator.opacity(2), lineWidth: 1)
     }
-  }
-}
-
-struct LinkstrAppIconBadge: View {
-  var size: CGFloat = 72
-
-  private var imageSize: CGFloat {
-    size - 10
-  }
-
-  var body: some View {
-    Circle()
-      .fill(LinkstrTheme.panelElevated)
-      .frame(width: size, height: size)
-      .overlay {
-        Image("LinkstrSplashIcon")
-          .resizable()
-          .scaledToFill()
-          .frame(width: imageSize, height: imageSize)
-          .clipShape(Circle())
-      }
-      .overlay {
-        Circle()
-          .stroke(LinkstrTheme.separator.opacity(2), lineWidth: 1)
-      }
   }
 }
 
@@ -375,13 +385,13 @@ struct LinkstrContactAvatar: View {
       .frame(width: size, height: size)
       .overlay {
         Text(LinkstrAvatarStyleResolver.contactInitials(for: name))
-          .font(LinkstrTheme.body(max(12, size * 0.34), weight: .semibold))
+          .font(LinkstrTheme.font(.subheadline, weight: .semibold))
           .foregroundStyle(Color.white)
       }
       .overlay {
         Circle()
           .stroke(Color.white.opacity(0.1), lineWidth: 1)
       }
-      .accessibilityLabel("avatar for \(name)")
+      .accessibilityHidden(true)
   }
 }

@@ -61,7 +61,7 @@ extension SettingsView {
   var identitySection: some View {
     LinkstrInsetSection(title: "identity") {
       if session.identityService.keypair != nil {
-        HStack(spacing: LinkstrTheme.buttonRowSpacing) {
+        LinkstrAdaptiveButtonRow {
           Button {
             if isNsecVisible {
               hideSensitiveIdentityContent()
@@ -92,7 +92,7 @@ extension SettingsView {
 
         if isNsecVisible {
           Text(revealedNsec.isEmpty ? "unable to reveal secret key (nsec)." : revealedNsec)
-            .font(LinkstrTheme.body(13))
+            .font(LinkstrTheme.font(.footnote))
             .foregroundStyle(LinkstrTheme.textSecondary)
             .textSelection(.enabled)
             .privacySensitive()
@@ -121,7 +121,7 @@ extension SettingsView {
         .disabled(isDeletingAccount)
       } else {
         Text("no account found. sign in with a secret key (nsec) or create one.")
-          .font(LinkstrTheme.body(13))
+          .font(LinkstrTheme.font(.footnote))
           .foregroundStyle(LinkstrTheme.textSecondary)
       }
     }
@@ -148,6 +148,23 @@ extension SettingsView {
       return LinkstrTheme.amber
     case .disconnected:
       return LinkstrTheme.textSecondary
+    }
+  }
+
+  func relayStatusLabel(for relay: RelayEntity) -> String {
+    guard relay.isEnabled else { return "disabled" }
+
+    switch session.relayStatus(for: relay) {
+    case .connected:
+      return "connected"
+    case .connecting:
+      return "connecting"
+    case .readOnly:
+      return "read only"
+    case .failed:
+      return "connection failed"
+    case .disconnected:
+      return "disconnected"
     }
   }
 

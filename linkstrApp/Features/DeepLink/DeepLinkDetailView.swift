@@ -33,6 +33,7 @@ struct DeepLinkDetailView: View {
       .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
       .padding(.top, LinkstrTheme.screenTopPadding)
       .padding(.bottom, LinkstrTheme.screenBottomPadding)
+      .linkstrReadableContent()
     }
     .background(LinkstrBackgroundView())
     .task(id: normalizedURLString) {
@@ -44,13 +45,13 @@ struct DeepLinkDetailView: View {
     VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
       if let previewTitle {
         Text(previewTitle)
-          .font(LinkstrTheme.title(17, weight: .semibold))
+          .font(LinkstrTheme.font(.headline, weight: .semibold))
           .foregroundStyle(LinkstrTheme.textPrimary)
           .fixedSize(horizontal: false, vertical: true)
       }
 
       Text(normalizedURLString ?? urlString)
-        .font(LinkstrTheme.body(13))
+        .font(LinkstrTheme.font(.footnote))
         .foregroundStyle(LinkstrTheme.textSecondary)
         .frame(maxWidth: .infinity, alignment: .leading)
         .multilineTextAlignment(.leading)
@@ -58,7 +59,7 @@ struct DeepLinkDetailView: View {
 
       if let remotePostText {
         Text(remotePostText)
-          .font(LinkstrTheme.body(13))
+          .font(LinkstrTheme.font(.footnote))
           .foregroundStyle(LinkstrTheme.textSecondary)
           .frame(maxWidth: .infinity, alignment: .leading)
           .multilineTextAlignment(.leading)
@@ -107,17 +108,19 @@ struct DeepLinkDetailView: View {
       }
     } else {
       Text("invalid shared link")
-        .font(LinkstrTheme.body(13))
+        .font(LinkstrTheme.font(.footnote))
         .foregroundStyle(LinkstrTheme.textSecondary)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
   }
 
   private func loadPreviewIfNeeded() async {
+    previewTitle = nil
+    previewThumbnailPath = nil
+    remotePostText = nil
+    thumbnailImage = nil
+
     guard let normalizedURLString else {
-      previewTitle = nil
-      previewThumbnailPath = nil
-      remotePostText = nil
       return
     }
 
@@ -125,6 +128,7 @@ struct DeepLinkDetailView: View {
     async let remotePostText = resolvedRemotePostText(for: normalizedURLString)
 
     let resolvedPreview = await preview
+    guard !Task.isCancelled else { return }
     previewTitle = LinkMetadataRefreshPolicy.normalizedTitle(resolvedPreview?.title)
     previewThumbnailPath = ManagedLocalFileScope.shared.normalizedManagedPath(
       resolvedPreview?.thumbnailPath
@@ -134,7 +138,9 @@ struct DeepLinkDetailView: View {
     } else {
       thumbnailImage = nil
     }
-    self.remotePostText = await remotePostText
+    let resolvedRemotePostText = await remotePostText
+    guard !Task.isCancelled else { return }
+    self.remotePostText = resolvedRemotePostText
   }
 
   private func shouldLoadRemotePostText(for urlString: String) -> Bool {

@@ -113,6 +113,7 @@ struct ShareSessionPickerSheet: View {
           .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
           .padding(.top, LinkstrTheme.screenTopPadding)
           .padding(.bottom, LinkstrTheme.screenBottomPadding)
+          .linkstrReadableContent()
         }
         .scrollDismissesKeyboard(.interactively)
       }
@@ -174,12 +175,12 @@ struct ShareSelectedSessionRow: View {
 
       VStack(alignment: .leading, spacing: LinkstrTheme.metaSpacing) {
         Text(session.name)
-          .font(LinkstrTheme.title(15, weight: .semibold))
+          .font(LinkstrTheme.font(.headline, weight: .semibold))
           .foregroundStyle(LinkstrTheme.textPrimary)
           .lineLimit(1)
 
         Text("tap to change")
-          .font(LinkstrTheme.body(11, weight: .medium))
+          .font(LinkstrTheme.font(.caption, weight: .medium))
           .foregroundStyle(LinkstrTheme.textTertiary)
           .lineLimit(1)
       }
@@ -187,7 +188,7 @@ struct ShareSelectedSessionRow: View {
       Spacer(minLength: 8)
 
       Image(systemName: "chevron.right")
-        .font(LinkstrTheme.system(13, weight: .semibold))
+        .font(LinkstrTheme.font(.footnote, weight: .semibold))
         .foregroundStyle(LinkstrTheme.textTertiary)
         .accessibilityHidden(true)
     }
@@ -209,12 +210,12 @@ struct ShareSessionPickerRow: View {
 
       VStack(alignment: .leading, spacing: LinkstrTheme.metaSpacing) {
         Text(session.name)
-          .font(LinkstrTheme.title(15, weight: .semibold))
+          .font(LinkstrTheme.font(.headline, weight: .semibold))
           .foregroundStyle(LinkstrTheme.textPrimary)
           .lineLimit(1)
 
         Text(session.updatedAt.linkstrListTimestampLabel)
-          .font(LinkstrTheme.body(11, weight: .medium))
+          .font(LinkstrTheme.font(.caption, weight: .medium))
           .foregroundStyle(LinkstrTheme.textTertiary)
           .lineLimit(1)
       }
@@ -224,7 +225,7 @@ struct ShareSessionPickerRow: View {
       Group {
         if isSelected {
           Image(systemName: "checkmark")
-            .font(LinkstrTheme.system(15, weight: .semibold))
+            .font(LinkstrTheme.font(.subheadline, weight: .semibold))
             .foregroundStyle(LinkstrTheme.accent)
         } else {
           Color.clear
@@ -249,15 +250,15 @@ struct LinkstrShareEmptyPickerState: View {
   var body: some View {
     VStack(spacing: 10) {
       Image(systemName: systemImage)
-        .font(LinkstrTheme.system(24, weight: .semibold))
+        .font(LinkstrTheme.font(.title2, weight: .semibold))
         .foregroundStyle(LinkstrTheme.accent)
 
       Text(title)
-        .font(LinkstrTheme.title(16))
+        .font(LinkstrTheme.font(.headline, weight: .semibold))
         .foregroundStyle(LinkstrTheme.textPrimary)
 
       Text(description)
-        .font(LinkstrTheme.body(13))
+        .font(LinkstrTheme.font(.footnote))
         .foregroundStyle(LinkstrTheme.textSecondary)
         .multilineTextAlignment(.center)
     }

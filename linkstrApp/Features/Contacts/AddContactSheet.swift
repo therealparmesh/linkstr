@@ -34,7 +34,7 @@ struct AddContactSheet: View {
 
             LinkstrInsetSection(title: "public key (npub)") {
               TextField("public key (npub...)", text: $npub)
-                .font(LinkstrTheme.body(15))
+                .font(LinkstrTheme.font(.subheadline))
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled(true)
                 .focused($focusedField, equals: .npub)
@@ -71,7 +71,7 @@ struct AddContactSheet: View {
                   LinkstrContactAvatar(name: previewIdentity.displayName, size: 50)
                   LinkstrContactIdentityView(
                     identity: previewIdentity,
-                    primaryFont: LinkstrTheme.body(15, weight: .medium),
+                    primaryFont: LinkstrTheme.font(.subheadline, weight: .medium),
                     lineLimit: 2
                   )
                   .frame(maxWidth: .infinity, alignment: .leading)
@@ -79,7 +79,7 @@ struct AddContactSheet: View {
 
                 if previewIdentity.chosenName == nil && normalizedAliasPreview == nil {
                   Text("looking up published nostr name...")
-                    .font(LinkstrTheme.body(12))
+                    .font(LinkstrTheme.font(.caption))
                     .foregroundStyle(LinkstrTheme.textSecondary)
                 }
               }
@@ -87,7 +87,7 @@ struct AddContactSheet: View {
 
             LinkstrInsetSection(title: "alias", footer: "optional. only you see this alias.") {
               TextField("alias", text: $alias)
-                .font(LinkstrTheme.body(15))
+                .font(LinkstrTheme.font(.subheadline))
                 .textInputAutocapitalization(.words)
                 .focused($focusedField, equals: .alias)
                 .disabled(isSubmitting)
@@ -99,6 +99,7 @@ struct AddContactSheet: View {
           .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
           .padding(.top, LinkstrTheme.screenTopPadding)
           .padding(.bottom, LinkstrTheme.screenBottomPadding)
+          .linkstrReadableContent()
           .scrollDismissesKeyboard(.interactively)
         }
       }

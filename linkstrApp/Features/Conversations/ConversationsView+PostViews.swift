@@ -236,7 +236,7 @@ struct PostListRowView: View {
     VStack(alignment: .leading, spacing: 6) {
       if showsSenderHeader {
         Text(senderLabel)
-          .font(LinkstrTheme.body(12, weight: .semibold))
+          .font(LinkstrTheme.font(.caption, weight: .semibold))
           .foregroundStyle(
             isOutgoing
               ? LinkstrTheme.accent
@@ -273,13 +273,13 @@ struct PostCardView: View {
 
       VStack(alignment: .leading, spacing: LinkstrTheme.compactSpacing) {
         Text(primaryText)
-          .font(LinkstrTheme.title(15, weight: .semibold))
+          .font(LinkstrTheme.font(.headline, weight: .semibold))
           .foregroundStyle(LinkstrTheme.textPrimary)
           .lineLimit(2)
 
         if let noteText {
           Text(noteText)
-            .font(LinkstrTheme.body(13))
+            .font(LinkstrTheme.font(.footnote))
             .foregroundStyle(LinkstrTheme.textSecondary)
             .lineLimit(3)
         }
@@ -293,7 +293,7 @@ struct PostCardView: View {
           }
 
           Text(post.timestamp.linkstrListTimestampLabel)
-            .font(LinkstrTheme.body(12, weight: .medium))
+            .font(LinkstrTheme.font(.caption, weight: .medium))
             .foregroundStyle(LinkstrTheme.textTertiary)
             .lineLimit(1)
         }
@@ -367,7 +367,7 @@ struct PostCardView: View {
       .frame(width: 58, height: 58)
       .overlay {
         Image(systemName: "link")
-          .font(LinkstrTheme.body(16))
+          .font(LinkstrTheme.font(.body))
           .foregroundStyle(LinkstrTheme.textSecondary)
       }
   }

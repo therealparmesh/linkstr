@@ -269,3 +269,50 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     XCTAssertEqual(requestedPubkeyBatches, [[pubkey]])
   }
 }
+
+extension AppSessionContactAndRelayTests {
+  func testDisconnectedRelayStatusIsAppliedImmediatelyAfterConnecting() throws {
+    let (session, container) = try makeSession()
+    let relay = RelayEntity(url: "wss://relay.example.com")
+    container.mainContext.insert(relay)
+    try container.mainContext.save()
+
+    session.simulateRuntimeRelayStatusForTesting(relayURL: relay.url, status: .connected)
+    session.simulateRuntimeRelayStatusForTesting(relayURL: relay.url, status: .disconnected)
+
+    XCTAssertEqual(session.relayStatus(for: relay), .disconnected)
+  }
+
+  func testStaleRelayCallbackDoesNotUpdateReplacementRuntime() async throws {
+    let (session, container) = try makeSession()
+    let relay = RelayEntity(url: "wss://relay.example.com")
+    container.mainContext.insert(relay)
+    try container.mainContext.save()
+    session.beginForegroundCycle()
+    let staleHandler = session.makeRelayStatusHandler()
+
+    session.replaceNostrService()
+    staleHandler(relay.url, .connected, nil)
+    await Task.yield()
+
+    XCTAssertEqual(session.relayStatus(for: relay), .disconnected)
+  }
+
+  func testRemoteProfileRetryStopsAfterProfileStateReset() async throws {
+    var requestedPubkeyBatches: [[String]] = []
+    let (session, _) = try makeSession(
+      requestProfileMetadata: { requestedPubkeys in
+        requestedPubkeyBatches.append(requestedPubkeys)
+        return true
+      },
+      remoteProfileLookupRetryNanoseconds: shortRemoteProfileLookupRetryNanoseconds
+    )
+    let pubkey = try TestKeyMaterialFactory.makePubkeyHex()
+
+    session.requestRemoteProfilesIfNeeded(pubkeyHexes: [pubkey])
+    session.resetRemoteProfileStateInMemory()
+    try await Task.sleep(nanoseconds: shortRemoteProfileLookupRetryNanoseconds * 2)
+
+    XCTAssertEqual(requestedPubkeyBatches, [[pubkey]])
+  }
+}

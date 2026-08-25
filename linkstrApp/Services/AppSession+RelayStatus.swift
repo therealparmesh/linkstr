@@ -118,28 +118,16 @@ extension AppSession {
       retryPendingRemoteProfileRequestsIfNeeded()
     }
 
-    let now = Date()
     let normalizedMessage = normalizedRelayStatusMessage(message)
-    if let existing = relayRuntimeStatusByURL[relayURL],
-      existing.status == .connected || existing.status == .readOnly,
-      status == .disconnected,
-      normalizedMessage == nil,
-      now.timeIntervalSince(existing.updatedAt)
-        < AppSessionTimingDefaults.relayDisconnectGraceInterval {
-      return
-    }
-
     if let existing = relayRuntimeStatusByURL[relayURL],
       existing.status == status,
       existing.message == normalizedMessage {
-      relayRuntimeStatusByURL[relayURL]?.updatedAt = now
       return
     }
 
     relayRuntimeStatusByURL[relayURL] = RelayRuntimeStatus(
       status: status,
-      message: normalizedMessage,
-      updatedAt: now
+      message: normalizedMessage
     )
   }
 
@@ -163,15 +151,13 @@ extension AppSession {
 
   func primeRelayRuntimeStatusForFreshStart(relayURLs: [String]) {
     guard !relayURLs.isEmpty else { return }
-    let now = Date()
     relayRuntimeStatusByURL = Dictionary(
       uniqueKeysWithValues: relayURLs.map {
         (
           $0,
           RelayRuntimeStatus(
             status: .disconnected,
-            message: nil,
-            updatedAt: now
+            message: nil
           )
         )
       }

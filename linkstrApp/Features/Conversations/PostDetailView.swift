@@ -1,7 +1,6 @@
 import EmojiKit
 import SwiftData
 import SwiftUI
-
 struct ReactionSummary: Identifiable, Hashable {
   let emoji: String
   let count: Int
@@ -45,10 +44,9 @@ struct ReactionSummary: Identifiable, Hashable {
 }
 
 struct ReactionParticipantBreakdown: Identifiable, Hashable {
+  let id: String
   let displayName: String
   let emojis: [String]
-
-  var id: String { displayName }
 }
 
 struct LinkstrReactionRow: View {
@@ -96,7 +94,7 @@ struct LinkstrReactionRow: View {
 
           if hasReadOnlyOverflow {
             Text("...")
-              .font(LinkstrTheme.body(12))
+              .font(LinkstrTheme.font(.caption))
               .foregroundStyle(LinkstrTheme.textSecondary)
           }
         } else {
@@ -110,11 +108,13 @@ struct LinkstrReactionRow: View {
 
           if let onAddReaction {
             Button(action: onAddReaction) {
-              Text("...")
-                .font(LinkstrTheme.body(13))
+              Image(systemName: "ellipsis")
+                .font(LinkstrTheme.font(.footnote, weight: .semibold))
                 .foregroundStyle(LinkstrTheme.textPrimary.opacity(0.9))
                 .padding(.horizontal, 10)
-                .padding(.vertical, 6)
+                .frame(
+                  minWidth: LinkstrTheme.minimumInteractiveDimension,
+                  minHeight: LinkstrTheme.minimumInteractiveDimension)
                 .background(
                   Capsule()
                     .fill(LinkstrTheme.panel)
@@ -125,6 +125,7 @@ struct LinkstrReactionRow: View {
                 )
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("more reactions")
           }
         }
       }
@@ -136,12 +137,12 @@ struct LinkstrReactionRow: View {
   private func readOnlySummaryText(_ summary: ReactionSummary) -> some View {
     ZStack(alignment: .bottomTrailing) {
       Text(summary.emoji)
-        .font(LinkstrTheme.system(17))
+        .font(LinkstrTheme.font(.body))
         .foregroundStyle(LinkstrTheme.textPrimary.opacity(0.95))
 
       if let badgeText = summary.readOnlyBadgeText {
         Text(badgeText)
-          .font(LinkstrTheme.body(9))
+          .font(LinkstrTheme.font(.caption2))
           .foregroundStyle(LinkstrTheme.textPrimary)
           .padding(.horizontal, 4)
           .padding(.vertical, 1)
@@ -172,6 +173,8 @@ struct LinkstrReactionRow: View {
           summaryChipLabel(summary)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("\(summary.emoji), \(summary.count) reaction\(summary.count == 1 ? "" : "s")")
+        .accessibilityValue(summary.includesCurrentUser ? "you reacted" : "")
       } else {
         summaryChipLabel(summary)
       }
@@ -181,13 +184,13 @@ struct LinkstrReactionRow: View {
   private func summaryChipLabel(_ summary: ReactionSummary) -> some View {
     HStack(spacing: 6) {
       Text(summary.emoji)
-        .font(LinkstrTheme.system(15))
+        .font(LinkstrTheme.font(.subheadline))
       Text(summary.badgeText)
-        .font(LinkstrTheme.body(12))
+        .font(LinkstrTheme.font(.caption))
         .foregroundStyle(LinkstrTheme.textPrimary.opacity(0.95))
     }
     .padding(.horizontal, 10)
-    .padding(.vertical, 6)
+    .frame(minHeight: LinkstrTheme.minimumInteractiveDimension)
     .background(
       Capsule()
         .fill(summary.includesCurrentUser ? LinkstrTheme.panelElevated : LinkstrTheme.panel)
@@ -212,6 +215,8 @@ struct LinkstrReactionRow: View {
           quickEmojiButtonLabel(emoji: emoji, summary: summary)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("\(emoji), \(summary?.count ?? 0) reaction\((summary?.count ?? 0) == 1 ? "" : "s")")
+        .accessibilityValue(summary?.includesCurrentUser == true ? "you reacted" : "")
       } else {
         quickEmojiButtonLabel(emoji: emoji, summary: summary)
       }
@@ -224,16 +229,16 @@ struct LinkstrReactionRow: View {
   ) -> some View {
     HStack(spacing: 6) {
       Text(emoji)
-        .font(LinkstrTheme.system(15))
+        .font(LinkstrTheme.font(.subheadline))
 
       if let count = summary?.count, count > 0 {
         Text(summary?.badgeText ?? "\(count)")
-          .font(LinkstrTheme.body(12))
+          .font(LinkstrTheme.font(.caption))
           .foregroundStyle(LinkstrTheme.textPrimary.opacity(0.95))
       }
     }
     .padding(.horizontal, 10)
-    .padding(.vertical, 6)
+    .frame(minHeight: LinkstrTheme.minimumInteractiveDimension)
     .background(
       Capsule()
         .fill(
@@ -344,6 +349,7 @@ struct PostDetailView: View {
           .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
           .padding(.top, LinkstrTheme.screenTopPadding)
           .padding(.bottom, LinkstrTheme.screenBottomPadding)
+          .linkstrReadableContent()
         }
       } else {
         ContentUnavailableView(
@@ -353,7 +359,6 @@ struct PostDetailView: View {
         )
       }
     }
-    .linkstrTabBarContentInset()
     .task(id: loadRequestID) {
       await loadContent()
     }

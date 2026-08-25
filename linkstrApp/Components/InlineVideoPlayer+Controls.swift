@@ -14,7 +14,7 @@ extension AdaptiveVideoPlaybackView {
         VStack(spacing: 8) {
           ProgressView()
           Text("loading post...")
-            .font(LinkstrTheme.body(12))
+            .font(LinkstrTheme.font(.caption))
             .foregroundStyle(LinkstrTheme.textSecondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
@@ -90,7 +90,7 @@ extension AdaptiveVideoPlaybackView {
         VStack(spacing: 8) {
           ProgressView()
           Text("preparing video playback...")
-            .font(LinkstrTheme.body(12))
+            .font(LinkstrTheme.font(.caption))
             .foregroundStyle(LinkstrTheme.textSecondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
@@ -107,14 +107,14 @@ extension AdaptiveVideoPlaybackView {
         embeddedPlayerSurface(embedSource)
       } else {
         Text("embedded playback unavailable. open the original post to view it.")
-          .font(LinkstrTheme.body(12))
+          .font(LinkstrTheme.font(.caption))
           .foregroundStyle(LinkstrTheme.textSecondary)
           .frame(maxWidth: .infinity, alignment: .leading)
       }
 
       if let extractionFallbackReason {
         Text("video playback unavailable: \(extractionFallbackReason)")
-          .font(LinkstrTheme.body(12))
+          .font(LinkstrTheme.font(.caption))
           .foregroundStyle(LinkstrTheme.textSecondary)
       }
 
@@ -158,7 +158,7 @@ extension AdaptiveVideoPlaybackView {
           VStack(spacing: 8) {
             ProgressView()
             Text("loading post...")
-              .font(LinkstrTheme.body(12))
+              .font(LinkstrTheme.font(.caption))
               .foregroundStyle(LinkstrTheme.textSecondary)
           }
           .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)

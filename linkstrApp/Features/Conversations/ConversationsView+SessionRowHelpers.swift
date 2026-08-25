@@ -3,6 +3,23 @@ import SwiftData
 import SwiftUI
 import UIKit
 
+struct LinkstrNoContactsPrompt: View {
+  let addContact: () -> Void
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: LinkstrTheme.compactSpacing) {
+      Text("no contacts yet. add someone to invite them.")
+        .font(LinkstrTheme.font(.footnote))
+        .foregroundStyle(LinkstrTheme.textSecondary)
+
+      Button(action: addContact) {
+        LinkstrActionButtonLabel(title: "add contact", systemImage: "person.badge.plus")
+      }
+      .linkstrSecondaryButton()
+    }
+  }
+}
+
 // MARK: - NewSessionSheet Helpers
 
 extension NewSessionSheet {
@@ -84,54 +101,57 @@ extension SessionManagementSheet {
   @ViewBuilder
   var managementSections: some View {
     LinkstrInsetSection(title: "add from contacts") {
-      LinkstrSearchField(prompt: "search contacts", text: $query)
-
       if sortedContacts.isEmpty {
-        Text("no contacts yet.")
-          .font(LinkstrTheme.body(13))
-          .foregroundStyle(LinkstrTheme.textSecondary)
-      } else if filteredContacts.isEmpty {
-        Text("no contacts match.")
-          .font(LinkstrTheme.body(13))
-          .foregroundStyle(LinkstrTheme.textSecondary)
+        LinkstrNoContactsPrompt {
+          focusedField = nil
+          isPresentingAddContact = true
+        }
       } else {
-        VStack(spacing: 0) {
-          ForEach(filteredContacts) { contact in
-            let identity = session.resolvedIdentity(for: contact)
-            let contactHex = contact.targetPubkey
-            Button {
-              if includedMemberHexes.contains(contactHex) {
-                includedMemberHexes.remove(contactHex)
-              } else {
-                includedMemberHexes.insert(contactHex)
+        LinkstrSearchField(prompt: "search contacts", text: $query)
+
+        if filteredContacts.isEmpty {
+          Text("no contacts match.")
+            .font(LinkstrTheme.font(.footnote))
+            .foregroundStyle(LinkstrTheme.textSecondary)
+        } else {
+          VStack(spacing: 0) {
+            ForEach(filteredContacts) { contact in
+              let identity = session.resolvedIdentity(for: contact)
+              let contactHex = contact.targetPubkey
+              Button {
+                if includedMemberHexes.contains(contactHex) {
+                  includedMemberHexes.remove(contactHex)
+                } else {
+                  includedMemberHexes.insert(contactHex)
+                }
+              } label: {
+                HStack(spacing: LinkstrTheme.rowSpacing) {
+                  LinkstrContactAvatar(name: identity.displayName, size: 38)
+                  LinkstrContactIdentityView(
+                    identity: identity,
+                    primaryFont: LinkstrTheme.font(.footnote, weight: .medium)
+                  )
+
+                  Spacer()
+
+                  Image(
+                    systemName: includedMemberHexes.contains(contactHex)
+                      ? "checkmark.circle.fill" : "circle"
+                  )
+                  .font(LinkstrTheme.font(.title3, weight: .semibold))
+                  .foregroundStyle(
+                    includedMemberHexes.contains(contactHex)
+                      ? LinkstrTheme.accent : LinkstrTheme.textTertiary
+                  )
+                }
+                .padding(.vertical, LinkstrTheme.listRowVerticalPadding)
+                .contentShape(Rectangle())
               }
-            } label: {
-              HStack(spacing: LinkstrTheme.rowSpacing) {
-                LinkstrContactAvatar(name: identity.displayName, size: 38)
-                LinkstrContactIdentityView(
-                  identity: identity,
-                  primaryFont: LinkstrTheme.body(14, weight: .medium)
-                )
+              .buttonStyle(.plain)
 
-                Spacer()
-
-                Image(
-                  systemName: includedMemberHexes.contains(contactHex)
-                    ? "checkmark.circle.fill" : "circle"
-                )
-                .font(LinkstrTheme.system(19, weight: .semibold))
-                .foregroundStyle(
-                  includedMemberHexes.contains(contactHex)
-                    ? LinkstrTheme.accent : LinkstrTheme.textTertiary
-                )
+              if contact.id != filteredContacts.last?.id {
+                LinkstrListRowDivider(leadingInset: 50)
               }
-              .padding(.vertical, LinkstrTheme.listRowVerticalPadding)
-              .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            if contact.id != filteredContacts.last?.id {
-              LinkstrListRowDivider(leadingInset: 50)
             }
           }
         }
@@ -149,7 +169,7 @@ extension SessionManagementSheet {
       } label: {
         HStack(spacing: LinkstrTheme.rowSpacing) {
           Label("delete session", systemImage: "trash")
-            .font(LinkstrTheme.body(14, weight: .semibold))
+            .font(LinkstrTheme.font(.footnote, weight: .semibold))
           Spacer()
         }
         .foregroundStyle(LinkstrTheme.destructive)
@@ -167,7 +187,7 @@ extension SessionManagementSheet {
 
     LinkstrInsetSection(title: "permissions") {
       Text("only the session creator can rename, delete, or change membership.")
-        .font(LinkstrTheme.body(13))
+        .font(LinkstrTheme.font(.footnote))
         .foregroundStyle(LinkstrTheme.textSecondary)
     }
   }
@@ -186,7 +206,7 @@ extension SessionManagementSheet {
             sessionEntity.isArchived ? "unarchive session" : "archive session",
             systemImage: sessionEntity.isArchived ? "tray.and.arrow.up" : "archivebox"
           )
-          .font(LinkstrTheme.body(14, weight: .semibold))
+          .font(LinkstrTheme.font(.footnote, weight: .semibold))
           Spacer()
         }
         .foregroundStyle(LinkstrTheme.textPrimary)

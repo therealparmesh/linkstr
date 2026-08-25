@@ -4,6 +4,7 @@ import UIKit
 
 struct ContactsView: View {
   @EnvironmentObject private var session: AppSession
+  let addContact: () -> Void
 
   @Query
   private var contacts: [ContactEntity]
@@ -13,7 +14,8 @@ struct ContactsView: View {
   @State private var isRemovingContact = false
   @State private var query = ""
 
-  init(ownerPubkey: String) {
+  init(ownerPubkey: String, addContact: @escaping () -> Void) {
+    self.addContact = addContact
     _contacts = Query(
       filter: #Predicate<ContactEntity> { contact in
         contact.ownerPubkey == ownerPubkey
@@ -82,9 +84,13 @@ struct ContactsView: View {
         LinkstrCenteredEmptyStateView(
           title: "no contacts",
           systemImage: "person.2.slash",
-          description: "add a contact. invite them when you start a session."
+          description: "add a contact. invite them when you start a session.",
+          actionTitle: "add contact",
+          actionSystemImage: "person.badge.plus",
+          action: addContact
         )
       }
+      .linkstrReadableContent()
     } else {
       ScrollView {
         VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
@@ -96,7 +102,10 @@ struct ContactsView: View {
             LinkstrCenteredEmptyStateView(
               title: "no contacts found",
               systemImage: "magnifyingglass",
-              description: "try another search."
+              description: "try another search.",
+              actionTitle: "clear search",
+              actionSystemImage: "xmark.circle",
+              action: { query = "" }
             )
             .frame(maxWidth: .infinity, minHeight: 220)
           } else {
@@ -129,8 +138,9 @@ struct ContactsView: View {
         .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
         .padding(.top, LinkstrTheme.screenTopPadding)
         .padding(.bottom, LinkstrTheme.screenBottomPadding)
+        .linkstrReadableContent()
       }
-      .linkstrTabBarContentInset()
+      .scrollDismissesKeyboard(.interactively)
     }
   }
 
@@ -179,12 +189,12 @@ private struct ContactRowView: View {
 
       LinkstrContactIdentityView(
         identity: identity,
-        primaryFont: LinkstrTheme.body(15, weight: .medium)
+        primaryFont: LinkstrTheme.font(.subheadline, weight: .medium)
       )
       .frame(maxWidth: .infinity, alignment: .leading)
 
       Image(systemName: "chevron.right")
-        .font(LinkstrTheme.system(12, weight: .semibold))
+        .font(LinkstrTheme.font(.caption, weight: .semibold))
         .foregroundStyle(LinkstrTheme.textTertiary)
     }
     .padding(.vertical, LinkstrTheme.fieldVerticalPadding)
@@ -227,7 +237,7 @@ private struct EditContactView: View {
 
           LinkstrInsetSection(title: "alias") {
             TextField("alias", text: $alias)
-              .font(LinkstrTheme.body(15))
+              .font(LinkstrTheme.font(.subheadline))
               .textInputAutocapitalization(.words)
               .submitLabel(.done)
               .onSubmit(saveAlias)
@@ -237,7 +247,7 @@ private struct EditContactView: View {
           if let nostrChosenName = identity.chosenName {
             LinkstrInsetSection(title: "published nostr name") {
               Text(nostrChosenName)
-                .font(LinkstrTheme.body(14))
+                .font(LinkstrTheme.font(.footnote))
                 .foregroundStyle(
                   contact.localAlias == nil
                     ? LinkstrTheme.textPrimary : LinkstrTheme.accentPink.opacity(0.88)
@@ -250,7 +260,7 @@ private struct EditContactView: View {
 
           LinkstrInsetSection(title: "public key (npub)") {
             Text(contact.npub)
-              .font(LinkstrTheme.body(13))
+              .font(LinkstrTheme.font(.footnote))
               .foregroundStyle(LinkstrTheme.textSecondary)
               .lineLimit(1)
               .textSelection(.enabled)
@@ -260,8 +270,8 @@ private struct EditContactView: View {
         .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
         .padding(.top, LinkstrTheme.screenTopPadding)
         .padding(.bottom, LinkstrTheme.screenBottomPadding)
+        .linkstrReadableContent()
       }
-      .linkstrTabBarContentInset()
     }
     .navigationBarBackButtonHidden(true)
     .linkstrBarChrome()

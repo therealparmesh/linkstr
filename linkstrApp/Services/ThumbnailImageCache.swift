@@ -1,7 +1,9 @@
+import ImageIO
 import UIKit
 
 final class ThumbnailImageCache: @unchecked Sendable {
   static let shared = ThumbnailImageCache()
+  private static let maximumPixelSize = 512
   private let cache = NSCache<NSString, UIImage>()
 
   private init() {
@@ -14,8 +16,19 @@ final class ThumbnailImageCache: @unchecked Sendable {
       return cached
     }
     return await Task.detached(priority: .userInitiated) {
-      guard let image = UIImage(contentsOfFile: path) else { return nil as UIImage? }
-      let cost = image.cgImage.map { $0.bytesPerRow * $0.height } ?? 0
+      let fileURL = URL(fileURLWithPath: path)
+      guard let source = CGImageSourceCreateWithURL(fileURL as CFURL, nil) else { return nil }
+      let options = [
+        kCGImageSourceCreateThumbnailFromImageAlways: true,
+        kCGImageSourceCreateThumbnailWithTransform: true,
+        kCGImageSourceShouldCacheImmediately: true,
+        kCGImageSourceThumbnailMaxPixelSize: Self.maximumPixelSize
+      ] as CFDictionary
+      guard let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, options) else {
+        return nil
+      }
+      let image = UIImage(cgImage: thumbnail)
+      let cost = thumbnail.bytesPerRow * thumbnail.height
       self.cache.setObject(image, forKey: path as NSString, cost: cost)
       return image
     }.value

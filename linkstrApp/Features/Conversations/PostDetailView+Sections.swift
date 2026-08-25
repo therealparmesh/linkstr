@@ -22,19 +22,22 @@ extension PostDetailView {
     let myPubkeyHash = session.identityService.pubkeyHex.map {
       LocalDataCrypto.shared.digestHex($0)
     }
-    let grouped = Dictionary(grouping: reactions) { reaction -> String in
-      if let myPubkeyHash, reaction.senderMatchesHash(myPubkeyHash) {
-        return "you"
-      }
-      return session.displayName(for: reaction.senderPubkey, contacts: contacts)
-    }
+    let grouped = Dictionary(grouping: reactions, by: \.senderPubkeyHash)
 
     return
-      grouped.map { displayName, reactions in
+      grouped.compactMap { senderPubkeyHash, reactions in
+        guard let firstReaction = reactions.first else { return nil }
+        let isCurrentUser = myPubkeyHash.map(firstReaction.senderMatchesHash) ?? false
+        let displayName = isCurrentUser
+          ? "you" : session.displayName(for: firstReaction.senderPubkey, contacts: contacts)
         let emojis = Array(Set(reactions.map(\.emoji))).sorted {
           $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
         }
-        return ReactionParticipantBreakdown(displayName: displayName, emojis: emojis)
+        return ReactionParticipantBreakdown(
+          id: senderPubkeyHash,
+          displayName: displayName,
+          emojis: emojis
+        )
       }
       .sorted {
         if $0.displayName == "you" { return true }
@@ -67,20 +70,20 @@ extension PostDetailView {
         Spacer(minLength: 0)
 
         Text(post.timestamp.linkstrMessageTimestampLabel)
-          .font(LinkstrTheme.body(11, weight: .medium))
+          .font(LinkstrTheme.font(.caption, weight: .medium))
           .foregroundStyle(LinkstrTheme.textTertiary)
       }
 
       if let title = post.metadataTitle, !title.isEmpty {
         Text(title)
-          .font(LinkstrTheme.title(17, weight: .semibold))
+          .font(LinkstrTheme.font(.headline, weight: .semibold))
           .foregroundStyle(LinkstrTheme.textPrimary)
           .fixedSize(horizontal: false, vertical: true)
       }
 
       if let url = post.url {
         Text(url)
-          .font(LinkstrTheme.body(13))
+          .font(LinkstrTheme.font(.footnote))
           .foregroundStyle(LinkstrTheme.textSecondary)
           .frame(maxWidth: .infinity, alignment: .leading)
           .multilineTextAlignment(.leading)
@@ -109,7 +112,7 @@ extension PostDetailView {
 
         if let remotePostText {
           Text(remotePostText)
-            .font(LinkstrTheme.body(13))
+            .font(LinkstrTheme.font(.footnote))
             .foregroundStyle(LinkstrTheme.textSecondary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .multilineTextAlignment(.leading)
@@ -124,7 +127,7 @@ extension PostDetailView {
   var postCardReadOnlyNotice: some View {
     if !canReactToPost {
       Text("you're no longer a member of this session. reactions are read-only.")
-        .font(LinkstrTheme.body(12))
+        .font(LinkstrTheme.font(.caption))
         .foregroundStyle(LinkstrTheme.textSecondary)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -154,11 +157,11 @@ extension PostDetailView {
           ForEach(reactionBreakdown) { entry in
             HStack(alignment: .center, spacing: 8) {
               Text(entry.displayName)
-                .font(LinkstrTheme.body(13, weight: .medium))
+                .font(LinkstrTheme.font(.footnote, weight: .medium))
                 .foregroundStyle(LinkstrTheme.textSecondary)
 
               Text(entry.emojis.joined(separator: " "))
-                .font(LinkstrTheme.system(16))
+                .font(LinkstrTheme.font(.body))
                 .foregroundStyle(LinkstrTheme.textPrimary)
 
               Spacer(minLength: 0)
@@ -294,11 +297,11 @@ extension PostDetailView {
 
       VStack(alignment: .leading, spacing: LinkstrTheme.metaSpacing) {
         Text(label)
-          .font(LinkstrTheme.body(11, weight: .semibold))
+          .font(LinkstrTheme.font(.caption, weight: .semibold))
           .foregroundStyle(LinkstrTheme.accent)
 
         Text(text)
-          .font(LinkstrTheme.body(13))
+          .font(LinkstrTheme.font(.footnote))
           .foregroundStyle(LinkstrTheme.textSecondary)
           .fixedSize(horizontal: false, vertical: true)
       }
@@ -345,20 +348,14 @@ extension PostDetailView {
     )
     guard !normalizedPubkeys.isEmpty else { return [] }
 
-    var contacts: [ContactEntity] = []
-    contacts.reserveCapacity(normalizedPubkeys.count)
-
-    for pubkey in normalizedPubkeys {
-      let descriptor = FetchDescriptor<ContactEntity>(
-        predicate: #Predicate {
-          $0.ownerPubkey == ownerPubkey && $0.targetPubkey == pubkey
-        },
-        sortBy: [SortDescriptor(\.createdAt)]
-      )
-      contacts.append(contentsOf: try modelContext.fetch(descriptor))
+    let targetPubkeys = Set(normalizedPubkeys)
+    let descriptor = FetchDescriptor<ContactEntity>(
+      predicate: #Predicate { $0.ownerPubkey == ownerPubkey },
+      sortBy: [SortDescriptor(\.createdAt)]
+    )
+    return try modelContext.fetch(descriptor).filter {
+      targetPubkeys.contains($0.targetPubkey)
     }
-
-    return contacts
   }
 
   func fetchReactions() throws -> [SessionReactionEntity] {

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 private enum RootViewTimingDefaults {
   static let toastAnimationDuration: TimeInterval = 0.2
@@ -102,6 +103,7 @@ struct RootView: View {
         .padding(.top, LinkstrTheme.toastTopPadding)
         .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
         .transition(.move(edge: .top).combined(with: .opacity))
+        .accessibilityElement(children: .combine)
         .accessibilityHint(
           toastOpensRelaySettings ? "opens relay settings" : "dismisses notification"
         )
@@ -118,25 +120,19 @@ struct RootView: View {
     .onChange(of: session.composeError) { _, newValue in
       guard let newValue, !newValue.isEmpty else { return }
       guard session.shouldPresentComposeErrorToast else { return }
-      withAnimation(.easeIn(duration: RootViewTimingDefaults.toastAnimationDuration)) {
-        toastIsSuccess = false
-        toastMessage = newValue
-        toastOpensRelaySettings = session.isRelayConnectionAlertMessage(newValue)
-      }
+      presentToast(
+        newValue,
+        isSuccess: false,
+        opensRelaySettings: session.isRelayConnectionAlertMessage(newValue)
+      )
       session.composeError = nil
-      toastDisplayID = UUID()
     }
     .onReceive(NotificationCenter.default.publisher(for: .linkstrSuccessToast)) { notification in
       guard let message = notification.object as? String else { return }
-      withAnimation(.easeIn(duration: RootViewTimingDefaults.toastAnimationDuration)) {
-        toastIsSuccess = true
-        toastMessage = message
-        toastOpensRelaySettings = false
-      }
-      toastDisplayID = UUID()
+      presentToast(message, isSuccess: true)
     }
     .task(id: toastDisplayID) {
-      guard toastMessage != nil else { return }
+      guard toastMessage != nil, toastIsSuccess else { return }
       try? await Task.sleep(for: .seconds(RootViewTimingDefaults.toastDisplayDuration))
       guard !Task.isCancelled else { return }
       dismissToast()
@@ -186,6 +182,20 @@ struct RootView: View {
     }
   }
 
+  private func presentToast(
+    _ message: String,
+    isSuccess: Bool,
+    opensRelaySettings: Bool = false
+  ) {
+    withAnimation(.easeIn(duration: RootViewTimingDefaults.toastAnimationDuration)) {
+      toastIsSuccess = isSuccess
+      toastMessage = message
+      toastOpensRelaySettings = opensRelaySettings
+    }
+    toastDisplayID = UUID()
+    UIAccessibility.post(notification: .announcement, argument: message)
+  }
+
   private func dismissToast() {
     withAnimation(.easeOut(duration: RootViewTimingDefaults.toastAnimationDuration)) {
       toastMessage = nil
@@ -203,11 +213,11 @@ private struct LinkstrBootLoadingView: View {
 
       VStack(spacing: 8) {
         Text("loading linkstr")
-          .font(LinkstrTheme.title(20))
+          .font(LinkstrTheme.font(.title3, weight: .semibold))
           .foregroundStyle(LinkstrTheme.textPrimary)
 
         Text(statusMessage)
-          .font(LinkstrTheme.body(14))
+          .font(LinkstrTheme.font(.footnote))
           .foregroundStyle(LinkstrTheme.textSecondary)
           .multilineTextAlignment(.center)
           .padding(.horizontal, 24)

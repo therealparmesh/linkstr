@@ -33,10 +33,10 @@ struct LinkstrQRScannerSheet: View {
       case .failed(let message):
         VStack(spacing: 12) {
           Text("scanner error")
-            .font(LinkstrTheme.title(18))
+            .font(LinkstrTheme.font(.title3, weight: .semibold))
             .foregroundStyle(.white)
           Text(message)
-            .font(LinkstrTheme.body(14))
+            .font(LinkstrTheme.font(.footnote))
             .foregroundStyle(LinkstrTheme.textSecondary)
             .multilineTextAlignment(.center)
             .padding(.horizontal, 24)
@@ -49,9 +49,12 @@ struct LinkstrQRScannerSheet: View {
             dismiss()
           } label: {
             Image(systemName: "xmark")
-              .font(LinkstrTheme.system(15, weight: .semibold))
+              .font(LinkstrTheme.font(.subheadline, weight: .semibold))
               .foregroundStyle(.white)
-              .frame(width: 36, height: 36)
+              .frame(
+                width: LinkstrTheme.minimumInteractiveDimension,
+                height: LinkstrTheme.minimumInteractiveDimension
+              )
               .background(.black.opacity(0.45), in: Circle())
           }
           .accessibilityLabel("close")
@@ -102,13 +105,13 @@ struct LinkstrQRScannerAccessDeniedView: View {
   var body: some View {
     VStack(spacing: 12) {
       Image(systemName: "camera.fill")
-        .font(LinkstrTheme.system(28))
+        .font(LinkstrTheme.font(.title))
         .foregroundStyle(.white)
       Text("camera access required")
-        .font(LinkstrTheme.title(18))
+        .font(LinkstrTheme.font(.title3, weight: .semibold))
         .foregroundStyle(.white)
       Text("enable camera access in settings to scan a public key (npub) qr code.")
-        .font(LinkstrTheme.body(14))
+        .font(LinkstrTheme.font(.footnote))
         .foregroundStyle(LinkstrTheme.textSecondary)
         .multilineTextAlignment(.center)
         .padding(.horizontal, 24)

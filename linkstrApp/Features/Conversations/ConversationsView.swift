@@ -12,6 +12,7 @@ private struct SessionSummary: Identifiable {
 
 struct ConversationsView: View {
   @Binding var isShowingArchivedSessions: Bool
+  let createSession: () -> Void
   let openSession: (String) -> Void
   private let ownerPubkeyHash: String
 
@@ -22,9 +23,11 @@ struct ConversationsView: View {
   init(
     ownerPubkey: String,
     isShowingArchivedSessions: Binding<Bool>,
+    createSession: @escaping () -> Void,
     openSession: @escaping (String) -> Void
   ) {
     self._isShowingArchivedSessions = isShowingArchivedSessions
+    self.createSession = createSession
     self.openSession = openSession
     self.ownerPubkeyHash = LocalDataCrypto.shared.digestHex(ownerPubkey)
 
@@ -59,6 +62,7 @@ struct ConversationsView: View {
       hasSessions: !sessions.isEmpty,
       summaries: summaries,
       isShowingArchivedSessions: isShowingArchivedSessions,
+      createSession: createSession,
       openSession: openSession
     )
   }
@@ -140,18 +144,33 @@ private struct ConversationsContentView: View {
   let hasSessions: Bool
   let summaries: [SessionSummary]
   let isShowingArchivedSessions: Bool
+  let createSession: () -> Void
   let openSession: (String) -> Void
 
   @State private var query = ""
 
+  private var normalizedQuery: String {
+    query.trimmingCharacters(in: .whitespacesAndNewlines).localizedLowercase
+  }
+
+  private var isSearching: Bool {
+    !normalizedQuery.isEmpty
+  }
+
   private var visibleSummaries: [SessionSummary] {
-    let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).localizedLowercase
     guard !normalizedQuery.isEmpty else { return summaries }
     return summaries.filter { summary in
       summary.session.name.localizedLowercase.contains(normalizedQuery)
         || summary.latestPreview.localizedLowercase.contains(normalizedQuery)
         || (summary.latestNote?.localizedLowercase.contains(normalizedQuery) ?? false)
     }
+  }
+
+  private var emptyStateAction: (() -> Void)? {
+    if isSearching {
+      return { query = "" }
+    }
+    return isShowingArchivedSessions ? nil : createSession
   }
 
   var body: some View {
@@ -173,26 +192,43 @@ private struct ConversationsContentView: View {
         LinkstrCenteredEmptyStateView(
           title: "no sessions",
           systemImage: "rectangle.stack.badge.plus",
-          description: "start a session. links you share will show up here."
+          description: "start a session. links you share will show up here.",
+          actionTitle: "new session",
+          actionSystemImage: "square.and.pencil",
+          action: createSession
         )
       }
+      .linkstrReadableContent()
     } else {
       ScrollView {
         VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
           LinkstrScreenTitle(title: isShowingArchivedSessions ? "archived" : "sessions")
 
-          LinkstrSearchField(
-            prompt: isShowingArchivedSessions ? "search archived sessions" : "search sessions",
-            text: $query
-          )
+          if !summaries.isEmpty {
+            LinkstrSearchField(
+              prompt: isShowingArchivedSessions ? "search archived sessions" : "search sessions",
+              text: $query
+            )
+          }
 
           if visibleSummaries.isEmpty {
             LinkstrCenteredEmptyStateView(
-              title: isShowingArchivedSessions ? "no archived sessions" : "no sessions found",
-              systemImage: isShowingArchivedSessions ? "archivebox" : "magnifyingglass",
-              description: isShowingArchivedSessions
-                ? "archive a session to move it here."
-                : "try a different search or create a new session."
+              title: isSearching
+                ? "no sessions found"
+                : isShowingArchivedSessions ? "no archived sessions" : "no active sessions",
+              systemImage: isSearching
+                ? "magnifyingglass"
+                : isShowingArchivedSessions ? "archivebox" : "rectangle.stack.badge.plus",
+              description: isSearching
+                ? "try another search."
+                : isShowingArchivedSessions
+                  ? "archive a session to move it here."
+                  : "start a new session or unarchive one.",
+              actionTitle: isSearching
+                ? "clear search"
+                : isShowingArchivedSessions ? nil : "new session",
+              actionSystemImage: isSearching ? "xmark.circle" : "square.and.pencil",
+              action: emptyStateAction
             )
             .frame(maxWidth: .infinity, minHeight: 220)
           } else {
@@ -213,8 +249,9 @@ private struct ConversationsContentView: View {
         .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
         .padding(.top, LinkstrTheme.screenTopPadding)
         .padding(.bottom, LinkstrTheme.screenBottomPadding)
+        .linkstrReadableContent()
       }
-      .linkstrTabBarContentInset()
+      .scrollDismissesKeyboard(.interactively)
     }
   }
 }
@@ -239,7 +276,7 @@ private struct SessionRowView: View {
       VStack(alignment: .leading, spacing: LinkstrTheme.metaSpacing) {
         HStack(alignment: .firstTextBaseline, spacing: LinkstrTheme.buttonRowSpacing) {
           Text(summary.session.name)
-            .font(LinkstrTheme.title(16, weight: .semibold))
+            .font(LinkstrTheme.font(.headline, weight: .semibold))
             .foregroundStyle(LinkstrTheme.textPrimary)
             .lineLimit(1)
 
@@ -247,7 +284,7 @@ private struct SessionRowView: View {
 
           HStack(spacing: 6) {
             Text(summary.latestTimestamp.linkstrListTimestampLabel)
-              .font(LinkstrTheme.body(11, weight: .medium))
+              .font(LinkstrTheme.font(.caption, weight: .medium))
               .foregroundStyle(LinkstrTheme.textTertiary)
               .lineLimit(1)
           }
@@ -255,7 +292,7 @@ private struct SessionRowView: View {
 
         HStack(alignment: .center, spacing: 8) {
           Text(subtitle)
-            .font(LinkstrTheme.body(13))
+            .font(LinkstrTheme.font(.footnote))
             .foregroundStyle(LinkstrTheme.textSecondary)
             .lineLimit(2)
 

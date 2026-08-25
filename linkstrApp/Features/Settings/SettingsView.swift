@@ -1,6 +1,23 @@
 import SwiftUI
 import UIKit
 
+struct LinkstrAdaptiveButtonRow<Content: View>: View {
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+  @ViewBuilder let content: Content
+
+  init(@ViewBuilder content: () -> Content) {
+    self.content = content()
+  }
+
+  var body: some View {
+    let layout = dynamicTypeSize.isAccessibilitySize
+      ? AnyLayout(VStackLayout(spacing: LinkstrTheme.buttonRowSpacing))
+      : AnyLayout(HStackLayout(spacing: LinkstrTheme.buttonRowSpacing))
+
+    layout { content }
+  }
+}
+
 struct SettingsView: View {
   @Environment(\.scenePhase) private var scenePhase
   @EnvironmentObject var session: AppSession
@@ -48,8 +65,9 @@ struct SettingsView: View {
       .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
       .padding(.top, LinkstrTheme.screenTopPadding)
       .padding(.bottom, LinkstrTheme.screenBottomPadding)
+      .linkstrReadableContent()
     }
-    .linkstrTabBarContentInset()
+    .scrollDismissesKeyboard(.interactively)
     .alert("log out", isPresented: $isPresentingLogoutOptions) {
       Button("log out (keep local data)") {
         session.logOut(clearLocalData: false)
@@ -109,7 +127,7 @@ struct SettingsView: View {
     ) {
       if sortedRelays.isEmpty {
         Text("no relays configured yet.")
-          .font(LinkstrTheme.body(13))
+          .font(LinkstrTheme.font(.footnote))
           .foregroundStyle(LinkstrTheme.textSecondary)
       } else {
         VStack(spacing: 0) {
@@ -124,15 +142,16 @@ struct SettingsView: View {
       }
 
       TextField("wss://relay.example.com", text: $relayURL)
-        .font(LinkstrTheme.body(15))
+        .font(LinkstrTheme.font(.subheadline))
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled(true)
+        .keyboardType(.URL)
         .lineLimit(1)
         .submitLabel(.done)
         .onSubmit(addRelayFromDraft)
         .linkstrInputField()
 
-      HStack(spacing: LinkstrTheme.buttonRowSpacing) {
+      LinkstrAdaptiveButtonRow {
         Button {
           addRelayFromDraft()
         } label: {
@@ -153,35 +172,12 @@ struct SettingsView: View {
   private func relayRow(_ relay: RelayEntity) -> some View {
     VStack(alignment: .leading, spacing: LinkstrTheme.buttonRowSpacing) {
       HStack(alignment: .top, spacing: LinkstrTheme.buttonRowSpacing) {
-        Circle()
-          .fill(statusDotColor(for: relay))
-          .frame(width: 10, height: 10)
-          .padding(.top, 4)
-
-        VStack(alignment: .leading, spacing: LinkstrTheme.metaSpacing) {
-          Text(relay.url)
-            .font(LinkstrTheme.body(14, weight: .medium))
-            .foregroundStyle(LinkstrTheme.textPrimary)
-            .lineLimit(2)
-
-          let relayErrorText =
-            session.relayErrorMessage(for: relay)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            ?? ""
-          if !relayErrorText.isEmpty {
-            Text(relayErrorText)
-              .font(LinkstrTheme.body(12))
-              .foregroundStyle(LinkstrTheme.textSecondary)
-              .fixedSize(horizontal: false, vertical: true)
-          }
-        }
+        relayDetails(relay)
 
         Spacer(minLength: 8)
-      }
 
-      HStack(alignment: .center, spacing: LinkstrTheme.rowSpacing) {
         Toggle(
-          "",
+          "relay enabled",
           isOn: Binding(
             get: { relay.isEnabled },
             set: { _ in session.toggleRelay(relay) }
@@ -190,9 +186,10 @@ struct SettingsView: View {
         .labelsHidden()
         .toggleStyle(.switch)
         .tint(LinkstrTheme.accent)
-        .scaleEffect(0.82)
-        .accessibilityLabel(relay.isEnabled ? "disable relay" : "enable relay")
+        .accessibilityLabel("\(relay.url) enabled")
+      }
 
+      HStack(alignment: .center, spacing: LinkstrTheme.rowSpacing) {
         Spacer()
 
         Button {
@@ -200,13 +197,45 @@ struct SettingsView: View {
           session.removeRelay(relay)
         } label: {
           Label("remove", systemImage: "trash")
-            .font(LinkstrTheme.body(12, weight: .medium))
+            .font(LinkstrTheme.font(.caption, weight: .medium))
         }
         .buttonStyle(.plain)
         .foregroundStyle(LinkstrTheme.destructive)
+        .frame(minHeight: LinkstrTheme.minimumInteractiveDimension)
       }
     }
     .padding(.vertical, LinkstrTheme.listRowVerticalPadding)
+  }
+
+  private func relayDetails(_ relay: RelayEntity) -> some View {
+    VStack(alignment: .leading, spacing: LinkstrTheme.metaSpacing) {
+      Text(relay.url)
+        .font(LinkstrTheme.font(.footnote, weight: .medium))
+        .foregroundStyle(LinkstrTheme.textPrimary)
+        .lineLimit(2)
+
+      HStack(spacing: 6) {
+        Circle()
+          .fill(statusDotColor(for: relay))
+          .frame(width: 8, height: 8)
+          .accessibilityHidden(true)
+
+        Text(relayStatusLabel(for: relay))
+          .font(LinkstrTheme.font(.caption, weight: .medium))
+          .foregroundStyle(LinkstrTheme.textSecondary)
+      }
+
+      let relayErrorText =
+        session.relayErrorMessage(for: relay)?
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        ?? ""
+      if !relayErrorText.isEmpty {
+        Text(relayErrorText)
+          .font(LinkstrTheme.font(.caption))
+          .foregroundStyle(LinkstrTheme.textSecondary)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+    }
   }
 
   private func addRelayFromDraft() {

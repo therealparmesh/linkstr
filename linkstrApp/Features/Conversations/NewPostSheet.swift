@@ -30,7 +30,7 @@ struct NewPostSheet: View {
             LinkstrScreenTitle(title: "new post")
             LinkstrInsetSection(title: "session") {
               Text(sessionEntity.name)
-                .font(LinkstrTheme.body(15, weight: .medium))
+                .font(LinkstrTheme.font(.subheadline, weight: .medium))
                 .foregroundStyle(LinkstrTheme.textPrimary)
                 .linkstrInputField()
             }
@@ -41,7 +41,7 @@ struct NewPostSheet: View {
 
             LinkstrInsetSection(title: "link") {
               TextField("example.com", text: $url)
-                .font(LinkstrTheme.body(14))
+                .font(LinkstrTheme.font(.footnote))
                 .textInputAutocapitalization(.never)
                 .keyboardType(.URL)
                 .autocorrectionDisabled(true)
@@ -63,7 +63,7 @@ struct NewPostSheet: View {
               )
 
               Text(urlFieldHint ?? " ")
-                .font(LinkstrTheme.body(12))
+                .font(LinkstrTheme.font(.caption))
                 .foregroundStyle(urlFieldHintColor)
                 .frame(maxWidth: .infinity, minHeight: 14, alignment: .leading)
                 .opacity(urlFieldHint == nil ? 0 : 1)
@@ -74,7 +74,7 @@ struct NewPostSheet: View {
               ZStack(alignment: .topLeading) {
                 if note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                   Text("note")
-                    .font(LinkstrTheme.body(14))
+                    .font(LinkstrTheme.font(.footnote))
                     .foregroundStyle(LinkstrTheme.textSecondary)
                     .padding(.top, LinkstrTheme.fieldVerticalPadding)
                     .padding(.leading, LinkstrTheme.fieldHorizontalPadding)
@@ -82,7 +82,7 @@ struct NewPostSheet: View {
                 }
 
                 TextEditor(text: $note)
-                  .font(LinkstrTheme.body(14))
+                  .font(LinkstrTheme.font(.footnote))
                   .foregroundStyle(LinkstrTheme.textPrimary)
                   .scrollContentBackground(.hidden)
                   .frame(minHeight: 112, maxHeight: 180)
@@ -97,6 +97,7 @@ struct NewPostSheet: View {
         .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
         .padding(.top, LinkstrTheme.screenTopPadding)
         .padding(.bottom, LinkstrTheme.screenBottomPadding)
+        .linkstrReadableContent()
         .scrollDismissesKeyboard(.interactively)
       }
 

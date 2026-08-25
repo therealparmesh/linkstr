@@ -3,6 +3,7 @@ import UIKit
 
 struct YouView: View {
   @EnvironmentObject private var session: AppSession
+  let openSettings: () -> Void
   @State private var qrImage: UIImage?
   @State private var profileNameDraft = ""
   @State private var isSavingProfileName = false
@@ -41,11 +42,12 @@ struct YouView: View {
         .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
         .padding(.top, LinkstrTheme.screenTopPadding)
         .padding(.bottom, LinkstrTheme.screenBottomPadding)
+        .linkstrReadableContent()
       }
       .task(id: npub) {
         qrImage = QRCodeGenerator.image(for: npub)
       }
-      .linkstrTabBarContentInset()
+      .scrollDismissesKeyboard(.interactively)
     } else {
       VStack(spacing: 0) {
         LinkstrScreenTitle(title: "you")
@@ -54,9 +56,13 @@ struct YouView: View {
         LinkstrCenteredEmptyStateView(
           title: "no identity",
           systemImage: "person.crop.circle.badge.exclamationmark",
-          description: "sign in or create an account in settings."
+          description: "sign in or create an account in settings.",
+          actionTitle: "open settings",
+          actionSystemImage: "gearshape",
+          action: openSettings
         )
       }
+      .linkstrReadableContent()
     }
   }
 
@@ -66,7 +72,7 @@ struct YouView: View {
       footer: "optional. others can see this name."
     ) {
       TextField("name others see", text: $profileNameDraft)
-        .font(LinkstrTheme.body(15))
+        .font(LinkstrTheme.font(.subheadline))
         .textInputAutocapitalization(.words)
         .autocorrectionDisabled(true)
         .submitLabel(.done)
@@ -76,7 +82,7 @@ struct YouView: View {
 
       if let profileNameErrorMessage = session.profileNameErrorMessage {
         Text(profileNameErrorMessage)
-          .font(LinkstrTheme.body(12))
+          .font(LinkstrTheme.font(.caption))
           .foregroundStyle(LinkstrTheme.destructive.opacity(0.92))
       }
 
@@ -91,7 +97,7 @@ struct YouView: View {
     ) {
       if let profileName = session.currentProfileName, !profileName.isEmpty {
         Text(profileName)
-          .font(LinkstrTheme.title(18, weight: .semibold))
+          .font(LinkstrTheme.font(.title3, weight: .semibold))
           .foregroundStyle(LinkstrTheme.textPrimary)
           .frame(maxWidth: .infinity, alignment: .center)
       }
@@ -115,7 +121,7 @@ struct YouView: View {
       footer: "copy this public key to add this account elsewhere."
     ) {
       Text(npub)
-        .font(LinkstrTheme.body(13))
+        .font(LinkstrTheme.font(.footnote))
         .foregroundStyle(LinkstrTheme.textSecondary)
         .textSelection(.enabled)
         .linkstrInputField()

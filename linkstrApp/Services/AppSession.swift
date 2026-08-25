@@ -25,7 +25,6 @@ struct SessionSnapshotParams {
 enum AppSessionTimingDefaults {
   static let remoteProfileLookupRetryNanoseconds: UInt64 = 3_000_000_000
   static let passiveOfflineToastGraceInterval: TimeInterval = 1
-  static let relayDisconnectGraceInterval: TimeInterval = 1
   static let identityRetryDelayNanoseconds: UInt64 = 250_000_000
 }
 
@@ -59,7 +58,6 @@ final class AppSession: ObservableObject {
   struct RelayRuntimeStatus {
     var status: RelayHealthStatus
     var message: String?
-    var updatedAt: Date
   }
 
   struct PendingMetadataRefresh {
@@ -242,6 +240,7 @@ final class AppSession: ObservableObject {
   var currentProfileMetadataContent: String?
   var inFlightRemoteProfilePubkeys = Set<String>()
   var pendingRemoteProfilePubkeys = Set<String>()
+  var remoteProfileLookupGeneration = 0
   var pendingIncomingMessages: [PendingIncomingMessage] = []
   var isDrainingPendingIncomingMessages = false
   var memberIntervalCache: [String: [SessionMemberIntervalEntity]] = [:]

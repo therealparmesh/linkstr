@@ -186,8 +186,13 @@ final class ContactStore {
   }
 
   func hasContact(ownerPubkey: String, withTargetPubkey targetPubkey: String) -> Bool {
-    guard let contacts = try? fetchContacts(ownerPubkey: ownerPubkey) else { return false }
-    return contacts.contains(where: { $0.targetPubkey == targetPubkey })
+    var descriptor = FetchDescriptor<ContactEntity>(
+      predicate: #Predicate {
+        $0.ownerPubkey == ownerPubkey && $0.targetPubkey == targetPubkey
+      }
+    )
+    descriptor.fetchLimit = 1
+    return ((try? modelContext.fetch(descriptor)) ?? []).isEmpty == false
   }
 
   func followedPubkeys(ownerPubkey: String) throws -> [String] {
@@ -233,7 +238,7 @@ final class ContactStore {
     do {
       try modelContext.save()
     } catch {
-      contact.encryptedAlias = previousEncryptedAlias
+      contact.restoreEncryptedAlias(previousEncryptedAlias)
       throw error
     }
   }

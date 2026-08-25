@@ -58,4 +58,9 @@ final class ContactEntity {
       try LocalDataCrypto.shared.encryptString(trimmed, ownerPubkey: ownerPubkey) ?? ""
     _localAlias = nil
   }
+
+  func restoreEncryptedAlias(_ encryptedAlias: String) {
+    self.encryptedAlias = encryptedAlias
+    _localAlias = nil
+  }
 }

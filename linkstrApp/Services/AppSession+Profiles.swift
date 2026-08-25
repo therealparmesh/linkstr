@@ -45,6 +45,7 @@ extension AppSession {
 
 extension AppSession {
   func resetRemoteProfileStateInMemory() {
+    remoteProfileLookupGeneration += 1
     remoteProfilesByPubkey = [:]
     inFlightRemoteProfilePubkeys.removeAll()
     pendingRemoteProfilePubkeys.removeAll()
@@ -100,11 +101,13 @@ extension AppSession {
     guard !normalizedPubkeys.isEmpty else { return }
     inFlightRemoteProfilePubkeys.formUnion(normalizedPubkeys)
     let retryDelayNanoseconds = remoteProfileRetryNanoseconds
+    let generation = remoteProfileLookupGeneration
     Task { [weak self, normalizedPubkeys] in
       try? await Task.sleep(nanoseconds: retryDelayNanoseconds)
       guard !Task.isCancelled else { return }
       await MainActor.run { [weak self, normalizedPubkeys] in
         guard let self else { return }
+        guard self.remoteProfileLookupGeneration == generation else { return }
         self.inFlightRemoteProfilePubkeys.subtract(normalizedPubkeys)
         let unresolvedPubkeys = normalizedPubkeys.filter { self.remoteProfilesByPubkey[$0] == nil }
         guard !unresolvedPubkeys.isEmpty else { return }

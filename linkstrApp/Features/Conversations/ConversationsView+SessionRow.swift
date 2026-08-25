@@ -17,6 +17,7 @@ struct NewSessionSheet: View {
   @State var query = ""
   @State var selectedNPubs = Set<String>()
   @State var isCreating = false
+  @State var isPresentingAddContact = false
   @State var mutationFeedback = LinkstrSheetMutationFeedback()
   @FocusState var focusedField: Field?
 
@@ -38,7 +39,7 @@ struct NewSessionSheet: View {
             LinkstrScreenTitle(title: "new session")
             LinkstrInsetSection(title: "session details") {
               TextField("session name", text: $sessionName)
-                .font(LinkstrTheme.body(15))
+                .font(LinkstrTheme.font(.subheadline))
                 .focused($focusedField, equals: .sessionName)
                 .textInputAutocapitalization(.words)
                 .submitLabel(contacts.isEmpty ? .done : .next)
@@ -50,55 +51,58 @@ struct NewSessionSheet: View {
               title: "members",
               accessory: "\(selectedNPubs.count + 1)"
             ) {
-              LinkstrSearchField(
-                prompt: "search contacts",
-                text: $query,
-                submitLabel: .done,
-                onSubmit: dismissKeyboard
-              )
-              .focused($focusedField, equals: .search)
-
               if contacts.isEmpty {
-                Text("no contacts yet. solo still works.")
-                  .font(LinkstrTheme.body(13))
-                  .foregroundStyle(LinkstrTheme.textSecondary)
-              } else if filteredContacts.isEmpty {
-                Text("no contacts match.")
-                  .font(LinkstrTheme.body(13))
-                  .foregroundStyle(LinkstrTheme.textSecondary)
+                LinkstrNoContactsPrompt {
+                  focusedField = nil
+                  isPresentingAddContact = true
+                }
               } else {
-                VStack(spacing: 0) {
-                  ForEach(filteredContacts) { contact in
-                    let identity = session.resolvedIdentity(for: contact)
-                    Button {
-                      toggle(contact.npub)
-                    } label: {
-                      HStack(spacing: LinkstrTheme.rowSpacing) {
-                        LinkstrContactAvatar(name: identity.displayName, size: 38)
-                        LinkstrContactIdentityView(
-                          identity: identity,
-                          primaryFont: LinkstrTheme.body(14, weight: .medium)
-                        )
+                LinkstrSearchField(
+                  prompt: "search contacts",
+                  text: $query,
+                  submitLabel: .done,
+                  onSubmit: dismissKeyboard
+                )
+                .focused($focusedField, equals: .search)
 
-                        Spacer()
+                if filteredContacts.isEmpty {
+                  Text("no contacts match.")
+                    .font(LinkstrTheme.font(.footnote))
+                    .foregroundStyle(LinkstrTheme.textSecondary)
+                } else {
+                  VStack(spacing: 0) {
+                    ForEach(filteredContacts) { contact in
+                      let identity = session.resolvedIdentity(for: contact)
+                      Button {
+                        toggle(contact.npub)
+                      } label: {
+                        HStack(spacing: LinkstrTheme.rowSpacing) {
+                          LinkstrContactAvatar(name: identity.displayName, size: 38)
+                          LinkstrContactIdentityView(
+                            identity: identity,
+                            primaryFont: LinkstrTheme.font(.footnote, weight: .medium)
+                          )
 
-                        Image(
-                          systemName: selectedNPubs.contains(contact.npub)
-                            ? "checkmark.circle.fill" : "circle"
-                        )
-                        .font(LinkstrTheme.system(19, weight: .semibold))
-                        .foregroundStyle(
-                          selectedNPubs.contains(contact.npub)
-                            ? LinkstrTheme.accent : LinkstrTheme.textTertiary
-                        )
+                          Spacer()
+
+                          Image(
+                            systemName: selectedNPubs.contains(contact.npub)
+                              ? "checkmark.circle.fill" : "circle"
+                          )
+                          .font(LinkstrTheme.font(.title3, weight: .semibold))
+                          .foregroundStyle(
+                            selectedNPubs.contains(contact.npub)
+                              ? LinkstrTheme.accent : LinkstrTheme.textTertiary
+                          )
+                        }
+                        .padding(.vertical, LinkstrTheme.listRowVerticalPadding)
+                        .contentShape(Rectangle())
                       }
-                      .padding(.vertical, LinkstrTheme.listRowVerticalPadding)
-                      .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
+                      .buttonStyle(.plain)
 
-                    if contact.id != filteredContacts.last?.id {
-                      LinkstrListRowDivider(leadingInset: 50)
+                      if contact.id != filteredContacts.last?.id {
+                        LinkstrListRowDivider(leadingInset: 50)
+                      }
                     }
                   }
                 }
@@ -108,6 +112,7 @@ struct NewSessionSheet: View {
           .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
           .padding(.top, LinkstrTheme.screenTopPadding)
           .padding(.bottom, LinkstrTheme.screenBottomPadding)
+          .linkstrReadableContent()
           .scrollDismissesKeyboard(.interactively)
         }
       }
@@ -158,6 +163,9 @@ struct NewSessionSheet: View {
         mutationFeedback.clear()
       }
     }
+    .sheet(isPresented: $isPresentingAddContact) {
+      AddContactSheet()
+    }
   }
 }
 
@@ -183,6 +191,7 @@ struct SessionManagementSheet: View {
   @State var isSaving = false
   @State var isDeletingSession = false
   @State var isPresentingDeleteConfirmation = false
+  @State var isPresentingAddContact = false
   @State var mutationFeedback = LinkstrSheetMutationFeedback()
   @FocusState var focusedField: Field?
 
@@ -216,7 +225,7 @@ struct SessionManagementSheet: View {
             LinkstrInsetSection(title: "session details") {
               if canManageSession {
                 TextField("session name", text: $sessionName)
-                  .font(LinkstrTheme.body(15))
+                  .font(LinkstrTheme.font(.subheadline))
                   .focused($focusedField, equals: .sessionName)
                   .textInputAutocapitalization(.words)
                   .submitLabel(.done)
@@ -224,7 +233,7 @@ struct SessionManagementSheet: View {
                   .linkstrInputField()
               } else {
                 Text(sessionEntity.name)
-                  .font(LinkstrTheme.body(14))
+                  .font(LinkstrTheme.font(.footnote))
                   .foregroundStyle(LinkstrTheme.textPrimary)
                   .lineLimit(3)
                   .textSelection(.enabled)
@@ -237,7 +246,7 @@ struct SessionManagementSheet: View {
             ) {
               if visibleCurrentMembers.isEmpty {
                 Text("only you are in this session.")
-                  .font(LinkstrTheme.body(13))
+                  .font(LinkstrTheme.font(.footnote))
                   .foregroundStyle(LinkstrTheme.textSecondary)
               } else {
                 VStack(spacing: 0) {
@@ -252,11 +261,11 @@ struct SessionManagementSheet: View {
                       if let identity {
                         LinkstrContactIdentityView(
                           identity: identity,
-                          primaryFont: LinkstrTheme.body(14, weight: .medium)
+                          primaryFont: LinkstrTheme.font(.footnote, weight: .medium)
                         )
                       } else {
                         Text("you")
-                          .font(LinkstrTheme.body(14, weight: .medium))
+                          .font(LinkstrTheme.font(.footnote, weight: .medium))
                           .foregroundStyle(LinkstrTheme.textPrimary)
                       }
 
@@ -267,9 +276,12 @@ struct SessionManagementSheet: View {
                           includedMemberHexes.remove(memberHex)
                         } label: {
                           Image(systemName: "minus.circle.fill")
-                            .font(LinkstrTheme.system(18, weight: .semibold))
+                            .font(LinkstrTheme.font(.title3, weight: .semibold))
                             .foregroundStyle(LinkstrTheme.destructive)
-                            .frame(width: 28, height: 28, alignment: .center)
+                            .frame(
+                              width: LinkstrTheme.minimumInteractiveDimension,
+                              height: LinkstrTheme.minimumInteractiveDimension
+                            )
                         }
                         .accessibilityLabel("remove \(identity?.displayName ?? "member")")
                       }
@@ -293,6 +305,7 @@ struct SessionManagementSheet: View {
           .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
           .padding(.top, LinkstrTheme.screenTopPadding)
           .padding(.bottom, LinkstrTheme.screenBottomPadding)
+          .linkstrReadableContent()
           .scrollDismissesKeyboard(.interactively)
         }
       }
@@ -368,6 +381,9 @@ struct SessionManagementSheet: View {
       .onChange(of: activeMembers.map(\.memberPubkey).stableTaskID) { _, _ in
         syncMembersIfNeeded()
       }
+    }
+    .sheet(isPresented: $isPresentingAddContact) {
+      AddContactSheet()
     }
   }
 }

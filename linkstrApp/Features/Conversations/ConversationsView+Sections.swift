@@ -1,7 +1,6 @@
 import SwiftData
 import SwiftUI
 import UIKit
-
 struct SessionPostsView: View {
   @Environment(\.dismiss) var dismiss
   @EnvironmentObject var session: AppSession
@@ -104,7 +103,7 @@ struct SessionPostsView: View {
 
             if contentState.postCount > 0 {
               Text(contentState.postCountLabel)
-                .font(LinkstrTheme.body(11, weight: .medium))
+                .font(LinkstrTheme.font(.caption, weight: .medium))
                 .foregroundStyle(LinkstrTheme.textTertiary)
             }
 
@@ -117,8 +116,10 @@ struct SessionPostsView: View {
                 title: "no posts yet",
                 systemImage: "link.badge.plus",
                 description: contentState.canCreatePosts
-                  ? "send a link to this session."
-                  : "you're no longer a member of this session."
+                  ? "send a link to this session." : "you're no longer a member of this session.",
+                actionTitle: contentState.canCreatePosts ? "new post" : nil,
+                actionSystemImage: "square.and.pencil",
+                action: contentState.canCreatePosts ? { isPresentingNewPost = true } : nil
               )
               .frame(maxWidth: .infinity, minHeight: 260)
             } else {
@@ -132,6 +133,7 @@ struct SessionPostsView: View {
           .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
           .padding(.top, LinkstrTheme.screenTopPadding)
           .padding(.bottom, LinkstrTheme.screenBottomPadding)
+          .linkstrReadableContent()
         }
       } else {
         ContentUnavailableView(
@@ -141,7 +143,6 @@ struct SessionPostsView: View {
         )
       }
     }
-    .linkstrTabBarContentInset()
     .scrollContentBackground(.hidden)
     .background(LinkstrBackgroundView())
 
@@ -311,7 +312,7 @@ struct SessionMembershipChangeRowView: View {
         .frame(height: 1)
 
       Text(markerLabel)
-        .font(LinkstrTheme.body(11, weight: .semibold))
+        .font(LinkstrTheme.font(.caption, weight: .semibold))
         .foregroundStyle(LinkstrTheme.textTertiary)
         .lineLimit(1)
 

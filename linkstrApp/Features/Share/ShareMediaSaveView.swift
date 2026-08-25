@@ -26,7 +26,7 @@ struct ShareMediaSaveView: View {
 
             LinkstrInsetSection(title: "link") {
               Text(draft.url)
-                .font(LinkstrTheme.body(14))
+                .font(LinkstrTheme.font(.footnote))
                 .foregroundStyle(LinkstrTheme.textPrimary)
                 .lineLimit(4)
                 .textSelection(.enabled)
@@ -39,11 +39,11 @@ struct ShareMediaSaveView: View {
 
                 VStack(alignment: .leading, spacing: LinkstrTheme.metaSpacing) {
                   Text(status.title)
-                    .font(LinkstrTheme.title(16))
+                    .font(LinkstrTheme.font(.headline, weight: .semibold))
                     .foregroundStyle(LinkstrTheme.textPrimary)
 
                   Text(status.message)
-                    .font(LinkstrTheme.body(13))
+                    .font(LinkstrTheme.font(.footnote))
                     .foregroundStyle(LinkstrTheme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                 }
@@ -55,6 +55,7 @@ struct ShareMediaSaveView: View {
           .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
           .padding(.top, LinkstrTheme.screenTopPadding)
           .padding(.bottom, LinkstrTheme.screenBottomPadding)
+          .linkstrReadableContent()
         }
       }
       .linkstrBarChrome()
@@ -121,7 +122,7 @@ struct ShareMediaSaveView: View {
           .tint(status.tint)
       } else {
         Image(systemName: status.systemImage)
-          .font(LinkstrTheme.system(19, weight: .semibold))
+          .font(LinkstrTheme.font(.title3, weight: .semibold))
           .foregroundStyle(status.tint)
       }
     }

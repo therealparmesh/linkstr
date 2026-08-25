@@ -7,6 +7,7 @@ import SwiftUI
 struct OnboardingView: View {
   @EnvironmentObject private var session: AppSession
   @State private var secretKey = ""
+  @State private var isSecretKeyVisible = false
   @State private var createdProfileName = ""
   @State private var isSavingCreatedProfileName = false
 
@@ -28,7 +29,9 @@ struct OnboardingView: View {
           .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
           .padding(.top, LinkstrTheme.screenTopPadding)
           .padding(.bottom, LinkstrTheme.screenBottomPadding)
+          .linkstrReadableContent()
         }
+        .scrollDismissesKeyboard(.interactively)
       }
       .linkstrBarChrome()
     }
@@ -41,7 +44,7 @@ struct OnboardingView: View {
   private var header: some View {
     VStack(alignment: .leading, spacing: 0) {
       Text("welcome to linkstr.")
-        .font(LinkstrTheme.title(30, weight: .bold))
+        .font(LinkstrTheme.font(.largeTitle, weight: .bold))
         .foregroundStyle(LinkstrTheme.textPrimary)
     }
   }
@@ -49,13 +52,39 @@ struct OnboardingView: View {
   private var signInAndCreateStep: some View {
     VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
       LinkstrInsetSection(title: "sign in") {
-        TextField("secret key (nsec)", text: $secretKey)
-          .font(LinkstrTheme.body(15))
+        HStack(spacing: LinkstrTheme.metaSpacing) {
+          Group {
+            if isSecretKeyVisible {
+              TextField("secret key (nsec)", text: $secretKey)
+            } else {
+              SecureField("secret key (nsec)", text: $secretKey)
+            }
+          }
+          .font(LinkstrTheme.font(.subheadline))
           .textInputAutocapitalization(.never)
           .autocorrectionDisabled(true)
           .submitLabel(.go)
           .onSubmit(submitSecretKey)
-          .linkstrInputField()
+          .privacySensitive()
+
+          Button {
+            isSecretKeyVisible.toggle()
+          } label: {
+            Image(systemName: isSecretKeyVisible ? "eye.slash" : "eye")
+              .frame(
+                width: LinkstrTheme.minimumInteractiveDimension,
+                height: LinkstrTheme.minimumInteractiveDimension
+              )
+              .contentShape(Rectangle())
+          }
+          .buttonStyle(.plain)
+          .foregroundStyle(LinkstrTheme.textSecondary)
+          .accessibilityLabel(isSecretKeyVisible ? "hide secret key" : "show secret key")
+        }
+        .padding(.leading, LinkstrTheme.fieldHorizontalPadding)
+        .padding(.trailing, LinkstrTheme.metaSpacing)
+        .frame(maxWidth: .infinity, minHeight: LinkstrTheme.inputControlMinHeight)
+        .linkstrFieldChrome()
 
         LinkstrInputAssistRow(
           showClear: !secretKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -79,7 +108,7 @@ struct OnboardingView: View {
           .frame(height: 1)
 
         Text("or")
-          .font(LinkstrTheme.body(12, weight: .medium))
+          .font(LinkstrTheme.font(.caption, weight: .medium))
           .foregroundStyle(LinkstrTheme.textTertiary)
 
         Rectangle()
@@ -106,7 +135,7 @@ struct OnboardingView: View {
         footer: "save this key. it works like your account password."
       ) {
         Text(nsec)
-          .font(LinkstrTheme.body(13))
+          .font(LinkstrTheme.font(.footnote))
           .foregroundStyle(LinkstrTheme.textSecondary)
           .textSelection(.enabled)
           .privacySensitive()
@@ -126,7 +155,7 @@ struct OnboardingView: View {
         footer: "optional. others can see this name."
       ) {
         TextField("name others see", text: $createdProfileName)
-          .font(LinkstrTheme.body(15))
+          .font(LinkstrTheme.font(.subheadline))
           .textInputAutocapitalization(.words)
           .autocorrectionDisabled(true)
           .submitLabel(.done)
@@ -135,7 +164,7 @@ struct OnboardingView: View {
 
         if let profileNameErrorMessage = session.profileNameErrorMessage {
           Text(profileNameErrorMessage)
-            .font(LinkstrTheme.body(12))
+            .font(LinkstrTheme.font(.caption))
             .foregroundStyle(LinkstrTheme.destructive.opacity(0.92))
         }
 

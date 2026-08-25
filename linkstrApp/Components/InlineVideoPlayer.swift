@@ -29,19 +29,21 @@ struct InlineVideoPlayer: View {
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
 
-      Button {
-        isShowingFullscreenPlayer = true
-      } label: {
-        Image(systemName: "arrow.up.left.and.arrow.down.right")
-          .font(LinkstrTheme.system(14, weight: .semibold))
-          .foregroundStyle(LinkstrTheme.textPrimary)
-          .padding(8)
-          .background(
-            Circle()
-              .fill(LinkstrTheme.panel.opacity(0.84))
-          )
+      if player != nil {
+        Button {
+          isShowingFullscreenPlayer = true
+        } label: {
+          Image(systemName: "arrow.up.left.and.arrow.down.right")
+            .font(LinkstrTheme.font(.footnote, weight: .semibold))
+            .foregroundStyle(LinkstrTheme.textPrimary)
+            .frame(
+              width: LinkstrTheme.minimumInteractiveDimension,
+              height: LinkstrTheme.minimumInteractiveDimension)
+            .background(Circle().fill(LinkstrTheme.panel.opacity(0.84)))
+        }
+        .accessibilityLabel("open video fullscreen")
+        .padding(8)
       }
-      .padding(8)
     }
     .fullScreenCover(isPresented: $isShowingFullscreenPlayer) {
       if let player {
@@ -97,6 +99,7 @@ struct InlineVideoPlayer: View {
       newPlayer.play()
     }
     .onDisappear {
+      guard !isShowingFullscreenPlayer else { return }
       player?.pause()
       player = nil
       statusObservation?.invalidate()
@@ -119,7 +122,6 @@ private struct FullScreenAVPlayerView: UIViewControllerRepresentable {
     player.play()
     return controller
   }
-
   func updateUIViewController(_ uiViewController: AVPlayerViewController, context: Context) {
     uiViewController.player = player
   }

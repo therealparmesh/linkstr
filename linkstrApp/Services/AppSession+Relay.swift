@@ -93,26 +93,27 @@ extension AppSession {
       relayURLs: relayURLs,
       onIncoming: makeIncomingHandler(),
       onRelayStatus: makeRelayStatusHandler(),
-      onInitialBackfillComplete: { [weak self] in
-        self?.finishInitialHistoricalRestore()
-      },
+      onInitialBackfillComplete: makeInitialBackfillCompleteHandler(),
       onFollowList: makeFollowListHandler(),
       onProfileMetadata: makeProfileMetadataHandler()
     )
   }
 
   func makeIncomingHandler() -> (ReceivedDirectMessage) -> Void {
-    { [weak self] incoming in
+    let sourceService = nostrService
+    return { [weak self, weak sourceService] incoming in
       Task { @MainActor in
-        self?.persistIncoming(incoming)
+        guard let self, let sourceService, self.nostrService === sourceService else { return }
+        self.persistIncoming(incoming)
       }
     }
   }
 
   func makeRelayStatusHandler() -> (String, RelayHealthStatus, String?) -> Void {
-    { [weak self] relayURL, status, message in
+    let sourceService = nostrService
+    return { [weak self, weak sourceService] relayURL, status, message in
       Task { @MainActor in
-        guard let self else { return }
+        guard let self, let sourceService, self.nostrService === sourceService else { return }
         guard self.isForeground else { return }
         self.updateRuntimeRelayStatus(
           relayURL: relayURL,
@@ -124,18 +125,32 @@ extension AppSession {
     }
   }
 
-  func makeFollowListHandler() -> (ReceivedFollowList) -> Void {
-    { [weak self] followList in
+  func makeInitialBackfillCompleteHandler() -> () -> Void {
+    let sourceService = nostrService
+    return { [weak self, weak sourceService] in
       Task { @MainActor in
-        self?.persistIncomingFollowList(followList)
+        guard let self, let sourceService, self.nostrService === sourceService else { return }
+        self.finishInitialHistoricalRestore()
+      }
+    }
+  }
+
+  func makeFollowListHandler() -> (ReceivedFollowList) -> Void {
+    let sourceService = nostrService
+    return { [weak self, weak sourceService] followList in
+      Task { @MainActor in
+        guard let self, let sourceService, self.nostrService === sourceService else { return }
+        self.persistIncomingFollowList(followList)
       }
     }
   }
 
   func makeProfileMetadataHandler() -> (ReceivedProfileMetadata) -> Void {
-    { [weak self] profileMetadata in
+    let sourceService = nostrService
+    return { [weak self, weak sourceService] profileMetadata in
       Task { @MainActor in
-        self?.persistIncomingProfileMetadata(profileMetadata)
+        guard let self, let sourceService, self.nostrService === sourceService else { return }
+        self.persistIncomingProfileMetadata(profileMetadata)
       }
     }
   }

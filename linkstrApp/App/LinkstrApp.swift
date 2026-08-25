@@ -335,16 +335,16 @@ struct LinkstrStorageRecoveryView: View {
       VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
         HStack(spacing: LinkstrTheme.rowSpacing) {
           Image(systemName: "externaldrive.badge.exclamationmark")
-            .font(LinkstrTheme.system(24, weight: .semibold))
+            .font(LinkstrTheme.font(.title2, weight: .semibold))
             .foregroundStyle(LinkstrTheme.amber)
 
           Text(title)
-            .font(LinkstrTheme.title(24))
+            .font(LinkstrTheme.font(.title, weight: .semibold))
             .foregroundStyle(LinkstrTheme.textPrimary)
         }
 
         Text(message)
-          .font(LinkstrTheme.body(14))
+          .font(LinkstrTheme.font(.footnote))
           .foregroundStyle(LinkstrTheme.textSecondary)
           .fixedSize(horizontal: false, vertical: true)
 

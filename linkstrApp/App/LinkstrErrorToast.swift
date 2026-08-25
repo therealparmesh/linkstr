@@ -7,12 +7,12 @@ struct LinkstrErrorToast: View {
   var body: some View {
     HStack(alignment: .top, spacing: 10) {
       Image(systemName: isSuccess ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
-        .font(LinkstrTheme.system(15, weight: .semibold))
+        .font(LinkstrTheme.font(.subheadline, weight: .semibold))
         .foregroundStyle(isSuccess ? LinkstrTheme.statusSuccess : LinkstrTheme.amber)
         .padding(.top, 1)
 
       Text(message)
-        .font(LinkstrTheme.body(14))
+        .font(LinkstrTheme.font(.footnote))
         .foregroundStyle(LinkstrTheme.textPrimary)
         .lineLimit(3)
         .frame(maxWidth: .infinity, alignment: .leading)
