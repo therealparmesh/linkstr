@@ -210,7 +210,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 - Session rows show unread indicators when any inbound root post in that session is unread.
 - Post cards inside a session show unread indicators when that root post is unread inbound.
 - Initial relay history restore into an empty local store treats replayed inbound posts as already read.
-- Opening a session marks visible inbound root posts as read. Opening post detail also marks that post as read.
+- Opening an unread inbound post marks it as read.
 - Reactions do not affect unread counters.
 
 ### Relay settings and runtime

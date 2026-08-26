@@ -118,9 +118,6 @@ extension SessionPostsView {
     }
     .buttonStyle(.plain)
     .onAppear {
-      if row.hasUnreadPost {
-        session.markRootPostRead(postID: row.post.rootID)
-      }
       session.refreshMetadataForVisiblePostIfNeeded(row.post)
     }
 
