@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 enum LinkstrTheme {
   static let background = Color(red: 0.09, green: 0.10, blue: 0.16)
@@ -37,6 +38,7 @@ enum LinkstrTheme {
   static let inputAssistBottomSpacing: CGFloat = 6
   static let fieldCornerRadius: CGFloat = 12
   static let minimumInteractiveDimension: CGFloat = 44
+  static let searchClearButtonTextInset = minimumInteractiveDimension - fieldHorizontalPadding
   static let readableContentMaxWidth: CGFloat = 680
 
   static func font(_ style: Font.TextStyle, weight: Font.Weight = .regular) -> Font {
@@ -99,6 +101,29 @@ private struct LinkstrInputField: ViewModifier {
       .padding(.vertical, LinkstrTheme.fieldVerticalPadding)
       .frame(maxWidth: .infinity, minHeight: minHeight, alignment: alignment)
       .linkstrFieldChrome()
+  }
+}
+
+private struct LinkstrKeyboardDismissal: ViewModifier {
+  func body(content: Content) -> some View {
+    content
+      .scrollDismissesKeyboard(.immediately)
+      .toolbar {
+        ToolbarItemGroup(placement: .keyboard) {
+          Spacer()
+
+          Button("done") {
+            UIApplication.shared.sendAction(
+              #selector(UIResponder.resignFirstResponder),
+              to: nil,
+              from: nil,
+              for: nil
+            )
+          }
+          .font(LinkstrTheme.font(.subheadline, weight: .semibold))
+          .tint(LinkstrTheme.accent)
+        }
+      }
   }
 }
 
@@ -173,6 +198,10 @@ extension View {
     alignment: Alignment = .leading
   ) -> some View {
     modifier(LinkstrInputField(minHeight: minHeight, alignment: alignment))
+  }
+
+  func linkstrKeyboardDismissal() -> some View {
+    modifier(LinkstrKeyboardDismissal())
   }
 
   func linkstrPrimaryButton() -> some View {

@@ -47,7 +47,7 @@ struct YouView: View {
       .task(id: npub) {
         qrImage = QRCodeGenerator.image(for: npub)
       }
-      .scrollDismissesKeyboard(.interactively)
+      .linkstrKeyboardDismissal()
     } else {
       VStack(spacing: 0) {
         LinkstrScreenTitle(title: "you")
@@ -201,18 +201,8 @@ struct YouView: View {
   }
 
   private func submitProfileName() {
-    dismissProfileNameKeyboard()
-    saveProfileName()
-  }
-
-  private func dismissProfileNameKeyboard() {
     isProfileNameFieldFocused = false
-    UIApplication.shared.sendAction(
-      #selector(UIResponder.resignFirstResponder),
-      to: nil,
-      from: nil,
-      for: nil
-    )
+    saveProfileName()
   }
 
   private func syncProfileNameDraft() {

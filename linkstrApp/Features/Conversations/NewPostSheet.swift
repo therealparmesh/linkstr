@@ -98,7 +98,7 @@ struct NewPostSheet: View {
         .padding(.top, LinkstrTheme.screenTopPadding)
         .padding(.bottom, LinkstrTheme.screenBottomPadding)
         .linkstrReadableContent()
-        .scrollDismissesKeyboard(.interactively)
+        .linkstrKeyboardDismissal()
       }
 
       .linkstrBarChrome()

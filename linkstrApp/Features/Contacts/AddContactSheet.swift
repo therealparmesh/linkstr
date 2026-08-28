@@ -100,8 +100,8 @@ struct AddContactSheet: View {
           .padding(.top, LinkstrTheme.screenTopPadding)
           .padding(.bottom, LinkstrTheme.screenBottomPadding)
           .linkstrReadableContent()
-          .scrollDismissesKeyboard(.interactively)
         }
+        .linkstrKeyboardDismissal()
       }
       .task(id: previewPubkeyHex) {
         guard let previewPubkeyHex else { return }

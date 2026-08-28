@@ -28,14 +28,12 @@ struct LinkstrAppMain: App {
     scrollViewAppearance.bounces = true
     scrollViewAppearance.alwaysBounceVertical = true
     scrollViewAppearance.alwaysBounceHorizontal = false
-    scrollViewAppearance.keyboardDismissMode = .interactive
 
     let collectionViewAppearance = UICollectionView.appearance()
     collectionViewAppearance.backgroundColor = .clear
     collectionViewAppearance.bounces = true
     collectionViewAppearance.alwaysBounceVertical = true
     collectionViewAppearance.alwaysBounceHorizontal = false
-    collectionViewAppearance.keyboardDismissMode = .interactive
   }
 
   private static func configureNavigationAppearance() {

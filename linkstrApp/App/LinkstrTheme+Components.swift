@@ -74,10 +74,13 @@ struct LinkstrSearchField: View {
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled(true)
         .submitLabel(submitLabel)
+        .padding(.trailing, LinkstrTheme.searchClearButtonTextInset)
         .onSubmit {
           onSubmit?()
         }
-
+    }
+    .linkstrInputField()
+    .overlay(alignment: .trailing) {
       Button {
         text = ""
       } label: {
@@ -96,7 +99,6 @@ struct LinkstrSearchField: View {
       .accessibilityHidden(text.isEmpty)
       .accessibilityLabel("clear search")
     }
-    .linkstrInputField()
   }
 }
 

@@ -140,7 +140,7 @@ struct ContactsView: View {
         .padding(.bottom, LinkstrTheme.screenBottomPadding)
         .linkstrReadableContent()
       }
-      .scrollDismissesKeyboard(.interactively)
+      .linkstrKeyboardDismissal()
     }
   }
 
@@ -272,6 +272,7 @@ private struct EditContactView: View {
         .padding(.bottom, LinkstrTheme.screenBottomPadding)
         .linkstrReadableContent()
       }
+      .linkstrKeyboardDismissal()
     }
     .navigationBarBackButtonHidden(true)
     .linkstrBarChrome()

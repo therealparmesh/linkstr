@@ -113,8 +113,8 @@ struct NewSessionSheet: View {
           .padding(.top, LinkstrTheme.screenTopPadding)
           .padding(.bottom, LinkstrTheme.screenBottomPadding)
           .linkstrReadableContent()
-          .scrollDismissesKeyboard(.interactively)
         }
+        .linkstrKeyboardDismissal()
       }
 
       .linkstrBarChrome()
@@ -306,8 +306,8 @@ struct SessionManagementSheet: View {
           .padding(.top, LinkstrTheme.screenTopPadding)
           .padding(.bottom, LinkstrTheme.screenBottomPadding)
           .linkstrReadableContent()
-          .scrollDismissesKeyboard(.interactively)
         }
+        .linkstrKeyboardDismissal()
       }
       .linkstrBarChrome()
       .toolbar {

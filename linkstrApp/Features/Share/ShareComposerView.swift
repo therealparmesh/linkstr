@@ -144,7 +144,7 @@ struct ShareComposerView: View {
           .padding(.bottom, LinkstrTheme.screenBottomPadding)
           .linkstrReadableContent()
         }
-        .scrollDismissesKeyboard(.interactively)
+        .linkstrKeyboardDismissal()
       }
       .linkstrBarChrome()
       .toolbar {

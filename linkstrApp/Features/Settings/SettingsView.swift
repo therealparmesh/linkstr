@@ -67,7 +67,7 @@ struct SettingsView: View {
       .padding(.bottom, LinkstrTheme.screenBottomPadding)
       .linkstrReadableContent()
     }
-    .scrollDismissesKeyboard(.interactively)
+    .linkstrKeyboardDismissal()
     .alert("log out", isPresented: $isPresentingLogoutOptions) {
       Button("log out (keep local data)") {
         session.logOut(clearLocalData: false)

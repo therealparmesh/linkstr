@@ -251,7 +251,7 @@ private struct ConversationsContentView: View {
         .padding(.bottom, LinkstrTheme.screenBottomPadding)
         .linkstrReadableContent()
       }
-      .scrollDismissesKeyboard(.interactively)
+      .linkstrKeyboardDismissal()
     }
   }
 }
