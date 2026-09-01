@@ -92,6 +92,8 @@ struct ShareSessionPickerSheet: View {
   }
 
   var body: some View {
+    let filteredSessions = visibleSessions
+
     NavigationStack {
       ZStack {
         LinkstrBackgroundView()
@@ -107,7 +109,7 @@ struct ShareSessionPickerSheet: View {
                 submitLabel: .search
               )
 
-              sessionPicker
+              sessionPicker(filteredSessions)
             }
           }
           .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
@@ -135,7 +137,9 @@ struct ShareSessionPickerSheet: View {
   }
 
   @ViewBuilder
-  private var sessionPicker: some View {
+  private func sessionPicker(_ visibleSessions: [SessionEntity]) -> some View {
+    let lastSessionID = visibleSessions.last?.storageID
+
     if visibleSessions.isEmpty {
       LinkstrShareEmptyPickerState(
         title: "no sessions found",
@@ -157,7 +161,7 @@ struct ShareSessionPickerSheet: View {
           }
           .buttonStyle(.plain)
 
-          if sessionEntity.storageID != visibleSessions.last?.storageID {
+          if sessionEntity.storageID != lastSessionID {
             LinkstrListRowDivider(leadingInset: 54)
           }
         }

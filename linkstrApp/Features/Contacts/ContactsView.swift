@@ -36,11 +36,11 @@ struct ContactsView: View {
       .map(\.contact)
   }
 
-  private var visibleContacts: [ContactEntity] {
+  private func visibleContacts(in contacts: [ContactEntity]) -> [ContactEntity] {
     let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !normalizedQuery.isEmpty else { return sortedContacts }
+    guard !normalizedQuery.isEmpty else { return contacts }
     return RecipientSearchLogic.filteredContacts(
-      sortedContacts,
+      contacts,
       query: normalizedQuery,
       displayName: { session.resolvedIdentity(for: $0).displayName },
       npub: \.npub,
@@ -48,11 +48,9 @@ struct ContactsView: View {
     )
   }
 
-  private var profileLookupPubkeys: [String] {
-    sortedContacts.map(\.targetPubkey)
-  }
-
   var body: some View {
+    let profileLookupPubkeys = contacts.map(\.targetPubkey)
+
     ZStack {
       LinkstrBackgroundView()
       content
@@ -76,7 +74,10 @@ struct ContactsView: View {
 
   @ViewBuilder
   private var content: some View {
-    if sortedContacts.isEmpty {
+    let orderedContacts = sortedContacts
+    let visibleContacts = visibleContacts(in: orderedContacts)
+
+    if orderedContacts.isEmpty {
       VStack(spacing: 0) {
         LinkstrScreenTitle(title: "contacts")
           .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)

@@ -32,15 +32,15 @@ struct MainTabView: View {
   @Binding private var selectedTab: AppTab
 
   private struct SessionNavigationTarget: Identifiable, Hashable {
-    let id = UUID()
     let sessionID: String
+
+    var id: String { sessionID }
   }
 
   @State private var isPresentingNewSession = false
   @State private var isPresentingAddContact = false
   @State private var isShowingArchivedSessions = false
   @State private var selectedSessionTarget: SessionNavigationTarget?
-  @State private var sessionNavigationResetTask: Task<Void, Never>?
 
   @Query private var sessions: [SessionEntity]
 
@@ -107,8 +107,6 @@ struct MainTabView: View {
         isShowingArchivedSessions = false
       }
       if newValue != .sessions {
-        sessionNavigationResetTask?.cancel()
-        sessionNavigationResetTask = nil
         selectedSessionTarget = nil
       }
     }
@@ -125,10 +123,6 @@ struct MainTabView: View {
     }
     .onChange(of: sessions.map(\.sessionID).stableTaskID) { _, _ in
       navigateToPendingSessionIfNeeded()
-    }
-    .onDisappear {
-      sessionNavigationResetTask?.cancel()
-      sessionNavigationResetTask = nil
     }
     .sheet(isPresented: $isPresentingNewSession) {
       NewSessionSheet(ownerPubkey: ownerPubkey)
@@ -214,20 +208,8 @@ struct MainTabView: View {
   private func openSession(_ sessionID: String) {
     selectedTab = .sessions
     let target = SessionNavigationTarget(sessionID: sessionID)
-    sessionNavigationResetTask?.cancel()
-
-    guard selectedSessionTarget != nil else {
-      selectedSessionTarget = target
-      return
-    }
-
-    selectedSessionTarget = nil
-    sessionNavigationResetTask = Task { @MainActor in
-      await Task.yield()
-      guard !Task.isCancelled else { return }
-      selectedSessionTarget = target
-      sessionNavigationResetTask = nil
-    }
+    guard selectedSessionTarget != target else { return }
+    selectedSessionTarget = target
   }
 
   private func navigateToPendingSessionIfNeeded() {

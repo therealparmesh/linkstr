@@ -31,6 +31,9 @@ struct NewSessionSheet: View {
   }
 
   var body: some View {
+    let visibleContacts = filteredContacts
+    let lastContactID = visibleContacts.last?.id
+
     NavigationStack {
       ZStack {
         LinkstrBackgroundView()
@@ -65,13 +68,13 @@ struct NewSessionSheet: View {
                 )
                 .focused($focusedField, equals: .search)
 
-                if filteredContacts.isEmpty {
+                if visibleContacts.isEmpty {
                   Text("no contacts match.")
                     .font(LinkstrTheme.font(.footnote))
                     .foregroundStyle(LinkstrTheme.textSecondary)
                 } else {
                   VStack(spacing: 0) {
-                    ForEach(filteredContacts) { contact in
+                    ForEach(visibleContacts) { contact in
                       let identity = session.resolvedIdentity(for: contact)
                       Button {
                         toggle(contact.npub)
@@ -100,7 +103,7 @@ struct NewSessionSheet: View {
                       }
                       .buttonStyle(.plain)
 
-                      if contact.id != filteredContacts.last?.id {
+                      if contact.id != lastContactID {
                         LinkstrListRowDivider(leadingInset: 50)
                       }
                     }
@@ -216,6 +219,11 @@ struct SessionManagementSheet: View {
   }
 
   var body: some View {
+    let orderedContacts = sortedContacts
+    let currentMembers = visibleCurrentMembers(contacts: orderedContacts)
+    let availableContacts = filteredContacts(contacts: orderedContacts)
+    let lookupPubkeys = profileLookupPubkeys(contacts: orderedContacts, currentMembers: currentMembers)
+
     NavigationStack {
       ZStack {
         LinkstrBackgroundView()
@@ -242,16 +250,16 @@ struct SessionManagementSheet: View {
             }
             LinkstrInsetSection(
               title: "current members",
-              accessory: "\(visibleCurrentMembers.count + 1)"
+              accessory: "\(currentMembers.count + 1)"
             ) {
-              if visibleCurrentMembers.isEmpty {
+              if currentMembers.isEmpty {
                 Text("only you are in this session.")
                   .font(LinkstrTheme.font(.footnote))
                   .foregroundStyle(LinkstrTheme.textSecondary)
               } else {
                 VStack(spacing: 0) {
-                  ForEach(visibleCurrentMembers, id: \.self) { memberHex in
-                    let identity = memberIdentity(for: memberHex)
+                  ForEach(currentMembers, id: \.self) { memberHex in
+                    let identity = memberIdentity(for: memberHex, contacts: orderedContacts)
                     HStack(spacing: LinkstrTheme.rowSpacing) {
                       LinkstrContactAvatar(
                         name: identity?.displayName ?? "you",
@@ -288,7 +296,7 @@ struct SessionManagementSheet: View {
                     }
                     .padding(.vertical, LinkstrTheme.listRowVerticalPadding)
 
-                    if memberHex != visibleCurrentMembers.last {
+                    if memberHex != currentMembers.last {
                       LinkstrListRowDivider(leadingInset: 50)
                     }
                   }
@@ -297,7 +305,10 @@ struct SessionManagementSheet: View {
             }
 
             if canManageSession {
-              managementSections
+              managementSections(
+                hasContacts: !orderedContacts.isEmpty,
+                filteredContacts: availableContacts
+              )
             } else {
               readOnlySections
             }
@@ -368,8 +379,8 @@ struct SessionManagementSheet: View {
           )
         }
       }
-      .task(id: profileLookupPubkeys.stableTaskID) {
-        session.requestRemoteProfilesIfNeeded(pubkeyHexes: profileLookupPubkeys)
+      .task(id: lookupPubkeys.stableTaskID) {
+        session.requestRemoteProfilesIfNeeded(pubkeyHexes: lookupPubkeys)
       }
       .onAppear(perform: syncStateIfNeeded)
       .onChange(of: sessionName) { _, _ in

@@ -99,9 +99,26 @@ extension NewSessionSheet {
 
 extension SessionManagementSheet {
   @ViewBuilder
-  var managementSections: some View {
+  func managementSections(
+    hasContacts: Bool,
+    filteredContacts: [ContactEntity]
+  ) -> some View {
+    addContactsSection(
+      hasContacts: hasContacts,
+      filteredContacts: filteredContacts
+    )
+    archiveSection
+    dangerZoneSection
+  }
+
+  @ViewBuilder
+  private func addContactsSection(
+    hasContacts: Bool,
+    filteredContacts: [ContactEntity]
+  ) -> some View {
+    let lastContactID = filteredContacts.last?.id
     LinkstrInsetSection(title: "add from contacts") {
-      if sortedContacts.isEmpty {
+      if !hasContacts {
         LinkstrNoContactsPrompt {
           focusedField = nil
           isPresentingAddContact = true
@@ -116,50 +133,55 @@ extension SessionManagementSheet {
         } else {
           VStack(spacing: 0) {
             ForEach(filteredContacts) { contact in
-              let identity = session.resolvedIdentity(for: contact)
-              let contactHex = contact.targetPubkey
-              Button {
-                if includedMemberHexes.contains(contactHex) {
-                  includedMemberHexes.remove(contactHex)
-                } else {
-                  includedMemberHexes.insert(contactHex)
-                }
-              } label: {
-                HStack(spacing: LinkstrTheme.rowSpacing) {
-                  LinkstrContactAvatar(name: identity.displayName, size: 38)
-                  LinkstrContactIdentityView(
-                    identity: identity,
-                    primaryFont: LinkstrTheme.font(.footnote, weight: .medium)
-                  )
-
-                  Spacer()
-
-                  Image(
-                    systemName: includedMemberHexes.contains(contactHex)
-                      ? "checkmark.circle.fill" : "circle"
-                  )
-                  .font(LinkstrTheme.font(.title3, weight: .semibold))
-                  .foregroundStyle(
-                    includedMemberHexes.contains(contactHex)
-                      ? LinkstrTheme.accent : LinkstrTheme.textTertiary
-                  )
-                }
-                .padding(.vertical, LinkstrTheme.listRowVerticalPadding)
-                .contentShape(Rectangle())
-              }
-              .buttonStyle(.plain)
-
-              if contact.id != filteredContacts.last?.id {
-                LinkstrListRowDivider(leadingInset: 50)
-              }
+              managementContactRow(contact, isLast: contact.id == lastContactID)
             }
           }
         }
       }
     }
+  }
 
-    archiveSection
+  @ViewBuilder
+  private func managementContactRow(_ contact: ContactEntity, isLast: Bool) -> some View {
+    let identity = session.resolvedIdentity(for: contact)
+    let contactHex = contact.targetPubkey
+    Button {
+      if includedMemberHexes.contains(contactHex) {
+        includedMemberHexes.remove(contactHex)
+      } else {
+        includedMemberHexes.insert(contactHex)
+      }
+    } label: {
+      HStack(spacing: LinkstrTheme.rowSpacing) {
+        LinkstrContactAvatar(name: identity.displayName, size: 38)
+        LinkstrContactIdentityView(
+          identity: identity,
+          primaryFont: LinkstrTheme.font(.footnote, weight: .medium)
+        )
 
+        Spacer()
+
+        Image(
+          systemName: includedMemberHexes.contains(contactHex)
+            ? "checkmark.circle.fill" : "circle"
+        )
+        .font(LinkstrTheme.font(.title3, weight: .semibold))
+        .foregroundStyle(
+          includedMemberHexes.contains(contactHex)
+            ? LinkstrTheme.accent : LinkstrTheme.textTertiary
+        )
+      }
+      .padding(.vertical, LinkstrTheme.listRowVerticalPadding)
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+
+    if !isLast {
+      LinkstrListRowDivider(leadingInset: 50)
+    }
+  }
+
+  private var dangerZoneSection: some View {
     LinkstrInsetSection(title: "danger zone", footer: deleteFooterText) {
       Button(role: .destructive) {
         guard !isSaving, !isDeletingSession else { return }
@@ -258,7 +280,7 @@ extension SessionManagementSheet {
     "deleting removes this session from the app and sends delete notices to known members."
   }
 
-  var visibleCurrentMembers: [String] {
+  func visibleCurrentMembers(contacts: [ContactEntity]) -> [String] {
     let myPubkey = session.identityService.pubkeyHex
     return
       includedMemberHexes
@@ -267,15 +289,15 @@ extension SessionManagementSheet {
         return memberHex != myPubkey
       }
       .sorted {
-        session.displayName(for: $0, contacts: sortedContacts).localizedCaseInsensitiveCompare(
-          session.displayName(for: $1, contacts: sortedContacts)
+        session.displayName(for: $0, contacts: contacts).localizedCaseInsensitiveCompare(
+          session.displayName(for: $1, contacts: contacts)
         ) == .orderedAscending
       }
   }
 
-  var filteredContacts: [ContactEntity] {
+  func filteredContacts(contacts: [ContactEntity]) -> [ContactEntity] {
     RecipientSearchLogic.filteredContacts(
-      sortedContacts,
+      contacts,
       query: query,
       displayName: { session.resolvedIdentity(for: $0).displayName },
       npub: \.npub,
@@ -283,15 +305,21 @@ extension SessionManagementSheet {
     )
   }
 
-  var profileLookupPubkeys: [String] {
-    var pubkeys = sortedContacts.map(\.targetPubkey)
-    pubkeys.append(contentsOf: visibleCurrentMembers)
+  func profileLookupPubkeys(
+    contacts: [ContactEntity],
+    currentMembers: [String]
+  ) -> [String] {
+    var pubkeys = contacts.map(\.targetPubkey)
+    pubkeys.append(contentsOf: currentMembers)
     return NostrValueNormalizer.dedupedNormalizedPubkeyHexes(pubkeys)
   }
 
-  func memberIdentity(for pubkeyHex: String) -> LinkstrResolvedIdentity? {
+  func memberIdentity(
+    for pubkeyHex: String,
+    contacts: [ContactEntity]
+  ) -> LinkstrResolvedIdentity? {
     guard pubkeyHex != session.identityService.pubkeyHex else { return nil }
-    return session.resolvedIdentity(for: pubkeyHex, contacts: sortedContacts)
+    return session.resolvedIdentity(for: pubkeyHex, contacts: contacts)
   }
 
   func saveSession() {
