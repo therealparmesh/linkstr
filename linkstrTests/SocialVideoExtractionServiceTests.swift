@@ -3,25 +3,23 @@ import XCTest
 @testable import linkstr
 
 final class SocialVideoExtractionServiceTests: XCTestCase {
-  func testInstagramPlaybackProbesTryLightweightURLBeforeShareToken() throws {
-    let sourceURL = try XCTUnwrap(URL(string: MediaURLFixtures.instagramShareTokenReelURL))
-    let canonicalURL = try XCTUnwrap(SocialURLHeuristics.instagramCanonicalURL(for: sourceURL))
+  func testGenericMediaDoesNotUseProviderIdentityRules() throws {
+    let sourceURL = try XCTUnwrap(URL(string: "https://example.com/video/12345678"))
+    let candidateURL = try XCTUnwrap(
+      URL(string: "https://cdn.example.com/video/87654321/stream.mp4")
+    )
 
-    let probeURLs = SocialVideoExtractionService.instagramPlaybackProbeURLs(
+    let result = SocialVideoExtractionService.shared.resolvePlayableMedia(
+      from: [candidateURL],
       sourceURL: sourceURL,
-      canonicalURL: canonicalURL
+      userAgent: "test",
+      cookies: []
     )
 
-    XCTAssertEqual(
-      probeURLs.map(\.absoluteString),
-      [
-        MediaURLFixtures.instagramLanguageReelURL,
-        MediaURLFixtures.instagramShareTokenReelURL,
-        MediaURLFixtures.instagramCanonicalReelURL,
-        MediaURLFixtures.instagramCanonicalReelURL + "embed"
-      ]
-    )
-    XCTAssertEqual(Set(probeURLs.map(\.absoluteString)).count, probeURLs.count)
+    guard case .ready(let media) = result else {
+      return XCTFail("Expected generic media to remain provider-independent")
+    }
+    XCTAssertEqual(media.map(\.playbackURL), [candidateURL])
   }
 
   func testDirectMP4URLResolvesWithoutPageScrape() async throws {
@@ -95,6 +93,12 @@ final class SocialVideoExtractionServiceTests: XCTestCase {
   }
 
   func testDedicatedEmbedURLsRejectOrdinaryProviderPages() {
+    let facebookEmbedURL = URL(
+      string:
+        "https://www.facebook.com/plugins/post.php"
+        + "?href=https%3A%2F%2Fwww.facebook.com%2Freel%2F123456789012345%2F"
+    )!
+
     XCTAssertTrue(
       URLClassifier.isDedicatedEmbedURL(
         URL(string: "https://www.tiktok.com/player/v1/7596114833477537054")!
@@ -104,6 +108,11 @@ final class SocialVideoExtractionServiceTests: XCTestCase {
       URLClassifier.isDedicatedEmbedURL(
         URL(string: "https://www.instagram.com/reel/C7x5mYfP0R1/embed")!
       )
+    )
+    XCTAssertTrue(URLClassifier.isDedicatedEmbedURL(facebookEmbedURL))
+    XCTAssertEqual(
+      URLClassifier.mediaStrategy(for: facebookEmbedURL),
+      .embedOnly(embedURL: facebookEmbedURL)
     )
     XCTAssertFalse(
       URLClassifier.isDedicatedEmbedURL(
@@ -131,11 +140,154 @@ final class SocialVideoExtractionServiceTests: XCTestCase {
     XCTAssertNil(MediaPresentationGeometry.aspectRatio(for: .zero))
   }
 
-  func testFacebookOpaqueVideoShareTokenIsNotGuessedToBeAReel() async {
-    let sourceURL = URL(string: "https://www.facebook.com/share/v/1AnBCzUqak/")!
-    let fallback = await URLCanonicalizationService.shared.fallbackCanonicalFacebookURL(
-      from: sourceURL
+  func testFacebookOpaqueShareTokensAreNotGuessedAsCanonicalIDs() async {
+    for sourceURL in [
+      URL(string: "https://www.facebook.com/share/v/1AnBCzUqak/")!,
+      URL(string: "https://www.facebook.com/share/r/1AnBCzUqak/")!
+    ] {
+      let fallback = await URLCanonicalizationService.shared.fallbackCanonicalFacebookURL(
+        from: sourceURL
+      )
+      XCTAssertNil(fallback)
+    }
+  }
+}
+
+extension SocialVideoExtractionServiceTests {
+  func testInstagramPageVideoExtractionIncludesCarouselAndRejectsRelatedPosts() {
+    let html = """
+      <script type="application/json">
+      {
+        "items": [
+          {
+            "code": "requestedPost",
+            "if_not_gated_logged_out": {
+              "code": "requestedPost",
+              "carousel_media": [
+                {
+                  "image_versions2": {"candidates": []}
+                },
+                {
+                  "video_versions": [
+                    {"url": "https://scontent.cdninstagram.com/video/requested.mp4"}
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "code": "relatedPost",
+            "video_versions": [
+              {"url": "https://scontent.cdninstagram.com/video/related.mp4"}
+            ]
+          }
+        ]
+      }
+      </script>
+      """
+
+    let urls = SocialVideoExtractionService.extractInstagramPageVideoURLs(
+      fromHTML: html,
+      expectedPostID: "requestedPost"
     )
-    XCTAssertNil(fallback)
+
+    XCTAssertEqual(
+      urls.map(\.absoluteString),
+      ["https://scontent.cdninstagram.com/video/requested.mp4"]
+    )
+  }
+
+  func testTikTokPageVideoExtractionUsesTheVerifiedPostContainer() {
+    let html = """
+      <script id="__UNIVERSAL_DATA_FOR_REHYDRATION__" type="application/json">
+      {
+        "__DEFAULT_SCOPE__": {
+          "webapp.reflow.video.detail": {
+            "itemInfo": {
+              "itemStruct": {
+                "id": "123456789",
+                "video": {
+                  "playAddr": "https://v16.tiktok.com/video/tos/requested.mp4",
+                  "downloadAddr": "https://v16.tiktok.com/video/tos/requested-download.mp4"
+                }
+              }
+            }
+          }
+        },
+        "related": {
+          "id": "987654321",
+          "video": {
+            "id": "987654321",
+            "playAddr": "https://v16.tiktok.com/video/tos/related.mp4"
+          }
+        }
+      }
+      </script>
+      """
+
+    let urls = SocialVideoExtractionService.extractTikTokPageVideoURLs(
+      fromHTML: html,
+      expectedVideoID: "123456789"
+    )
+
+    XCTAssertEqual(
+      urls.map(\.absoluteString),
+      [
+        "https://v16.tiktok.com/video/tos/requested.mp4",
+        "https://v16.tiktok.com/video/tos/requested-download.mp4"
+      ]
+    )
+  }
+
+  func testFacebookPageVideoExtractionVerifiesKnownPostIdentity() throws {
+    let sourceURL = try XCTUnwrap(
+      URL(string: "https://www.facebook.com/reel/123456789012345/")
+    )
+    let videoURL = "https://video.xx.fbcdn.net/video/requested.mp4"
+    let matchingHTML = """
+      <meta property="og:url" content="https://www.facebook.com/reel/123456789012345/">
+      <meta property="og:video" content="\(videoURL)">
+      """
+    let unrelatedHTML = """
+      <meta property="og:url" content="https://www.facebook.com/reel/999999999999999/">
+      <meta property="og:video" content="https://video.xx.fbcdn.net/video/related.mp4">
+      """
+    XCTAssertEqual(
+      SocialVideoExtractionService.extractFacebookPageVideoURLs(
+        fromHTML: matchingHTML,
+        pageURL: sourceURL,
+        sourceURL: sourceURL
+      ).map(\.absoluteString),
+      [videoURL]
+    )
+    XCTAssertEqual(
+      SocialVideoExtractionService.extractFacebookPageVideoURLs(
+        fromHTML: matchingHTML,
+        pageURL: try XCTUnwrap(
+          URL(string: "https://www.facebook.com/watch/?v=555555555555555")
+        ),
+        sourceURL: sourceURL
+      ).map(\.absoluteString),
+      [videoURL]
+    )
+    XCTAssertEqual(
+      SocialVideoExtractionService.extractFacebookPageVideoURLs(
+        fromHTML: matchingHTML,
+        pageURL: sourceURL,
+        sourceURL: try XCTUnwrap(
+          URL(string: "https://www.facebook.com/share/v/1EscaUGs3R/")
+        )
+      ).map(\.absoluteString),
+      [videoURL]
+    )
+    XCTAssertTrue(
+      SocialVideoExtractionService.extractFacebookPageVideoURLs(
+        fromHTML: unrelatedHTML,
+        pageURL: try XCTUnwrap(
+          URL(string: "https://www.facebook.com/reel/999999999999999/")
+        ),
+        sourceURL: sourceURL
+      ).isEmpty
+    )
   }
 }

@@ -62,16 +62,16 @@ extension MediaURLFixtures {
       name: "facebook shared video",
       url: "https://www.facebook.com/share/v/10153231379946729/",
       linkType: .facebook,
-      strategyKind: .embedOnly,
-      embedExpectation: .prefix("https://www.facebook.com/plugins/video.php?href="),
-      allowsLocalPlayback: false
+      strategyKind: .extractionPreferred,
+      embedExpectation: .prefix("https://www.facebook.com/plugins/post.php?href="),
+      allowsLocalPlayback: true
     ),
     StrategyExpectation(
       name: "facebook shared reel",
       url: "https://www.facebook.com/share/r/213286701716863/",
       linkType: .facebook,
       strategyKind: .extractionPreferred,
-      embedExpectation: .prefix("https://www.facebook.com/plugins/video.php?href="),
+      embedExpectation: .prefix("https://www.facebook.com/plugins/post.php?href="),
       allowsLocalPlayback: true
     ),
     StrategyExpectation(
@@ -80,6 +80,14 @@ extension MediaURLFixtures {
       linkType: .youtube,
       strategyKind: .embedOnly,
       embedExpectation: .exact("https://www.youtube.com/embed/aqz-KE-bpKQ?playsinline=1&rel=0"),
+      allowsLocalPlayback: false
+    ),
+    StrategyExpectation(
+      name: "youtube legacy video path",
+      url: "https://www.youtube.com/v/dQw4w9WgXcQ",
+      linkType: .youtube,
+      strategyKind: .embedOnly,
+      embedExpectation: .exact("https://www.youtube.com/embed/dQw4w9WgXcQ?playsinline=1&rel=0"),
       allowsLocalPlayback: false
     ),
     StrategyExpectation(

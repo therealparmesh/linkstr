@@ -1,67 +1,94 @@
 import Foundation
 
 extension SocialVideoExtractionService {
-  func extractFromFacebook(sourceURL: URL) async -> ExtractionState? {
+  func extractFromFacebook(
+    sourceURL: URL,
+    budget: MediaDiscoveryBudget
+  ) async -> ExtractionState? {
     guard SocialURLHeuristics.isFacebookHost(sourceURL),
       SocialURLHeuristics.isFacebookReelURL(sourceURL)
         || SocialURLHeuristics.isFacebookVideoURL(sourceURL)
     else {
       return nil
     }
-    let ogVideoCandidates = await facebookOGVideoURLs(from: sourceURL)
+    guard budget.permitsAttempt else { return nil }
+    let ogVideoCandidates = await facebookPageVideoURLs(from: sourceURL)
     let ranked = rankCandidates(ogVideoCandidates, sourceURL: sourceURL)
-    return resolvePlayableMedia(
+    if let resolved = resolvePlayableMedia(
       from: ranked,
       sourceURL: sourceURL,
       userAgent: Self.mobileUserAgent,
       cookies: []
-    )
+    ) {
+      return resolved
+    }
+
+    if budget.permitsAttempt,
+      SocialURLHeuristics.facebookVideoID(from: sourceURL) != nil {
+      let fallbackResult = await extractViaGenericSniff(
+        sourceURL: sourceURL,
+        budget: budget
+      )
+      if case .ready = fallbackResult {
+        return fallbackResult
+      }
+    }
+    return .cannotExtract("could not find a usable video stream for this post.")
   }
 
   func facebookIDScore(
     url: URL, value: String, host: String, sourceURL: URL
   ) -> Int {
-    guard let expectedID = SocialURLHeuristics.facebookVideoID(from: sourceURL) else { return 0 }
-    var score = 0
-    if value.contains(expectedID) { score += 50 }
-    if let candidateID = SocialURLHeuristics.facebookVideoID(fromCandidateURL: url) {
-      score += candidateID == expectedID ? 100 : -100
-    }
-    if !(host.contains("facebook") || host.contains("fbcdn") || host.contains("fbsbx")) {
-      score -= 25
-    }
-    return score
+    mediaIdentityScore(
+      expectedID: SocialURLHeuristics.facebookVideoID(from: sourceURL),
+      candidateID: SocialURLHeuristics.facebookVideoID(fromCandidateURL: url),
+      value: value,
+      host: host,
+      allowedHostTokens: ["facebook", "fbcdn", "fbsbx"]
+    )
   }
 
-  /// Extracts direct CDN video URLs from `og:video` meta tags.
-  /// Some providers embed the playable `.mp4` URL in server-rendered HTML when
-  /// fetched with a mobile user-agent, making this faster and more reliable
-  /// than the generic scraper or headless WebView sniff.
-  private func facebookOGVideoURLs(from sourceURL: URL) async -> [URL] {
-    var request = URLRequest(url: sourceURL)
-    request.httpMethod = "GET"
-    request.setValue(Self.mobileUserAgent, forHTTPHeaderField: "User-Agent")
-    request.setValue(
-      "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      forHTTPHeaderField: "Accept"
-    )
-    request.timeoutInterval = SocialVideoTimingDefaults.lightweightFetchTimeout
+  /// Extracts direct CDN video URLs from post-scoped Open Graph metadata.
+  private func facebookPageVideoURLs(from sourceURL: URL) async -> [URL] {
+    var pageURLs = [sourceURL]
+    if let videoID = SocialURLHeuristics.facebookVideoID(from: sourceURL),
+      let mobileReelURL = URL(string: "https://m.facebook.com/reel/\(videoID)/"),
+      mobileReelURL != sourceURL {
+      pageURLs.append(mobileReelURL)
+    }
 
-    do {
-      let (data, response) = try await URLSession.shared.data(for: request)
-      if let httpResponse = response as? HTTPURLResponse,
-        !(200..<400).contains(httpResponse.statusCode) {
-        return []
+    for pageURL in pageURLs {
+      guard let page = await SocialMediaPageLoader.load(
+        pageURL, userAgent: Self.mobileUserAgent),
+        let html = page.html
+      else {
+        continue
       }
+      let videoURLs = Self.extractFacebookPageVideoURLs(
+        fromHTML: html,
+        pageURL: page.finalURL,
+        sourceURL: sourceURL
+      )
+      if !videoURLs.isEmpty {
+        return videoURLs
+      }
+    }
+    return []
+  }
 
-      guard
-        let html = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1)
-      else { return [] }
-
-      return Self.extractOGVideoURLs(fromHTML: html)
-    } catch {
+  static func extractFacebookPageVideoURLs(
+    fromHTML html: String,
+    pageURL: URL,
+    sourceURL: URL
+  ) -> [URL] {
+    let expectedID = SocialURLHeuristics.facebookVideoID(from: sourceURL)
+    let canonicalPageID = URLCanonicalizationService.facebookCanonicalCandidateURL(fromHTML: html)
+      .flatMap { SocialURLHeuristics.facebookVideoID(from: $0) }
+    let pageID = canonicalPageID ?? SocialURLHeuristics.facebookVideoID(from: pageURL)
+    guard let pageID, expectedID == nil || pageID == expectedID else {
       return []
     }
+    return Self.extractOGVideoURLs(fromHTML: html)
   }
 }
 
@@ -83,8 +110,8 @@ actor URLCanonicalizationService {
 
     let resolved = await resolveUncached(sourceURL)
     let skipCacheOnIdentity =
-      SocialURLHeuristics.isFacebookShareURL(sourceURL)
-      || sourceURL.host?.lowercased().hasSuffix("fb.watch") == true
+      Self.requiresFacebookPageResolution(sourceURL)
+      || SocialURLHeuristics.isTikTokShortURL(sourceURL)
     if !skipCacheOnIdentity || resolved != sourceURL {
       cache[cacheKey] = resolved
     }
@@ -115,113 +142,121 @@ actor URLCanonicalizationService {
       return instagramCanonicalURL
     }
 
-    let isFacebookShare = SocialURLHeuristics.isFacebookShareURL(sourceURL)
-    let isFbWatch = sourceURL.host?.lowercased().hasSuffix("fb.watch") == true
-    guard isFacebookShare || isFbWatch else {
+    if SocialURLHeuristics.isTikTokShortURL(sourceURL),
+      let tikTokCanonicalURL = await resolvedTikTokVideoPageURL(from: sourceURL) {
+      return tikTokCanonicalURL
+    }
+
+    guard SocialURLHeuristics.isFacebookHost(sourceURL) else {
       return sourceURL
     }
 
-    if let redirectedURL = await firstRedirectTarget(from: sourceURL),
-      let canonical = canonicalFacebookURL(from: redirectedURL) {
-      return canonical
+    if URLClassifier.isDedicatedEmbedURL(sourceURL) {
+      return sourceURL
     }
 
-    if let canonicalFromPage = await canonicalFacebookURLFromPage(sourceURL) {
-      return canonicalFromPage
+    guard Self.requiresFacebookPageResolution(sourceURL) else {
+      return Self.canonicalFacebookURL(from: sourceURL) ?? sourceURL
+    }
+
+    if let canonical = await resolvedFacebookURL(from: sourceURL) {
+      return canonical
     }
 
     if let fallback = fallbackCanonicalFacebookURL(from: sourceURL) {
       return fallback
     }
 
+    let parts = SocialURLHeuristics.normalizedPathComponents(for: sourceURL)
+    if parts.first == "watch" {
+      return Self.canonicalFacebookURL(from: sourceURL) ?? sourceURL
+    }
+
     return sourceURL
   }
 
-  private func firstRedirectTarget(from sourceURL: URL) async -> URL? {
-    var request = URLRequest(url: sourceURL)
-    request.httpMethod = "GET"
-    request.setValue(
-      "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15"
-        + " (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
-      forHTTPHeaderField: "User-Agent"
-    )
-    request.timeoutInterval = SocialVideoTimingDefaults.lightweightFetchTimeout
-    return await FirstRedirectResolver.resolve(
-      request: request,
-      timeout: SocialVideoTimingDefaults.lightweightFetchTimeout
-    )
+  private static func requiresFacebookPageResolution(_ sourceURL: URL) -> Bool {
+    guard SocialURLHeuristics.isFacebookHost(sourceURL),
+      !URLClassifier.isDedicatedEmbedURL(sourceURL)
+    else {
+      return false
+    }
+
+    let parts = SocialURLHeuristics.normalizedPathComponents(for: sourceURL)
+    if parts.first == "reel" || parts.first == "reels" {
+      return false
+    }
+
+    return SocialURLHeuristics.isFacebookShareURL(sourceURL)
+      || SocialURLHeuristics.hostMatches(sourceURL, domain: "fb.watch")
+      || SocialURLHeuristics.isFacebookVideoURL(sourceURL)
   }
 
-  private func canonicalFacebookURLFromPage(_ sourceURL: URL) async -> URL? {
-    var request = URLRequest(url: sourceURL)
-    request.httpMethod = "GET"
-    request.setValue(
-      "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15"
-        + " (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
-      forHTTPHeaderField: "User-Agent"
-    )
-    request.setValue(
-      "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      forHTTPHeaderField: "Accept"
-    )
-    request.timeoutInterval = SocialVideoTimingDefaults.lightweightFetchTimeout
+  private func resolvedTikTokVideoPageURL(from sourceURL: URL) async -> URL? {
+    guard
+      let page = await SocialMediaPageLoader.load(
+        sourceURL,
+        userAgent: SocialVideoExtractionService.mobileUserAgent
+      )
+    else { return nil }
+    return Self.canonicalTikTokVideoURL(from: page.finalURL)
+  }
 
-    do {
-      let (data, response) = try await URLSession.shared.data(for: request)
-      if let httpResponse = response as? HTTPURLResponse,
-        !(200..<400).contains(httpResponse.statusCode) {
-        return nil
-      }
-
-      guard !data.isEmpty else { return nil }
-      let html =
-        String(data: data, encoding: .utf8)
-        ?? String(data: data, encoding: .isoLatin1)
-      guard let html else { return nil }
-
-      guard let candidateURL = Self.facebookCanonicalCandidateURL(fromHTML: html) else {
-        return nil
-      }
-
-      return canonicalFacebookURL(from: candidateURL)
-    } catch {
+  static func canonicalTikTokVideoURL(from resolvedURL: URL) -> URL? {
+    guard SocialURLHeuristics.isTikTokHost(resolvedURL),
+      SocialURLHeuristics.tikTokVideoID(from: resolvedURL) != nil,
+      var components = URLComponents(url: resolvedURL, resolvingAgainstBaseURL: false)
+    else {
       return nil
     }
+
+    components.scheme = "https"
+    components.host = "www.tiktok.com"
+    components.port = nil
+    components.user = nil
+    components.password = nil
+    components.query = nil
+    components.fragment = nil
+    return components.url
   }
 
-  private func canonicalFacebookURL(from candidateURL: URL, depth: Int = 3) -> URL? {
+  private func resolvedFacebookURL(from sourceURL: URL) async -> URL? {
+    guard
+      let page = await SocialMediaPageLoader.load(
+        sourceURL,
+        userAgent: SocialVideoExtractionService.mobileUserAgent
+      )
+    else { return nil }
+
+    return Self.canonicalFacebookURL(pageFinalURL: page.finalURL, html: page.html)
+  }
+
+  static func canonicalFacebookURL(pageFinalURL: URL, html: String?) -> URL? {
+    if let html,
+      let candidateURL = facebookCanonicalCandidateURL(fromHTML: html),
+      let canonicalURL = canonicalFacebookURL(from: candidateURL) {
+      return canonicalURL
+    }
+    return canonicalFacebookURL(from: pageFinalURL)
+  }
+
+  private static func canonicalFacebookURL(from candidateURL: URL, depth: Int = 3) -> URL? {
+    guard SocialURLHeuristics.isFacebookHost(candidateURL) else { return nil }
+
     if depth > 0, let loginNextURL = facebookLoginNextURL(from: candidateURL) {
       return canonicalFacebookURL(from: loginNextURL, depth: depth - 1)
     }
 
-    let parts = candidateURL.pathComponents
-      .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased() }
-      .filter { !$0.isEmpty }
-
-    if let reelIndex = parts.firstIndex(of: "reel"), reelIndex + 1 < parts.count {
-      let id = parts[reelIndex + 1].trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !id.isEmpty else { return nil }
-      return URL(string: "https://www.facebook.com/reel/\(id)/")
+    guard let videoID = SocialURLHeuristics.facebookVideoID(from: candidateURL) else {
+      return nil
+    }
+    if SocialURLHeuristics.isFacebookReelURL(candidateURL) {
+      return URL(string: "https://www.facebook.com/reel/\(videoID)/")
     }
 
-    if parts.first == "watch",
-      let videoId = URLComponents(url: candidateURL, resolvingAgainstBaseURL: false)?.queryItems?
-        .first(
-          where: { $0.name.lowercased() == "v" })?.value?
-        .trimmingCharacters(in: .whitespacesAndNewlines),
-      !videoId.isEmpty {
-      var components = URLComponents(string: "https://www.facebook.com/watch/")
-      components?.queryItems = [URLQueryItem(name: "v", value: videoId)]
-      return components?.url
-    }
-
-    if let videosIndex = parts.firstIndex(of: "videos"), videosIndex + 1 < parts.count {
-      let id = parts[videosIndex + 1].trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !id.isEmpty else { return nil }
-      return URL(string: "https://www.facebook.com/watch/?v=\(id)")
-    }
-
-    return nil
+    var components = URLComponents(string: "https://www.facebook.com/watch/")
+    components?.queryItems = [URLQueryItem(name: "v", value: videoID)]
+    return components?.url
   }
 
   static func facebookCanonicalCandidateURL(fromHTML html: String) -> URL? {
@@ -276,7 +311,7 @@ actor URLCanonicalizationService {
       forHTTPHeaderField: "User-Agent"
     )
     request.setValue("application/json", forHTTPHeaderField: "Accept")
-    request.timeoutInterval = SocialVideoTimingDefaults.lightweightFetchTimeout
+    request.timeoutInterval = SocialVideoTimingDefaults.requestTimeout
 
     do {
       let (data, response) = try await URLSession.shared.data(for: request)
@@ -306,56 +341,5 @@ actor URLCanonicalizationService {
     } catch {
       return nil
     }
-  }
-}
-
-private final class FirstRedirectResolver: NSObject, URLSessionTaskDelegate {
-  private var continuation: CheckedContinuation<URL?, Never>?
-  private var hasFinished = false
-  private var session: URLSession?
-
-  static func resolve(request: URLRequest, timeout: TimeInterval) async -> URL? {
-    let resolver = FirstRedirectResolver()
-    return await resolver.start(request: request, timeout: timeout)
-  }
-
-  private func start(request: URLRequest, timeout: TimeInterval) async -> URL? {
-    await withCheckedContinuation { continuation in
-      self.continuation = continuation
-
-      let configuration = URLSessionConfiguration.ephemeral
-      configuration.timeoutIntervalForRequest = timeout
-      configuration.timeoutIntervalForResource = timeout
-
-      let session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
-      self.session = session
-
-      let task = session.dataTask(with: request)
-      task.resume()
-    }
-  }
-
-  private func finish(with url: URL?) {
-    guard !hasFinished else { return }
-    hasFinished = true
-    continuation?.resume(returning: url)
-    continuation = nil
-    session?.invalidateAndCancel()
-    session = nil
-  }
-
-  func urlSession(
-    _ session: URLSession,
-    task: URLSessionTask,
-    willPerformHTTPRedirection response: HTTPURLResponse,
-    newRequest request: URLRequest,
-    completionHandler: @escaping (URLRequest?) -> Void
-  ) {
-    finish(with: request.url)
-    completionHandler(nil)
-  }
-
-  func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-    finish(with: nil)
   }
 }

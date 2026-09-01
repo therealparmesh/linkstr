@@ -2,15 +2,17 @@ import Foundation
 import WebKit
 
 extension SocialVideoExtractionService {
-  func extractViaGenericSniff(sourceURL: URL) async -> ExtractionState {
+  func extractViaGenericSniff(
+    sourceURL: URL,
+    budget: MediaDiscoveryBudget
+  ) async -> ExtractionState {
     for userAgent in [Self.mobileUserAgent, Self.desktopUserAgent] {
-      var scrapeCandidates = await scrapeMediaURLsFromPage(
-        sourceURL: sourceURL, userAgent: userAgent)
-      if scrapeCandidates.isEmpty {
-        try? await Task.sleep(for: .milliseconds(300))
-        scrapeCandidates = await scrapeMediaURLsFromPage(
-          sourceURL: sourceURL, userAgent: userAgent)
+      guard budget.permitsAttempt else {
+        return .cannotExtract("could not find a usable video stream for this post.")
       }
+
+      let scrapeCandidates = await scrapeMediaURLsFromPage(
+        sourceURL: sourceURL, userAgent: userAgent)
 
       if !scrapeCandidates.isEmpty {
         let ranked = rankCandidates(scrapeCandidates, sourceURL: sourceURL)
@@ -24,6 +26,9 @@ extension SocialVideoExtractionService {
         }
       }
 
+      guard budget.permitsAttempt else {
+        return .cannotExtract("could not find a usable video stream for this post.")
+      }
       let sniffResult = await sniffMediaURLs(
         from: sourceURL, userAgent: userAgent)
       let candidates = mergeCandidates(
@@ -64,39 +69,33 @@ extension SocialVideoExtractionService {
   }
 
   func scrapeMediaURLsFromPage(sourceURL: URL, userAgent: String) async -> [URL] {
-    var request = URLRequest(url: sourceURL)
-    request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
-    request.setValue("*/*", forHTTPHeaderField: "Accept")
+    guard let page = await SocialMediaPageLoader.load(sourceURL, userAgent: userAgent),
+      var html = page.html
+    else { return [] }
 
-    do {
-      let (data, _) = try await URLSession.shared.data(for: request)
-      guard var html = String(data: data, encoding: .utf8) else { return [] }
+    html = Self.unescapeJSONStringLiterals(html)
 
-      html = Self.unescapeJSONStringLiterals(html)
+    let regex = try? NSRegularExpression(pattern: #"https://[^"'\s<]+"#)
+    guard let regex else { return [] }
+    let nsRange = NSRange(html.startIndex..., in: html)
+    let matches = regex.matches(in: html, range: nsRange)
 
-      let regex = try NSRegularExpression(pattern: #"https://[^"'\s<]+"#)
-      let nsRange = NSRange(html.startIndex..., in: html)
-      let matches = regex.matches(in: html, range: nsRange)
+    var urls: [URL] = []
+    var seen = Set<String>()
 
-      var urls: [URL] = []
-      var seen = Set<String>()
-
-      for match in matches {
-        guard let range = Range(match.range, in: html) else { continue }
-        var candidate = String(html[range]).trimmingCharacters(
-          in: CharacterSet(charactersIn: ")]},"))
-        candidate = HTMLTextDecoder.decodeHTMLEntities(candidate)
-        let lower = candidate.lowercased()
-        guard Self.isLikelyMediaURLString(lower), seen.insert(lower).inserted,
-          let url = URL(string: candidate)
-        else { continue }
-        urls.append(url)
-      }
-
-      return urls
-    } catch {
-      return []
+    for match in matches {
+      guard let range = Range(match.range, in: html) else { continue }
+      var candidate = String(html[range]).trimmingCharacters(
+        in: CharacterSet(charactersIn: ")]},"))
+      candidate = HTMLTextDecoder.decodeHTMLEntities(candidate)
+      let lower = candidate.lowercased()
+      guard Self.isLikelyMediaURLString(lower), seen.insert(lower).inserted,
+        let url = URL(string: candidate)
+      else { continue }
+      urls.append(url)
     }
+
+    return urls
   }
 
   /// Decode JSON-escaped text so that embedded URLs become plain `https://…`
@@ -229,7 +228,7 @@ final class MediaCandidateCollector: NSObject, WKNavigationDelegate, WKScriptMes
   private let injectionScript: String
 
   private var continuation: CheckedContinuation<[URL], Never>?
-  private var timeoutTask: Task<Void, Never>?
+  private var discoveryDeadlineTask: Task<Void, Never>?
   private var candidateSet = Set<String>()
   private var candidateOrder: [URL] = []
   private var webView: WKWebView?
@@ -266,17 +265,32 @@ final class MediaCandidateCollector: NSObject, WKNavigationDelegate, WKScriptMes
     webView.customUserAgent = userAgent
     self.webView = webView
 
-    webView.load(URLRequest(url: sourceURL))
-
-    let urls = await withCheckedContinuation { (continuation: CheckedContinuation<[URL], Never>) in
-      self.continuation = continuation
-      timeoutTask = Task { [weak self] in
-        try? await Task.sleep(
-          for: .seconds(SocialVideoTimingDefaults.mediaCandidateCollectionTimeout))
-        guard let self else { return }
-        await MainActor.run {
-          self.finish()
+    let urls = await withTaskCancellationHandler {
+      await withCheckedContinuation { (continuation: CheckedContinuation<[URL], Never>) in
+        self.continuation = continuation
+        if Task.isCancelled {
+          finish()
+          return
         }
+
+        discoveryDeadlineTask = Task { [weak self] in
+          do {
+            try await Task.sleep(
+              for: .seconds(SocialVideoTimingDefaults.webViewProbeTimeout))
+          } catch {
+            return
+          }
+          guard let self else { return }
+          await MainActor.run {
+            self.finish()
+          }
+        }
+
+        webView.load(URLRequest(url: sourceURL))
+      }
+    } onCancel: {
+      Task { @MainActor [weak self] in
+        self?.finish()
       }
     }
 
@@ -286,10 +300,10 @@ final class MediaCandidateCollector: NSObject, WKNavigationDelegate, WKScriptMes
   }
 
   private func cleanup() {
-    timeoutTask?.cancel()
-    timeoutTask = nil
-    earlyFinishTask?.cancel()
-    earlyFinishTask = nil
+    discoveryDeadlineTask?.cancel()
+    discoveryDeadlineTask = nil
+    candidateGraceTask?.cancel()
+    candidateGraceTask = nil
 
     contentController?.removeScriptMessageHandler(forName: "linkstrVideo")
     contentController = nil
@@ -305,7 +319,7 @@ final class MediaCandidateCollector: NSObject, WKNavigationDelegate, WKScriptMes
     "video.xx.fbcdn.net", "cdninstagram.com", "video.twimg.com"
   ]
 
-  private var earlyFinishTask: Task<Void, Never>?
+  private var candidateGraceTask: Task<Void, Never>?
 
   private func registerCandidate(_ url: URL) {
     let lower = url.absoluteString.lowercased()
@@ -314,11 +328,18 @@ final class MediaCandidateCollector: NSObject, WKNavigationDelegate, WKScriptMes
     if candidateSet.insert(lower).inserted {
       candidateOrder.append(url)
 
-      if earlyFinishTask == nil,
-        Self.highConfidencePatterns.contains(where: lower.contains) {
-        earlyFinishTask = Task { [weak self] in
-          try? await Task.sleep(
-            for: .seconds(SocialVideoTimingDefaults.earlyFinishDebounce))
+      if Self.highConfidencePatterns.contains(where: lower.contains) {
+        discoveryDeadlineTask?.cancel()
+        discoveryDeadlineTask = nil
+
+        guard candidateGraceTask == nil else { return }
+        candidateGraceTask = Task { [weak self] in
+          do {
+            try await Task.sleep(
+              for: .seconds(SocialVideoTimingDefaults.candidateCollectionGracePeriod))
+          } catch {
+            return
+          }
           guard let self else { return }
           await MainActor.run { self.finish() }
         }

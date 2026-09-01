@@ -63,29 +63,20 @@ enum SocialURLHeuristics {
     return first == "share"
   }
 
-  static func isTikTokVideoLikeURL(_ url: URL) -> Bool {
+  static func isTikTokShortURL(_ url: URL) -> Bool {
+    guard isTikTokHost(url) else { return false }
     let host = normalizedHost(for: url) ?? ""
     if hostMatches(host, domain: "vm.tiktok.com") || hostMatches(host, domain: "vt.tiktok.com") {
       return true
     }
 
-    let parts = url.pathComponents.map { $0.lowercased() }
-    if parts.contains("video") {
-      return true
-    }
+    let parts = normalizedPathComponents(for: url)
+    return parts.first == "t" && parts.count >= 2
+  }
 
-    // tiktok.com/t/<code> short links redirect to video pages.
-    if parts.contains("t") {
-      return true
-    }
-
-    guard let queryItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
-    else {
-      return false
-    }
-    return queryItems.contains { item in
-      tikTokVideoIDQueryKeys.contains(item.name.lowercased())
-    }
+  static func isTikTokVideoLikeURL(_ url: URL) -> Bool {
+    guard isTikTokHost(url) else { return false }
+    return isTikTokShortURL(url) || tikTokVideoID(from: url) != nil
   }
 
   static func isInstagramReelURL(_ url: URL) -> Bool {
@@ -159,26 +150,7 @@ enum SocialURLHeuristics {
   }
 
   static func isYouTubeVideoURL(_ url: URL) -> Bool {
-    guard isYouTubeHost(url) else { return false }
-    guard let host = url.host?.lowercased() else { return false }
-
-    // youtu.be short links are always video links
-    if hostMatches(host, domain: "youtu.be") { return true }
-
-    let parts = url.pathComponents
-      .map { $0.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "/")) }
-      .filter { !$0.isEmpty }
-
-    // /watch?v=, /shorts/, /embed/, /live/, /v/
-    if parts.first == "watch" {
-      let queryItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
-      return queryItems?.contains(where: { $0.name == "v" }) == true
-    }
-    let videoPathPrefixes = ["shorts", "embed", "live", "v"]
-    if let first = parts.first, videoPathPrefixes.contains(first), parts.count >= 2 {
-      return true
-    }
-    return false
+    youtubeVideoID(from: url) != nil
   }
 
   static func isRumbleVideoURL(_ url: URL) -> Bool {
@@ -246,7 +218,8 @@ enum SocialURLHeuristics {
     in url: URL,
     markers: [String],
     minLength: Int,
-    allowDigitsOnly: Bool
+    allowDigitsOnly: Bool,
+    preservesCase: Bool = false
   ) -> String? {
     let parts = url.pathComponents
       .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "/")) }
@@ -255,7 +228,11 @@ enum SocialURLHeuristics {
     for (index, part) in parts.enumerated() {
       guard markers.contains(part.lowercased()), index + 1 < parts.count else { continue }
       if let token = normalizedToken(
-        parts[index + 1], minLength: minLength, allowDigitsOnly: allowDigitsOnly) {
+        parts[index + 1],
+        minLength: minLength,
+        allowDigitsOnly: allowDigitsOnly,
+        preservesCase: preservesCase
+      ) {
         return token
       }
     }
@@ -266,13 +243,14 @@ enum SocialURLHeuristics {
   static func normalizedToken(
     _ raw: String,
     minLength: Int,
-    allowDigitsOnly: Bool
+    allowDigitsOnly: Bool,
+    preservesCase: Bool = false
   ) -> String? {
-    let cleaned =
+    let trimmed =
       raw
       .trimmingCharacters(in: .whitespacesAndNewlines)
       .trimmingCharacters(in: CharacterSet(charactersIn: "/?&=#"))
-      .lowercased()
+    let cleaned = preservesCase ? trimmed : trimmed.lowercased()
     guard cleaned.count >= minLength else { return nil }
     if allowDigitsOnly, !cleaned.allSatisfy(\.isNumber) {
       return nil

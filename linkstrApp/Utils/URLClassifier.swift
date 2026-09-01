@@ -67,23 +67,20 @@ enum URLClassifier {
   }
 
   private static func instagramMediaStrategy(for url: URL, linkType: LinkType) -> MediaStrategy {
-    if SocialURLHeuristics.isInstagramReelURL(url) {
-      return .extractionPreferred(embedURL: embedURL(for: url, linkType: linkType) ?? url)
-    }
-    if SocialURLHeuristics.isInstagramVideoPostURL(url) {
-      return .extractionPreferred(embedURL: embedURL(for: url, linkType: linkType) ?? url)
-    }
-    return .link
+    guard SocialURLHeuristics.isInstagramReelURL(url)
+      || SocialURLHeuristics.isInstagramVideoPostURL(url)
+    else { return .link }
+    return .extractionPreferred(embedURL: embedURL(for: url, linkType: linkType) ?? url)
   }
 
   private static func facebookMediaStrategy(for url: URL, linkType: LinkType) -> MediaStrategy {
-    if SocialURLHeuristics.isFacebookReelURL(url) {
-      return .extractionPreferred(embedURL: embedURL(for: url, linkType: linkType) ?? url)
+    if isDedicatedEmbedURL(url) {
+      return .embedOnly(embedURL: url)
     }
-    if SocialURLHeuristics.isFacebookVideoURL(url) {
-      return .embedOnly(embedURL: embedURL(for: url, linkType: linkType) ?? url)
-    }
-    return .link
+    guard SocialURLHeuristics.isFacebookReelURL(url)
+      || SocialURLHeuristics.isFacebookVideoURL(url)
+    else { return .link }
+    return .extractionPreferred(embedURL: embedURL(for: url, linkType: linkType) ?? url)
   }
 
   static func preferredMediaAspectRatio(for sourceURL: URL, strategy: MediaStrategy) -> CGFloat {
@@ -94,7 +91,7 @@ enum URLClassifier {
       case .tiktok, .instagram:
         return 9.0 / 16.0
       case .facebook:
-        return 9.0 / 16.0
+        return SocialURLHeuristics.isFacebookReelURL(sourceURL) ? 9.0 / 16.0 : 16.0 / 9.0
       case .twitter, .youtube, .rumble, .generic:
         return 16.0 / 9.0
       }
@@ -151,24 +148,19 @@ enum URLClassifier {
   private static func facebookEmbedURL(for sourceURL: URL) -> URL? {
     let canonicalURL = canonicalFacebookWebURL(sourceURL)
 
-    if canonicalURL.path.lowercased().hasPrefix("/plugins/video.php") {
+    let path = canonicalURL.path.lowercased()
+    if path.hasPrefix("/plugins/video.php") || path.hasPrefix("/plugins/post.php") {
       return canonicalURL
     }
-
-    let isReel = SocialURLHeuristics.isFacebookReelURL(canonicalURL)
-    let width = isReel ? "540" : "560"
-    let height = isReel ? "960" : "315"
 
     var components = URLComponents()
     components.scheme = "https"
     components.host = "www.facebook.com"
-    components.path = "/plugins/video.php"
+    components.path = "/plugins/post.php"
     components.queryItems = [
       URLQueryItem(name: "href", value: canonicalURL.absoluteString),
       URLQueryItem(name: "show_text", value: "false"),
-      URLQueryItem(name: "width", value: width),
-      URLQueryItem(name: "height", value: height),
-      URLQueryItem(name: "autoplay", value: "false")
+      URLQueryItem(name: "width", value: "540")
     ]
     return components.url ?? canonicalURL
   }
@@ -176,23 +168,8 @@ enum URLClassifier {
   private static func youtubeEmbedURL(for sourceURL: URL) -> URL? {
     guard let host = sourceURL.host?.lowercased() else { return sourceURL }
 
-    let parts = sourceURL.pathComponents.filter { $0 != "/" }
     let queryItems = URLComponents(url: sourceURL, resolvingAgainstBaseURL: false)?.queryItems
-
-    let videoID: String?
-    if host.contains("youtu.be") {
-      videoID = parts.first
-    } else if parts.first?.lowercased() == "shorts", parts.count >= 2 {
-      videoID = parts[1]
-    } else if parts.first?.lowercased() == "embed", parts.count >= 2 {
-      videoID = parts[1]
-    } else if parts.first?.lowercased() == "live", parts.count >= 2 {
-      videoID = parts[1]
-    } else {
-      videoID = queryItems?.first(where: { $0.name == "v" })?.value
-    }
-
-    guard let id = videoID?.trimmingCharacters(in: .whitespacesAndNewlines), !id.isEmpty else {
+    guard let id = SocialURLHeuristics.youtubeVideoID(from: sourceURL) else {
       return sourceURL
     }
 
@@ -313,6 +290,7 @@ extension URLClassifier {
       return parts.last == "embed"
     case .facebook:
       return parts.starts(with: ["plugins", "video.php"])
+        || parts.starts(with: ["plugins", "post.php"])
     case .youtube:
       return parts.first == "embed" && parts.count >= 2
     case .rumble:

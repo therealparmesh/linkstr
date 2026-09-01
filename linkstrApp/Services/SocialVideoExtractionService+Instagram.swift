@@ -1,126 +1,184 @@
 import Foundation
 
 extension SocialVideoExtractionService {
-  func extractFromInstagram(sourceURL: URL) async -> ExtractionState? {
+  func extractFromInstagram(
+    sourceURL: URL,
+    budget: MediaDiscoveryBudget
+  ) async -> ExtractionState? {
     guard SocialURLHeuristics.isInstagramHost(sourceURL),
       SocialURLHeuristics.isInstagramReelURL(sourceURL)
         || SocialURLHeuristics.isInstagramVideoPostURL(sourceURL),
-      let canonicalSourceURL = SocialURLHeuristics.instagramCanonicalURL(for: sourceURL)
+      let postID = SocialURLHeuristics.instagramPostID(from: sourceURL)
     else {
       return nil
     }
 
-    if let pageSummary = await instagramPageMediaSummary(from: canonicalSourceURL) {
-      let ranked = rankCandidates(pageSummary.videoURLs, sourceURL: canonicalSourceURL)
+    var sawNonVideoPage = false
+    if budget.permitsAttempt,
+      let pageSummary = await instagramPageMediaSummary(
+        from: sourceURL,
+        expectedPostID: postID
+      ) {
+      let ranked = rankCandidates(pageSummary.videoURLs, sourceURL: sourceURL)
       if let resolved = resolvePlayableMedia(
         from: ranked,
-        sourceURL: canonicalSourceURL,
-        userAgent: Self.desktopUserAgent,
+        sourceURL: sourceURL,
+        userAgent: Self.mobileUserAgent,
         cookies: []
       ) {
         return resolved
       }
 
       if pageSummary.mediaKind == .nonVideo {
-        return .cannotExtract("this Instagram post does not include a playable video.")
+        sawNonVideoPage = true
       }
     }
 
-    let lightweightProbeURL = Self.instagramLightweightPlaybackURL(for: canonicalSourceURL)
-    for probeURL in Self.instagramPlaybackProbeURLs(
-      sourceURL: sourceURL,
-      canonicalURL: canonicalSourceURL
-    ) {
-      let attempts = probeURL == lightweightProbeURL ? 2 : 1
-      for attempt in 0..<attempts {
-        let state = await extractViaGenericSniff(sourceURL: probeURL)
-        if case .ready = state {
-          return state
-        }
-        if attempt + 1 < attempts {
-          try? await Task.sleep(for: .milliseconds(300))
-        }
+    if budget.permitsAttempt {
+      let state = await extractViaGenericSniff(
+        sourceURL: sourceURL,
+        budget: budget
+      )
+      if case .ready = state {
+        return state
       }
     }
 
+    if sawNonVideoPage {
+      return .cannotExtract("this Instagram post does not include a playable video.")
+    }
     return .cannotExtract("could not find a usable video stream for this post.")
-  }
-
-  static func instagramPlaybackProbeURLs(sourceURL: URL, canonicalURL: URL) -> [URL] {
-    var urls: [URL] = []
-    var seen = Set<String>()
-
-    appendUnique(Self.instagramLightweightPlaybackURL(for: canonicalURL), to: &urls, seen: &seen)
-    appendUnique(sourceURL, to: &urls, seen: &seen)
-    appendUnique(canonicalURL, to: &urls, seen: &seen)
-    appendUnique(canonicalURL.appendingPathComponent("embed"), to: &urls, seen: &seen)
-
-    return urls
-  }
-
-  private static func instagramLightweightPlaybackURL(for canonicalURL: URL) -> URL? {
-    guard var components = URLComponents(url: canonicalURL, resolvingAgainstBaseURL: false) else {
-      return nil
-    }
-    // Some Instagram share-token pages hide video resources that this public page still exposes.
-    components.queryItems = [URLQueryItem(name: "l", value: "1")]
-    return components.url
-  }
-
-  private static func appendUnique(_ url: URL?, to urls: inout [URL], seen: inout Set<String>) {
-    guard let url else { return }
-    let key = url.absoluteString.lowercased()
-    guard seen.insert(key).inserted else { return }
-    urls.append(url)
   }
 
   func instagramIDScore(
     url: URL, value: String, host: String, sourceURL: URL
   ) -> Int {
-    guard let expectedID = SocialURLHeuristics.instagramPostID(from: sourceURL) else { return 0 }
-    var score = 0
-    if value.contains(expectedID) { score += 50 }
-    if let candidateID = SocialURLHeuristics.instagramPostID(fromCandidateURL: url) {
-      score += candidateID == expectedID ? 100 : -100
-    }
-    if !(host.contains("instagram") || host.contains("cdninstagram") || host.contains("fbcdn")) {
-      score -= 25
-    }
-    return score
+    mediaIdentityScore(
+      expectedID: SocialURLHeuristics.instagramPostID(from: sourceURL),
+      candidateID: SocialURLHeuristics.instagramPostID(fromCandidateURL: url),
+      value: value,
+      host: host,
+      allowedHostTokens: ["instagram", "cdninstagram", "fbcdn"]
+    )
   }
 
-  // MARK: - Instagram embed page
+  // MARK: - Instagram page
 
-  private func instagramPageMediaSummary(from canonicalURL: URL) async -> (
+  private func instagramPageMediaSummary(
+    from pageURL: URL,
+    expectedPostID: String
+  ) async -> (
     videoURLs: [URL], mediaKind: SocialPostHTMLParser.InstagramMediaKind
   )? {
-    var request = URLRequest(url: canonicalURL)
-    request.httpMethod = "GET"
-    request.setValue(Self.desktopUserAgent, forHTTPHeaderField: "User-Agent")
-    request.setValue(
-      "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      forHTTPHeaderField: "Accept"
-    )
-    request.timeoutInterval = SocialVideoTimingDefaults.lightweightFetchTimeout
+    var loadedPage = false
+    var mediaKind = SocialPostHTMLParser.InstagramMediaKind.unknown
 
-    do {
-      let (data, response) = try await URLSession.shared.data(for: request)
-      if let httpResponse = response as? HTTPURLResponse,
-        !(200..<400).contains(httpResponse.statusCode) {
-        return nil
+    for userAgent in [Self.mobileUserAgent, Self.desktopUserAgent] {
+      guard let page = await SocialMediaPageLoader.load(pageURL, userAgent: userAgent),
+        let html = page.html
+      else {
+        continue
+      }
+      loadedPage = true
+      let detectedKind = SocialPostHTMLParser.instagramMediaKind(from: html)
+      if detectedKind != .unknown {
+        mediaKind = detectedKind
       }
 
-      guard
-        let html = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1)
-      else { return nil }
-
-      return (
-        videoURLs: Self.extractOGVideoURLs(fromHTML: html),
-        mediaKind: SocialPostHTMLParser.instagramMediaKind(from: html)
+      var videoURLs = Self.extractInstagramPageVideoURLs(
+        fromHTML: html,
+        expectedPostID: expectedPostID
       )
-    } catch {
-      return nil
+      if SocialURLHeuristics.instagramPostID(from: page.finalURL) == expectedPostID {
+        var seen = Set(videoURLs.map { $0.absoluteString.lowercased() })
+        for url in Self.extractOGVideoURLs(fromHTML: html)
+        where seen.insert(url.absoluteString.lowercased()).inserted {
+          videoURLs.append(url)
+        }
+      }
+      if !videoURLs.isEmpty {
+        return (videoURLs, detectedKind)
+      }
     }
+
+    return loadedPage ? ([], mediaKind) : nil
+  }
+
+  static func extractInstagramPageVideoURLs(
+    fromHTML html: String,
+    expectedPostID: String
+  ) -> [URL] {
+    var seen = Set<String>()
+    var urls: [URL] = []
+
+    for script in HTMLScriptContentScanner.contents(in: html) {
+      guard let data = script.data(using: .utf8),
+        let json = try? JSONSerialization.jsonObject(with: data)
+      else {
+        continue
+      }
+
+      for rawURL in instagramVideoURLStrings(in: json, expectedPostID: expectedPostID) {
+        let decoded = HTMLTextDecoder.decodeHTMLEntities(rawURL)
+        let key = decoded.lowercased()
+        guard key.hasPrefix("https://"),
+          isLikelyMediaURLString(key),
+          seen.insert(key).inserted,
+          let url = URL(string: decoded)
+        else {
+          continue
+        }
+        urls.append(url)
+      }
+    }
+    return urls
+  }
+
+  private static func instagramVideoURLStrings(
+    in value: Any,
+    expectedPostID: String
+  ) -> [String] {
+    if let dictionary = value as? [String: Any] {
+      let postID = (dictionary["code"] as? String) ?? (dictionary["shortcode"] as? String)
+      if postID == expectedPostID {
+        let urls = instagramVideoURLStrings(inVerifiedMedia: dictionary)
+        if !urls.isEmpty {
+          return urls
+        }
+      }
+      return dictionary.values.flatMap {
+        instagramVideoURLStrings(in: $0, expectedPostID: expectedPostID)
+      }
+    }
+
+    if let array = value as? [Any] {
+      return array.flatMap {
+        instagramVideoURLStrings(in: $0, expectedPostID: expectedPostID)
+      }
+    }
+    return []
+  }
+
+  private static func instagramVideoURLStrings(
+    inVerifiedMedia media: [String: Any]
+  ) -> [String] {
+    var urls = (media["video_versions"] as? [[String: Any]])?
+      .compactMap { $0["url"] as? String } ?? []
+    if let videoURL = media["video_url"] as? String {
+      urls.append(videoURL)
+    }
+
+    if let carousel = media["carousel_media"] as? [[String: Any]] {
+      urls.append(contentsOf: carousel.flatMap { instagramVideoURLStrings(inVerifiedMedia: $0) })
+    }
+
+    if let sidecar = media["edge_sidecar_to_children"] as? [String: Any],
+      let edges = sidecar["edges"] as? [[String: Any]] {
+      urls.append(contentsOf: edges.compactMap { $0["node"] as? [String: Any] }
+        .flatMap { instagramVideoURLStrings(inVerifiedMedia: $0) })
+    }
+
+    return urls
   }
 
   // MARK: - Open Graph video extraction

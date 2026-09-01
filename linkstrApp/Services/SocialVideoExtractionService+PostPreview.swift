@@ -68,7 +68,7 @@ actor SocialPostResolutionService {
 
     var request = URLRequest(url: canonicalURL)
     request.httpMethod = "GET"
-    request.timeoutInterval = SocialVideoTimingDefaults.apiRequestTimeout
+    request.timeoutInterval = SocialVideoTimingDefaults.requestTimeout
     request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
     request.setValue("text/html", forHTTPHeaderField: "Accept")
 
@@ -90,7 +90,7 @@ actor SocialPostResolutionService {
   private func fetchFacebookPreview(for sourceURL: URL) async -> SocialPostPreview? {
     var request = URLRequest(url: sourceURL)
     request.httpMethod = "GET"
-    request.timeoutInterval = SocialVideoTimingDefaults.apiRequestTimeout
+    request.timeoutInterval = SocialVideoTimingDefaults.requestTimeout
     request.setValue(
       "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15"
         + " (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
@@ -130,7 +130,7 @@ actor SocialPostResolutionService {
 
     var request = URLRequest(url: endpoint)
     request.httpMethod = "GET"
-    request.timeoutInterval = SocialVideoTimingDefaults.apiRequestTimeout
+    request.timeoutInterval = SocialVideoTimingDefaults.requestTimeout
     request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
     request.setValue("application/json", forHTTPHeaderField: "Accept")
 

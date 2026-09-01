@@ -1,14 +1,57 @@
 import Foundation
 
 extension SocialURLHeuristics {
+  static func youtubeVideoID(from sourceURL: URL) -> String? {
+    guard isYouTubeHost(sourceURL) else { return nil }
+
+    let parts = sourceURL.pathComponents
+      .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "/")) }
+      .filter { !$0.isEmpty }
+    let host = normalizedHost(for: sourceURL) ?? ""
+
+    let rawID: String?
+    if hostMatches(host, domain: "youtu.be") {
+      rawID = parts.first
+    } else if let first = parts.first?.lowercased(),
+      ["shorts", "embed", "live", "v"].contains(first), parts.count >= 2 {
+      rawID = parts[1]
+    } else if parts.first?.lowercased() == "watch" {
+      rawID = URLComponents(url: sourceURL, resolvingAgainstBaseURL: false)?.queryItems?
+        .first(where: { $0.name.caseInsensitiveCompare("v") == .orderedSame })?.value
+    } else {
+      rawID = nil
+    }
+
+    guard let id = rawID?.trimmingCharacters(in: .whitespacesAndNewlines), !id.isEmpty else {
+      return nil
+    }
+    return id
+  }
+
   static func tikTokVideoID(from sourceURL: URL) -> String? {
     let parts = sourceURL.pathComponents
-    if let videoIndex = parts.firstIndex(of: "video"), videoIndex + 1 < parts.count {
-      let candidate = parts[videoIndex + 1]
-      let digits = candidate.filter(\.isNumber)
-      if digits.count >= 8 { return digits }
+      .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "/")) }
+      .filter { !$0.isEmpty }
+
+    if parts.count >= 3,
+      parts[0].caseInsensitiveCompare("player") == .orderedSame,
+      parts[1].caseInsensitiveCompare("v1") == .orderedSame,
+      let id = normalizedTikTokVideoID(parts[2]) {
+      return id
+    }
+
+    if let videoIndex = parts.firstIndex(where: {
+      $0.caseInsensitiveCompare("video") == .orderedSame
+    }), videoIndex + 1 < parts.count,
+      let id = normalizedTikTokVideoID(parts[videoIndex + 1]) {
+      return id
     }
     return tikTokVideoIDFromQuery(sourceURL)
+  }
+
+  private static func normalizedTikTokVideoID(_ rawValue: String) -> String? {
+    let digits = rawValue.filter(\.isNumber)
+    return digits.count >= 8 ? digits : nil
   }
 
   private static func tikTokVideoIDFromQuery(_ url: URL) -> String? {
@@ -17,8 +60,9 @@ extension SocialURLHeuristics {
     else { return nil }
 
     for item in queryItems where tikTokVideoIDQueryKeys.contains(item.name.lowercased()) {
-      let digits = (item.value ?? "").filter(\.isNumber)
-      if digits.count >= 8 { return digits }
+      if let id = normalizedTikTokVideoID(item.value ?? "") {
+        return id
+      }
     }
     return nil
   }
@@ -44,7 +88,8 @@ extension SocialURLHeuristics {
       in: sourceURL,
       markers: ["reel", "reels", "p", "tv"],
       minLength: 5,
-      allowDigitsOnly: false
+      allowDigitsOnly: false,
+      preservesCase: true
     ) {
       return token
     }
@@ -55,7 +100,12 @@ extension SocialURLHeuristics {
 
     for key in ["shortcode", "media_id"] {
       if let value = queryItems.first(where: { $0.name.lowercased() == key })?.value,
-        let token = normalizedToken(value, minLength: 5, allowDigitsOnly: false) {
+        let token = normalizedToken(
+          value,
+          minLength: 5,
+          allowDigitsOnly: false,
+          preservesCase: true
+        ) {
         return token
       }
     }
@@ -68,7 +118,8 @@ extension SocialURLHeuristics {
       in: url,
       markers: ["reel", "reels", "p", "tv"],
       minLength: 5,
-      allowDigitsOnly: false
+      allowDigitsOnly: false,
+      preservesCase: true
     ) {
       return token
     }
@@ -82,12 +133,17 @@ extension SocialURLHeuristics {
 
         if key == "ig_cache_key" {
           if let token = tokenFromRegex(igCacheKeyPattern, in: raw) {
-            return token.lowercased()
+            return token
           }
           continue
         }
 
-        if let token = normalizedToken(raw, minLength: 5, allowDigitsOnly: false) {
+        if let token = normalizedToken(
+          raw,
+          minLength: 5,
+          allowDigitsOnly: false,
+          preservesCase: true
+        ) {
           return token
         }
       }
@@ -97,13 +153,15 @@ extension SocialURLHeuristics {
       instagramPostPattern,
       in: url.absoluteString
     ) {
-      return token.lowercased()
+      return token
     }
 
     return nil
   }
 
   static func instagramCanonicalURL(for sourceURL: URL) -> URL? {
+    guard isInstagramHost(sourceURL) else { return nil }
+
     let rawParts = sourceURL.pathComponents
       .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "/")) }
       .filter { !$0.isEmpty }
@@ -134,6 +192,19 @@ extension SocialURLHeuristics {
       return id
     }
 
+    let parts = sourceURL.pathComponents
+      .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "/")) }
+      .filter { !$0.isEmpty }
+    if let videosIndex = parts.firstIndex(where: {
+      $0.caseInsensitiveCompare("videos") == .orderedSame
+    }) {
+      for part in parts.dropFirst(videosIndex + 1).reversed() {
+        if let id = normalizedToken(part, minLength: 6, allowDigitsOnly: true) {
+          return id
+        }
+      }
+    }
+
     guard let components = URLComponents(url: sourceURL, resolvingAgainstBaseURL: false),
       let queryItems = components.queryItems
     else { return nil }
@@ -149,18 +220,10 @@ extension SocialURLHeuristics {
   }
 
   static func facebookVideoID(fromCandidateURL url: URL) -> String? {
-    if let id = pathToken(
-      in: url,
-      markers: ["reel", "reels", "videos", "v", "r"],
-      minLength: 6,
-      allowDigitsOnly: true
-    ) {
-      return id
-    }
+    if let id = facebookVideoID(from: url) { return id }
 
-    if let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-      let queryItems = components.queryItems {
-      for key in ["video_id", "v", "story_fbid", "item_id", "group_id"] {
+    if let queryItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems {
+      for key in ["item_id", "group_id"] {
         if let value = queryItems.first(where: { $0.name.lowercased() == key })?.value,
           let id = normalizedToken(value, minLength: 6, allowDigitsOnly: true) {
           return id

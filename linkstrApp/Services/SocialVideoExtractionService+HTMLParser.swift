@@ -261,3 +261,24 @@ enum HTMLTagAttributeScanner {
     return attributes
   }
 }
+
+enum HTMLScriptContentScanner {
+  static func contents(in html: String) -> [String] {
+    guard let scriptRegex = try? NSRegularExpression(
+      pattern: #"<\s*script\b[^>]*>(.*?)<\s*/\s*script\s*>"#,
+      options: [.caseInsensitive, .dotMatchesLineSeparators]
+    ) else {
+      return []
+    }
+
+    let range = NSRange(html.startIndex..<html.endIndex, in: html)
+    return scriptRegex.matches(in: html, range: range).compactMap { match in
+      guard match.numberOfRanges > 1,
+        let contentRange = Range(match.range(at: 1), in: html)
+      else {
+        return nil
+      }
+      return String(html[contentRange])
+    }
+  }
+}

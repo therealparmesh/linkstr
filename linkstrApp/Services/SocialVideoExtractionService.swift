@@ -1,21 +1,21 @@
 import Foundation
 
-struct PlayableMedia {
+struct PlayableMedia: Sendable {
   let playbackURL: URL
   let headers: [String: String]
   let isLocalFile: Bool
 }
 
-enum ExtractionState {
+enum ExtractionState: Sendable {
   case ready([PlayableMedia])
   case cannotExtract(String)
 }
 
 enum SocialVideoTimingDefaults {
-  static let mediaCandidateCollectionTimeout: TimeInterval = 12
-  static let apiRequestTimeout: TimeInterval = 8
-  static let lightweightFetchTimeout: TimeInterval = 6
-  static let earlyFinishDebounce: TimeInterval = 1.5
+  static let localDiscoveryBudget: Duration = .seconds(60)
+  static let requestTimeout: TimeInterval = 6
+  static let webViewProbeTimeout: TimeInterval = 12
+  static let candidateCollectionGracePeriod: TimeInterval = 1.5
 }
 
 enum HTMLTextDecoder {
@@ -62,39 +62,6 @@ final class SocialVideoExtractionService: NSObject {
     super.init()
   }
 
-  // MARK: - Entry point
-
-  func extractPlayableMedia(from sourceURL: URL) async -> ExtractionState {
-    let sourceURLString = sourceURL.absoluteString.lowercased()
-    if Self.isLikelyMediaURLString(sourceURLString),
-      let resolved = resolvePlayableMedia(
-        from: [sourceURL],
-        sourceURL: sourceURL,
-        userAgent: Self.mobileUserAgent,
-        cookies: []
-      ) {
-      return resolved
-    }
-
-    if let result = await extractFromTikTok(sourceURL: sourceURL) {
-      return result
-    }
-
-    if let result = await extractFromInstagram(sourceURL: sourceURL) {
-      return result
-    }
-
-    if let result = await extractFromFacebook(sourceURL: sourceURL) {
-      return result
-    }
-
-    if let result = await extractFromTwitter(sourceURL: sourceURL) {
-      return result
-    }
-
-    return await extractViaGenericSniff(sourceURL: sourceURL)
-  }
-
   // MARK: - Shared resolution
 
   func resolvePlayableMedia(
@@ -119,37 +86,37 @@ final class SocialVideoExtractionService: NSObject {
   }
 
   private func matchesSourceIdentity(_ candidateURL: URL, sourceURL: URL) -> Bool {
-    if let expectedID = SocialURLHeuristics.tikTokVideoID(from: sourceURL) {
-      if let candidateID = SocialURLHeuristics.tikTokVideoID(fromCandidateURL: candidateURL),
-        expectedID != candidateID {
-        return false
-      }
-    }
-
-    if let expectedID = SocialURLHeuristics.instagramPostID(from: sourceURL),
-      let candidateID = SocialURLHeuristics.instagramPostID(fromCandidateURL: candidateURL),
-      expectedID != candidateID {
-      return false
-    }
-
-    if let expectedID = SocialURLHeuristics.facebookVideoID(from: sourceURL),
-      let candidateID = SocialURLHeuristics.facebookVideoID(fromCandidateURL: candidateURL),
-      expectedID != candidateID {
-      return false
-    }
-
-    if SocialURLHeuristics.isTwitterStatusURL(sourceURL) {
+    switch URLClassifier.classify(sourceURL) {
+    case .tiktok:
+      return candidateMatches(
+        expectedID: SocialURLHeuristics.tikTokVideoID(from: sourceURL),
+        candidateID: SocialURLHeuristics.tikTokVideoID(fromCandidateURL: candidateURL)
+      )
+    case .instagram:
+      return candidateMatches(
+        expectedID: SocialURLHeuristics.instagramPostID(from: sourceURL),
+        candidateID: SocialURLHeuristics.instagramPostID(fromCandidateURL: candidateURL)
+      )
+    case .facebook:
+      return candidateMatches(
+        expectedID: SocialURLHeuristics.facebookVideoID(from: sourceURL),
+        candidateID: SocialURLHeuristics.facebookVideoID(fromCandidateURL: candidateURL)
+      )
+    case .twitter:
+      guard SocialURLHeuristics.isTwitterStatusURL(sourceURL) else { return true }
       let host = candidateURL.host?.lowercased() ?? ""
-      let isTwitterMediaHost =
+      return
         host == "twimg.com"
         || host.hasSuffix(".twimg.com")
         || SocialURLHeuristics.isTwitterHost(candidateURL)
-      if !isTwitterMediaHost {
-        return false
-      }
+    case .youtube, .rumble, .generic:
+      return true
     }
+  }
 
-    return true
+  private func candidateMatches(expectedID: String?, candidateID: String?) -> Bool {
+    guard let expectedID, let candidateID else { return true }
+    return expectedID == candidateID
   }
 
   // MARK: - Candidate ranking
@@ -213,10 +180,36 @@ final class SocialVideoExtractionService: NSObject {
   private func providerIDScore(
     url: URL, value: String, host: String, sourceURL: URL
   ) -> Int {
-    var score = 0
-    score += tiktokIDScore(url: url, value: value, host: host, sourceURL: sourceURL)
-    score += instagramIDScore(url: url, value: value, host: host, sourceURL: sourceURL)
-    score += facebookIDScore(url: url, value: value, host: host, sourceURL: sourceURL)
+    switch URLClassifier.classify(sourceURL) {
+    case .tiktok:
+      return tiktokIDScore(url: url, value: value, host: host, sourceURL: sourceURL)
+    case .instagram:
+      return instagramIDScore(url: url, value: value, host: host, sourceURL: sourceURL)
+    case .facebook:
+      return facebookIDScore(url: url, value: value, host: host, sourceURL: sourceURL)
+    case .twitter, .youtube, .rumble, .generic:
+      return 0
+    }
+  }
+}
+
+extension SocialVideoExtractionService {
+  func mediaIdentityScore(
+    expectedID: String?,
+    candidateID: String?,
+    value: String,
+    host: String,
+    allowedHostTokens: [String]
+  ) -> Int {
+    guard let expectedID else { return 0 }
+
+    var score = value.contains(expectedID.lowercased()) ? 50 : 0
+    if let candidateID {
+      score += candidateID == expectedID ? 100 : -100
+    }
+    if !allowedHostTokens.contains(where: host.contains) {
+      score -= 25
+    }
     return score
   }
 

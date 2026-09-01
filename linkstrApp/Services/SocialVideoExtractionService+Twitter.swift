@@ -1,11 +1,17 @@
 import Foundation
 
 extension SocialVideoExtractionService {
-  func extractFromTwitter(sourceURL: URL) async -> ExtractionState? {
+  func extractFromTwitter(
+    sourceURL: URL,
+    budget: MediaDiscoveryBudget
+  ) async -> ExtractionState? {
     guard SocialURLHeuristics.isTwitterStatusURL(sourceURL) else {
       return nil
     }
-    let summary = await TwitterStatusResolutionService.shared.mediaSummary(for: sourceURL)
+    let summary = await TwitterStatusResolutionService.shared.mediaSummary(
+      for: sourceURL,
+      budget: budget
+    )
     if summary.hasVideo == false {
       return .cannotExtract("this post does not include a playable video.")
     }
@@ -47,7 +53,10 @@ actor TwitterStatusResolutionService {
   private var mediaSummaryCache: [String: TwitterStatusMediaSummary] = [:]
   private var presentationCache: [String: TwitterStatusResolvedPresentation] = [:]
 
-  func mediaSummary(for sourceURL: URL) async -> TwitterStatusMediaSummary {
+  func mediaSummary(
+    for sourceURL: URL,
+    budget: MediaDiscoveryBudget? = nil
+  ) async -> TwitterStatusMediaSummary {
     guard let cacheKey = cacheKey(for: sourceURL) else {
       return .empty
     }
@@ -55,7 +64,7 @@ actor TwitterStatusResolutionService {
       return cached
     }
 
-    let summary = await fetchMediaSummary(for: sourceURL)
+    let summary = await fetchMediaSummary(for: sourceURL, budget: budget)
     if summary.hasVideo || !summary.candidateURLs.isEmpty || summary.preview != nil {
       mediaSummaryCache[cacheKey] = summary
     }
@@ -119,7 +128,10 @@ actor TwitterStatusResolutionService {
     SocialURLHeuristics.twitterStatusID(from: sourceURL)
   }
 
-  private func fetchMediaSummary(for sourceURL: URL) async -> TwitterStatusMediaSummary {
+  private func fetchMediaSummary(
+    for sourceURL: URL,
+    budget: MediaDiscoveryBudget?
+  ) async -> TwitterStatusMediaSummary {
     guard let statusID = SocialURLHeuristics.twitterStatusID(from: sourceURL) else {
       return .empty
     }
@@ -132,6 +144,9 @@ actor TwitterStatusResolutionService {
 
     var fallbackSummary: TwitterStatusMediaSummary?
     for rawEndpoint in endpoints {
+      guard !Task.isCancelled, budget?.permitsAttempt ?? true else {
+        return fallbackSummary ?? .empty
+      }
       guard let endpoint = URL(string: rawEndpoint) else { continue }
       if let summary = await fetchMediaSummary(from: endpoint) {
         if summary.hasVideo || !summary.candidateURLs.isEmpty {
@@ -149,7 +164,7 @@ actor TwitterStatusResolutionService {
   private func fetchMediaSummary(from endpoint: URL) async -> TwitterStatusMediaSummary? {
     var request = URLRequest(url: endpoint)
     request.httpMethod = "GET"
-    request.timeoutInterval = SocialVideoTimingDefaults.apiRequestTimeout
+    request.timeoutInterval = SocialVideoTimingDefaults.requestTimeout
     request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
     request.setValue("application/json", forHTTPHeaderField: "Accept")
 
@@ -187,7 +202,7 @@ actor TwitterStatusResolutionService {
 
     var request = URLRequest(url: endpoint)
     request.httpMethod = "GET"
-    request.timeoutInterval = SocialVideoTimingDefaults.apiRequestTimeout
+    request.timeoutInterval = SocialVideoTimingDefaults.requestTimeout
     request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
     request.setValue("application/json", forHTTPHeaderField: "Accept")
 

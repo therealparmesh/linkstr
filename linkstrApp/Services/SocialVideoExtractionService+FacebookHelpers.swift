@@ -1,7 +1,7 @@
 import Foundation
 
 extension URLCanonicalizationService {
-  func facebookLoginNextURL(from url: URL) -> URL? {
+  static func facebookLoginNextURL(from url: URL) -> URL? {
     guard SocialURLHeuristics.isFacebookHost(url) else { return nil }
 
     let parts = url.pathComponents
@@ -40,6 +40,7 @@ extension URLCanonicalizationService {
 
     switch marker {
     case "r", "reel":
+      guard token.allSatisfy(\.isNumber) else { return nil }
       return URL(string: "https://www.facebook.com/reel/\(token)/")
     case "v":
       guard token.allSatisfy(\.isNumber) else { return nil }

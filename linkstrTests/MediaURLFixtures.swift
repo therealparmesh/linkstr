@@ -38,6 +38,14 @@ enum MediaURLFixtures {
       allowsLocalPlayback: true
     ),
     StrategyExpectation(
+      name: "tiktok player",
+      url: "https://www.tiktok.com/player/v1/7596114833477537054",
+      linkType: .tiktok,
+      strategyKind: .extractionPreferred,
+      embedExpectation: .exact("https://www.tiktok.com/player/v1/7596114833477537054"),
+      allowsLocalPlayback: true
+    ),
+    StrategyExpectation(
       name: "instagram reel",
       url: "https://www.instagram.com/reel/C7x5mYfP0R1/",
       linkType: .instagram,
@@ -58,16 +66,16 @@ enum MediaURLFixtures {
       url: "https://www.facebook.com/reel/123456789012345",
       linkType: .facebook,
       strategyKind: .extractionPreferred,
-      embedExpectation: .prefix("https://www.facebook.com/plugins/video.php?href="),
+      embedExpectation: .prefix("https://www.facebook.com/plugins/post.php?href="),
       allowsLocalPlayback: true
     ),
     StrategyExpectation(
       name: "facebook video post",
       url: "https://www.facebook.com/some.page/videos/123456789012345/",
       linkType: .facebook,
-      strategyKind: .embedOnly,
-      embedExpectation: .prefix("https://www.facebook.com/plugins/video.php?href="),
-      allowsLocalPlayback: false
+      strategyKind: .extractionPreferred,
+      embedExpectation: .prefix("https://www.facebook.com/plugins/post.php?href="),
+      allowsLocalPlayback: true
     ),
     StrategyExpectation(
       name: "youtube watch",
