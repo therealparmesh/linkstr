@@ -319,14 +319,14 @@ Non-video provider URLs (channel pages, profiles, etc.) fall back to open-in-bro
 
 #### Embed URLs
 
-| Provider  | Pattern                                                |
-| --------- | ------------------------------------------------------ |
-| TikTok    | `/player/v1/<id>`                                      |
-| Instagram | `/reel/<shortcode>/embed`, `/p/<shortcode>/embed`      |
-| Facebook  | `/plugins/post.php`                                    |
-| YouTube   | `/embed/<id>`                                          |
-| Rumble    | oEmbed iframe URL                                      |
-| Twitter/X | Official widget factory (`widgets.js` / `createTweet`) |
+| Provider  | Pattern                                                      |
+| --------- | ------------------------------------------------------------ |
+| TikTok    | `/player/v1/<id>`                                            |
+| Instagram | `/reel/<shortcode>/embed`, `/p/<shortcode>/embed`            |
+| Facebook  | `/plugins/post.php` (Reels), official oEmbed player (videos) |
+| YouTube   | `/embed/<id>`                                                |
+| Rumble    | oEmbed iframe URL                                            |
+| Twitter/X | Official widget factory (`widgets.js` / `createTweet`)       |
 
 Embedded web playback allows provider-element fullscreen when supported.
 

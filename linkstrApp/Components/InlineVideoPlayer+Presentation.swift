@@ -153,6 +153,9 @@ extension AdaptiveVideoPlaybackView {
     if let preferredEmbedSource = activeResolvedPresentation?.preferredEmbedSource {
       return preferredEmbedSource
     }
+    if let facebookVideo = EmbeddedWebSource.facebookVideo(for: fallback) {
+      return facebookVideo
+    }
     return .url(fallback)
   }
 

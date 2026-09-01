@@ -15,6 +15,15 @@ enum EmbeddedWebSource: Equatable {
     }
     return false
   }
+
+  var customUserAgent: String? {
+    guard case .html(_, let baseURL) = self,
+      baseURL.map(SocialURLHeuristics.isFacebookHost) == true
+    else {
+      return nil
+    }
+    return SocialVideoExtractionService.mobileUserAgent
+  }
 }
 
 private enum EmbeddedWebViewTimingDefaults {
@@ -273,6 +282,7 @@ struct EmbeddedWebView: UIViewRepresentable {
     guard sourceChanged else { return }
     context.coordinator.prepareForNewLoad()
 
+    uiView.customUserAgent = source.customUserAgent
     switch source {
     case .url(let url):
       var request = URLRequest(url: url)

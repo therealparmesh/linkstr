@@ -153,6 +153,13 @@ enum URLClassifier {
       return canonicalURL
     }
 
+    if !SocialURLHeuristics.isFacebookReelURL(canonicalURL),
+      let videoID = SocialURLHeuristics.facebookVideoID(from: canonicalURL) {
+      var components = URLComponents(string: "https://m.facebook.com/watch/")
+      components?.queryItems = [URLQueryItem(name: "v", value: videoID)]
+      return components?.url ?? canonicalURL
+    }
+
     var components = URLComponents()
     components.scheme = "https"
     components.host = "www.facebook.com"

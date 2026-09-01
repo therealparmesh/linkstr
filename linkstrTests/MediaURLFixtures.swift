@@ -74,7 +74,7 @@ enum MediaURLFixtures {
       url: "https://www.facebook.com/some.page/videos/123456789012345/",
       linkType: .facebook,
       strategyKind: .extractionPreferred,
-      embedExpectation: .prefix("https://www.facebook.com/plugins/post.php?href="),
+      embedExpectation: .exact("https://m.facebook.com/watch/?v=123456789012345"),
       allowsLocalPlayback: true
     ),
     StrategyExpectation(

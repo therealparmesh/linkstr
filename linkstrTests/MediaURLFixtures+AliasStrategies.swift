@@ -63,7 +63,7 @@ extension MediaURLFixtures {
       url: "https://www.facebook.com/share/v/10153231379946729/",
       linkType: .facebook,
       strategyKind: .extractionPreferred,
-      embedExpectation: .prefix("https://www.facebook.com/plugins/post.php?href="),
+      embedExpectation: .exact("https://m.facebook.com/watch/?v=10153231379946729"),
       allowsLocalPlayback: true
     ),
     StrategyExpectation(

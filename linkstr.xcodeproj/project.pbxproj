@@ -88,6 +88,7 @@
 		7EF8BC107CF075E68AD919E7 /* ConversationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CD8B506D0AD0F0519915CBF /* ConversationsView.swift */; };
 		7F7CF166FB999B12B26C4BBC /* linkstrShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 82AE7F4577C7CCB0D01A56C5 /* linkstrShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		7F9C806A6328ECBB552D680F /* LinkstrDeepLinkCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = B23E9A6EB0A0CB14BEF2BEC3 /* LinkstrDeepLinkCodec.swift */; };
+		81F14DC0C274A83A5A37FF4B /* EmbeddedWebSourceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C3D8356ADF2430938203F82 /* EmbeddedWebSourceTests.swift */; };
 		835D248486BFA8B181BA5C91 /* SocialVideoExtractionService+PostPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1E180B14DDBDC6B24F94458 /* SocialVideoExtractionService+PostPreview.swift */; };
 		8365430EA92F69D319DD343A /* TaskIDHash.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A57E13C1D0F751C08EE6BB9 /* TaskIDHash.swift */; };
 		8574D43523B7BD04DEA3E984 /* ConversationsView+SessionRowHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7892F937BF2BAD2F4F1EC893 /* ConversationsView+SessionRowHelpers.swift */; };
@@ -120,6 +121,7 @@
 		B2447312C6185E8FF7D93A4E /* WebNavigationGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04DA78B023380E23DCDD595C /* WebNavigationGuard.swift */; };
 		B4FCB3E83340EEAE33463385 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A7E6C89A81182CE921500BF /* KeychainStore.swift */; };
 		B5BF21D1BB43B9AF1791B583 /* LinkstrTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8656D4233266D4074559D533 /* LinkstrTheme.swift */; };
+		B5F1AD42B1D8F81652FBF246 /* EmbeddedWebSource+Facebook.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDC04D7B74CD3D1DE670C374 /* EmbeddedWebSource+Facebook.swift */; };
 		B6E83A246A27C105D076DDE1 /* InlineVideoPlayer+Controls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60D786C2B33D7AFE5589D6FF /* InlineVideoPlayer+Controls.swift */; };
 		B7863404BF8D17F25DBDACB8 /* PublishAckTrackerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 936898CE3B6551FD64EC159D /* PublishAckTrackerTests.swift */; };
 		B904D2F49467D7C7DBCA13D1 /* PostDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92BD6D05E5DF16FC27ED5440 /* PostDetailView.swift */; };
@@ -222,6 +224,7 @@
 		2A6D0C57B9E774CA4C1DA391 /* ShareComposerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareComposerView.swift; sourceTree = "<group>"; };
 		2AC707FAB20932919A43F61E /* AppSession+Metadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppSession+Metadata.swift"; sourceTree = "<group>"; };
 		2B51633F30C9325002364199 /* SessionMessageStore+Queries.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SessionMessageStore+Queries.swift"; sourceTree = "<group>"; };
+		2C3D8356ADF2430938203F82 /* EmbeddedWebSourceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmbeddedWebSourceTests.swift; sourceTree = "<group>"; };
 		2D093011C05A61EC259283D5 /* AppSession+Push.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppSession+Push.swift"; sourceTree = "<group>"; };
 		2D21B96820A357DD636C638A /* PostDetailView+Sections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PostDetailView+Sections.swift"; sourceTree = "<group>"; };
 		2D2D2AB55E6B9E0CB6931D53 /* SessionMembershipTimelineBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionMembershipTimelineBuilderTests.swift; sourceTree = "<group>"; };
@@ -328,6 +331,7 @@
 		CB7F110277AC0A83DE9F897D /* AppSessionIngestTests+Helpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppSessionIngestTests+Helpers.swift"; sourceTree = "<group>"; };
 		CCA511D64E36E08388A917DF /* AccountStateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountStateStore.swift; sourceTree = "<group>"; };
 		CD11FED8FA000BF093FF17A1 /* PublishAckTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublishAckTracker.swift; sourceTree = "<group>"; };
+		CDC04D7B74CD3D1DE670C374 /* EmbeddedWebSource+Facebook.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EmbeddedWebSource+Facebook.swift"; sourceTree = "<group>"; };
 		D33336CFF6A92115695D5710 /* DeepLinkCodecTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLinkCodecTests.swift; sourceTree = "<group>"; };
 		D5C2051F552FE95BFF6B7D9A /* AppSession+Profiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppSession+Profiles.swift"; sourceTree = "<group>"; };
 		D61080B5C5DE5D5D9B0482D7 /* linkstr.Debug.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = linkstr.Debug.entitlements; sourceTree = "<group>"; };
@@ -636,6 +640,7 @@
 				4E26BDA3D85ADA347E71A241 /* AppSessionTestSupport+Helpers.swift */,
 				B8170C2B6ECB684CC17D5FA8 /* ContactKeyParserTests.swift */,
 				D33336CFF6A92115695D5710 /* DeepLinkCodecTests.swift */,
+				2C3D8356ADF2430938203F82 /* EmbeddedWebSourceTests.swift */,
 				F0D55F08DC8BFAD9B13F49A7 /* IdentityServiceTests.swift */,
 				708AFDAAA6632914B9BEBEC3 /* LinkstrPayloadTests.swift */,
 				534C61A47169A3D9565A8709 /* ManagedLocalFileScopeTests.swift */,
@@ -658,6 +663,7 @@
 		DC8F3B7A96F0C63F2141165A /* Components */ = {
 			isa = PBXGroup;
 			children = (
+				CDC04D7B74CD3D1DE670C374 /* EmbeddedWebSource+Facebook.swift */,
 				B3773FC7A860E3D05A4C98ED /* EmbeddedWebView.swift */,
 				81A118A79DA2EA70C0D2845E /* InlineVideoPlayer.swift */,
 				60D786C2B33D7AFE5589D6FF /* InlineVideoPlayer+Controls.swift */,
@@ -828,6 +834,7 @@
 				DDB1323E9731948BF20658FD /* DateLabelFormatter.swift in Sources */,
 				3E24A4F22F0E181AE68CCFA8 /* DeepLinkDetailView.swift in Sources */,
 				9A2C2C05B3A09A218E33C4B0 /* DeepLinkHandler.swift in Sources */,
+				B5F1AD42B1D8F81652FBF246 /* EmbeddedWebSource+Facebook.swift in Sources */,
 				A86C04225EC7751654FEF2A9 /* EmbeddedWebView.swift in Sources */,
 				4EA2585B9A7B60CCA7F413F3 /* HLSDownloadManager.swift in Sources */,
 				98570683D9CDD058B8047F1E /* IdentityService.swift in Sources */,
@@ -934,6 +941,7 @@
 				A0C514C45CF917B5D689A331 /* AppSessionTestSupport.swift in Sources */,
 				7A2809C196D0429D9760F4FC /* ContactKeyParserTests.swift in Sources */,
 				C0EA7461CD38B51347377CB5 /* DeepLinkCodecTests.swift in Sources */,
+				81F14DC0C274A83A5A37FF4B /* EmbeddedWebSourceTests.swift in Sources */,
 				5659595590A750C521C2AA10 /* IdentityServiceTests.swift in Sources */,
 				A6414B3C98C6E95F06811E48 /* LinkstrPayloadTests.swift in Sources */,
 				F6EDC909884C324A0D029A05 /* ManagedLocalFileScopeTests.swift in Sources */,

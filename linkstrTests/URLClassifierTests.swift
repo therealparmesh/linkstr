@@ -29,7 +29,7 @@ final class URLClassifierTests: XCTestCase {
     XCTAssertEqual(URLClassifier.classify("https://twitter.com.evil.org/jack/status/20"), .generic)
   }
 
-  func testFacebookVideoUsesLocalPlaybackWithPostEmbedFallback() {
+  func testFacebookVideoUsesLocalPlaybackWithMobileWebFallback() {
     let sourceURL = URL(
       string: "https://www.facebook.com/some.page/videos/123456789012345/"
     )!
@@ -38,12 +38,12 @@ final class URLClassifierTests: XCTestCase {
       return XCTFail("Expected local playback for a Facebook video post")
     }
 
-    assertFacebookPluginEmbed(
-      embedURL,
-      expectedHref: "https://www.facebook.com/some.page/videos/123456789012345/"
+    XCTAssertEqual(
+      embedURL.absoluteString,
+      "https://m.facebook.com/watch/?v=123456789012345"
     )
     XCTAssertTrue(strategy.allowsLocalPlaybackToggle)
-    XCTAssertTrue(URLClassifier.isDedicatedEmbedURL(embedURL))
+    XCTAssertFalse(URLClassifier.isDedicatedEmbedURL(embedURL))
     XCTAssertEqual(
       URLClassifier.preferredMediaAspectRatio(for: sourceURL, strategy: strategy),
       16.0 / 9.0,
@@ -326,23 +326,5 @@ private extension URLClassifierTests {
         "Unexpected embed URL prefix for \(name): \(actualURL.absoluteString)"
       )
     }
-  }
-
-  func assertFacebookPluginEmbed(_ embedURL: URL, expectedHref: String) {
-    guard let components = URLComponents(url: embedURL, resolvingAgainstBaseURL: false) else {
-      return XCTFail("Expected URL components for Facebook embed URL")
-    }
-
-    XCTAssertEqual(components.scheme, "https")
-    XCTAssertEqual(components.host, "www.facebook.com")
-    XCTAssertEqual(components.path, "/plugins/post.php")
-
-    func value(_ key: String) -> String? {
-      components.queryItems?.first(where: { $0.name == key })?.value
-    }
-
-    XCTAssertEqual(value("href"), expectedHref)
-    XCTAssertEqual(value("show_text"), "false")
-    XCTAssertEqual(value("width"), "540")
   }
 }
