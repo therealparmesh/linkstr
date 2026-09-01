@@ -243,15 +243,14 @@ struct EmbeddedWebView: UIViewRepresentable {
     }
   }
 
-  func makeCoordinator() -> Coordinator {
-    Coordinator()
-  }
+  func makeCoordinator() -> Coordinator { Coordinator() }
 
   func makeUIView(context: Context) -> WKWebView {
     let config = WKWebViewConfiguration()
     config.allowsInlineMediaPlayback = true
     config.allowsAirPlayForMediaPlayback = true
     config.mediaTypesRequiringUserActionForPlayback = []
+    config.defaultWebpagePreferences.preferredContentMode = .mobile
     config.defaultWebpagePreferences.allowsContentJavaScript = true
     config.preferences.javaScriptCanOpenWindowsAutomatically = true
     config.userContentController.add(context.coordinator, name: Coordinator.metricsHandlerName)

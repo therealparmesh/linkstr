@@ -10,14 +10,17 @@ extension AdaptiveVideoPlaybackView {
   @ViewBuilder
   var content: some View {
     if isResolvingPresentation {
-      mediaSurface {
-        VStack(spacing: 8) {
-          ProgressView()
-          Text("loading post...")
-            .font(LinkstrTheme.font(.caption))
-            .foregroundStyle(LinkstrTheme.textSecondary)
+      VStack(alignment: .leading, spacing: 8) {
+        mediaSurface {
+          VStack(spacing: 8) {
+            ProgressView()
+            Text("loading post...")
+              .font(LinkstrTheme.font(.caption))
+              .foregroundStyle(LinkstrTheme.textSecondary)
+          }
+          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        openInBrowserButton(action: openSourceAction)
       }
     } else {
       switch effectiveMediaStrategy {
@@ -32,17 +35,7 @@ extension AdaptiveVideoPlaybackView {
         embedPlaybackBlock(
           embedSource: resolvedOrFallbackEmbedSource(embedURL), allowsTryLocalPlayback: false)
       case .link:
-        if let openSourceAction {
-          Button {
-            openSourceAction()
-          } label: {
-            LinkstrActionButtonLabel(title: "open in browser")
-          }
-          .frame(maxWidth: .infinity)
-          .linkstrSecondaryButton()
-        } else {
-          EmptyView()
-        }
+        openInBrowserButton(action: openSourceAction)
       }
     }
   }
@@ -75,7 +68,7 @@ extension AdaptiveVideoPlaybackView {
               }
             )
           }
-          extractionReadyActions(exportFileURL: exportFileURL)
+          localPlaybackActions(exportFileURL: exportFileURL)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
       } else {
@@ -86,14 +79,17 @@ extension AdaptiveVideoPlaybackView {
       embedPlaybackBlock(embedSource: embedSource, allowsTryLocalPlayback: true)
 
     case nil:
-      mediaSurface {
-        VStack(spacing: 8) {
-          ProgressView()
-          Text("preparing video playback...")
-            .font(LinkstrTheme.font(.caption))
-            .foregroundStyle(LinkstrTheme.textSecondary)
+      VStack(alignment: .leading, spacing: 8) {
+        mediaSurface {
+          VStack(spacing: 8) {
+            ProgressView()
+            Text("preparing local playback...")
+              .font(LinkstrTheme.font(.caption))
+              .foregroundStyle(LinkstrTheme.textSecondary)
+          }
+          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        localPlaybackActions(exportFileURL: nil)
       }
     }
   }
@@ -113,21 +109,16 @@ extension AdaptiveVideoPlaybackView {
       }
 
       if let extractionFallbackReason {
-        Text("video playback unavailable: \(extractionFallbackReason)")
+        Text("local playback unavailable: \(extractionFallbackReason)")
           .font(LinkstrTheme.font(.caption))
           .foregroundStyle(LinkstrTheme.textSecondary)
       }
 
-      let canOpenSource = showOpenSourceButtonInEmbedMode && openSourceAction != nil
-
-      if allowsTryLocalPlayback, canOpenSource, let openSourceAction {
-        HStack(spacing: 8) {
-          retryLocalPlaybackButton
-          openInBrowserButton(action: openSourceAction)
+      if allowsTryLocalPlayback {
+        playbackModeActions {
+          tryLocalPlaybackButton
         }
-      } else if allowsTryLocalPlayback {
-        retryLocalPlaybackButton
-      } else if canOpenSource, let openSourceAction {
+      } else {
         openInBrowserButton(action: openSourceAction)
       }
     }
@@ -167,25 +158,23 @@ extension AdaptiveVideoPlaybackView {
     }
   }
 
-  @ViewBuilder
-  func extractionReadyActions(exportFileURL: URL?) -> some View {
-    if let openSourceAction {
-      VStack(spacing: 8) {
-        HStack(spacing: 8) {
-          useEmbeddedButton
-          openInBrowserButton(action: openSourceAction)
-        }
-        if let exportFileURL {
-          saveButton(for: exportFileURL)
-        }
-      }
-    } else if let exportFileURL {
-      HStack(spacing: 8) {
+  func localPlaybackActions(exportFileURL: URL?) -> some View {
+    VStack(spacing: 8) {
+      playbackModeActions {
         useEmbeddedButton
+      }
+      if let exportFileURL {
         saveButton(for: exportFileURL)
       }
-    } else {
-      useEmbeddedButton
+    }
+  }
+
+  func playbackModeActions<Action: View>(
+    @ViewBuilder action: () -> Action
+  ) -> some View {
+    HStack(spacing: 8) {
+      action()
+      openInBrowserButton(action: openSourceAction)
     }
   }
 
@@ -195,9 +184,9 @@ extension AdaptiveVideoPlaybackView {
     }
   }
 
-  var retryLocalPlaybackButton: some View {
+  var tryLocalPlaybackButton: some View {
     secondaryActionButton("try local playback") {
-      retryLocalPlayback()
+      tryLocalPlayback()
     }
   }
 
@@ -224,7 +213,7 @@ extension AdaptiveVideoPlaybackView {
     .linkstrSecondaryButton()
   }
 
-  func retryLocalPlayback() {
+  func tryLocalPlayback() {
     Task {
       if extractionFallbackReason != nil, cachedLocalMedia == nil {
         clearFailedLocalPlaybackState()
@@ -244,7 +233,7 @@ extension AdaptiveVideoPlaybackView {
   func handlePlaybackFailure(currentMedia: PlayableMedia, candidates: [PlayableMedia]) {
     if currentMedia.isLocalFile {
       clearFailedLocalPlaybackState()
-      retryLocalPlayback()
+      tryLocalPlayback()
       return
     }
 

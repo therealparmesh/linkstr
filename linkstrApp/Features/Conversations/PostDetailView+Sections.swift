@@ -177,7 +177,6 @@ extension PostDetailView {
     if let urlString = post.url, let url = URL(string: urlString) {
       AdaptiveVideoPlaybackView(
         sourceURL: url,
-        showOpenSourceButtonInEmbedMode: true,
         openSourceAction: { openURL(url) },
         resolveCachedLocalMedia: { sourceURL in
           guard

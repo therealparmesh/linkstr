@@ -82,7 +82,6 @@ struct DeepLinkDetailView: View {
       case .extractionPreferred, .embedOnly:
         AdaptiveVideoPlaybackView(
           sourceURL: sourceURL,
-          showOpenSourceButtonInEmbedMode: true,
           openSourceAction: { openURL(sourceURL) }
         )
       case .link:

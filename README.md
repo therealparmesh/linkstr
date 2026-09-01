@@ -304,9 +304,9 @@ Non-video provider URLs (channel pages, profiles, etc.) fall back to open-in-bro
 
 #### Playback behavior
 
-- For extraction-preferred providers, local playback is attempted first with explicit controls to switch to embed mode.
+- For extraction-preferred providers, local playback is attempted first with controls to use the embed or open the post in a browser while it prepares.
 - If a local playback stream fails, the next available stream is tried automatically before falling back to embed mode.
-- If extraction fails, embed mode remains available with retry-local and open-in-browser actions.
+- If extraction fails, embed mode remains available with try-local and open-in-browser actions.
 - Action rows are normalized across post detail and shared-link detail surfaces.
 - Audio plays even when the iPhone silent switch is enabled.
 - In local playback mode with a cached file, users can export via **Save…** to Photos or Files.

@@ -147,8 +147,7 @@ struct AdaptiveVideoPlaybackView: View {
   }
 
   let sourceURL: URL
-  let showOpenSourceButtonInEmbedMode: Bool
-  let openSourceAction: (() -> Void)?
+  let openSourceAction: () -> Void
   let resolveCachedLocalMedia: ((URL) -> PlayableMedia?)?
   let persistLocalMedia: ((URL, PlayableMedia) -> Void)?
   let clearPersistedLocalMedia: (() -> Void)?
@@ -172,15 +171,13 @@ struct AdaptiveVideoPlaybackView: View {
 
   init(
     sourceURL: URL,
-    showOpenSourceButtonInEmbedMode: Bool = true,
-    openSourceAction: (() -> Void)? = nil,
+    openSourceAction: @escaping () -> Void,
     resolveCachedLocalMedia: ((URL) -> PlayableMedia?)? = nil,
     persistLocalMedia: ((URL, PlayableMedia) -> Void)? = nil,
     clearPersistedLocalMedia: (() -> Void)? = nil,
     reloadID: Int = 0
   ) {
     self.sourceURL = sourceURL
-    self.showOpenSourceButtonInEmbedMode = showOpenSourceButtonInEmbedMode
     self.openSourceAction = openSourceAction
     self.resolveCachedLocalMedia = resolveCachedLocalMedia
     self.persistLocalMedia = persistLocalMedia

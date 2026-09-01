@@ -284,9 +284,8 @@ Historical replay depends on relay retention. linkstr can retry out-of-order pos
 1. Check your network connection.
 2. Switch between **Try local playback** and **Use embedded**.
 3. If a cached copy was auto-trimmed, try local playback again to re-cache it.
-4. Try local playback again to clear a stale local failure and force a fresh retry.
-5. Use the refresh button in post detail if that post's metadata seems stale or missing.
-6. Use **Open in browser** if the provider blocks embedded playback.
+4. Use the refresh button in post detail if that post's metadata seems stale or missing.
+5. Use **Open in browser** if the provider blocks embedded playback.
 
 ### A preview looks stale or wrong
 
