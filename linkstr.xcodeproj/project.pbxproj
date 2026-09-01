@@ -116,6 +116,7 @@
 		AB9FA849E34609852DBB9D37 /* EmojiKit in Frameworks */ = {isa = PBXBuildFile; productRef = E622661FD0CFD2491CCEF99E /* EmojiKit */; };
 		ACA44E3730662BC4CBCD6650 /* LinkstrApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B5DE4303E3776275C702572 /* LinkstrApp.swift */; };
 		AEE794A6709679424AB46C3D /* AddContactSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30A0293426CA62529786E6A3 /* AddContactSheet.swift */; };
+		B182ABAD0A5B14D1921C195C /* PlayableMedia+AVFoundation.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDD6058FFCC4C1C1F496E05F /* PlayableMedia+AVFoundation.swift */; };
 		B2447312C6185E8FF7D93A4E /* WebNavigationGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04DA78B023380E23DCDD595C /* WebNavigationGuard.swift */; };
 		B4FCB3E83340EEAE33463385 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A7E6C89A81182CE921500BF /* KeychainStore.swift */; };
 		B5BF21D1BB43B9AF1791B583 /* LinkstrTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8656D4233266D4074559D533 /* LinkstrTheme.swift */; };
@@ -142,6 +143,7 @@
 		DDB1323E9731948BF20658FD /* DateLabelFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 063D7C9BFD3554835A4C6F7B /* DateLabelFormatter.swift */; };
 		DF35F429AB619775A9C4128E /* NostrDMService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1BA1730FD8EA4DB2ED9EA2 /* NostrDMService.swift */; };
 		DF8D62B17EFEE3AA93E48059 /* AppSessionMutationTests+DeletePost.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACAA46A2913AE922D89A3994 /* AppSessionMutationTests+DeletePost.swift */; };
+		E163C36D98B43222E701435B /* InlineVideoPlayer+Presentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EC8E890AE37F6E6BFA56227 /* InlineVideoPlayer+Presentation.swift */; };
 		E18C45BA7EC37F7EBA100C99 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A53C12395D9526655996C351 /* MainTabView.swift */; };
 		E53937C382ED8AA58D1351A1 /* AppSessionMutationTests+Membership.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99341F3C7EC70858F472E4DD /* AppSessionMutationTests+Membership.swift */; };
 		E7EF6C2EE6939C035928BC94 /* SocialPostParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A148936C12349188DD4390CF /* SocialPostParserTests.swift */; };
@@ -246,6 +248,7 @@
 		4E26BDA3D85ADA347E71A241 /* AppSessionTestSupport+Helpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppSessionTestSupport+Helpers.swift"; sourceTree = "<group>"; };
 		4E537303C3401BCF6BC22940 /* AppSessionContactAndRelayTests+Sessions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppSessionContactAndRelayTests+Sessions.swift"; sourceTree = "<group>"; };
 		4EB92DCA9ED42AEA6435B156 /* AppSession+Reactions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppSession+Reactions.swift"; sourceTree = "<group>"; };
+		4EC8E890AE37F6E6BFA56227 /* InlineVideoPlayer+Presentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "InlineVideoPlayer+Presentation.swift"; sourceTree = "<group>"; };
 		4F32F5B99A165F5BCB019087 /* AppSession+PersistenceIngest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppSession+PersistenceIngest.swift"; sourceTree = "<group>"; };
 		534C61A47169A3D9565A8709 /* ManagedLocalFileScopeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedLocalFileScopeTests.swift; sourceTree = "<group>"; };
 		5706DE74EAC8D4C83F889108 /* AppSession+Contacts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppSession+Contacts.swift"; sourceTree = "<group>"; };
@@ -346,6 +349,7 @@
 		F6FE97A03CA51C25CCE76854 /* linkstr.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = linkstr.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F836F1233F2039173B6CF6CB /* LinkstrResolvedIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkstrResolvedIdentity.swift; sourceTree = "<group>"; };
 		F9F6803C214CB5B24C0FC54F /* SessionPayloadValidationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionPayloadValidationTests.swift; sourceTree = "<group>"; };
+		FDD6058FFCC4C1C1F496E05F /* PlayableMedia+AVFoundation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PlayableMedia+AVFoundation.swift"; sourceTree = "<group>"; };
 		FDEC9192CC71EB4B9B2F9C86 /* DeepLinkHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLinkHandler.swift; sourceTree = "<group>"; };
 		FEC87A59057527F2A8A4A7E0 /* AppSessionIngestTests+RootDeletion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppSessionIngestTests+RootDeletion.swift"; sourceTree = "<group>"; };
 		FFA210F3465E551A86331AC9 /* LinkstrErrorToast.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkstrErrorToast.swift; sourceTree = "<group>"; };
@@ -528,6 +532,7 @@
 				96FDD9A5B0EADBF134B04AE2 /* NostrDMService+Backfill.swift */,
 				434E57D3DDCE61EE8F692C80 /* NostrDMService+EventHandling.swift */,
 				2359F7986140A47316BC12A6 /* NostrDMService+Publishing.swift */,
+				FDD6058FFCC4C1C1F496E05F /* PlayableMedia+AVFoundation.swift */,
 				CD11FED8FA000BF093FF17A1 /* PublishAckTracker.swift */,
 				5CD43DF41F40C87E2C71E160 /* PushAPIClient.swift */,
 				1D78D3C52F2C60EEE6C2FFAD /* PushNotificationService.swift */,
@@ -657,6 +662,7 @@
 				81A118A79DA2EA70C0D2845E /* InlineVideoPlayer.swift */,
 				60D786C2B33D7AFE5589D6FF /* InlineVideoPlayer+Controls.swift */,
 				F1EFD994E7985682A552C874 /* InlineVideoPlayer+Overlays.swift */,
+				4EC8E890AE37F6E6BFA56227 /* InlineVideoPlayer+Presentation.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -750,7 +756,6 @@
 				};
 			};
 			buildConfigurationList = F639D01CC0D42D5BFE71F603 /* Build configuration list for PBXProject "linkstr" */;
-			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -764,6 +769,7 @@
 				6A3835F79985E1062726CDBC /* XCRemoteSwiftPackageReference "nostr-sdk-ios" */,
 			);
 			preferredProjectObjectVersion = 77;
+			productRefGroup = 99985767ED62A6A79229D318 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -827,6 +833,7 @@
 				98570683D9CDD058B8047F1E /* IdentityService.swift in Sources */,
 				B6E83A246A27C105D076DDE1 /* InlineVideoPlayer+Controls.swift in Sources */,
 				C331CAD3843A8EC74917A94D /* InlineVideoPlayer+Overlays.swift in Sources */,
+				E163C36D98B43222E701435B /* InlineVideoPlayer+Presentation.swift in Sources */,
 				24D6B26A434E191D6BBFF8D8 /* InlineVideoPlayer.swift in Sources */,
 				B4FCB3E83340EEAE33463385 /* KeychainStore.swift in Sources */,
 				526808802A22A90EA4F9D24A /* LinkType.swift in Sources */,
@@ -851,6 +858,7 @@
 				D4A922EC5968C37C16962A28 /* NostrProfileMetadata.swift in Sources */,
 				555FFCB5B214602932B55E76 /* NostrValueNormalizer.swift in Sources */,
 				8F0C4138EF679B83420A0FB0 /* OnboardingView.swift in Sources */,
+				B182ABAD0A5B14D1921C195C /* PlayableMedia+AVFoundation.swift in Sources */,
 				4C85E38565E8D22B46A1363A /* PostDetailView+Sections.swift in Sources */,
 				B904D2F49467D7C7DBCA13D1 /* PostDetailView.swift in Sources */,
 				0EA533E81DF41D8D80F8687E /* PublishAckTracker.swift in Sources */,

@@ -286,66 +286,6 @@ extension AdaptiveVideoPlaybackView {
     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
   }
 
-  func prepareMediaIfNeeded() async {
-    guard !isResolvingPresentation else { return }
-    guard effectiveMediaStrategy.allowsLocalPlaybackToggle else { return }
-    guard localPlaybackMode == .localPreferred else { return }
-
-    let playbackSourceURL = effectiveSourceURL
-
-    if let cached = resolveCachedLocalMedia?(playbackSourceURL) {
-      if cached.isLocalFile {
-        Task {
-          await VideoCacheService.shared.touchCachedMedia(at: cached.playbackURL)
-        }
-      }
-      cachedLocalMedia = cached
-      extractionState = .ready([cached])
-      extractionFallbackReason = nil
-      return
-    }
-
-    if let cachedLocalMedia {
-      extractionState = .ready([cachedLocalMedia])
-      extractionFallbackReason = nil
-      return
-    }
-
-    let result = await SocialVideoExtractionService.shared.extractPlayableMedia(
-      from: playbackSourceURL)
-    playbackCandidateIndex = 0
-    extractionState = result
-
-    switch result {
-    case .ready(let candidates):
-      extractionFallbackReason = nil
-      if let media = candidates.first {
-        if media.isLocalFile {
-          Task {
-            await VideoCacheService.shared.touchCachedMedia(at: media.playbackURL)
-          }
-          cachedLocalMedia = media
-          persistLocalMedia?(playbackSourceURL, media)
-        }
-      }
-    case .cannotExtract(let reason):
-      extractionFallbackReason = reason
-      localPlaybackMode = .embedPreferred
-    }
-  }
-
-  var effectiveSourceURL: URL {
-    canonicalSourceURL ?? sourceURL
-  }
-
-  func resolvedOrFallbackEmbedSource(_ fallback: URL) -> EmbeddedWebSource {
-    if let preferredEmbedSource {
-      return preferredEmbedSource
-    }
-
-    return .url(fallback)
-  }
-
   func shouldDeferEmbedReveal(for embedSource: EmbeddedWebSource) -> Bool {
     embedSource.usesManagedHTMLDocument
   }
@@ -367,18 +307,6 @@ extension AdaptiveVideoPlaybackView {
   func normalizedEmbedHeight(_ height: CGFloat) -> CGFloat {
     guard height.isFinite else { return 220 }
     return max(height.rounded(.up), 220)
-  }
-
-  var effectiveMediaStrategy: URLClassifier.MediaStrategy {
-    resolvedMediaStrategy ?? URLClassifier.mediaStrategy(for: effectiveSourceURL)
-  }
-
-  var effectiveMediaAspectRatio: CGFloat {
-    if localPlaybackMode == .localPreferred, let detectedMediaAspectRatio {
-      return detectedMediaAspectRatio
-    }
-    return URLClassifier.preferredMediaAspectRatio(
-      for: effectiveSourceURL, strategy: effectiveMediaStrategy)
   }
 
   func exportableLocalMediaURL(for media: PlayableMedia) -> URL? {

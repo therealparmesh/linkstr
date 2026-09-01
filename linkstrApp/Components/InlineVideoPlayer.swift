@@ -61,18 +61,7 @@ struct InlineVideoPlayer: View {
       player?.pause()
       player = nil
 
-      let options = media.headers.isEmpty
-        ? nil
-        : ["AVURLAssetHTTPHeaderFieldsKey": media.headers]
-      let asset = AVURLAsset(url: media.playbackURL, options: options)
-      do {
-        let videoTracks = try await asset.loadTracks(withMediaType: .video)
-        guard !Task.isCancelled else { return }
-        guard !videoTracks.isEmpty else {
-          onPlaybackFailed?()
-          return
-        }
-      } catch {
+      guard let asset = await media.loadVideoAsset() else {
         guard !Task.isCancelled else { return }
         onPlaybackFailed?()
         return
@@ -165,10 +154,7 @@ struct AdaptiveVideoPlaybackView: View {
   let clearPersistedLocalMedia: (() -> Void)?
   let reloadID: Int
 
-  @State var canonicalSourceURL: URL?
-  @State var preferredEmbedSource: EmbeddedWebSource?
-  @State var resolvedMediaStrategy: URLClassifier.MediaStrategy?
-  @State var isResolvingPresentation = false
+  @State var resolvedPresentation: ResolvedPresentation?
   @State var extractionState: ExtractionState?
   @State var cachedLocalMedia: PlayableMedia?
   @State var localCacheTask: Task<Void, Never>?
@@ -206,42 +192,7 @@ struct AdaptiveVideoPlaybackView: View {
     content
       .frame(maxWidth: .infinity, alignment: .leading)
       .task(id: playbackReloadTaskID) {
-        localCacheTask?.cancel()
-        localCacheTask = nil
-        cachedLocalMedia = nil
-        preferredEmbedSource = nil
-        resolvedMediaStrategy = nil
-        let canonical = await URLCanonicalizationService.shared.canonicalPlaybackURL(for: sourceURL)
-        canonicalSourceURL = canonical
-        let isTwitter = SocialURLHeuristics.isTwitterStatusURL(canonical)
-        let isRumble = URLClassifier.classify(canonical) == .rumble
-        isResolvingPresentation = isTwitter || isRumble
-        if isTwitter {
-          let twitterPresentation =
-            await TwitterStatusResolutionService.shared.resolvedPresentation(for: canonical)
-          resolvedMediaStrategy = twitterPresentation?.strategy ?? .link
-          if let document = twitterPresentation?.embedHTMLDocument {
-            preferredEmbedSource = .html(
-              document: document,
-              baseURL: URL(string: "https://publish.twitter.com")
-            )
-          }
-        }
-        if isRumble, preferredEmbedSource == nil,
-          let rumbleEmbedURL = await URLCanonicalizationService.shared.preferredRumbleEmbedURL(
-            for: canonical) {
-          preferredEmbedSource = .url(rumbleEmbedURL)
-        }
-        isResolvingPresentation = false
-        embeddedContentHeight = nil
-        isEmbeddedContentReady = false
-        detectedMediaAspectRatio = nil
-        embeddedLoadFailed = false
-        extractionState = nil
-        extractionFallbackReason = nil
-        playbackCandidateIndex = 0
-        localPlaybackMode = .localPreferred
-        await prepareMediaIfNeeded()
+        await reloadPlaybackPresentation()
       }
       .alert(
         "save local media",

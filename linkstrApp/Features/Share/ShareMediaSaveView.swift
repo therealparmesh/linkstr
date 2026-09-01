@@ -171,6 +171,7 @@ struct ShareMediaSaveView: View {
     let service = SocialVideoExtractionService.shared
     for candidate in candidates {
       guard !Task.isCancelled else { return nil }
+      guard await candidate.loadVideoAsset() != nil else { continue }
       if let local = await service.cachePlayableMediaLocally(candidate) {
         return local
       }
