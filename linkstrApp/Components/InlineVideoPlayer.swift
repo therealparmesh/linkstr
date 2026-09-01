@@ -66,6 +66,7 @@ struct InlineVideoPlayer: View {
         onPlaybackFailed?()
         return
       }
+      guard !Task.isCancelled else { return }
       onPlaybackReady?()
 
       let item = AVPlayerItem(asset: asset)
@@ -158,6 +159,7 @@ struct AdaptiveVideoPlaybackView: View {
   @State var cachedLocalMedia: PlayableMedia?
   @State var localCacheTask: Task<Void, Never>?
   @State var localPlaybackMode: LocalPlaybackMode = .localPreferred
+  @State var localPlaybackRequestID = 0
   @State var playbackCandidateIndex = 0
   @State var extractionFallbackReason: String?
   @State var exportTarget: LocalMediaExportTarget?
@@ -190,6 +192,9 @@ struct AdaptiveVideoPlaybackView: View {
       .frame(maxWidth: .infinity, alignment: .leading)
       .task(id: playbackReloadTaskID) {
         await reloadPlaybackPresentation()
+      }
+      .task(id: localPreparationTaskID) {
+        await prepareMediaIfNeeded()
       }
       .alert(
         "save local media",
@@ -250,8 +255,7 @@ struct AdaptiveVideoPlaybackView: View {
         }
       )
       .onDisappear {
-        localCacheTask?.cancel()
-        localCacheTask = nil
+        cancelLocalCaching()
       }
   }
 }
@@ -265,7 +269,7 @@ extension AdaptiveVideoPlaybackView {
     guard !media.isLocalFile else { return }
     guard cachedLocalMedia == nil else { return }
 
-    localCacheTask?.cancel()
+    cancelLocalCaching()
     localCacheTask = Task {
       guard
         let localMedia = await SocialVideoExtractionService.shared.cachePlayableMediaLocally(media)
@@ -273,15 +277,20 @@ extension AdaptiveVideoPlaybackView {
       guard !Task.isCancelled else { return }
 
       await MainActor.run {
+        guard !Task.isCancelled else { return }
         cachedLocalMedia = localMedia
         persistLocalMedia?(sourceURL, localMedia)
       }
     }
   }
 
-  func clearFailedLocalPlaybackState() {
+  func cancelLocalCaching() {
     localCacheTask?.cancel()
     localCacheTask = nil
+  }
+
+  func clearFailedLocalPlaybackState() {
+    cancelLocalCaching()
 
     if clearPersistedLocalMedia == nil,
       let cachedLocalMedia,

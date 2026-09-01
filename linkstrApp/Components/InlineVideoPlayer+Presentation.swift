@@ -21,12 +21,10 @@ extension AdaptiveVideoPlaybackView {
     else { return }
 
     resolvedPresentation = presentation
-    await prepareMediaIfNeeded()
   }
 
   func resetPlaybackPresentation() {
-    localCacheTask?.cancel()
-    localCacheTask = nil
+    cancelLocalCaching()
     cachedLocalMedia = nil
     resolvedPresentation = nil
     embeddedContentHeight = nil
@@ -37,6 +35,7 @@ extension AdaptiveVideoPlaybackView {
     extractionFallbackReason = nil
     playbackCandidateIndex = 0
     localPlaybackMode = .localPreferred
+    localPlaybackRequestID = 0
   }
 
   func resolvePlaybackPresentation(
@@ -81,6 +80,12 @@ extension AdaptiveVideoPlaybackView {
     !Task.isCancelled && taskID == playbackReloadTaskID
   }
 
+  var localPreparationTaskID: String {
+    let presentationState = activeResolvedPresentation == nil ? "resolving" : "resolved"
+    let mode = localPlaybackMode == .localPreferred ? "local" : "embedded"
+    return "\(playbackReloadTaskID)#\(presentationState)#\(mode)#\(localPlaybackRequestID)"
+  }
+
   func prepareMediaIfNeeded() async {
     guard !isResolvingPresentation else { return }
     guard effectiveMediaStrategy.allowsLocalPlaybackToggle else { return }
@@ -102,7 +107,7 @@ extension AdaptiveVideoPlaybackView {
 
     let result = await SocialVideoExtractionService.shared.extractPlayableMedia(
       from: playbackSourceURL)
-    guard isCurrentPlaybackTask(taskID) else { return }
+    guard isCurrentPlaybackTask(taskID), localPlaybackMode == .localPreferred else { return }
     applyExtractionResult(result, sourceURL: playbackSourceURL)
   }
 

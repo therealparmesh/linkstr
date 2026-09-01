@@ -180,6 +180,7 @@ extension AdaptiveVideoPlaybackView {
 
   var useEmbeddedButton: some View {
     secondaryActionButton("use embedded") {
+      cancelLocalCaching()
       localPlaybackMode = .embedPreferred
     }
   }
@@ -214,20 +215,18 @@ extension AdaptiveVideoPlaybackView {
   }
 
   func tryLocalPlayback() {
-    Task {
-      if extractionFallbackReason != nil, cachedLocalMedia == nil {
-        clearFailedLocalPlaybackState()
-      }
-      localPlaybackMode = .localPreferred
-      playbackCandidateIndex = 0
-      embeddedContentHeight = nil
-      isEmbeddedContentReady = false
-      detectedMediaAspectRatio = nil
-      embeddedLoadFailed = false
-      extractionState = nil
-      extractionFallbackReason = nil
-      await prepareMediaIfNeeded()
+    if extractionFallbackReason != nil, cachedLocalMedia == nil {
+      clearFailedLocalPlaybackState()
     }
+    localPlaybackMode = .localPreferred
+    localPlaybackRequestID += 1
+    playbackCandidateIndex = 0
+    embeddedContentHeight = nil
+    isEmbeddedContentReady = false
+    detectedMediaAspectRatio = nil
+    embeddedLoadFailed = false
+    extractionState = nil
+    extractionFallbackReason = nil
   }
 
   func handlePlaybackFailure(currentMedia: PlayableMedia, candidates: [PlayableMedia]) {

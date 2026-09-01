@@ -29,6 +29,7 @@ final class HLSDownloadManager: NSObject {
     let options = ["AVURLAssetHTTPHeaderFieldsKey": headers]
     let asset = AVURLAsset(url: assetURL, options: options)
     let isProtected = try await asset.load(.hasProtectedContent)
+    try Task.checkCancellation()
     if isProtected {
       throw HLSDownloadError.drmProtected
     }
@@ -40,12 +41,17 @@ final class HLSDownloadManager: NSObject {
       throw HLSDownloadError.taskCreationFailed
     }
 
-    return try await withCheckedThrowingContinuation { continuation in
-      lock.lock()
-      continuations[task.taskIdentifier] = continuation
-      destinationURLByTaskID[task.taskIdentifier] = destinationURL
-      lock.unlock()
-      task.resume()
+    return try await withTaskCancellationHandler {
+      try Task.checkCancellation()
+      return try await withCheckedThrowingContinuation { continuation in
+        lock.lock()
+        continuations[task.taskIdentifier] = continuation
+        destinationURLByTaskID[task.taskIdentifier] = destinationURL
+        lock.unlock()
+        task.resume()
+      }
+    } onCancel: {
+      task.cancel()
     }
   }
 }
