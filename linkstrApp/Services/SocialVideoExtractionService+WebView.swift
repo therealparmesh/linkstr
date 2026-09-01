@@ -294,8 +294,9 @@ final class MediaCandidateCollector: NSObject, WKNavigationDelegate, WKScriptMes
       }
     }
 
+    defer { cleanup() }
+    guard !Task.isCancelled else { return ([], []) }
     let cookies = await allCookies(from: webView.configuration.websiteDataStore.httpCookieStore)
-    cleanup()
     return (urls, cookies)
   }
 

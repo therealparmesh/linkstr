@@ -1,6 +1,6 @@
 # linkstr
 
-_Last updated: August 16, 2026_
+_Last updated: September 1, 2026_
 
 linkstr is an iOS app for private link sharing on [Nostr](https://nostr.com). You create private sessions, share links with people you trust, react with emojis, and play supported video directly inside the app when a provider allows it.
 
@@ -305,8 +305,9 @@ Non-video provider URLs (channel pages, profiles, etc.) fall back to open-in-bro
 #### Playback behavior
 
 - For extraction-preferred providers, local playback is attempted first with controls to use the embed or open the post in a browser while it prepares.
-- If a local playback stream fails, the next available stream is tried automatically before falling back to embed mode.
+- If a local playback stream fails, caching for that stream stops and the next available stream is tried automatically before falling back to embed mode.
 - If extraction fails, embed mode remains available with try-local and open-in-browser actions.
+- Switching playback modes, refreshing or changing the source, and leaving the screen cancel superseded playback preparation and caching work.
 - Action rows are normalized across post detail and shared-link detail surfaces.
 - Audio plays even when the iPhone silent switch is enabled.
 - In local playback mode with a cached file, users can export via **Save…** to Photos or Files.
@@ -464,16 +465,6 @@ This runs both the iOS unit tests (via `xcodebuild`) and the push-service Go tes
 ```
 
 Runs [SwiftLint](https://github.com/realm/SwiftLint) across all Swift sources.
-
-### Run iOS tests only
-
-```bash
-xcodebuild test \
-  -project linkstr.xcodeproj \
-  -scheme linkstr \
-  -destination 'platform=iOS Simulator,name=iPhone 16' \
-  -quiet
-```
 
 ### Run push-service tests only
 

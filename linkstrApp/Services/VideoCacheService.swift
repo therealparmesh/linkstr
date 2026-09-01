@@ -147,6 +147,7 @@ actor VideoCacheService {
     headers.forEach { request.setValue($1, forHTTPHeaderField: $0) }
 
     let (tmpURL, response) = try await URLSession.shared.download(for: request)
+    try Task.checkCancellation()
     guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
       throw URLError(.badServerResponse)
     }

@@ -45,23 +45,23 @@ extension AdaptiveVideoPlaybackView {
     switch extractionState {
     case .ready(let candidates):
       if let media = currentPlaybackCandidate(from: candidates) {
+        let playbackTaskID = localPreparationTaskID
         let exportFileURL = exportableLocalMediaURL(for: cachedLocalMedia ?? media)
         VStack(alignment: .leading, spacing: 8) {
           mediaSurface {
             InlineVideoPlayer(
               media: media,
               onPlaybackReady: {
-                guard currentPlaybackCandidate(from: candidates)?.playbackURL == media.playbackURL,
-                  !media.isLocalFile
-                else { return }
+                guard !media.isLocalFile,
+                  isCurrentPlaybackCallback(for: media, taskID: playbackTaskID) else { return }
                 scheduleLocalCachingIfNeeded(sourceURL: effectiveSourceURL, media: media)
               },
               onPlaybackFailed: {
+                guard isCurrentPlaybackCallback(for: media, taskID: playbackTaskID) else { return }
                 handlePlaybackFailure(currentMedia: media, candidates: candidates)
               },
               onAspectRatioChange: { aspectRatio in
-                guard currentPlaybackCandidate(from: candidates)?.playbackURL == media.playbackURL
-                else { return }
+                guard isCurrentPlaybackCallback(for: media, taskID: playbackTaskID) else { return }
                 if abs((detectedMediaAspectRatio ?? 0) - aspectRatio) > 0.001 {
                   detectedMediaAspectRatio = aspectRatio
                 }
@@ -230,8 +230,13 @@ extension AdaptiveVideoPlaybackView {
   }
 
   func handlePlaybackFailure(currentMedia: PlayableMedia, candidates: [PlayableMedia]) {
-    if currentMedia.isLocalFile {
+    if currentMedia.isLocalFile || cachedLocalMedia != nil {
       clearFailedLocalPlaybackState()
+    } else {
+      cancelLocalCaching()
+    }
+
+    if currentMedia.isLocalFile {
       tryLocalPlayback()
       return
     }
@@ -242,6 +247,13 @@ extension AdaptiveVideoPlaybackView {
   func currentPlaybackCandidate(from candidates: [PlayableMedia]) -> PlayableMedia? {
     guard playbackCandidateIndex < candidates.count else { return nil }
     return candidates[playbackCandidateIndex]
+  }
+
+  func isCurrentPlaybackCallback(for media: PlayableMedia, taskID: String) -> Bool {
+    guard taskID == localPreparationTaskID,
+      case .ready(let candidates) = extractionState
+    else { return false }
+    return currentPlaybackCandidate(from: candidates)?.playbackURL == media.playbackURL
   }
 
   func advancePlaybackCandidate(candidates: [PlayableMedia]) {
