@@ -97,16 +97,14 @@ linkstr accepts normal web URLs, but in-app playback is provider-dependent.
 **Extraction-preferred** (local playback attempted first, embed fallback available):
 
 - TikTok videos
-- Instagram Reels
-- Facebook Reels
+- Instagram Reels and video posts
+- Facebook Reels and video posts
 - Twitter/X statuses — only when provider metadata confirms video is present
 
 **Embed-only** (web player only, no local extraction):
 
 - YouTube
 - Rumble
-- Instagram video posts
-- Facebook video posts
 - Twitter/X non-video statuses — only when the official tweet embed is available
 
 **Browser fallback** covers everything else, plus any provider URL that blocks extraction or embed playback at runtime.
@@ -284,7 +282,7 @@ Historical replay depends on relay retention. linkstr can retry out-of-order pos
 ### Videos won't play
 
 1. Check your network connection.
-2. Switch between **Try local playback** and **Try embed playback**.
+2. Switch between **Try local playback** and **Use embedded**.
 3. If a cached copy was auto-trimmed, try local playback again to re-cache it.
 4. Try local playback again to clear a stale local failure and force a fresh retry.
 5. Use the refresh button in post detail if that post's metadata seems stale or missing.

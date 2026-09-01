@@ -272,7 +272,7 @@ URL classification drives playback mode: extraction, embed, or link fallback. Mo
 
 #### Playback modes
 
-**Extraction** downloads the video file locally for native playback:
+**Extraction** resolves direct video media for native playback and local caching:
 
 - System video player with full controls.
 - Extracted media can be saved to Photos or Files.
@@ -290,16 +290,15 @@ URL classification drives playback mode: extraction, embed, or link fallback. Mo
 **Extraction-preferred** (local playback attempted first, embed fallback available):
 
 - TikTok videos
-- Instagram Reels
-- Facebook Reels
+- Instagram Reels and video posts (`/p/`, `/tv/`)
+- Facebook Reels and video posts
 - Twitter/X statuses — only when provider metadata confirms video media is present
 
 **Embed-only** (web player only, no extraction):
 
 - YouTube
 - Rumble
-- Instagram non-Reel posts (`/p/`, `/tv/`)
-- Facebook non-Reel videos (`/videos/`)
+- Twitter/X non-video statuses — only when the official tweet embed is available
 
 Non-video provider URLs (channel pages, profiles, etc.) fall back to open-in-browser.
 
@@ -320,14 +319,14 @@ Non-video provider URLs (channel pages, profiles, etc.) fall back to open-in-bro
 
 #### Embed URLs
 
-| Provider  | Pattern                                                   |
-| --------- | --------------------------------------------------------- |
-| TikTok    | Desktop website (`/@_/video/<id>`)                        |
-| Instagram | Desktop website (`/reel/<shortcode>/`, `/p/<shortcode>/`) |
-| Facebook  | `/plugins/video.php`                                      |
-| YouTube   | `/embed`                                                  |
-| Rumble    | oEmbed iframe URL                                         |
-| Twitter/X | Official widget factory (`widgets.js` / `createTweet`)    |
+| Provider  | Pattern                                                |
+| --------- | ------------------------------------------------------ |
+| TikTok    | `/player/v1/<id>`                                      |
+| Instagram | `/reel/<shortcode>/embed`, `/p/<shortcode>/embed`      |
+| Facebook  | `/plugins/post.php`                                    |
+| YouTube   | `/embed/<id>`                                          |
+| Rumble    | oEmbed iframe URL                                      |
+| Twitter/X | Official widget factory (`widgets.js` / `createTweet`) |
 
 Embedded web playback allows provider-element fullscreen when supported.
 
