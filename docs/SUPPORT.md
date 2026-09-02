@@ -1,6 +1,6 @@
 # linkstr support
 
-_Last updated: August 16, 2026_
+_Last updated: September 1, 2026_
 
 linkstr is a private link-sharing app built on [Nostr](https://nostr.com). You create or join private sessions, share links inside those sessions, and react with emoji. This page describes the current shipped behavior in plain language.
 

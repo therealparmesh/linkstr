@@ -196,7 +196,8 @@ actor URLCanonicalizationService {
     guard
       let page = await SocialMediaPageLoader.load(
         sourceURL,
-        userAgent: SocialVideoExtractionService.mobileUserAgent
+        userAgent: SocialVideoExtractionService.mobileUserAgent,
+        stoppingAtRedirectThat: { Self.canonicalTikTokVideoURL(from: $0) != nil }
       )
     else { return nil }
     return Self.canonicalTikTokVideoURL(from: page.finalURL)
