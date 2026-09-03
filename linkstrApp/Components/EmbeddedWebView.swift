@@ -1,10 +1,6 @@
 import SwiftUI
 import WebKit
 
-#if canImport(UIKit)
-  import UIKit
-#endif
-
 enum EmbeddedWebSource: Equatable {
   case url(URL)
   case html(document: String, baseURL: URL?)
@@ -83,17 +79,6 @@ struct EmbeddedWebView: UIViewRepresentable {
       }
 
       if navigationAction.navigationType == .linkActivated {
-        guard WebNavigationGuard.allowsNavigation(to: targetURL) else {
-          decisionHandler(.cancel)
-          return
-        }
-        // Allow same-origin link navigations to proceed inside the webview
-        // (e.g. play buttons, internal navigation) instead of bouncing to Safari.
-        if isSameOrigin(targetURL, as: webView.url) {
-          decisionHandler(.allow)
-          return
-        }
-        openExternally(targetURL)
         decisionHandler(.cancel)
         return
       }
@@ -111,17 +96,6 @@ struct EmbeddedWebView: UIViewRepresentable {
       for navigationAction: WKNavigationAction,
       windowFeatures: WKWindowFeatures
     ) -> WKWebView? {
-      if let targetURL = navigationAction.request.url,
-        WebNavigationGuard.allowsNavigation(to: targetURL) {
-        // For same-origin navigations (e.g. window.open or target="_blank"),
-        // load in the existing webview so inline playback works instead of
-        // bouncing to Safari.
-        if isSameOrigin(targetURL, as: webView.url) {
-          webView.load(navigationAction.request)
-        } else {
-          openExternally(targetURL)
-        }
-      }
       return nil
     }
 
@@ -243,20 +217,6 @@ struct EmbeddedWebView: UIViewRepresentable {
 
       return (height: nil, ready: nil)
     }
-
-    private func isSameOrigin(_ url: URL, as other: URL?) -> Bool {
-      guard let otherHost = other?.host?.lowercased(),
-        let targetHost = url.host?.lowercased()
-      else { return false }
-      return targetHost == otherHost || targetHost.hasSuffix(".\(otherHost)")
-        || otherHost.hasSuffix(".\(targetHost)")
-    }
-
-    private func openExternally(_ url: URL) {
-      #if canImport(UIKit)
-        UIApplication.shared.open(url)
-      #endif
-    }
   }
 
   func makeCoordinator() -> Coordinator { Coordinator() }
@@ -268,7 +228,6 @@ struct EmbeddedWebView: UIViewRepresentable {
     config.mediaTypesRequiringUserActionForPlayback = []
     config.defaultWebpagePreferences.preferredContentMode = .mobile
     config.defaultWebpagePreferences.allowsContentJavaScript = true
-    config.preferences.javaScriptCanOpenWindowsAutomatically = true
     config.userContentController.add(context.coordinator, name: Coordinator.metricsHandlerName)
     config.userContentController.addUserScript(
       WKUserScript(

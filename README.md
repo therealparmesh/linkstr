@@ -311,6 +311,7 @@ Non-video provider URLs (channel pages, profiles, etc.) fall back to open-in-bro
 - Provider embeds decide which post audio is available; linkstr does not separately extract audio-only media.
 - If a local playback stream fails, caching for that stream stops and the next available stream is tried automatically before falling back to embed mode.
 - If extraction fails, embed mode remains available with try-local and open-in-browser actions.
+- Link taps inside provider embeds are ignored; use **open in browser** to leave linkstr intentionally.
 - Switching playback modes, refreshing or changing the source, and leaving the screen cancel superseded playback preparation and caching work.
 - Action rows are normalized across post detail and shared-link detail surfaces.
 - Audio plays even when the iPhone silent switch is enabled.
@@ -320,7 +321,6 @@ Non-video provider URLs (channel pages, profiles, etc.) fall back to open-in-bro
 
 - Video statuses use extraction-preferred playback.
 - Non-video statuses use official tweet embeds when available, falling back to open-in-browser.
-- Embedded tweet taps that navigate away from the widget open externally.
 
 #### Embed URLs
 
