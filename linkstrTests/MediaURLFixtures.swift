@@ -58,7 +58,7 @@ enum MediaURLFixtures {
       url: "https://www.instagram.com/reel/C7x5mYfP0R1/",
       linkType: .instagram,
       strategyKind: .extractionPreferred,
-      embedExpectation: .exact("https://www.instagram.com/reel/C7x5mYfP0R1/embed"),
+      embedExpectation: .exact("https://www.instagram.com/reel/C7x5mYfP0R1/?l=1"),
       allowsLocalPlayback: true
     ),
     StrategyExpectation(
@@ -66,7 +66,7 @@ enum MediaURLFixtures {
       url: "https://www.instagram.com/p/C7x5mYfP0R1/",
       linkType: .instagram,
       strategyKind: .extractionPreferred,
-      embedExpectation: .exact("https://www.instagram.com/p/C7x5mYfP0R1/embed"),
+      embedExpectation: .exact("https://www.instagram.com/p/C7x5mYfP0R1/?l=1"),
       allowsLocalPlayback: true
     ),
     StrategyExpectation(

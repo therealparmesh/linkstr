@@ -160,6 +160,8 @@ struct ShareMediaSaveView: View {
         guard !Task.isCancelled else { return }
         status = .unavailable("could not prepare media for saving")
       }
+    case .noVideo:
+      status = .unavailable("this post does not include a playable video")
     case .cannotExtract(let reason):
       status = .unavailable(reason)
     }

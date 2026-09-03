@@ -13,7 +13,7 @@ extension SocialVideoExtractionService {
       budget: budget
     )
     if summary.hasVideo == false {
-      return .cannotExtract("this post does not include a playable video.")
+      return .noVideo
     }
     return resolvePlayableMedia(
       from: summary.candidateURLs,

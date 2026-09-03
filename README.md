@@ -307,7 +307,7 @@ Non-video provider URLs (channel pages, profiles, etc.) fall back to open-in-bro
 #### Playback behavior
 
 - For extraction-preferred providers, local playback is attempted first with controls to use the embed or open the post in a browser while it prepares.
-- Confirmed photo-only Instagram posts skip slow local video probing and use the official swipeable embed.
+- Confirmed photo-only Instagram posts skip slow local video probing and use Instagram's swipeable mobile web view.
 - Provider embeds decide which post audio is available; linkstr does not separately extract audio-only media.
 - If a local playback stream fails, caching for that stream stops and the next available stream is tried automatically before falling back to embed mode.
 - If extraction fails, embed mode remains available with try-local and open-in-browser actions.
@@ -327,7 +327,7 @@ Non-video provider URLs (channel pages, profiles, etc.) fall back to open-in-bro
 | Provider  | Pattern                                                      |
 | --------- | ------------------------------------------------------------ |
 | TikTok    | `/player/v1/<id>`                                            |
-| Instagram | `/reel/<shortcode>/embed`, `/p/<shortcode>/embed`            |
+| Instagram | Mobile post or Reel URL with `?l=1`                          |
 | Facebook  | `/plugins/post.php` (Reels), official oEmbed player (videos) |
 | YouTube   | `/embed/<id>`                                                |
 | Rumble    | oEmbed iframe URL                                            |

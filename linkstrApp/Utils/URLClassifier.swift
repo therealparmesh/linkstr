@@ -145,7 +145,9 @@ enum URLClassifier {
     guard let canonicalURL = SocialURLHeuristics.instagramCanonicalURL(for: sourceURL) else {
       return sourceURL
     }
-    return canonicalURL.appendingPathComponent("embed")
+    var components = URLComponents(url: canonicalURL, resolvingAgainstBaseURL: false)
+    components?.queryItems = [URLQueryItem(name: "l", value: "1")]
+    return components?.url ?? canonicalURL
   }
 
   private static func facebookEmbedURL(for sourceURL: URL) -> URL? {

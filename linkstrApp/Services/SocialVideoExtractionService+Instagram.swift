@@ -36,7 +36,7 @@ extension SocialVideoExtractionService {
       }
 
       if pageSummary.confirmsNoVideo {
-        return .cannotExtract("this Instagram post does not include a playable video.")
+        return .noVideo
       }
       sawNonVideoPage = pageSummary.mediaKind == .nonVideo
     }
@@ -52,7 +52,7 @@ extension SocialVideoExtractionService {
     }
 
     if sawNonVideoPage {
-      return .cannotExtract("this Instagram post does not include a playable video.")
+      return .noVideo
     }
     return .cannotExtract("could not find a usable video stream for this post.")
   }

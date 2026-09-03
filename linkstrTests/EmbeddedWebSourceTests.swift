@@ -1,3 +1,4 @@
+import WebKit
 import XCTest
 
 @testable import linkstr
@@ -20,5 +21,26 @@ final class EmbeddedWebSourceTests: XCTestCase {
         for: try XCTUnwrap(URL(string: "https://www.facebook.com/reel/123456789012345/"))
       )
     )
+  }
+
+  @MainActor
+  func testBlockedWebNavigationDoesNotInvalidateTheEmbed() {
+    let coordinator = EmbeddedWebView.Coordinator()
+    var reportedFailure = false
+    coordinator.onLoadFailure = { reportedFailure = true }
+
+    coordinator.webView(
+      WKWebView(),
+      didFailProvisionalNavigation: nil,
+      withError: NSError(domain: "WebKitErrorDomain", code: 102)
+    )
+    XCTAssertFalse(reportedFailure)
+
+    coordinator.webView(
+      WKWebView(),
+      didFailProvisionalNavigation: nil,
+      withError: URLError(.timedOut)
+    )
+    XCTAssertTrue(reportedFailure)
   }
 }

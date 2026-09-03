@@ -23,7 +23,7 @@ extension MediaURLFixtures {
       url: "https://m.instagram.com/reel/C7x5mYfP0R1/",
       linkType: .instagram,
       strategyKind: .extractionPreferred,
-      embedExpectation: .exact("https://www.instagram.com/reel/C7x5mYfP0R1/embed"),
+      embedExpectation: .exact("https://www.instagram.com/reel/C7x5mYfP0R1/?l=1"),
       allowsLocalPlayback: true
     ),
     StrategyExpectation(
@@ -31,7 +31,7 @@ extension MediaURLFixtures {
       url: "https://www.instagram.com/share/reel/DUSWiOIDivu/",
       linkType: .instagram,
       strategyKind: .extractionPreferred,
-      embedExpectation: .exact("https://www.instagram.com/reel/DUSWiOIDivu/embed"),
+      embedExpectation: .exact("https://www.instagram.com/reel/DUSWiOIDivu/?l=1"),
       allowsLocalPlayback: true
     ),
     StrategyExpectation(
@@ -39,7 +39,7 @@ extension MediaURLFixtures {
       url: "https://www.instagram.com/share/p/DUbRe_8EuQY/",
       linkType: .instagram,
       strategyKind: .extractionPreferred,
-      embedExpectation: .exact("https://www.instagram.com/p/DUbRe_8EuQY/embed"),
+      embedExpectation: .exact("https://www.instagram.com/p/DUbRe_8EuQY/?l=1"),
       allowsLocalPlayback: true
     ),
     StrategyExpectation(
@@ -47,7 +47,7 @@ extension MediaURLFixtures {
       url: "https://www.instagram.com/p/C-dH1fUNQwq/?l=1",
       linkType: .instagram,
       strategyKind: .extractionPreferred,
-      embedExpectation: .exact("https://www.instagram.com/p/C-dH1fUNQwq/embed"),
+      embedExpectation: .exact("https://www.instagram.com/p/C-dH1fUNQwq/?l=1"),
       allowsLocalPlayback: true
     ),
     StrategyExpectation(
@@ -55,7 +55,7 @@ extension MediaURLFixtures {
       url: instagramShareTokenReelURL,
       linkType: .instagram,
       strategyKind: .extractionPreferred,
-      embedExpectation: .exact("https://www.instagram.com/reel/DaBh1TUP5sC/embed"),
+      embedExpectation: .exact("https://www.instagram.com/reel/DaBh1TUP5sC/?l=1"),
       allowsLocalPlayback: true
     ),
     StrategyExpectation(

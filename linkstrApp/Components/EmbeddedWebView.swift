@@ -135,7 +135,11 @@ struct EmbeddedWebView: UIViewRepresentable {
     }
 
     private func reportLoadFailure(_ error: Error) {
-      guard (error as? URLError)?.code != .cancelled else { return }
+      let nsError = error as NSError
+      if (error as? URLError)?.code == .cancelled
+        || (nsError.domain == "WebKitErrorDomain" && nsError.code == 102) {
+        return
+      }
       onLoadFailure?()
     }
 

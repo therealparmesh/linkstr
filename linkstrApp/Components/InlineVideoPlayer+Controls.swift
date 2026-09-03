@@ -75,7 +75,7 @@ extension AdaptiveVideoPlaybackView {
         embedPlaybackBlock(embedSource: embedSource, allowsTryLocalPlayback: true)
       }
 
-    case .cannotExtract:
+    case .noVideo, .cannotExtract:
       embedPlaybackBlock(embedSource: embedSource, allowsTryLocalPlayback: true)
 
     case nil:
@@ -296,6 +296,8 @@ extension AdaptiveVideoPlaybackView {
       return true
     case .url(let url):
       return URLClassifier.isDedicatedEmbedURL(url)
+        || (SocialURLHeuristics.isInstagramHost(url)
+          && SocialURLHeuristics.instagramPostID(from: url) != nil)
     }
   }
 

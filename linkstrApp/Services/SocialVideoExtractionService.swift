@@ -8,6 +8,7 @@ struct PlayableMedia: Sendable {
 
 enum ExtractionState: Sendable {
   case ready([PlayableMedia])
+  case noVideo
   case cannotExtract(String)
 }
 

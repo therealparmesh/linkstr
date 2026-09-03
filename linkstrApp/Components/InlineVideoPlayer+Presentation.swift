@@ -135,6 +135,9 @@ extension AdaptiveVideoPlaybackView {
       }
       cachedLocalMedia = media
       persistLocalMedia?(sourceURL, media)
+    case .noVideo:
+      extractionFallbackReason = nil
+      localPlaybackMode = .embedPreferred
     case .cannotExtract(let reason):
       extractionFallbackReason = reason
       localPlaybackMode = .embedPreferred
