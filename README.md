@@ -1,6 +1,6 @@
 # linkstr
 
-_Last updated: September 1, 2026_
+_Last updated: September 2, 2026_
 
 linkstr is an iOS app for private link sharing on [Nostr](https://nostr.com). You create private sessions, share links with people you trust, react with emojis, and play supported video directly inside the app when a provider allows it.
 
@@ -298,6 +298,8 @@ URL classification drives playback mode: extraction, embed, or link fallback. Mo
 
 - YouTube
 - Rumble
+- TikTok Photo Mode posts
+- Confirmed Instagram photo posts and photo-only carousels
 - Twitter/X non-video statuses — only when the official tweet embed is available
 
 Non-video provider URLs (channel pages, profiles, etc.) fall back to open-in-browser.
@@ -305,6 +307,8 @@ Non-video provider URLs (channel pages, profiles, etc.) fall back to open-in-bro
 #### Playback behavior
 
 - For extraction-preferred providers, local playback is attempted first with controls to use the embed or open the post in a browser while it prepares.
+- Confirmed photo-only Instagram posts skip slow local video probing and use the official swipeable embed.
+- Provider embeds decide which post audio is available; linkstr does not separately extract audio-only media.
 - If a local playback stream fails, caching for that stream stops and the next available stream is tried automatically before falling back to embed mode.
 - If extraction fails, embed mode remains available with try-local and open-in-browser actions.
 - Switching playback modes, refreshing or changing the source, and leaving the screen cancel superseded playback preparation and caching work.

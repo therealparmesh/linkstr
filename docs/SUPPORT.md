@@ -1,6 +1,6 @@
 # linkstr support
 
-_Last updated: September 1, 2026_
+_Last updated: September 2, 2026_
 
 linkstr is a private link-sharing app built on [Nostr](https://nostr.com). You create or join private sessions, share links inside those sessions, and react with emoji. This page describes the current shipped behavior in plain language.
 
@@ -105,6 +105,8 @@ linkstr accepts normal web URLs, but in-app playback is provider-dependent.
 
 - YouTube
 - Rumble
+- TikTok Photo Mode posts
+- Confirmed Instagram photo posts and photo-only carousels
 - Twitter/X non-video statuses — only when the official tweet embed is available
 
 **Browser fallback** covers everything else, plus any provider URL that blocks extraction or embed playback at runtime.
