@@ -30,6 +30,22 @@ private enum EmbeddedWebViewTimingDefaults {
   static let metricPollDelays: [TimeInterval] = [0.05, 0.2, 0.5, 1, 1.5]
 }
 
+private let socialEmbedViewportScript = """
+  (() => {
+    const host = location.hostname.toLowerCase();
+    const isInstagram = host === 'instagram.com' || host.endsWith('.instagram.com');
+    const isFacebook = host === 'facebook.com' || host.endsWith('.facebook.com');
+    if ((!isInstagram && !isFacebook) || document.querySelector('meta[name="viewport"]')) {
+      return;
+    }
+
+    const viewport = document.createElement('meta');
+    viewport.name = 'viewport';
+    viewport.content = 'width=device-width, initial-scale=1';
+    (document.head || document.documentElement).appendChild(viewport);
+  })();
+  """
+
 struct EmbeddedWebView: UIViewRepresentable {
   let source: EmbeddedWebSource
   var onIntrinsicHeightChange: ((CGFloat) -> Void)?
@@ -254,6 +270,13 @@ struct EmbeddedWebView: UIViewRepresentable {
     config.defaultWebpagePreferences.allowsContentJavaScript = true
     config.preferences.javaScriptCanOpenWindowsAutomatically = true
     config.userContentController.add(context.coordinator, name: Coordinator.metricsHandlerName)
+    config.userContentController.addUserScript(
+      WKUserScript(
+        source: socialEmbedViewportScript,
+        injectionTime: .atDocumentStart,
+        forMainFrameOnly: true
+      )
+    )
     if #available(iOS 16.4, *) {
       config.preferences.isElementFullscreenEnabled = true
     }
@@ -300,7 +323,9 @@ struct EmbeddedWebView: UIViewRepresentable {
       uiView.loadHTMLString(document, baseURL: baseURL)
     }
   }
+}
 
+extension EmbeddedWebView {
   static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
     uiView.navigationDelegate = nil
     uiView.uiDelegate = nil
