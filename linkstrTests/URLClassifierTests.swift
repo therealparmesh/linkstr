@@ -83,7 +83,7 @@ final class URLClassifierTests: XCTestCase {
     let strategy = URLClassifier.mediaStrategy(for: sourceURL)
 
     XCTAssertEqual(
-      SocialURLHeuristics.tikTokVideoID(from: URL(string: sourceURL)!),
+      SocialURLHeuristics.tikTokPostID(from: URL(string: sourceURL)!),
       "7596114833477537054"
     )
     guard case .extractionPreferred(let embedURL) = strategy else {
@@ -102,11 +102,11 @@ final class URLClassifierTests: XCTestCase {
     )
 
     XCTAssertEqual(
-      URLCanonicalizationService.canonicalTikTokVideoURL(from: resolvedURL)?.absoluteString,
+      URLCanonicalizationService.canonicalTikTokPostURL(from: resolvedURL)?.absoluteString,
       "https://www.tiktok.com/@acct/video/7596114833477537054"
     )
     XCTAssertNil(
-      URLCanonicalizationService.canonicalTikTokVideoURL(
+      URLCanonicalizationService.canonicalTikTokPostURL(
         from: try XCTUnwrap(
           URL(string: "https://tiktok.com.example.com/@acct/video/7596114833477537054")
         )
@@ -274,6 +274,22 @@ final class URLClassifierTests: XCTestCase {
     )
     XCTAssertEqual(canonicalShareTokenURL, canonicalLanguageURL)
     XCTAssertEqual(canonicalShareTokenURL, canonicalArbitraryQueryURL)
+  }
+}
+
+extension URLClassifierTests {
+  func testTikTokResolvedPhotoURLBecomesStableCanonicalPostURL() throws {
+    let resolvedPhotoURL = try XCTUnwrap(
+      URL(
+        string:
+          "https://m.tiktok.com/@acct/photo/7651971146413329671"
+          + "?share_item_id=7651971146413329671&utm_source=copy"
+      )
+    )
+    XCTAssertEqual(
+      URLCanonicalizationService.canonicalTikTokPostURL(from: resolvedPhotoURL)?.absoluteString,
+      "https://www.tiktok.com/@acct/photo/7651971146413329671"
+    )
   }
 }
 

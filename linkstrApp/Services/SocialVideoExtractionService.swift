@@ -89,8 +89,8 @@ final class SocialVideoExtractionService: NSObject {
     switch URLClassifier.classify(sourceURL) {
     case .tiktok:
       return candidateMatches(
-        expectedID: SocialURLHeuristics.tikTokVideoID(from: sourceURL),
-        candidateID: SocialURLHeuristics.tikTokVideoID(fromCandidateURL: candidateURL)
+        expectedID: SocialURLHeuristics.tikTokPostID(from: sourceURL),
+        candidateID: SocialURLHeuristics.tikTokPostID(fromCandidateURL: candidateURL)
       )
     case .instagram:
       return candidateMatches(

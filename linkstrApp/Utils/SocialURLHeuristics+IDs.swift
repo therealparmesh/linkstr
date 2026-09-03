@@ -28,7 +28,7 @@ extension SocialURLHeuristics {
     return id
   }
 
-  static func tikTokVideoID(from sourceURL: URL) -> String? {
+  static func tikTokPostID(from sourceURL: URL) -> String? {
     let parts = sourceURL.pathComponents
       .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "/")) }
       .filter { !$0.isEmpty }
@@ -36,43 +36,44 @@ extension SocialURLHeuristics {
     if parts.count >= 3,
       parts[0].caseInsensitiveCompare("player") == .orderedSame,
       parts[1].caseInsensitiveCompare("v1") == .orderedSame,
-      let id = normalizedTikTokVideoID(parts[2]) {
+      let id = normalizedTikTokPostID(parts[2]) {
       return id
     }
 
-    if let videoIndex = parts.firstIndex(where: {
+    if let postIndex = parts.firstIndex(where: {
       $0.caseInsensitiveCompare("video") == .orderedSame
-    }), videoIndex + 1 < parts.count,
-      let id = normalizedTikTokVideoID(parts[videoIndex + 1]) {
+        || $0.caseInsensitiveCompare("photo") == .orderedSame
+    }), postIndex + 1 < parts.count,
+      let id = normalizedTikTokPostID(parts[postIndex + 1]) {
       return id
     }
-    return tikTokVideoIDFromQuery(sourceURL)
+    return tikTokPostIDFromQuery(sourceURL)
   }
 
-  private static func normalizedTikTokVideoID(_ rawValue: String) -> String? {
+  private static func normalizedTikTokPostID(_ rawValue: String) -> String? {
     let digits = rawValue.filter(\.isNumber)
     return digits.count >= 8 ? digits : nil
   }
 
-  private static func tikTokVideoIDFromQuery(_ url: URL) -> String? {
+  private static func tikTokPostIDFromQuery(_ url: URL) -> String? {
     guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
       let queryItems = components.queryItems
     else { return nil }
 
-    for item in queryItems where tikTokVideoIDQueryKeys.contains(item.name.lowercased()) {
-      if let id = normalizedTikTokVideoID(item.value ?? "") {
+    for item in queryItems where tikTokPostIDQueryKeys.contains(item.name.lowercased()) {
+      if let id = normalizedTikTokPostID(item.value ?? "") {
         return id
       }
     }
     return nil
   }
 
-  static func tikTokVideoID(fromCandidateURL url: URL) -> String? {
-    if let id = tikTokVideoID(from: url) { return id }
+  static func tikTokPostID(fromCandidateURL url: URL) -> String? {
+    if let id = tikTokPostID(from: url) { return id }
 
     let raw = url.absoluteString
 
-    for regex in tikTokVideoPatterns {
+    for regex in tikTokPostPatterns {
       let nsRange = NSRange(raw.startIndex..<raw.endIndex, in: raw)
       guard let match = regex.firstMatch(in: raw, range: nsRange), match.numberOfRanges > 1,
         let range = Range(match.range(at: 1), in: raw)

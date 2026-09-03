@@ -62,7 +62,10 @@ enum URLClassifier {
   }
 
   private static func tiktokMediaStrategy(for url: URL, linkType: LinkType) -> MediaStrategy {
-    guard SocialURLHeuristics.isTikTokVideoLikeURL(url) else { return .link }
+    guard SocialURLHeuristics.isTikTokPostURL(url) else { return .link }
+    if SocialURLHeuristics.isTikTokPhotoURL(url) {
+      return .embedOnly(embedURL: embedURL(for: url, linkType: linkType) ?? url)
+    }
     return .extractionPreferred(embedURL: embedURL(for: url, linkType: linkType) ?? url)
   }
 
@@ -103,7 +106,7 @@ enum URLClassifier {
       if linkType == .twitter {
         return 4.0 / 5.0
       }
-      if isShortFormVideoURL(sourceURL) {
+      if isShortFormMediaURL(sourceURL) {
         return 9.0 / 16.0
       }
       return 16.0 / 9.0
@@ -132,7 +135,7 @@ enum URLClassifier {
   }
 
   private static func tikTokEmbedURL(for sourceURL: URL) -> URL? {
-    if let id = SocialURLHeuristics.tikTokVideoID(from: sourceURL) {
+    if let id = SocialURLHeuristics.tikTokPostID(from: sourceURL) {
       return URL(string: "https://www.tiktok.com/player/v1/\(id)")
     }
     return sourceURL
@@ -224,11 +227,11 @@ enum URLClassifier {
     SocialURLHeuristics.twitterCanonicalStatusURL(from: sourceURL)
   }
 
-  private static func isShortFormVideoURL(_ sourceURL: URL) -> Bool {
+  private static func isShortFormMediaURL(_ sourceURL: URL) -> Bool {
     let linkType = classify(sourceURL)
     switch linkType {
     case .tiktok:
-      return SocialURLHeuristics.isTikTokVideoLikeURL(sourceURL)
+      return SocialURLHeuristics.isTikTokPostURL(sourceURL)
     case .instagram:
       return SocialURLHeuristics.isInstagramReelURL(sourceURL)
     case .facebook:

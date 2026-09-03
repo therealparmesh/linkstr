@@ -247,3 +247,103 @@ final class SocialPostParserTests: XCTestCase {
     XCTAssertEqual(preview?.bodyText, "hello")
   }
 }
+
+extension SocialPostParserTests {
+  func testInstagramEmbedSummaryRecognizesPhotoOnlyCarousel() throws {
+    let media: [String: Any] = [
+      "__typename": "GraphSidecar",
+      "shortcode": "Db_as8rCJ_W",
+      "is_video": false,
+      "edge_sidecar_to_children": [
+        "edges": [
+          ["node": ["is_video": false]],
+          ["node": ["is_video": false]]
+        ]
+      ]
+    ]
+    let html = try instagramEmbedHTML(media: media)
+
+    let summary = try XCTUnwrap(
+      SocialVideoExtractionService.extractInstagramEmbedMediaSummary(
+        fromHTML: html,
+        expectedPostID: "Db_as8rCJ_W"
+      )
+    )
+
+    XCTAssertEqual(summary.mediaKind, .nonVideo)
+    XCTAssertTrue(summary.videoURLs.isEmpty)
+  }
+
+  func testInstagramEmbedSummaryFindsVideoInMixedCarousel() throws {
+    let media: [String: Any] = [
+      "__typename": "GraphSidecar",
+      "shortcode": "Mixed123",
+      "is_video": false,
+      "edge_sidecar_to_children": [
+        "edges": [
+          ["node": ["is_video": false]],
+          [
+            "node": [
+              "is_video": true,
+              "video_url": "https://scontent.cdninstagram.com/media/clip.mp4"
+            ]
+          ]
+        ]
+      ]
+    ]
+    let html = try instagramEmbedHTML(media: media)
+
+    let summary = try XCTUnwrap(
+      SocialVideoExtractionService.extractInstagramEmbedMediaSummary(
+        fromHTML: html,
+        expectedPostID: "Mixed123"
+      )
+    )
+
+    XCTAssertEqual(summary.mediaKind, .video)
+    XCTAssertEqual(
+      summary.videoURLs.map(\.absoluteString),
+      ["https://scontent.cdninstagram.com/media/clip.mp4"]
+    )
+    XCTAssertNil(
+      SocialVideoExtractionService.extractInstagramEmbedMediaSummary(
+        fromHTML: html,
+        expectedPostID: "Related123"
+      )
+    )
+  }
+
+  func testInstagramEmbedSummaryDoesNotAssumePartiallyDescribedCarouselIsPhotoOnly() throws {
+    let media: [String: Any] = [
+      "__typename": "GraphSidecar",
+      "shortcode": "Unknown123",
+      "edge_sidecar_to_children": [
+        "edges": [
+          ["node": ["is_video": false]],
+          ["node": [:]]
+        ]
+      ]
+    ]
+    let html = try instagramEmbedHTML(media: media)
+
+    let summary = try XCTUnwrap(
+      SocialVideoExtractionService.extractInstagramEmbedMediaSummary(
+        fromHTML: html,
+        expectedPostID: "Unknown123"
+      )
+    )
+
+    XCTAssertEqual(summary.mediaKind, .unknown)
+    XCTAssertTrue(summary.videoURLs.isEmpty)
+  }
+
+  private func instagramEmbedHTML(media: [String: Any]) throws -> String {
+    let contextData = try JSONSerialization.data(
+      withJSONObject: ["gql_data": ["shortcode_media": media]]
+    )
+    let context = try XCTUnwrap(String(data: contextData, encoding: .utf8))
+    let wrapperData = try JSONSerialization.data(withJSONObject: ["contextJSON": context])
+    let wrapper = try XCTUnwrap(String(data: wrapperData, encoding: .utf8))
+    return "<script>bootstrap(\(wrapper))</script>"
+  }
+}

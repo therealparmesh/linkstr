@@ -6,12 +6,12 @@ extension SocialVideoExtractionService {
     budget: MediaDiscoveryBudget
   ) async -> ExtractionState? {
     guard SocialURLHeuristics.isTikTokHost(sourceURL),
-      SocialURLHeuristics.isTikTokVideoLikeURL(sourceURL)
+      SocialURLHeuristics.isTikTokVideoURL(sourceURL)
     else {
       return nil
     }
 
-    guard let videoID = SocialURLHeuristics.tikTokVideoID(from: sourceURL) else {
+    guard let videoID = SocialURLHeuristics.tikTokPostID(from: sourceURL) else {
       return nil
     }
 
@@ -60,8 +60,8 @@ extension SocialVideoExtractionService {
     url: URL, value: String, host: String, sourceURL: URL
   ) -> Int {
     mediaIdentityScore(
-      expectedID: SocialURLHeuristics.tikTokVideoID(from: sourceURL),
-      candidateID: SocialURLHeuristics.tikTokVideoID(fromCandidateURL: url),
+      expectedID: SocialURLHeuristics.tikTokPostID(from: sourceURL),
+      candidateID: SocialURLHeuristics.tikTokPostID(fromCandidateURL: url),
       value: value,
       host: host,
       allowedHostTokens: ["tiktok", "byte", "akamaized"]
@@ -124,7 +124,7 @@ extension SocialVideoExtractionService {
     from sourceURL: URL,
     budget: MediaDiscoveryBudget
   ) async -> [URL] {
-    guard let awemeID = SocialURLHeuristics.tikTokVideoID(from: sourceURL) else {
+    guard let awemeID = SocialURLHeuristics.tikTokPostID(from: sourceURL) else {
       return []
     }
 

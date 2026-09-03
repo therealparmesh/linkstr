@@ -52,7 +52,7 @@ actor SocialPostResolutionService {
     case .instagram:
       return SocialURLHeuristics.instagramPostID(from: sourceURL)
     case .tiktok:
-      return SocialURLHeuristics.tikTokVideoID(from: sourceURL)
+      return SocialURLHeuristics.tikTokPostID(from: sourceURL)
     case .facebook:
       return SocialURLHeuristics.facebookVideoID(from: sourceURL)
     default:
@@ -118,10 +118,10 @@ actor SocialPostResolutionService {
   // MARK: - TikTok
 
   private func fetchTikTokPreview(for sourceURL: URL) async -> SocialPostPreview? {
-    guard let videoID = SocialURLHeuristics.tikTokVideoID(from: sourceURL) else { return nil }
+    guard let postID = SocialURLHeuristics.tikTokPostID(from: sourceURL) else { return nil }
 
-    let canonicalURLString =
-      "https://www.tiktok.com/@_/video/\(videoID)"
+    let route = SocialURLHeuristics.isTikTokPhotoURL(sourceURL) ? "photo" : "video"
+    let canonicalURLString = "https://www.tiktok.com/@_/\(route)/\(postID)"
     guard var components = URLComponents(string: "https://www.tiktok.com/oembed") else {
       return nil
     }

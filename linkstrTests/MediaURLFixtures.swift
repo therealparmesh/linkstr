@@ -46,6 +46,14 @@ enum MediaURLFixtures {
       allowsLocalPlayback: true
     ),
     StrategyExpectation(
+      name: "tiktok photo post",
+      url: "https://www.tiktok.com/@acct/photo/7651971146413329671",
+      linkType: .tiktok,
+      strategyKind: .embedOnly,
+      embedExpectation: .exact("https://www.tiktok.com/player/v1/7651971146413329671"),
+      allowsLocalPlayback: false
+    ),
+    StrategyExpectation(
       name: "instagram reel",
       url: "https://www.instagram.com/reel/C7x5mYfP0R1/",
       linkType: .instagram,

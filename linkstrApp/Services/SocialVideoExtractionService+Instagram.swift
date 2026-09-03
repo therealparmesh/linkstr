@@ -1,5 +1,11 @@
 import Foundation
 
+private struct InstagramPageMediaSummary {
+  let videoURLs: [URL]
+  let mediaKind: SocialPostHTMLParser.InstagramMediaKind
+  let confirmsNoVideo: Bool
+}
+
 extension SocialVideoExtractionService {
   func extractFromInstagram(
     sourceURL: URL,
@@ -14,11 +20,11 @@ extension SocialVideoExtractionService {
     }
 
     var sawNonVideoPage = false
-    if budget.permitsAttempt,
+    if budget.permitsAttempt {
       let pageSummary = await instagramPageMediaSummary(
         from: sourceURL,
         expectedPostID: postID
-      ) {
+      )
       let ranked = rankCandidates(pageSummary.videoURLs, sourceURL: sourceURL)
       if let resolved = resolvePlayableMedia(
         from: ranked,
@@ -29,9 +35,10 @@ extension SocialVideoExtractionService {
         return resolved
       }
 
-      if pageSummary.mediaKind == .nonVideo {
-        sawNonVideoPage = true
+      if pageSummary.confirmsNoVideo {
+        return .cannotExtract("this Instagram post does not include a playable video.")
       }
+      sawNonVideoPage = pageSummary.mediaKind == .nonVideo
     }
 
     if budget.permitsAttempt {
@@ -67,49 +74,104 @@ extension SocialVideoExtractionService {
   private func instagramPageMediaSummary(
     from pageURL: URL,
     expectedPostID: String
-  ) async -> (
-    videoURLs: [URL], mediaKind: SocialPostHTMLParser.InstagramMediaKind
-  )? {
-    var loadedPage = false
+  ) async -> InstagramPageMediaSummary {
     var mediaKind = SocialPostHTMLParser.InstagramMediaKind.unknown
 
     for userAgent in [Self.mobileUserAgent, Self.desktopUserAgent] {
-      guard let page = await SocialMediaPageLoader.load(pageURL, userAgent: userAgent),
-        let html = page.html
-      else {
-        continue
+      guard
+        let summary = await loadInstagramPageSummary(
+          from: pageURL,
+          expectedPostID: expectedPostID,
+          userAgent: userAgent
+        )
+      else { continue }
+      if summary.mediaKind != .unknown {
+        mediaKind = summary.mediaKind
       }
-      loadedPage = true
-      let detectedKind = SocialPostHTMLParser.instagramMediaKind(from: html)
-      if detectedKind != .unknown {
-        mediaKind = detectedKind
-      }
-
-      var videoURLs = Self.extractInstagramPageVideoURLs(
-        fromHTML: html,
-        expectedPostID: expectedPostID
-      )
-      if SocialURLHeuristics.instagramPostID(from: page.finalURL) == expectedPostID {
-        var seen = Set(videoURLs.map { $0.absoluteString.lowercased() })
-        for url in Self.extractOGVideoURLs(fromHTML: html)
-        where seen.insert(url.absoluteString.lowercased()).inserted {
-          videoURLs.append(url)
-        }
-      }
-      if !videoURLs.isEmpty {
-        return (videoURLs, detectedKind)
+      if !summary.videoURLs.isEmpty {
+        return summary
       }
     }
 
-    return loadedPage ? ([], mediaKind) : nil
+    if let embedSummary = await loadInstagramEmbedSummary(
+      from: pageURL,
+      expectedPostID: expectedPostID
+    ) {
+      if !embedSummary.videoURLs.isEmpty || embedSummary.confirmsNoVideo {
+        return embedSummary
+      }
+      if embedSummary.mediaKind != .unknown {
+        mediaKind = embedSummary.mediaKind
+      }
+    }
+
+    return InstagramPageMediaSummary(
+      videoURLs: [],
+      mediaKind: mediaKind,
+      confirmsNoVideo: false
+    )
+  }
+
+  private func loadInstagramPageSummary(
+    from pageURL: URL,
+    expectedPostID: String,
+    userAgent: String
+  ) async -> InstagramPageMediaSummary? {
+    guard let page = await SocialMediaPageLoader.load(pageURL, userAgent: userAgent),
+      let html = page.html
+    else { return nil }
+
+    let matchesExpectedPost =
+      SocialURLHeuristics.instagramPostID(from: page.finalURL) == expectedPostID
+    let mediaKind = matchesExpectedPost
+      ? SocialPostHTMLParser.instagramMediaKind(from: html)
+      : .unknown
+    var videoURLs = Self.extractInstagramPageVideoURLs(
+      fromHTML: html,
+      expectedPostID: expectedPostID
+    )
+    if matchesExpectedPost {
+      var seen = Set(videoURLs.map { $0.absoluteString.lowercased() })
+      for url in Self.extractOGVideoURLs(fromHTML: html)
+      where seen.insert(url.absoluteString.lowercased()).inserted {
+        videoURLs.append(url)
+      }
+    }
+    return InstagramPageMediaSummary(
+      videoURLs: videoURLs,
+      mediaKind: mediaKind,
+      confirmsNoVideo: false
+    )
+  }
+
+  private func loadInstagramEmbedSummary(
+    from pageURL: URL,
+    expectedPostID: String
+  ) async -> InstagramPageMediaSummary? {
+    guard
+      let embedURL = SocialURLHeuristics.instagramCanonicalURL(for: pageURL)?
+        .appendingPathComponent("embed"),
+      embedURL != pageURL,
+      let page = await SocialMediaPageLoader.load(embedURL, userAgent: Self.mobileUserAgent),
+      let html = page.html,
+      let summary = Self.extractInstagramEmbedMediaSummary(
+        fromHTML: html,
+        expectedPostID: expectedPostID
+      )
+    else { return nil }
+
+    return InstagramPageMediaSummary(
+      videoURLs: summary.videoURLs,
+      mediaKind: summary.mediaKind,
+      confirmsNoVideo: summary.mediaKind == .nonVideo
+    )
   }
 
   static func extractInstagramPageVideoURLs(
     fromHTML html: String,
     expectedPostID: String
   ) -> [URL] {
-    var seen = Set<String>()
-    var urls: [URL] = []
+    var rawURLs: [String] = []
 
     for script in HTMLScriptContentScanner.contents(in: html) {
       guard let data = script.data(using: .utf8),
@@ -118,20 +180,85 @@ extension SocialVideoExtractionService {
         continue
       }
 
-      for rawURL in instagramVideoURLStrings(in: json, expectedPostID: expectedPostID) {
-        let decoded = HTMLTextDecoder.decodeHTMLEntities(rawURL)
-        let key = decoded.lowercased()
-        guard key.hasPrefix("https://"),
-          isLikelyMediaURLString(key),
-          seen.insert(key).inserted,
-          let url = URL(string: decoded)
-        else {
-          continue
-        }
-        urls.append(url)
-      }
+      rawURLs.append(contentsOf: instagramVideoURLStrings(in: json, expectedPostID: expectedPostID))
     }
-    return urls
+    return normalizedInstagramVideoURLs(from: rawURLs)
+  }
+
+  static func extractInstagramEmbedMediaSummary(
+    fromHTML html: String,
+    expectedPostID: String
+  ) -> (
+    videoURLs: [URL], mediaKind: SocialPostHTMLParser.InstagramMediaKind
+  )? {
+    guard
+      let regex = try? NSRegularExpression(
+        pattern: #""contextJSON"\s*:\s*("(?:\\.|[^"\\])*")"#
+      )
+    else { return nil }
+
+    let range = NSRange(html.startIndex..<html.endIndex, in: html)
+    for match in regex.matches(in: html, range: range) {
+      guard match.numberOfRanges > 1,
+        let jsonStringRange = Range(match.range(at: 1), in: html),
+        let jsonStringData = String(html[jsonStringRange]).data(using: .utf8),
+        let context = try? JSONSerialization.jsonObject(
+          with: jsonStringData,
+          options: .fragmentsAllowed
+        ) as? String,
+        let contextData = context.data(using: .utf8),
+        let payload = try? JSONSerialization.jsonObject(with: contextData) as? [String: Any],
+        let graphData = payload["gql_data"] as? [String: Any],
+        let media = graphData["shortcode_media"] as? [String: Any],
+        let postID = (media["code"] as? String) ?? (media["shortcode"] as? String),
+        postID == expectedPostID
+      else {
+        continue
+      }
+
+      let videoURLs = normalizedInstagramVideoURLs(
+        from: instagramVideoURLStrings(inVerifiedMedia: media)
+      )
+      let type = media["__typename"] as? String
+      let childVideoFlags = instagramSidecarVideoFlags(in: media)
+      let mediaKind: SocialPostHTMLParser.InstagramMediaKind
+      if type == "GraphVideo" || media["is_video"] as? Bool == true
+        || childVideoFlags.contains(true) {
+        mediaKind = .video
+      } else if type == "GraphImage"
+        || (type == "GraphSidecar" && !childVideoFlags.isEmpty) {
+        mediaKind = .nonVideo
+      } else {
+        mediaKind = .unknown
+      }
+      return (videoURLs, mediaKind)
+    }
+
+    return nil
+  }
+
+  private static func normalizedInstagramVideoURLs(from rawURLs: [String]) -> [URL] {
+    var seen = Set<String>()
+    return rawURLs.compactMap { rawURL in
+      let decoded = HTMLTextDecoder.decodeHTMLEntities(rawURL)
+      let key = decoded.lowercased()
+      guard key.hasPrefix("https://"),
+        isLikelyMediaURLString(key),
+        seen.insert(key).inserted
+      else { return nil }
+      return URL(string: decoded)
+    }
+  }
+
+  private static func instagramSidecarVideoFlags(in media: [String: Any]) -> [Bool] {
+    guard let sidecar = media["edge_sidecar_to_children"] as? [String: Any],
+      let edges = sidecar["edges"] as? [[String: Any]],
+      !edges.isEmpty
+    else { return [] }
+    let flags = edges.compactMap { edge in
+      (edge["node"] as? [String: Any])?["is_video"] as? Bool
+    }
+    return flags.count == edges.count ? flags : []
   }
 
   private static func instagramVideoURLStrings(

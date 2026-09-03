@@ -143,7 +143,7 @@ actor URLCanonicalizationService {
     }
 
     if SocialURLHeuristics.isTikTokShortURL(sourceURL),
-      let tikTokCanonicalURL = await resolvedTikTokVideoPageURL(from: sourceURL) {
+      let tikTokCanonicalURL = await resolvedTikTokPostURL(from: sourceURL) {
       return tikTokCanonicalURL
     }
 
@@ -192,20 +192,20 @@ actor URLCanonicalizationService {
       || SocialURLHeuristics.isFacebookVideoURL(sourceURL)
   }
 
-  private func resolvedTikTokVideoPageURL(from sourceURL: URL) async -> URL? {
+  private func resolvedTikTokPostURL(from sourceURL: URL) async -> URL? {
     guard
       let page = await SocialMediaPageLoader.load(
         sourceURL,
         userAgent: SocialVideoExtractionService.mobileUserAgent,
-        stoppingAtRedirectThat: { Self.canonicalTikTokVideoURL(from: $0) != nil }
+        stoppingAtRedirectThat: { Self.canonicalTikTokPostURL(from: $0) != nil }
       )
     else { return nil }
-    return Self.canonicalTikTokVideoURL(from: page.finalURL)
+    return Self.canonicalTikTokPostURL(from: page.finalURL)
   }
 
-  static func canonicalTikTokVideoURL(from resolvedURL: URL) -> URL? {
+  static func canonicalTikTokPostURL(from resolvedURL: URL) -> URL? {
     guard SocialURLHeuristics.isTikTokHost(resolvedURL),
-      SocialURLHeuristics.tikTokVideoID(from: resolvedURL) != nil,
+      SocialURLHeuristics.tikTokPostID(from: resolvedURL) != nil,
       var components = URLComponents(url: resolvedURL, resolvingAgainstBaseURL: false)
     else {
       return nil

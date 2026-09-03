@@ -11,12 +11,12 @@ enum SocialURLHeuristics {
     }
   }
 
-  static let tikTokVideoPatterns: [NSRegularExpression] = [
-    regex(#"/video/(\d{8,})"#),
+  static let tikTokPostPatterns: [NSRegularExpression] = [
+    regex(#"/(?:video|photo)/(\d{8,})"#),
     regex(#"(?:aweme_id|item_id|group_id|video_id)=(\d{8,})"#)
   ]
 
-  static let tikTokVideoIDQueryKeys = ["aweme_id", "item_id", "group_id", "video_id"]
+  static let tikTokPostIDQueryKeys = ["aweme_id", "item_id", "group_id", "video_id"]
 
   static let igCacheKeyPattern = regex(#"([A-Za-z0-9_-]{5,})"#)
 
@@ -74,9 +74,23 @@ enum SocialURLHeuristics {
     return parts.first == "t" && parts.count >= 2
   }
 
-  static func isTikTokVideoLikeURL(_ url: URL) -> Bool {
+  static func isTikTokPostURL(_ url: URL) -> Bool {
     guard isTikTokHost(url) else { return false }
-    return isTikTokShortURL(url) || tikTokVideoID(from: url) != nil
+    return isTikTokShortURL(url) || tikTokPostID(from: url) != nil
+  }
+
+  static func isTikTokPhotoURL(_ url: URL) -> Bool {
+    pathToken(
+      in: url,
+      markers: ["photo"],
+      minLength: 8,
+      allowDigitsOnly: true
+    ) != nil
+  }
+
+  static func isTikTokVideoURL(_ url: URL) -> Bool {
+    guard isTikTokHost(url), !isTikTokPhotoURL(url) else { return false }
+    return tikTokPostID(from: url) != nil
   }
 
   static func isInstagramReelURL(_ url: URL) -> Bool {
