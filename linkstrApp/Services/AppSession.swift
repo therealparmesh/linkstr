@@ -26,6 +26,7 @@ enum AppSessionTimingDefaults {
   static let remoteProfileLookupRetryNanoseconds: UInt64 = 3_000_000_000
   static let passiveOfflineToastGraceInterval: TimeInterval = 1
   static let identityRetryDelayNanoseconds: UInt64 = 250_000_000
+  static let metadataRefreshRetryInterval: TimeInterval = 30
 }
 
 enum IdentityLoadRetryDefaults {
@@ -151,6 +152,7 @@ final class AppSession: ObservableObject {
     var onNostrStart: (() -> Void)?
     var requestProfileMetadata: (([String]) -> Bool)?
     var remoteProfileLookupRetryNanoseconds: UInt64?
+    var metadataRefreshRetryInterval: TimeInterval?
     var clearLocalAccountData: ((String) throws -> Void)?
     var registerPushDevice: ((PushDeviceRegistration) async throws -> Void)?
     var unregisterPushDevice: ((String) async throws -> Void)?
@@ -226,6 +228,7 @@ final class AppSession: ObservableObject {
   var isProcessingMetadataQueue = false
   var activeMetadataRefreshStorageID: String?
   var metadataRefreshQueueGeneration = 0
+  var metadataRefreshRetryAfterByStorageID: [String: Date] = [:]
   @Published var relayRuntimeStatusByURL: [String: RelayRuntimeStatus] = [:]
   var pendingOfflineToastTask: Task<Void, Never>?
   var nostrStartupTask: Task<Void, Never>?

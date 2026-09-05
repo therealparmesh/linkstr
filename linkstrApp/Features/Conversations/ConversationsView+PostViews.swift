@@ -72,8 +72,7 @@ extension SessionPostsView {
       }
     }
 
-    var profileLookupPubkeys = contacts.map(\.targetPubkey)
-    profileLookupPubkeys.append(contentsOf: members.map(\.memberPubkey))
+    var profileLookupPubkeys = members.map(\.memberPubkey)
     profileLookupPubkeys.append(contentsOf: memberIntervals.map(\.memberPubkey))
     profileLookupPubkeys.append(contentsOf: rootPosts.map(\.senderPubkey))
     profileLookupPubkeys.append(contentsOf: reactions.map(\.senderPubkey))

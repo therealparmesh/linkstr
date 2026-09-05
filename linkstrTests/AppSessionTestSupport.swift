@@ -121,6 +121,7 @@ class AppSessionTestCase: XCTestCase {
     onNostrStart: (() -> Void)? = nil,
     requestProfileMetadata: (([String]) -> Bool)? = nil,
     remoteProfileLookupRetryNanoseconds: UInt64? = nil,
+    metadataRefreshRetryInterval: TimeInterval? = nil,
     clearLocalAccountData: ((String) throws -> Void)? = nil,
     registerPushDevice: ((PushDeviceRegistration) async throws -> Void)? = nil,
     unregisterPushDevice: ((String) async throws -> Void)? = nil,
@@ -143,6 +144,7 @@ class AppSessionTestCase: XCTestCase {
     testingOverrides.onNostrStart = onNostrStart
     testingOverrides.requestProfileMetadata = requestProfileMetadata
     testingOverrides.remoteProfileLookupRetryNanoseconds = remoteProfileLookupRetryNanoseconds
+    testingOverrides.metadataRefreshRetryInterval = metadataRefreshRetryInterval
     testingOverrides.clearLocalAccountData = clearLocalAccountData
     testingOverrides.registerPushDevice = registerPushDevice
     testingOverrides.unregisterPushDevice = unregisterPushDevice

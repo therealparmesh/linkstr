@@ -2,7 +2,7 @@ import Foundation
 import LinkPresentation
 import UIKit
 
-struct LinkPreviewData {
+struct LinkPreviewData: Sendable {
   let title: String?
   let thumbnailPath: String?
 }
@@ -41,13 +41,21 @@ enum LinkMetadataRefreshPolicy {
   }
 }
 
-final class URLMetadataService {
+actor URLMetadataService {
   static let shared = URLMetadataService()
+  private let requests = AsyncRequestCache<String, LinkPreviewData>()
+
   private init() {}
 
   func fetchPreview(for urlString: String) async -> LinkPreviewData? {
     guard let url = URL(string: urlString) else { return nil }
 
+    return await requests.value(for: urlString) {
+      await self.fetchUncachedPreview(for: url)
+    }
+  }
+
+  private func fetchUncachedPreview(for url: URL) async -> LinkPreviewData? {
     if let twitterPreview = await twitterPreview(for: url) {
       return twitterPreview
     }

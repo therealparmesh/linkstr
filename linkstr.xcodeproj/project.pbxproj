@@ -97,6 +97,7 @@
 		8D290EFA71ECBCEBE812B8F9 /* SocialVideoExtractionServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA40A356B1060651B3B3C3CC /* SocialVideoExtractionServiceTests.swift */; };
 		8DC83AB66FD73F40E9C87A48 /* AppSession+PersistenceHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EECA829508320817324CAAF /* AppSession+PersistenceHelpers.swift */; };
 		8F0C4138EF679B83420A0FB0 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E79035E720BA98D2978F518A /* OnboardingView.swift */; };
+		93090B7783D1625D499CDC42 /* AsyncRequestCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6AC320FB92DFC5F258D91C76 /* AsyncRequestCache.swift */; };
 		93530BF824C781EE2F733164 /* AppSession+Relay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 333271E0248034242E39B236 /* AppSession+Relay.swift */; };
 		97F114CB63199A8B8FADAF82 /* NostrValueNormalizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27F9DA7F14B48D24E7341D34 /* NostrValueNormalizerTests.swift */; };
 		98570683D9CDD058B8047F1E /* IdentityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 904C4B05CC46626ABA814DAC /* IdentityService.swift */; };
@@ -108,6 +109,7 @@
 		A010D608D2DB3D5C155DCB2C /* AppSession+Persistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EE33A8A926071254F631AA1 /* AppSession+Persistence.swift */; };
 		A0C514C45CF917B5D689A331 /* AppSessionTestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38A471A89B13B8583C493EA6 /* AppSessionTestSupport.swift */; };
 		A35BF9C1FB26D4F9A6085101 /* SessionMessageEntity+Helpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97E48BBAC2DB46F972474A8C /* SessionMessageEntity+Helpers.swift */; };
+		A376AA608E7FB7ACBFEF05BB /* AsyncRequestCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB16E81CE29D8702DE41EE9D /* AsyncRequestCacheTests.swift */; };
 		A480D1E9F593B8091ACF70D4 /* SocialVideoExtractionService+Discovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = C88EE7B18AE327026435CC85 /* SocialVideoExtractionService+Discovery.swift */; };
 		A4C3F63D9A5B21B8CC659287 /* AppSession+PersistenceIngest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F32F5B99A165F5BCB019087 /* AppSession+PersistenceIngest.swift */; };
 		A5124484396ED1FB626B7263 /* NostrDMService+EventHandling.swift in Sources */ = {isa = PBXBuildFile; fileRef = 434E57D3DDCE61EE8F692C80 /* NostrDMService+EventHandling.swift */; };
@@ -268,6 +270,7 @@
 		651F823987A750FE5E95409A /* DeepLinkDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLinkDetailView.swift; sourceTree = "<group>"; };
 		659FD95AEC32EABA9F868F07 /* SocialMediaPageLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialMediaPageLoader.swift; sourceTree = "<group>"; };
 		68870DE67263FD1E71276FFD /* ConversationsView+SessionRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ConversationsView+SessionRow.swift"; sourceTree = "<group>"; };
+		6AC320FB92DFC5F258D91C76 /* AsyncRequestCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AsyncRequestCache.swift; sourceTree = "<group>"; };
 		6CD8B506D0AD0F0519915CBF /* ConversationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationsView.swift; sourceTree = "<group>"; };
 		6F16ACCA1422405453C75065 /* AppSessionContactAndRelayTests+Relay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppSessionContactAndRelayTests+Relay.swift"; sourceTree = "<group>"; };
 		706E9D6176C6220D1B20EA95 /* ContactKeyParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactKeyParser.swift; sourceTree = "<group>"; };
@@ -353,6 +356,7 @@
 		F6FE97A03CA51C25CCE76854 /* linkstr.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = linkstr.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F836F1233F2039173B6CF6CB /* LinkstrResolvedIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkstrResolvedIdentity.swift; sourceTree = "<group>"; };
 		F9F6803C214CB5B24C0FC54F /* SessionPayloadValidationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionPayloadValidationTests.swift; sourceTree = "<group>"; };
+		FB16E81CE29D8702DE41EE9D /* AsyncRequestCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AsyncRequestCacheTests.swift; sourceTree = "<group>"; };
 		FDD6058FFCC4C1C1F496E05F /* PlayableMedia+AVFoundation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PlayableMedia+AVFoundation.swift"; sourceTree = "<group>"; };
 		FDEC9192CC71EB4B9B2F9C86 /* DeepLinkHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLinkHandler.swift; sourceTree = "<group>"; };
 		FEC87A59057527F2A8A4A7E0 /* AppSessionIngestTests+RootDeletion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppSessionIngestTests+RootDeletion.swift"; sourceTree = "<group>"; };
@@ -528,6 +532,7 @@
 				5DCDE0339ACA05803DC7D2CE /* AppSession+RelayStatus.swift */,
 				18D442788A5BC2EDBB39A6C0 /* AppSession+SessionLifecycle.swift */,
 				23404A221A48DEE4B14E732E /* AppSession+Sessions.swift */,
+				6AC320FB92DFC5F258D91C76 /* AsyncRequestCache.swift */,
 				7412317A8E3D9D82E9951CBE /* HLSDownloadManager.swift */,
 				904C4B05CC46626ABA814DAC /* IdentityService.swift */,
 				A9928A74B5A3130F488D2287 /* ManagedLocalFileScope.swift */,
@@ -638,6 +643,7 @@
 				73A9C333D8B5988353F7DE3C /* AppSessionPushTests.swift */,
 				38A471A89B13B8583C493EA6 /* AppSessionTestSupport.swift */,
 				4E26BDA3D85ADA347E71A241 /* AppSessionTestSupport+Helpers.swift */,
+				FB16E81CE29D8702DE41EE9D /* AsyncRequestCacheTests.swift */,
 				B8170C2B6ECB684CC17D5FA8 /* ContactKeyParserTests.swift */,
 				D33336CFF6A92115695D5710 /* DeepLinkCodecTests.swift */,
 				2C3D8356ADF2430938203F82 /* EmbeddedWebSourceTests.swift */,
@@ -823,6 +829,7 @@
 				4E183EA9F5DC74D51E3B7BE5 /* AppSession+SessionLifecycle.swift in Sources */,
 				D20828F6D4A31992E0F1F19B /* AppSession+Sessions.swift in Sources */,
 				644CCBC5ABB2C8109F4F29EA /* AppSession.swift in Sources */,
+				93090B7783D1625D499CDC42 /* AsyncRequestCache.swift in Sources */,
 				496466B5A3D3B9531C9499E2 /* ContactEntity.swift in Sources */,
 				431978137CDB6F1CC1E77A8E /* ContactKeyParser.swift in Sources */,
 				57C6E5E021A8945DAD35270E /* ContactsView.swift in Sources */,
@@ -939,6 +946,7 @@
 				6900C6D1B70D4C7F25777609 /* AppSessionPushTests.swift in Sources */,
 				5C8F576BF2F3FEFC2EE3CCAB /* AppSessionTestSupport+Helpers.swift in Sources */,
 				A0C514C45CF917B5D689A331 /* AppSessionTestSupport.swift in Sources */,
+				A376AA608E7FB7ACBFEF05BB /* AsyncRequestCacheTests.swift in Sources */,
 				7A2809C196D0429D9760F4FC /* ContactKeyParserTests.swift in Sources */,
 				C0EA7461CD38B51347377CB5 /* DeepLinkCodecTests.swift in Sources */,
 				81F14DC0C274A83A5A37FF4B /* EmbeddedWebSourceTests.swift in Sources */,

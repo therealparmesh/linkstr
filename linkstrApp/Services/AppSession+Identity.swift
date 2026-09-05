@@ -147,6 +147,7 @@ extension AppSession {
     isProcessingMetadataQueue = false
     activeMetadataRefreshStorageID = nil
     metadataRefreshQueueGeneration = 0
+    metadataRefreshRetryAfterByStorageID.removeAll()
     passiveOfflineToastGraceUntil = nil
     pendingSessionNavigationRequest = nil
     pendingCreatedAccountNsec = nil

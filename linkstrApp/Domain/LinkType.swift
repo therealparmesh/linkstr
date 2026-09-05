@@ -1,4 +1,4 @@
-enum LinkType: String, Codable, CaseIterable {
+enum LinkType: String, Codable, CaseIterable, Sendable {
   case tiktok
   case instagram
   case facebook

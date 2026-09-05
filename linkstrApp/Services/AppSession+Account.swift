@@ -214,6 +214,7 @@ extension AppSession {
   func clearCachedMetadata() {
     do {
       try messageStore.clearCachedMetadata()
+      metadataRefreshRetryAfterByStorageID.removeAll(keepingCapacity: true)
       composeError = nil
     } catch {
       report(error: error)

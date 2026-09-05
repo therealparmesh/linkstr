@@ -103,9 +103,13 @@ extension AppSession {
     guard shouldFetchLinkMetadataForCurrentProcess() else { return }
     guard message.kind == .root else { return }
     guard message.url != nil else { return }
-    guard needsMetadataRefresh(message) else { return }
 
     let storageID = message.storageID
+    guard needsMetadataRefresh(message) else {
+      metadataRefreshRetryAfterByStorageID.removeValue(forKey: storageID)
+      return
+    }
+    guard !isMetadataRefreshCoolingDown(storageID: storageID) else { return }
     guard !enqueuedMetadataStorageIDs.contains(storageID) else { return }
     enqueuedMetadataStorageIDs.insert(storageID)
     pendingMetadataRefreshes.append(PendingMetadataRefresh(storageID: storageID))
@@ -174,7 +178,11 @@ extension AppSession {
   func refreshMetadata(for message: SessionMessageEntity, force: Bool = false) async throws
     -> Bool {
     guard let url = message.url else { return false }
-    guard force || needsMetadataRefresh(message) else { return false }
+    guard force || needsMetadataRefresh(message) else {
+      metadataRefreshRetryAfterByStorageID.removeValue(forKey: message.storageID)
+      return false
+    }
+    defer { updateMetadataRefreshCooldown(for: message) }
 
     let preview: LinkPreviewData?
     if let fetchLinkPreview = testingOverrides.fetchLinkPreview {
@@ -205,6 +213,36 @@ extension AppSession {
 
     try message.setMetadata(title: resolvedTitle, thumbnailURL: resolvedThumbnail)
     return true
+  }
+
+  private func isMetadataRefreshCoolingDown(storageID: String) -> Bool {
+    guard let retryAfter = metadataRefreshRetryAfterByStorageID[storageID] else { return false }
+    guard retryAfter > .now else {
+      metadataRefreshRetryAfterByStorageID.removeValue(forKey: storageID)
+      return false
+    }
+    return true
+  }
+
+  private func updateMetadataRefreshCooldown(for message: SessionMessageEntity) {
+    let storageID = message.storageID
+    guard needsMetadataRefresh(message) else {
+      metadataRefreshRetryAfterByStorageID.removeValue(forKey: storageID)
+      return
+    }
+
+    if metadataRefreshRetryAfterByStorageID[storageID] == nil,
+      metadataRefreshRetryAfterByStorageID.count >= CacheLimits.maximumEntryCount,
+      let earliestStorageID = metadataRefreshRetryAfterByStorageID.min(by: {
+        $0.value < $1.value
+      })?.key {
+      metadataRefreshRetryAfterByStorageID.removeValue(forKey: earliestStorageID)
+    }
+
+    let retryInterval =
+      testingOverrides.metadataRefreshRetryInterval
+      ?? AppSessionTimingDefaults.metadataRefreshRetryInterval
+    metadataRefreshRetryAfterByStorageID[storageID] = .now.addingTimeInterval(retryInterval)
   }
 
   func needsMetadataRefresh(_ message: SessionMessageEntity) -> Bool {

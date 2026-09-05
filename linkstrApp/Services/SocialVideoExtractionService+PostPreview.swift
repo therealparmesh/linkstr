@@ -1,6 +1,6 @@
 import Foundation
 
-struct SocialPostPreview: Equatable {
+struct SocialPostPreview: Equatable, Sendable {
   let bodyText: String?
   let authorName: String?
   let imageURL: URL?
@@ -13,38 +13,33 @@ actor SocialPostResolutionService {
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15"
     + " (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
 
-  private var cache: [String: SocialPostPreview] = [:]
+  private let requests = AsyncRequestCache<String, SocialPostPreview>(
+    maximumCachedValueCount: CacheLimits.maximumEntryCount,
+    shouldCache: { $0.bodyText != nil || $0.authorName != nil }
+  )
 
   func preview(for sourceURL: URL) async -> SocialPostPreview? {
     let linkType = URLClassifier.classify(sourceURL)
     guard let cacheKey = cacheKey(for: sourceURL, linkType: linkType) else { return nil }
 
-    if let cached = cache[cacheKey] {
-      return cached
+    return await requests.value(for: cacheKey) {
+      switch linkType {
+      case .instagram:
+        return await self.fetchInstagramPreview(for: sourceURL)
+      case .tiktok:
+        return await self.fetchTikTokPreview(for: sourceURL)
+      case .facebook:
+        return await self.fetchFacebookPreview(for: sourceURL)
+      default:
+        return nil
+      }
     }
-
-    let resolved: SocialPostPreview?
-    switch linkType {
-    case .instagram:
-      resolved = await fetchInstagramPreview(for: sourceURL)
-    case .tiktok:
-      resolved = await fetchTikTokPreview(for: sourceURL)
-    case .facebook:
-      resolved = await fetchFacebookPreview(for: sourceURL)
-    default:
-      return nil
-    }
-
-    if let resolved, resolved.bodyText != nil || resolved.authorName != nil {
-      cache[cacheKey] = resolved
-    }
-    return resolved
   }
 
-  func invalidate(for sourceURL: URL) {
+  func invalidate(for sourceURL: URL) async {
     let linkType = URLClassifier.classify(sourceURL)
     guard let cacheKey = cacheKey(for: sourceURL, linkType: linkType) else { return }
-    cache.removeValue(forKey: cacheKey)
+    await requests.invalidate(cacheKey)
   }
 
   private func cacheKey(for sourceURL: URL, linkType: LinkType) -> String? {

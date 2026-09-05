@@ -128,6 +128,47 @@ extension AppSessionContactAndRelayTests {
     XCTAssertEqual(third.metadataTitle, "preview for metadata-test-third")
   }
 
+  func testIncompleteMetadataRefreshWaitsBeforeAutomaticRetry() async throws {
+    let recorder = MetadataPreviewRecorder()
+    let (session, container) = try makeSession(
+      metadataRefreshRetryInterval: 0.2,
+      fetchLinkPreview: { url in
+        await recorder.record(url)
+        return LinkPreviewData(title: "Preview", thumbnailPath: nil)
+      }
+    )
+    try session.identityService.createNewIdentity()
+    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
+    let message = try makeMetadataRoot(
+      eventID: "cooldown", url: "metadata-test-cooldown", ownerPubkey: myPubkey)
+    container.mainContext.insert(message)
+    try container.mainContext.save()
+
+    session.refreshMetadataForVisiblePostIfNeeded(message)
+    let firstRequestDeadline = Date(timeIntervalSinceNow: 1)
+    while session.testingPendingMetadataRefreshCount > 0, Date() < firstRequestDeadline {
+      try await Task.sleep(nanoseconds: 10_000_000)
+    }
+
+    session.refreshMetadataForVisiblePostIfNeeded(message)
+    try await Task.sleep(nanoseconds: 20_000_000)
+    let requestCountDuringCooldown = await recorder.snapshot().count
+    XCTAssertEqual(requestCountDuringCooldown, 1)
+
+    try await Task.sleep(nanoseconds: 200_000_000)
+    session.refreshMetadataForVisiblePostIfNeeded(message)
+    let retryDeadline = Date(timeIntervalSinceNow: 1)
+    while (await recorder.snapshot()).count < 2, Date() < retryDeadline {
+      try await Task.sleep(nanoseconds: 10_000_000)
+    }
+    while session.testingPendingMetadataRefreshCount > 0, Date() < retryDeadline {
+      try await Task.sleep(nanoseconds: 10_000_000)
+    }
+
+    let requestCountAfterCooldown = await recorder.snapshot().count
+    XCTAssertEqual(requestCountAfterCooldown, 2)
+  }
+
   func makeMetadataRoot(
     eventID: String,
     url: String,
