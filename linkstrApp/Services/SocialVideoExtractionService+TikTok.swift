@@ -16,17 +16,20 @@ extension SocialVideoExtractionService {
     }
 
     if budget.permitsAttempt {
-      let pageCandidates = await loadTikTokPagePlayURLs(
+      let pageSummary = await loadTikTokPageMediaSummary(
         from: sourceURL,
         expectedVideoID: videoID
       )
       if let resolved = resolvePlayableMedia(
-        from: pageCandidates,
+        from: pageSummary.videoURLs,
         sourceURL: sourceURL,
         userAgent: Self.mobileUserAgent,
         cookies: []
       ) {
         return resolved
+      }
+      if pageSummary.confirmsNoVideo {
+        return .noVideo
       }
     }
 
@@ -68,27 +71,28 @@ extension SocialVideoExtractionService {
     )
   }
 
-  private func loadTikTokPagePlayURLs(
+  private func loadTikTokPageMediaSummary(
     from sourceURL: URL,
     expectedVideoID: String
-  ) async -> [URL] {
+  ) async -> (videoURLs: [URL], confirmsNoVideo: Bool) {
     guard let page = await SocialMediaPageLoader.load(sourceURL, userAgent: Self.mobileUserAgent),
       let html = page.html
     else {
-      return []
+      return ([], false)
     }
-    return Self.extractTikTokPageVideoURLs(
+    return Self.extractTikTokPageMediaSummary(
       fromHTML: html,
       expectedVideoID: expectedVideoID
     )
   }
 
-  static func extractTikTokPageVideoURLs(
+  static func extractTikTokPageMediaSummary(
     fromHTML html: String,
     expectedVideoID: String
-  ) -> [URL] {
+  ) -> (videoURLs: [URL], confirmsNoVideo: Bool) {
     var seen = Set<String>()
     var urls: [URL] = []
+    var foundImagePost = false
 
     for script in HTMLScriptContentScanner.contents(in: html) {
       guard let data = script.data(using: .utf8),
@@ -104,7 +108,8 @@ extension SocialVideoExtractionService {
         continue
       }
 
-      for rawURL in [item.video.playAddr, item.video.downloadAddr].compactMap({ $0 }) {
+      foundImagePost = foundImagePost || item.imagePost?.images.isEmpty == false
+      for rawURL in [item.video?.playAddr, item.video?.downloadAddr].compactMap({ $0 }) {
         let normalized = rawURL.trimmingCharacters(in: .whitespacesAndNewlines)
         let key = normalized.lowercased()
         guard key.hasPrefix("https://"),
@@ -117,7 +122,7 @@ extension SocialVideoExtractionService {
         urls.append(url)
       }
     }
-    return urls
+    return (urls, foundImagePost && urls.isEmpty)
   }
 
   private func loadTikTokAPIPlayURLs(
@@ -212,13 +217,20 @@ private struct TikTokPageItemInfo: Decodable {
 
 private struct TikTokPageItem: Decodable {
   let id: String
-  let video: TikTokPageVideo
+  let video: TikTokPageVideo?
+  let imagePost: TikTokPageImagePost?
 }
 
 private struct TikTokPageVideo: Decodable {
   let playAddr: String?
   let downloadAddr: String?
 }
+
+private struct TikTokPageImagePost: Decodable {
+  let images: [TikTokPageImage]
+}
+
+private struct TikTokPageImage: Decodable {}
 
 private struct TikTokFeedPayload: Decodable {
   let awemeList: [TikTokFeedItem]

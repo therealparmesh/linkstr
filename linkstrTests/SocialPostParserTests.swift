@@ -337,6 +337,56 @@ extension SocialPostParserTests {
     XCTAssertTrue(summary.videoURLs.isEmpty)
   }
 
+  func testInstagramEmbedSummaryRecognizesVerifiedPhotoContext() throws {
+    let contextData = try JSONSerialization.data(
+      withJSONObject: [
+        "context": [
+          "type": "GraphImage",
+          "shortcode": "Photo123"
+        ]
+      ]
+    )
+    let context = try XCTUnwrap(String(data: contextData, encoding: .utf8))
+    let wrapperData = try JSONSerialization.data(withJSONObject: ["contextJSON": context])
+    let wrapper = try XCTUnwrap(String(data: wrapperData, encoding: .utf8))
+    let html = "<script>bootstrap(\(wrapper))</script>"
+
+    let summary = try XCTUnwrap(
+      SocialVideoExtractionService.extractInstagramEmbedMediaSummary(
+        fromHTML: html,
+        expectedPostID: "Photo123"
+      )
+    )
+
+    XCTAssertEqual(summary.mediaKind, .nonVideo)
+    XCTAssertTrue(summary.videoURLs.isEmpty)
+  }
+
+  func testInstagramEmbedSummaryRecognizesVerifiedPhotoContainer() throws {
+    let html = """
+      <div
+        data-permalink="https://www.instagram.com/p/Photo123/?utm_source=ig_embed&amp;ig_rid=abc"
+        data-media-type="GraphImage">
+      </div>
+      """
+
+    let summary = try XCTUnwrap(
+      SocialVideoExtractionService.extractInstagramEmbedMediaSummary(
+        fromHTML: html,
+        expectedPostID: "Photo123"
+      )
+    )
+
+    XCTAssertEqual(summary.mediaKind, .nonVideo)
+    XCTAssertTrue(summary.videoURLs.isEmpty)
+    XCTAssertNil(
+      SocialVideoExtractionService.extractInstagramEmbedMediaSummary(
+        fromHTML: html,
+        expectedPostID: "Related123"
+      )
+    )
+  }
+
   private func instagramEmbedHTML(media: [String: Any]) throws -> String {
     let contextData = try JSONSerialization.data(
       withJSONObject: ["gql_data": ["shortcode_media": media]]

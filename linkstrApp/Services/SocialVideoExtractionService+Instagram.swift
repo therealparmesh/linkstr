@@ -191,50 +191,73 @@ extension SocialVideoExtractionService {
   ) -> (
     videoURLs: [URL], mediaKind: SocialPostHTMLParser.InstagramMediaKind
   )? {
-    guard
-      let regex = try? NSRegularExpression(
-        pattern: #""contextJSON"\s*:\s*("(?:\\.|[^"\\])*")"#
-      )
-    else { return nil }
+    if let regex = try? NSRegularExpression(
+      pattern: #""contextJSON"\s*:\s*("(?:\\.|[^"\\])*")"#
+    ) {
+      let range = NSRange(html.startIndex..<html.endIndex, in: html)
+      for match in regex.matches(in: html, range: range) {
+        guard match.numberOfRanges > 1,
+          let jsonStringRange = Range(match.range(at: 1), in: html),
+          let jsonStringData = String(html[jsonStringRange]).data(using: .utf8),
+          let context = try? JSONSerialization.jsonObject(
+            with: jsonStringData,
+            options: .fragmentsAllowed
+          ) as? String,
+          let contextData = context.data(using: .utf8),
+          let payload = try? JSONSerialization.jsonObject(with: contextData) as? [String: Any]
+        else {
+          continue
+        }
 
-    let range = NSRange(html.startIndex..<html.endIndex, in: html)
-    for match in regex.matches(in: html, range: range) {
-      guard match.numberOfRanges > 1,
-        let jsonStringRange = Range(match.range(at: 1), in: html),
-        let jsonStringData = String(html[jsonStringRange]).data(using: .utf8),
-        let context = try? JSONSerialization.jsonObject(
-          with: jsonStringData,
-          options: .fragmentsAllowed
-        ) as? String,
-        let contextData = context.data(using: .utf8),
-        let payload = try? JSONSerialization.jsonObject(with: contextData) as? [String: Any],
-        let graphData = payload["gql_data"] as? [String: Any],
-        let media = graphData["shortcode_media"] as? [String: Any],
-        let postID = (media["code"] as? String) ?? (media["shortcode"] as? String),
-        postID == expectedPostID
+        if let graphData = payload["gql_data"] as? [String: Any],
+          let media = graphData["shortcode_media"] as? [String: Any],
+          let postID = (media["code"] as? String) ?? (media["shortcode"] as? String),
+          postID == expectedPostID {
+          return (
+            normalizedInstagramVideoURLs(
+              from: instagramVideoURLStrings(inVerifiedMedia: media)
+            ),
+            instagramMediaKind(inVerifiedMedia: media)
+          )
+        }
+
+        if let embedContext = payload["context"] as? [String: Any],
+          let postID = (embedContext["code"] as? String)
+            ?? (embedContext["shortcode"] as? String),
+          postID == expectedPostID,
+          embedContext["type"] as? String == "GraphImage" {
+          return ([], .nonVideo)
+        }
+      }
+    }
+
+    for attributes in HTMLTagAttributeScanner.attributes(inTagsNamed: "div", html: html)
+    where attributes["data-media-type"] == "GraphImage" {
+      guard let rawPermalink = attributes["data-permalink"],
+        let permalink = URL(string: HTMLTextDecoder.decodeHTMLEntities(rawPermalink)),
+        SocialURLHeuristics.instagramPostID(from: permalink) == expectedPostID
       else {
         continue
       }
-
-      let videoURLs = normalizedInstagramVideoURLs(
-        from: instagramVideoURLStrings(inVerifiedMedia: media)
-      )
-      let type = media["__typename"] as? String
-      let childVideoFlags = instagramSidecarVideoFlags(in: media)
-      let mediaKind: SocialPostHTMLParser.InstagramMediaKind
-      if type == "GraphVideo" || media["is_video"] as? Bool == true
-        || childVideoFlags.contains(true) {
-        mediaKind = .video
-      } else if type == "GraphImage"
-        || (type == "GraphSidecar" && !childVideoFlags.isEmpty) {
-        mediaKind = .nonVideo
-      } else {
-        mediaKind = .unknown
-      }
-      return (videoURLs, mediaKind)
+      return ([], .nonVideo)
     }
 
     return nil
+  }
+
+  private static func instagramMediaKind(
+    inVerifiedMedia media: [String: Any]
+  ) -> SocialPostHTMLParser.InstagramMediaKind {
+    let type = media["__typename"] as? String
+    let childVideoFlags = instagramSidecarVideoFlags(in: media)
+    if type == "GraphVideo" || media["is_video"] as? Bool == true
+      || childVideoFlags.contains(true) {
+      return .video
+    }
+    if type == "GraphImage" || (type == "GraphSidecar" && !childVideoFlags.isEmpty) {
+      return .nonVideo
+    }
+    return .unknown
   }
 
   private static func normalizedInstagramVideoURLs(from rawURLs: [String]) -> [URL] {

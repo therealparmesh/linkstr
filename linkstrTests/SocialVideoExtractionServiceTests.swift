@@ -225,18 +225,58 @@ extension SocialVideoExtractionServiceTests {
       </script>
       """
 
-    let urls = SocialVideoExtractionService.extractTikTokPageVideoURLs(
+    let summary = SocialVideoExtractionService.extractTikTokPageMediaSummary(
       fromHTML: html,
       expectedVideoID: "123456789"
     )
 
     XCTAssertEqual(
-      urls.map(\.absoluteString),
+      summary.videoURLs.map(\.absoluteString),
       [
         "https://v16.tiktok.com/video/tos/requested.mp4",
         "https://v16.tiktok.com/video/tos/requested-download.mp4"
       ]
     )
+    XCTAssertFalse(summary.confirmsNoVideo)
+  }
+
+  func testTikTokPageMediaSummaryRecognizesVerifiedImagePost() {
+    let html = """
+      <script id="__UNIVERSAL_DATA_FOR_REHYDRATION__" type="application/json">
+      {
+        "__DEFAULT_SCOPE__": {
+          "webapp.reflow.video.detail": {
+            "itemInfo": {
+              "itemStruct": {
+                "id": "123456789",
+                "video": {
+                  "playAddr": "",
+                  "downloadAddr": ""
+                },
+                "imagePost": {
+                  "images": [{"imageURL": {"urlList": ["https://p16.tiktokcdn.com/photo.jpeg"]}}]
+                }
+              }
+            }
+          }
+        },
+        "related": {
+          "id": "987654321",
+          "video": {
+            "playAddr": "https://v16.tiktok.com/video/tos/related.mp4"
+          }
+        }
+      }
+      </script>
+      """
+
+    let summary = SocialVideoExtractionService.extractTikTokPageMediaSummary(
+      fromHTML: html,
+      expectedVideoID: "123456789"
+    )
+
+    XCTAssertTrue(summary.videoURLs.isEmpty)
+    XCTAssertTrue(summary.confirmsNoVideo)
   }
 
   func testFacebookPageVideoExtractionVerifiesKnownPostIdentity() throws {
