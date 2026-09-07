@@ -259,23 +259,17 @@ struct SessionManagementSheet: View {
               } else {
                 VStack(spacing: 0) {
                   ForEach(currentMembers, id: \.self) { memberHex in
-                    let identity = memberIdentity(for: memberHex, contacts: orderedContacts)
+                    let identity = session.resolvedIdentity(for: memberHex, contacts: orderedContacts)
                     HStack(spacing: LinkstrTheme.rowSpacing) {
                       LinkstrContactAvatar(
-                        name: identity?.displayName ?? "you",
+                        name: identity.displayName,
                         size: 38
                       )
 
-                      if let identity {
-                        LinkstrContactIdentityView(
-                          identity: identity,
-                          primaryFont: LinkstrTheme.font(.footnote, weight: .medium)
-                        )
-                      } else {
-                        Text("you")
-                          .font(LinkstrTheme.font(.footnote, weight: .medium))
-                          .foregroundStyle(LinkstrTheme.textPrimary)
-                      }
+                      LinkstrContactIdentityView(
+                        identity: identity,
+                        primaryFont: LinkstrTheme.font(.footnote, weight: .medium)
+                      )
 
                       Spacer()
 
@@ -291,10 +285,16 @@ struct SessionManagementSheet: View {
                               height: LinkstrTheme.minimumInteractiveDimension
                             )
                         }
-                        .accessibilityLabel("remove \(identity?.displayName ?? "member")")
+                        .accessibilityLabel("remove \(identity.displayName)")
                       }
                     }
                     .padding(.vertical, LinkstrTheme.listRowVerticalPadding)
+                    .contextMenu {
+                      Button("copy public key", systemImage: "doc.on.doc") {
+                        UIPasteboard.general.string = identity.npub
+                      }
+                    }
+                    .accessibilityAction(named: Text("copy public key")) { UIPasteboard.general.string = identity.npub }
 
                     if memberHex != currentMembers.last {
                       LinkstrListRowDivider(leadingInset: 50)

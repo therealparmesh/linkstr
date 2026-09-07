@@ -138,6 +138,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 - The session members button opens the same sheet for everyone. Creators manage the session there; non-creators see the session name read-only and can review current members.
 - Session detail uses chat-like link cards with grouped consecutive posts and inline membership timeline markers.
 - Members can be added only from existing contacts. Members can be removed from active membership.
+- Long-press a current member to copy their public key (`npub`).
 - Only the session creator can rename, delete, or change session membership. Non-creator membership and delete mutations are ignored on ingest.
 - Session detail inserts centered `in:` / `out:` separators for membership changes observed after the first local membership snapshot.
 - If the signed-in user is removed, the session stays visible as local history but becomes read-only for new posts and reactions.

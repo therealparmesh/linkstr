@@ -74,6 +74,7 @@ The bottom footer shows validation and relay status only. The keyboard return ke
 | Rename a session               | Open a session, tap the members button, and edit the session name.                                                                                                                              |
 | Delete a session               | Open a session, tap the members button, and use **Delete Session** in the manage sheet.                                                                                                         |
 | Add or remove members          | Open a session and use the members button.                                                                                                                                                      |
+| Copy a member's public key     | Open a session, tap the members button, then long-press a current member and choose **Copy Public Key**.                                                                                        |
 
 Only the session creator can rename sessions, delete them, or change session membership.
 

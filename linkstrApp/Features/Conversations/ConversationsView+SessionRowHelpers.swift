@@ -314,14 +314,6 @@ extension SessionManagementSheet {
     return NostrValueNormalizer.dedupedNormalizedPubkeyHexes(pubkeys)
   }
 
-  func memberIdentity(
-    for pubkeyHex: String,
-    contacts: [ContactEntity]
-  ) -> LinkstrResolvedIdentity? {
-    guard pubkeyHex != session.identityService.pubkeyHex else { return nil }
-    return session.resolvedIdentity(for: pubkeyHex, contacts: contacts)
-  }
-
   func saveSession() {
     guard canManageSession else {
       session.composeError = "only the session creator can manage this session."
