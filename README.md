@@ -74,7 +74,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 - New account creation can optionally set a profile name visible to others before leaving onboarding.
 - The active identity is keychain-backed.
 - The You tab exposes a profile card, QR code, current public key (`npub`), and editing for the account's published Nostr profile name.
-- Settings uses always-visible grouped sections for relays, storage, and identity.
+- Settings uses always-visible grouped sections for playback, relays, storage, and identity.
 - Settings storage controls can clear downloaded videos separately from saved link metadata and thumbnails.
 - The `nsec` is hidden by default and only revealed on explicit action. The revealed value is cleared again when the settings identity view disappears or the app moves to the inactive or background state.
 
@@ -316,7 +316,7 @@ Non-video provider URLs (channel pages, profiles, etc.) fall back to open-in-bro
 - Switching playback modes, refreshing or changing the source, and leaving the screen cancel superseded playback preparation and caching work.
 - Action rows are normalized across post detail and shared-link detail surfaces.
 - Audio plays even when the iPhone silent switch is enabled.
-- Local video playback loops automatically until paused or dismissed.
+- Local video playback loops without a repeat limit by default, inline and fullscreen. Settings → Playback → **loop local videos** turns looping off or on. The preference is saved on this device and applies across accounts; turning it off lets the current video finish without restarting.
 - In local playback mode with a cached file, users can export via **Save…** to Photos or Files.
 
 **Twitter/X statuses** are resolved at runtime:

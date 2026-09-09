@@ -7,6 +7,8 @@ import SwiftUI
 #endif
 
 struct InlineVideoPlayer: View {
+  @AppStorage("loopLocalVideos") private var loopLocalVideos = true
+
   let media: PlayableMedia
   var onPlaybackReady: (() -> Void)?
   var onPlaybackFailed: (() -> Void)?
@@ -56,7 +58,8 @@ struct InlineVideoPlayer: View {
     .onReceive(
       NotificationCenter.default.publisher(for: AVPlayerItem.didPlayToEndTimeNotification)
     ) { notification in
-      guard let endedItem = notification.object as? AVPlayerItem,
+      guard loopLocalVideos,
+        let endedItem = notification.object as? AVPlayerItem,
         let player,
         player.currentItem === endedItem
       else { return }

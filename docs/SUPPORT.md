@@ -112,7 +112,7 @@ linkstr accepts normal web URLs, but in-app playback is provider-dependent.
 
 **Browser fallback** covers everything else, plus any provider URL that blocks extraction or embed playback at runtime.
 
-Local video playback loops automatically until you pause it or leave the player. Embedded playback behavior is controlled by the provider.
+Local video playback loops without a repeat limit by default, inline and fullscreen. Turn off **loop local videos** in Settings → Playback to stop at the end of each video. Your choice is saved on this device and applies across accounts. Embedded playback behavior is controlled by the provider.
 
 When local extraction succeeds, linkstr can cache the media on-device and offer **Save to Photos** or **Save to Files**. Embed-only playback stays network-backed and does not offer local export controls.
 

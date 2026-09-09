@@ -22,6 +22,8 @@ struct SettingsView: View {
   @Environment(\.scenePhase) private var scenePhase
   @EnvironmentObject var session: AppSession
 
+  @AppStorage("loopLocalVideos") private var loopLocalVideos = true
+
   @State private var relayURL = ""
   @State var revealedNsec = ""
   @State var isNsecVisible = false
@@ -57,6 +59,7 @@ struct SettingsView: View {
     ScrollView {
       VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
         LinkstrScreenTitle(title: "settings")
+        playbackSection
         relaysSection
         storageSection
         identitySection
@@ -115,6 +118,19 @@ struct SettingsView: View {
           + "and local encryption keys for this account after the relay "
           + "deletion request succeeds."
       )
+    }
+  }
+
+  private var playbackSection: some View {
+    LinkstrInsetSection(
+      title: "playback",
+      footer: "repeat local videos when they end. embedded videos follow the provider's settings."
+    ) {
+      Toggle("loop local videos", isOn: $loopLocalVideos)
+        .font(LinkstrTheme.font(.subheadline))
+        .foregroundStyle(LinkstrTheme.textPrimary)
+        .toggleStyle(.switch)
+        .tint(LinkstrTheme.accent)
     }
   }
 
