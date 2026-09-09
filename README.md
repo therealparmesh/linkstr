@@ -1,6 +1,6 @@
 # linkstr
 
-_Last updated: September 2, 2026_
+_Last updated: September 9, 2026_
 
 linkstr is an iOS app for private link sharing on [Nostr](https://nostr.com). You create private sessions, share links with people you trust, react with emojis, and play supported video directly inside the app when a provider allows it.
 
@@ -316,6 +316,7 @@ Non-video provider URLs (channel pages, profiles, etc.) fall back to open-in-bro
 - Switching playback modes, refreshing or changing the source, and leaving the screen cancel superseded playback preparation and caching work.
 - Action rows are normalized across post detail and shared-link detail surfaces.
 - Audio plays even when the iPhone silent switch is enabled.
+- Local video playback loops automatically until paused or dismissed.
 - In local playback mode with a cached file, users can export via **Save…** to Photos or Files.
 
 **Twitter/X statuses** are resolved at runtime:

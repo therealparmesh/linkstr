@@ -53,6 +53,17 @@ struct InlineVideoPlayer: View {
           .background(Color.black)
       }
     }
+    .onReceive(
+      NotificationCenter.default.publisher(for: AVPlayerItem.didPlayToEndTimeNotification)
+    ) { notification in
+      guard let endedItem = notification.object as? AVPlayerItem,
+        let player,
+        player.currentItem === endedItem
+      else { return }
+
+      player.seek(to: .zero)
+      player.play()
+    }
     .task(id: media.playbackURL) {
       statusObservation?.invalidate()
       statusObservation = nil
