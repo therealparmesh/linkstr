@@ -148,6 +148,11 @@ extension AppSession {
   }
 
   func clearLocalAccountData(ownerPubkey: String) throws {
+    guard !isUsingRecoveryStore else {
+      throw LocalAccountCleanupError(failures: [
+        "couldn't open local storage. retry startup before removing account data."
+      ])
+    }
     if let clearLocalAccountDataOverride = testingOverrides.clearLocalAccountData {
       try clearLocalAccountDataOverride(ownerPubkey)
       return
@@ -169,12 +174,6 @@ extension AppSession {
     }
 
     do {
-      try LocalDataCrypto.shared.clearKey(ownerPubkey: ownerPubkey)
-    } catch {
-      failures.append(error.localizedDescription)
-    }
-
-    do {
       try accountStateStore.deleteAccountState(ownerPubkey: ownerPubkey)
     } catch {
       failures.append("couldn't remove local account state.")
@@ -183,6 +182,7 @@ extension AppSession {
     if !failures.isEmpty {
       throw LocalAccountCleanupError(failures: failures)
     }
+    try LocalDataCrypto.shared.clearKey(ownerPubkey: ownerPubkey)
   }
 }
 

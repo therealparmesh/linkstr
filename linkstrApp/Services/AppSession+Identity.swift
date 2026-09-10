@@ -119,6 +119,7 @@ extension AppSession {
       resetProfileMetadataStateInMemory()
       return
     }
+    preserveLocalEncryptionKey(ownerPubkey: ownerPubkey)
     if testingOverrides.skipPersistedFollowListStateLoad {
       resetFollowListStateInMemory()
       resetRemoteProfileStateInMemory()
@@ -129,6 +130,55 @@ extension AppSession {
     resetRemoteProfileStateInMemory()
     loadPersistedProfileMetadataState(ownerPubkey: ownerPubkey)
     schedulePushStateSync()
+  }
+
+  func preserveLocalEncryptionKey(ownerPubkey: String) {
+    guard !isUsingRecoveryStore else {
+      LocalDataCrypto.shared.preserveExistingKey(ownerPubkey: ownerPubkey)
+      return
+    }
+    do {
+      let hasEncryptedData =
+        try modelContext.fetchCount(
+          FetchDescriptor<ContactEntity>(
+            predicate: #Predicate { $0.ownerPubkey == ownerPubkey && $0.encryptedAlias != "" }
+          )) > 0
+        || modelContext.fetchCount(
+          FetchDescriptor<SessionEntity>(
+            predicate: #Predicate { $0.ownerPubkey == ownerPubkey }
+          )) > 0
+        || modelContext.fetchCount(
+          FetchDescriptor<SessionMessageEntity>(
+            predicate: #Predicate { $0.ownerPubkey == ownerPubkey }
+          )) > 0
+        || modelContext.fetchCount(
+          FetchDescriptor<SessionMemberEntity>(
+            predicate: #Predicate { $0.ownerPubkey == ownerPubkey }
+          )) > 0
+        || modelContext.fetchCount(
+          FetchDescriptor<SessionMemberIntervalEntity>(
+            predicate: #Predicate { $0.ownerPubkey == ownerPubkey }
+          )) > 0
+        || modelContext.fetchCount(
+          FetchDescriptor<SessionReactionEntity>(
+            predicate: #Predicate { $0.ownerPubkey == ownerPubkey }
+          )) > 0
+        || modelContext.fetchCount(
+          FetchDescriptor<SessionDeletionTombstoneEntity>(
+            predicate: #Predicate { $0.ownerPubkey == ownerPubkey }
+          )) > 0
+        || modelContext.fetchCount(
+          FetchDescriptor<SessionPostDeletionEntity>(
+            predicate: #Predicate { $0.ownerPubkey == ownerPubkey }
+          )) > 0
+      if hasEncryptedData {
+        LocalDataCrypto.shared.preserveExistingKey(ownerPubkey: ownerPubkey)
+      }
+    } catch {
+      // A failed storage check must not permit replacement of a restored account's key.
+      LocalDataCrypto.shared.preserveExistingKey(ownerPubkey: ownerPubkey)
+      report(error: error)
+    }
   }
 
   func resetRuntimeSessionState() {
@@ -204,6 +254,8 @@ extension AppSession {
       }
 
       guard let ownerPubkey = identityService.pubkeyHex else { return }
+
+      preserveLocalEncryptionKey(ownerPubkey: ownerPubkey)
 
       let contacts = fetchSimulatorContacts(ownerPubkey: ownerPubkey)
       let posts = fetchSimulatorPosts(ownerPubkey: ownerPubkey)

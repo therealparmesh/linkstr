@@ -208,6 +208,7 @@ final class AppSession: ObservableObject {
 
   let identityService: IdentityService
   let modelContext: ModelContext
+  var isUsingRecoveryStore = false
   let contactStore: ContactStore
   let relayStore: RelayStore
   let messageStore: SessionMessageStore

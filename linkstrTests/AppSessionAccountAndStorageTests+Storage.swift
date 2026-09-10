@@ -106,8 +106,18 @@ extension AppSessionAccountAndStorageTests {
     bootstrap.continueWithTemporaryStore()
 
     switch bootstrap.startupState {
-    case .ready(_, _, let isUsingTemporaryStore):
+    case .ready(let readyContext, _, let isUsingTemporaryStore):
       XCTAssertTrue(isUsingTemporaryStore)
+      let owner = UUID().uuidString
+      let keyName = "local_data_key.\(owner)"
+      defer { try? LocalDataCrypto.shared.clearKey(ownerPubkey: owner) }
+      readyContext.session.preserveLocalEncryptionKey(ownerPubkey: owner)
+      XCTAssertThrowsError(try LocalDataCrypto.shared.encryptString("alias", ownerPubkey: owner))
+      XCTAssertNil(try KeychainStore.shared.get(keyName))
+      let restoredKey = Data(repeating: 42, count: 32).base64EncodedString()
+      try KeychainStore.shared.set(restoredKey, for: keyName)
+      XCTAssertThrowsError(try readyContext.session.clearLocalAccountData(ownerPubkey: owner))
+      XCTAssertEqual(try KeychainStore.shared.get(keyName), restoredKey)
     case .loading, .fatal:
       XCTFail("expected temporary-store startup state")
     }

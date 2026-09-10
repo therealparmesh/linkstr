@@ -413,6 +413,7 @@ Embedded web playback allows provider-element fullscreen when supported.
 - Sensitive content fields are encrypted at rest with per-owner local keys (aliases, session and member identity values, URLs, notes, metadata, and creator keys).
 - Operational identifiers and timestamps remain plaintext in local storage for indexing and querying.
 - Identity keys remain in the keychain. Keychain accessibility uses `WhenUnlocked` and prefers synchronizable items when available.
+- Keychain replacements update existing items in place. Missing local encryption keys are not regenerated for accounts with stored encrypted data; failed decryptions remain retryable without rewriting that data.
 - Simulator fallback key storage is used when the simulator keychain is unavailable.
 
 ### Backup and migration expectations
@@ -420,7 +421,7 @@ Embedded web playback allows provider-element fullscreen when supported.
 - Identity continuity across devices depends on keychain and iCloud Keychain backup conditions.
 - SwiftData participates in iOS backup and restore according to the device's backup mode.
 - If encrypted local data restores without matching key material, encrypted fields are unreadable.
-- Reliable long-term portability depends on preserving the `nsec`.
+- The `nsec` preserves access to the Nostr identity. Restoring encrypted local data also requires its separate per-account encryption key from Keychain; the `nsec` alone cannot decrypt it.
 - A Nostr vanish or delete request is relay-side only; the key itself remains usable until you discard it.
 
 ### Known non-goals

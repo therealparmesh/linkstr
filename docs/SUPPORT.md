@@ -249,6 +249,10 @@ linkstr stores account-scoped sessions, member snapshots and intervals, session 
 
 In the device keychain, with iOS-controlled protection. Simulator fallback storage is used only when simulator keychain access is unavailable.
 
+Restoring encrypted local data also requires its original per-account encryption key, not just the `nsec`. If the key is temporarily unavailable, linkstr keeps the encrypted fields and can read them again when the original key becomes available. It does not generate a replacement key for existing encrypted data or while the persistent store cannot be opened.
+
+If linkstr starts in temporary recovery mode, retry startup successfully before clearing local account data. The app cannot safely remove account data or its encryption key while the persistent store is unavailable.
+
 ### Where are videos and previews stored?
 
 Downloaded media and generated previews are stored in app-owned local storage. Video cache is treated as disposable device cache and trims itself automatically. Media saved via the share sheet goes to Photos or a Files location you choose. Settings can clear cached videos or saved preview metadata if you want to free space or force a preview rebuild.

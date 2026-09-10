@@ -240,6 +240,8 @@ final class AppBootstrapState: ObservableObject {
           container: container,
           session: makeSession(container.mainContext)
         )
+        // The unreadable persistent store may still need this account's original key.
+        readyContext.session.isUsingRecoveryStore = true
         startupState = .ready(
           readyContext,
           recoveryMessage: Self.recoveryMessage(for: error),

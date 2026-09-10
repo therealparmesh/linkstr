@@ -20,6 +20,7 @@ linkstr stores app data locally for the signed-in account, including:
 - Session deletion tombstones, posts, reactions, delete watermarks, read state, and archive state.
 - Media cache references, downloaded videos, and generated previews.
 - Local per-account encryption keys used to protect sensitive stored fields at rest.
+- Existing encrypted local data requires its original per-account encryption key. If that key is unavailable after a restore, linkstr preserves the encrypted data instead of generating a replacement key. The `nsec` alone cannot decrypt these local fields.
 
 Sensitive local fields are encrypted at rest with per-account local keys. Operational identifiers and timestamps may remain plaintext locally for indexing and query purposes.
 

@@ -25,7 +25,9 @@ enum KeychainStoreError: Error, LocalizedError {
 final class KeychainStore {
   static let shared = KeychainStore()
 
-  private let service = "com.parmscript.linkstr"
+  private let service: String
+  private let updateItem: (CFDictionary, CFDictionary) -> OSStatus
+  private let addItem: (CFDictionary, UnsafeMutablePointer<CFTypeRef?>?) -> OSStatus
   private let migratoryAccessibility = kSecAttrAccessibleWhenUnlocked
 
   #if targetEnvironment(simulator)
@@ -33,30 +35,69 @@ final class KeychainStore {
     private let fallbackPrefix = "sim.keychain.fallback."
   #endif
 
-  private init() {}
+  init(
+    service: String = "com.parmscript.linkstr",
+    updateItem: @escaping (CFDictionary, CFDictionary) -> OSStatus = SecItemUpdate,
+    addItem: @escaping (CFDictionary, UnsafeMutablePointer<CFTypeRef?>?) -> OSStatus = SecItemAdd
+  ) {
+    self.service = service
+    self.updateItem = updateItem
+    self.addItem = addItem
+  }
 
   func set(_ value: String, for key: String) throws {
+    let status = update(value, for: key)
+    if status == errSecSuccess {
+      clearFallback(for: key)
+      return
+    }
+    if status == errSecItemNotFound {
+      if try insert(value, for: key) { return }
+      let retryStatus = update(value, for: key)
+      guard retryStatus == errSecSuccess else {
+        throw KeychainStoreError.saveFailed(retryStatus)
+      }
+      clearFallback(for: key)
+      return
+    }
+    if setFallbackIfRecoverable(status, value: value, for: key) { return }
+    throw KeychainStoreError.saveFailed(status)
+  }
+
+  private func update(_ value: String, for key: String) -> OSStatus {
+    updateItem(
+      query(for: key, synchronizableQuery: kSecAttrSynchronizableAny) as CFDictionary,
+      [
+        kSecValueData as String: Data(value.utf8),
+        kSecAttrAccessible as String: migratoryAccessibility
+      ] as CFDictionary
+    )
+  }
+
+  // A competing writer's key must be reused, never overwritten by a new random key.
+  func insert(_ value: String, for key: String) throws -> Bool {
     let data = Data(value.utf8)
-    deletePrimaryAndLegacyItems(for: key)
 
     // Prefer synchronizable storage so encrypted backups + device migration can carry keychain
     // identity/local-data keys across phones when iCloud Keychain is available.
     let syncStatus = add(data, for: key, synchronizable: true)
     if syncStatus == errSecSuccess {
       clearFallback(for: key)
-      return
+      return true
     }
+    if syncStatus == errSecDuplicateItem { return false }
 
     // Fallback keeps sign-in available when synchronizable keychain is unavailable on device.
     let localStatus = add(data, for: key, synchronizable: false)
     if localStatus == errSecSuccess {
       clearFallback(for: key)
-      return
+      return true
     }
+    if localStatus == errSecDuplicateItem { return false }
 
     if setFallbackIfRecoverable(localStatus, value: value, for: key)
       || setFallbackIfRecoverable(syncStatus, value: value, for: key) {
-      return
+      return true
     }
 
     throw KeychainStoreError.saveFailed(localStatus)
@@ -101,18 +142,7 @@ final class KeychainStore {
     )
     addQuery[kSecValueData as String] = data
     addQuery[kSecAttrAccessible as String] = migratoryAccessibility
-    return SecItemAdd(addQuery as CFDictionary, nil)
-  }
-
-  private func deletePrimaryAndLegacyItems(for key: String) {
-    let deleteQueries: [[String: Any]] = [
-      query(for: key, synchronizableQuery: kCFBooleanTrue),
-      query(for: key, synchronizableQuery: kCFBooleanFalse),
-      query(for: key, synchronizableQuery: nil)
-    ]
-    for deleteQuery in deleteQueries {
-      SecItemDelete(deleteQuery as CFDictionary)
-    }
+    return addItem(addQuery as CFDictionary, nil)
   }
 
   private func readValue(for key: String, synchronizableQuery: Any?) throws -> String? {
@@ -208,12 +238,16 @@ final class KeychainStore {
 }
 
 enum LocalDataCryptoError: Error, LocalizedError {
+  case missingKey
   case invalidKeyMaterial
   case invalidCiphertext
   case decryptionFailed
 
   var errorDescription: String? {
     switch self {
+    case .missingKey:
+      return
+        "this account's encryption key is unavailable. restore its keychain data and try again."
     case .invalidKeyMaterial:
       return "stored encryption key is invalid."
     case .invalidCiphertext:
@@ -227,16 +261,30 @@ enum LocalDataCryptoError: Error, LocalizedError {
 final class LocalDataCrypto {
   static let shared = LocalDataCrypto()
 
-  private let keychain = KeychainStore.shared
+  private let keychain: KeychainStore
   private let keyPrefix = "local_data_key."
   private var symmetricKeyCache: [String: SymmetricKey] = [:]
+  private var existingKeyOwners: Set<String> = []
   private let symmetricKeyCacheLock = NSLock()
 
-  private init() {}
+  init(keychain: KeychainStore = .shared) {
+    self.keychain = keychain
+  }
+
+  func preserveExistingKey(ownerPubkey: String) {
+    symmetricKeyCacheLock.lock()
+    defer { symmetricKeyCacheLock.unlock() }
+    existingKeyOwners.insert(ownerPubkey)
+  }
+
+  func requireExistingKey(ownerPubkey: String) throws {
+    preserveExistingKey(ownerPubkey: ownerPubkey)
+    _ = try symmetricKey(for: ownerPubkey, allowCreation: false)
+  }
 
   func encryptString(_ plaintext: String?, ownerPubkey: String) throws -> String? {
+    let key = try symmetricKey(for: ownerPubkey, allowCreation: true)
     guard let plaintext else { return nil }
-    let key = try symmetricKey(for: ownerPubkey)
     let data = Data(plaintext.utf8)
     let sealedBox = try AES.GCM.seal(data, using: key)
     guard let combined = sealedBox.combined else {
@@ -246,9 +294,10 @@ final class LocalDataCrypto {
   }
 
   func decryptString(_ ciphertext: String?, ownerPubkey: String) -> String? {
-    guard let ciphertext else { return nil }
+    guard let ciphertext, !ciphertext.isEmpty else { return nil }
+    preserveExistingKey(ownerPubkey: ownerPubkey)
     do {
-      let key = try symmetricKey(for: ownerPubkey)
+      let key = try symmetricKey(for: ownerPubkey, allowCreation: false)
       guard let combined = Data(base64Encoded: ciphertext) else {
         throw LocalDataCryptoError.invalidCiphertext
       }
@@ -264,8 +313,11 @@ final class LocalDataCrypto {
   }
 
   func clearKey(ownerPubkey: String) throws {
-    removeCachedSymmetricKey(for: ownerPubkey)
+    symmetricKeyCacheLock.lock()
+    defer { symmetricKeyCacheLock.unlock() }
     try keychain.delete(keyName(for: ownerPubkey))
+    symmetricKeyCache.removeValue(forKey: ownerPubkey)
+    existingKeyOwners.remove(ownerPubkey)
   }
 
   func digestHex(_ value: String) -> String {
@@ -280,44 +332,35 @@ final class LocalDataCrypto {
     return String(bytes: bytes, encoding: .ascii)!
   }
 
-  private func symmetricKey(for ownerPubkey: String) throws -> SymmetricKey {
-    if let cached = cachedSymmetricKey(for: ownerPubkey) {
+  private func symmetricKey(for ownerPubkey: String, allowCreation: Bool) throws -> SymmetricKey {
+    symmetricKeyCacheLock.lock()
+    defer { symmetricKeyCacheLock.unlock() }
+    if let cached = symmetricKeyCache[ownerPubkey] {
       return cached
     }
 
     let keyName = keyName(for: ownerPubkey)
-    if let encodedKey = try keychain.get(keyName) {
-      guard let data = Data(base64Encoded: encodedKey), data.count == 32 else {
-        throw LocalDataCryptoError.invalidKeyMaterial
+    var encodedKey = try keychain.get(keyName)
+    if encodedKey == nil {
+      guard allowCreation, !existingKeyOwners.contains(ownerPubkey) else {
+        throw LocalDataCryptoError.missingKey
       }
-      let key = SymmetricKey(data: data)
-      cacheSymmetricKey(key, for: ownerPubkey)
-      return key
+      let key = SymmetricKey(size: .bits256)
+      let newValue = key.withUnsafeBytes { Data($0) }.base64EncodedString()
+      if try keychain.insert(newValue, for: keyName) {
+        encodedKey = newValue
+      } else {
+        encodedKey = try keychain.get(keyName)
+      }
     }
-
-    let key = SymmetricKey(size: .bits256)
-    let keyData = Data(key.withUnsafeBytes { Data($0) })
-    try keychain.set(keyData.base64EncodedString(), for: keyName)
-    cacheSymmetricKey(key, for: ownerPubkey)
-    return key
-  }
-
-  private func cachedSymmetricKey(for ownerPubkey: String) -> SymmetricKey? {
-    symmetricKeyCacheLock.lock()
-    defer { symmetricKeyCacheLock.unlock() }
-    return symmetricKeyCache[ownerPubkey]
-  }
-
-  private func cacheSymmetricKey(_ key: SymmetricKey, for ownerPubkey: String) {
-    symmetricKeyCacheLock.lock()
+    guard let encodedKey else { throw LocalDataCryptoError.missingKey }
+    guard let data = Data(base64Encoded: encodedKey), data.count == 32 else {
+      throw LocalDataCryptoError.invalidKeyMaterial
+    }
+    let key = SymmetricKey(data: data)
     symmetricKeyCache[ownerPubkey] = key
-    symmetricKeyCacheLock.unlock()
-  }
-
-  private func removeCachedSymmetricKey(for ownerPubkey: String) {
-    symmetricKeyCacheLock.lock()
-    symmetricKeyCache.removeValue(forKey: ownerPubkey)
-    symmetricKeyCacheLock.unlock()
+    existingKeyOwners.insert(ownerPubkey)
+    return key
   }
 
   private func keyName(for ownerPubkey: String) -> String {

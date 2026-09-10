@@ -18,9 +18,9 @@ final class SessionMemberEntity {
   var memberPubkey: String {
     if let cached = _memberPubkey { return cached }
     let value =
-      LocalDataCrypto.shared.decryptString(encryptedMemberPubkey, ownerPubkey: ownerPubkey) ?? ""
+      LocalDataCrypto.shared.decryptString(encryptedMemberPubkey, ownerPubkey: ownerPubkey)
     _memberPubkey = value
-    return value
+    return value ?? ""
   }
 
   init(
@@ -77,9 +77,9 @@ final class SessionMemberIntervalEntity {
   var memberPubkey: String {
     if let cached = _memberPubkey { return cached }
     let value =
-      LocalDataCrypto.shared.decryptString(encryptedMemberPubkey, ownerPubkey: ownerPubkey) ?? ""
+      LocalDataCrypto.shared.decryptString(encryptedMemberPubkey, ownerPubkey: ownerPubkey)
     _memberPubkey = value
-    return value
+    return value ?? ""
   }
 
   init(
@@ -131,9 +131,9 @@ final class SessionReactionEntity {
   var senderPubkey: String {
     if let cached = _senderPubkey { return cached }
     let value =
-      LocalDataCrypto.shared.decryptString(encryptedSenderPubkey, ownerPubkey: ownerPubkey) ?? ""
+      LocalDataCrypto.shared.decryptString(encryptedSenderPubkey, ownerPubkey: ownerPubkey)
     _senderPubkey = value
-    return value
+    return value ?? ""
   }
 
   init(
@@ -197,9 +197,9 @@ final class SessionDeletionTombstoneEntity {
   var deletedByPubkey: String {
     if let cached = _deletedByPubkey { return cached }
     let value =
-      LocalDataCrypto.shared.decryptString(encryptedDeletedByPubkey, ownerPubkey: ownerPubkey) ?? ""
+      LocalDataCrypto.shared.decryptString(encryptedDeletedByPubkey, ownerPubkey: ownerPubkey)
     _deletedByPubkey = value
-    return value
+    return value ?? ""
   }
 
   init(
@@ -242,9 +242,9 @@ final class SessionPostDeletionEntity {
   var deletedByPubkey: String {
     if let cached = _deletedByPubkey { return cached }
     let value =
-      LocalDataCrypto.shared.decryptString(encryptedDeletedByPubkey, ownerPubkey: ownerPubkey) ?? ""
+      LocalDataCrypto.shared.decryptString(encryptedDeletedByPubkey, ownerPubkey: ownerPubkey)
     _deletedByPubkey = value
-    return value
+    return value ?? ""
   }
 
   init(

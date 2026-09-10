@@ -37,16 +37,18 @@ final class SessionMessageEntity {
   var senderPubkey: String {
     if let cached = _senderPubkey { return cached }
     let value =
-      LocalDataCrypto.shared.decryptString(encryptedSenderPubkey, ownerPubkey: ownerPubkey) ?? ""
+      LocalDataCrypto.shared.decryptString(encryptedSenderPubkey, ownerPubkey: ownerPubkey)
     _senderPubkey = value
-    return value
+    return value ?? ""
   }
 
   @Transient private var _url: String??
   var url: String? {
     if let cached = _url { return cached }
     let value = LocalDataCrypto.shared.decryptString(encryptedURL, ownerPubkey: ownerPubkey)
-    _url = .some(value)
+    if value != nil || encryptedURL == nil {
+      _url = .some(value)
+    }
     return value
   }
 
@@ -54,7 +56,9 @@ final class SessionMessageEntity {
   var note: String? {
     if let cached = _note { return cached }
     let value = LocalDataCrypto.shared.decryptString(encryptedNote, ownerPubkey: ownerPubkey)
-    _note = .some(value)
+    if value != nil || encryptedNote == nil {
+      _note = .some(value)
+    }
     return value
   }
 
@@ -63,7 +67,9 @@ final class SessionMessageEntity {
     if let cached = _thumbnailURL { return cached }
     let value = LocalDataCrypto.shared.decryptString(
       encryptedThumbnailURL, ownerPubkey: ownerPubkey)
-    _thumbnailURL = .some(value)
+    if value != nil || encryptedThumbnailURL == nil {
+      _thumbnailURL = .some(value)
+    }
     return value
   }
 
@@ -72,7 +78,9 @@ final class SessionMessageEntity {
     if let cached = _metadataTitle { return cached }
     let value = LocalDataCrypto.shared.decryptString(
       encryptedMetadataTitle, ownerPubkey: ownerPubkey)
-    _metadataTitle = .some(value)
+    if value != nil || encryptedMetadataTitle == nil {
+      _metadataTitle = .some(value)
+    }
     return value
   }
 
@@ -217,18 +225,18 @@ final class SessionEntity {
   @Transient private var _name: String?
   var name: String {
     if let cached = _name { return cached }
-    let value = LocalDataCrypto.shared.decryptString(encryptedName, ownerPubkey: ownerPubkey) ?? ""
+    let value = LocalDataCrypto.shared.decryptString(encryptedName, ownerPubkey: ownerPubkey)
     _name = value
-    return value
+    return value ?? ""
   }
 
   @Transient private var _createdByPubkey: String?
   var createdByPubkey: String {
     if let cached = _createdByPubkey { return cached }
     let value =
-      LocalDataCrypto.shared.decryptString(encryptedCreatedByPubkey, ownerPubkey: ownerPubkey) ?? ""
+      LocalDataCrypto.shared.decryptString(encryptedCreatedByPubkey, ownerPubkey: ownerPubkey)
     _createdByPubkey = value
-    return value
+    return value ?? ""
   }
 
   init(

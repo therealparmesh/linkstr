@@ -14,8 +14,10 @@ final class ContactEntity {
   @Transient private var _localAlias: String??
   var localAlias: String? {
     if let cached = _localAlias { return cached }
-    let decrypted = LocalDataCrypto.shared.decryptString(encryptedAlias, ownerPubkey: ownerPubkey)
-    let trimmed = decrypted?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    guard
+      let decrypted = LocalDataCrypto.shared.decryptString(encryptedAlias, ownerPubkey: ownerPubkey)
+    else { return nil }
+    let trimmed = decrypted.trimmingCharacters(in: .whitespacesAndNewlines)
     let value: String? = trimmed.isEmpty ? nil : trimmed
     _localAlias = .some(value)
     return value
@@ -48,6 +50,9 @@ final class ContactEntity {
   }
 
   func updateAlias(_ alias: String?) throws {
+    if !encryptedAlias.isEmpty {
+      try LocalDataCrypto.shared.requireExistingKey(ownerPubkey: ownerPubkey)
+    }
     let trimmed = alias?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     if trimmed.isEmpty {
       encryptedAlias = ""
