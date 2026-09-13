@@ -1,6 +1,6 @@
 # linkstr support
 
-_Last updated: September 12, 2026_
+_Last updated: September 13, 2026_
 
 linkstr is a private link-sharing app built on [Nostr](https://nostr.com). You create or join private sessions, share links inside those sessions, and react with emoji. This page describes the current shipped behavior in plain language.
 
@@ -155,7 +155,7 @@ Session content is end-to-end encrypted before it reaches relays. Only session m
 
 linkstr uses an APNs push service for iOS notifications. That service stores your APNs device token, your Nostr pubkey, archived conversation IDs used to suppress notifications for archived sessions, and lightweight push-dedupe bookkeeping so the same event is not pushed repeatedly. Dedupe records older than 30 days are removed when the service starts or handles a push request. Device tokens are removed when you unregister, switch the device to another account, or Apple permanently rejects them. Archive state is removed with the last registered token for an account.
 
-Push alerts use generic text. Tapping a new-post alert opens the session's posts list. Tapping a reaction alert opens the reacted-to post; older alerts without a target post ID open the session instead. This replaces the current screen even if you already have a post open. Content arriving from relays afterward updates the screen automatically. Missing or deleted content shows an unavailable message. Old push notifications are not replayed during historical restore.
+Push alerts use generic text. Tapping a new-post or reaction alert opens the session's posts list without starting a video. Reaction alerts scroll to the reacted-to post once it arrives; older alerts without a target post ID simply open the list. If you start scrolling yourself, linkstr cancels any pending jump. This replaces the current screen even if you already have a post open. Missing or deleted target posts leave you in the list. Old push notifications are not replayed during historical restore.
 
 ### Can I use my account in other Nostr apps?
 
@@ -182,7 +182,7 @@ Yes. Open the session and tap the members button. That sheet shows the session n
 
 Yes. Open the session, tap the members button, and use **Archive Session** or **Unarchive Session**.
 
-Archive only changes whether the session appears in the active or archived list on this device. It does not delete the session or its posts.
+Archive changes whether the session appears in the active or archived list. This private choice syncs across linkstr devices using the same account. It does not delete the session or its posts.
 
 ### What happens when I add or remove a member?
 
@@ -252,6 +252,12 @@ In the device keychain, with iOS-controlled protection. Simulator fallback stora
 Restoring encrypted local data also requires its original per-account encryption key, not just the `nsec`. If the key is temporarily unavailable, linkstr keeps the encrypted fields and can read them again when the original key becomes available. It does not generate a replacement key for existing encrypted data or while the persistent store cannot be opened.
 
 If linkstr starts in temporary recovery mode, retry startup successfully before clearing local account data. The app cannot safely remove account data or its encryption key while the persistent store is unavailable.
+
+### Will my aliases and archived sessions restore on a new phone?
+
+linkstr backs up private aliases and archive choices to your Nostr relays, encrypted so only your account can read them. Importing the same `nsec` in linkstr can restore them, including cleared aliases and unarchived sessions. The contact or session must also be restored before its preference appears. This does not make your aliases public or change your public follows.
+
+Changes made offline stay queued on the device until a relay accepts them. Keep the old installation until it has reconnected before switching phones. Restore depends on relay retention and availability; the `nsec` does not restore every local setting, read state, or cached file. Existing on-device encryption is unchanged.
 
 ### Where are videos and previews stored?
 

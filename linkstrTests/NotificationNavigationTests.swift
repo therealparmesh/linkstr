@@ -20,7 +20,7 @@ final class NotificationNavigationTests: AppSessionTestCase {
       (["conversation_id": "session", "type": "new_emoji_reaction", "post_id": " "],
        [.session("session")]),
       (["conversation_id": "session", "type": "new_emoji_reaction", "post_id": " post ",
-        "event_id": "reaction"], [.session("session"), .post(sessionID: "session", postID: "post")])
+        "event_id": "reaction"], [.session("session", scrollToPostID: "post")])
     ]
     for (payload, expected) in cases {
       XCTAssertEqual(SessionNavigationRequest(notification: payload)?.path, expected)
@@ -77,38 +77,51 @@ final class NotificationNavigationTests: AppSessionTestCase {
 
     await waitUntil { session.pendingSessionNavigationRequest?.postID == "post" }
     session.didFinishBoot = true
-    await waitUntil { self.navigationController(in: host)?.viewControllers.count == 3 }
-    try await verifyPostArrivingAfterNavigation(in: container.mainContext, owner: owner)
+    await waitUntil { self.navigationController(in: host)?.viewControllers.count == 2 }
+    try await verifyLatePostScrollsWithoutOpening(in: container.mainContext, owner: owner, host: host)
 
     notifications.enqueueNavigation(userInfo: ["conversation_id": "session", "type": "new_post"])
     await waitUntil { self.navigationController(in: host)?.viewControllers.count == 2 }
 
     notifications.enqueueNavigation(userInfo: reaction)
-    await waitUntil { self.navigationController(in: host)?.viewControllers.count == 3 }
+    await waitUntil { notifications.pendingNavigation == nil }
     let reactionStack = try XCTUnwrap(navigationController(in: host))
     notifications.enqueueNavigation(userInfo: reaction)
     await waitUntil {
       guard let current = self.navigationController(in: host) else { return false }
-      return current !== reactionStack && current.viewControllers.count == 3
+      return current !== reactionStack && current.viewControllers.count == 2
     }
 
     notifications.enqueueNavigation(userInfo: reaction)
     notifications.enqueueNavigation(userInfo: ["conversation_id": "other-session"])
-    await waitUntil { self.navigationController(in: host)?.viewControllers.count == 2 }
+    await waitUntil { notifications.pendingNavigation == nil && session.pendingSessionNavigationRequest == nil }
     XCTAssertNil(session.pendingSessionNavigationRequest)
     XCTAssertNil(notifications.pendingNavigation)
   }
 
-  private func verifyPostArrivingAfterNavigation(in context: ModelContext, owner: String) async throws {
+  private func verifyLatePostScrollsWithoutOpening(
+    in context: ModelContext, owner: String, host: UIViewController
+  ) async throws {
+    for index in 0..<40 {
+      context.insert(try SessionMessageEntity(
+        eventID: "filler-\(index)", ownerPubkey: owner, conversationID: "session", rootID: "filler-\(index)",
+        kind: .root, senderPubkey: owner, url: nil, note: nil, timestamp: .now, linkType: .generic
+      ))
+    }
     let post = try SessionMessageEntity(
       eventID: "post", ownerPubkey: owner, conversationID: "session", rootID: "post",
       kind: .root, senderPubkey: String(repeating: "b", count: 64), url: nil, note: nil,
-      timestamp: .now, linkType: .generic
+      timestamp: .now.addingTimeInterval(-60), linkType: .generic
     )
     context.insert(post)
     try context.save()
-    // The visible post's task marks it read only after its live query receives the insertion.
-    await waitUntil { post.readAt != nil }
+    await waitUntil { self.hasScrolledList(in: host.view) }
+    XCTAssertNil(post.readAt, "notification scrolling must not open the post detail")
+  }
+
+  private func hasScrolledList(in view: UIView) -> Bool {
+    if let scroll = view as? UIScrollView, scroll.contentOffset.y > 500 { return true }
+    return view.subviews.contains { self.hasScrolledList(in: $0) }
   }
 
   private func navigationController(in controller: UIViewController) -> UINavigationController? {

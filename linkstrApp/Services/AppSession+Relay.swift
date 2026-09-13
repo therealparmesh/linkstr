@@ -5,6 +5,8 @@ import NostrSDK
 
 extension AppSession {
   func replaceNostrService() {
+    privatePreferenceSyncTask?.cancel()
+    privatePreferenceSyncTask = nil
     nostrService.stop()
     nostrService = NostrDMService()
   }
@@ -207,6 +209,15 @@ extension AppSession {
       onFollowList: onFollowList,
       onProfileMetadata: onProfileMetadata
     )
+    let sourceService = nostrService
+    nostrService.onPrivatePreference = { [weak self, weak sourceService] event in
+      guard let self, let sourceService, self.nostrService === sourceService else { return }
+      self.receivePrivatePreference(event)
+    }
+    nostrService.onPrivatePreferencesReady = { [weak self, weak sourceService] in
+      guard let self, let sourceService, self.nostrService === sourceService else { return }
+      self.preparePrivatePreferenceBackup()
+    }
   }
 
   @discardableResult

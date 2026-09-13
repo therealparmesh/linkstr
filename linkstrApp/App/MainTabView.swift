@@ -94,8 +94,8 @@ struct MainTabView: View {
 
     .navigationDestination(for: SessionRoute.self) { route in
       switch route {
-      case .session(let sessionID):
-        SessionPostsView(ownerPubkey: ownerPubkey, sessionID: sessionID)
+      case .session(let sessionID, let postID):
+        SessionPostsView(ownerPubkey: ownerPubkey, sessionID: sessionID, scrollToPostID: postID)
       case .post(let sessionID, let postID):
         PostDetailView(ownerPubkey: ownerPubkey, sessionID: sessionID, postID: postID)
       }

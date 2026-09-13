@@ -4,6 +4,22 @@ import NostrSDK
 // MARK: - Event dispatch & processing
 
 extension NostrDMService {
+  func authenticate(to relay: Relay, challenge: String) {
+    guard let keypair, relayPool?.relays.contains(where: { $0 === relay }) == true else { return }
+    let relayURL = relay.url.absoluteString
+    do {
+      let event = try AuthenticationEvent.Builder()
+        .relayURL(relay.url).challenge(challenge).build(signedBy: keypair)
+      let data = try JSONEncoder().encode(event)
+      guard let request = String(data: data, encoding: .utf8) else { return }
+      pendingAuthenticationEvents = pendingAuthenticationEvents.filter { $0.value != relayURL }
+      pendingAuthenticationEvents[event.id] = relayURL
+      relay.send(request: "[\"AUTH\",\(request)]")
+    } catch {
+      onRelayStatus?(relayURL, .readOnly, error.localizedDescription)
+    }
+  }
+
   func directMessageSource(for subscriptionID: String) -> DirectMessageIngestSource {
     if subscriptionID.hasPrefix("linkstr-backfill-") {
       return .historical
@@ -14,6 +30,13 @@ extension NostrDMService {
   func handleIncomingEvent(_ relayEvent: RelayEvent) {
     guard let keypair else { return }
     let event = relayEvent.event
+    if event.kind == PrivatePreferenceCodec.kind {
+      if event.pubkey == keypair.publicKey.hex,
+        event.firstValueForRawTagName("d")?.hasPrefix(PrivatePreferenceCodec.namespace) == true {
+        onPrivatePreference?(event)
+      }
+      return
+    }
 
     switch event.kind {
     case .followList:
@@ -198,6 +221,17 @@ extension NostrDMService {
     let okEventID = params.okEventID
     let okSuccess = params.okSuccess
     let okMessage = params.okMessage
+    if let okEventID, pendingAuthenticationEvents[okEventID] == relayURL {
+      pendingAuthenticationEvents.removeValue(forKey: okEventID)
+      if okSuccess == true {
+        onRelayStatus?(relayURL, .connected, nil)
+        installSubscriptions()
+      }
+      return
+    }
+    if eoseSubscriptionID == privatePreferencesSubscriptionID {
+      onPrivatePreferencesReady?()
+    }
     if let eoseSubscriptionID, activeBackfillStates[eoseSubscriptionID] != nil {
       handleBackfillEOSE(relayURL: relayURL, subscriptionID: eoseSubscriptionID)
     }
@@ -299,6 +333,11 @@ extension NostrDMService: RelayDelegate {
     var okMessage: String?
 
     switch response {
+    case .auth(let challenge):
+      Task { @MainActor [weak self] in
+        self?.authenticate(to: relay, challenge: challenge)
+      }
+      return
     case .eose(let subscriptionID):
       eoseSubscriptionID = subscriptionID
     case .closed(let subscriptionID, _):
@@ -316,15 +355,6 @@ extension NostrDMService: RelayDelegate {
         }
       }
     default:
-      break
-    }
-
-    guard
-      eoseSubscriptionID != nil
-        || closedSubscriptionID != nil
-        || readOnlyMessage != nil
-        || okEventID != nil
-    else {
       return
     }
 

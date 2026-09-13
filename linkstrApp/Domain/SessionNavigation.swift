@@ -1,7 +1,7 @@
 import Foundation
 
 enum SessionRoute: Hashable {
-  case session(String)
+  case session(String, scrollToPostID: String? = nil)
   case post(sessionID: String, postID: String)
 }
 
@@ -11,11 +11,7 @@ struct SessionNavigationRequest: Identifiable, Equatable {
   let postID: String?
 
   var path: [SessionRoute] {
-    var routes: [SessionRoute] = [.session(sessionID)]
-    if let postID {
-      routes.append(.post(sessionID: sessionID, postID: postID))
-    }
-    return routes
+    [.session(sessionID, scrollToPostID: postID)]
   }
 
   init(sessionID: String, postID: String? = nil) {

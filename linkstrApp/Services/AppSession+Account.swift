@@ -175,6 +175,7 @@ extension AppSession {
 
     do {
       try accountStateStore.deleteAccountState(ownerPubkey: ownerPubkey)
+      try privatePreferenceStore.delete(ownerPubkey: ownerPubkey)
     } catch {
       failures.append("couldn't remove local account state.")
     }

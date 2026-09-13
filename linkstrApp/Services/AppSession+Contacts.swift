@@ -26,7 +26,6 @@ extension AppSession {
     let normalizedAlias = contactStore.normalizeAlias(alias)
     if contactStore.hasContact(ownerPubkey: ownerPubkey, withTargetPubkey: targetPubkey) {
       return updateExistingContactAlias(
-        ownerPubkey: ownerPubkey,
         targetPubkey: targetPubkey,
         alias: normalizedAlias
       )
@@ -42,16 +41,11 @@ extension AppSession {
   }
 
   private func updateExistingContactAlias(
-    ownerPubkey: String,
     targetPubkey: String,
     alias: String?
   ) -> Bool {
     do {
-      try contactStore.updateAlias(
-        ownerPubkey: ownerPubkey,
-        targetPubkey: targetPubkey,
-        alias: alias
-      )
+      try savePrivatePreference(.alias(pubkey: targetPubkey, name: alias))
       composeError = nil
       return true
     } catch {
@@ -96,17 +90,14 @@ extension AppSession {
       return false
     }
 
+    guard identityService.pubkeyHex == ownerPubkey else { return false }
     do {
       try persistLocalFollowedPubkeys(
         ownerPubkey: ownerPubkey,
         followedPubkeys: nextFollowedPubkeys
       ) { [self] in
         if let alias {
-          try contactStore.updateAlias(
-            ownerPubkey: ownerPubkey,
-            targetPubkey: targetPubkey,
-            alias: alias
-          )
+          try savePrivatePreference(.alias(pubkey: targetPubkey, name: alias))
         }
       }
       composeError = nil
@@ -123,10 +114,14 @@ extension AppSession {
       composeError = "you're signed out. sign in to manage contacts."
       return false
     }
+    guard contact.ownerPubkey == ownerPubkey else {
+      composeError = "this contact belongs to a different account."
+      return false
+    }
 
     do {
       let normalizedAlias = contactStore.normalizeAlias(alias)
-      try contactStore.updateAlias(contact, ownerPubkey: ownerPubkey, alias: normalizedAlias)
+      try savePrivatePreference(.alias(pubkey: contact.targetPubkey, name: normalizedAlias))
       composeError = nil
       return true
     } catch {
@@ -179,7 +174,10 @@ extension AppSession {
       return false
     }
 
+    guard let keypair = identityService.keypair, keypair.publicKey.hex == ownerPubkey else { return false }
     do {
+      try privatePreferenceStore.save(.alias(pubkey: contact.targetPubkey, name: nil), keypair: keypair)
+      defer { schedulePrivatePreferenceSync() }
       try persistLocalFollowedPubkeys(
         ownerPubkey: ownerPubkey,
         followedPubkeys: nextFollowedPubkeys
@@ -238,6 +236,7 @@ extension AppSession {
       ownerPubkey: ownerPubkey,
       pubkeyHexes: followedPubkeys
     )
+    try restorePrivatePreferences()
     try aliasMutation?()
     latestAppliedFollowListCreatedAt = createdAt
     latestAppliedFollowListEventID = eventID

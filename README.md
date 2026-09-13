@@ -1,6 +1,6 @@
 # linkstr
 
-_Last updated: September 9, 2026_
+_Last updated: September 13, 2026_
 
 linkstr is an iOS app for private link sharing on [Nostr](https://nostr.com). You create private sessions, share links with people you trust, react with emojis, and play supported video directly inside the app when a provider allows it.
 
@@ -264,7 +264,7 @@ linkstr payloads are JSON-encoded and delivered through Nostr gift-wrap direct m
 - Archived conversations do not notify.
 - Reaction deactivations, self-echoed events, and historical relay restore/backfill do not trigger notifications.
 - Foreground presentation remains enabled (banner, list, sound).
-- New-post notifications open the session's posts list. Reaction notifications with a target post ID open that post, with the session one back step away; older reaction notifications without that ID open the session.
+- New-post and reaction notifications open the session's posts list, without opening a post or starting video playback. Reaction notifications with a target post ID scroll to that post once it is available; older alerts without that ID simply open the list. Manual scrolling cancels a pending jump to a post that has not arrived yet.
 - Notification taps replace the current navigation stack and dismiss its sheets, including when the same session or post is already open. Cold-launch taps are retained through app startup; the latest tap wins.
 - Post details observe account- and post-scoped data so posts and reactions arriving after navigation appear without reopening the screen. Missing or deleted destinations show the existing unavailable state.
 - Push alerts use generic text; encrypted session content is fetched and decrypted on-device.
@@ -354,7 +354,7 @@ Embedded web playback allows provider-element fullscreen when supported.
 - Add and remove actions publish a full replacement follow-list event and wait for relay acceptance.
 - Incoming follow-list events from the signed-in author reconcile local contacts (newer timestamp wins; equal timestamp uses lexicographic event-ID tiebreak).
 - Follow-list recency watermarks are persisted per account so an app restart does not allow stale follow-list rollback.
-- Aliases are private per-account, per-device data and are never published to relays.
+- Aliases are private per-account data. They are backed up to relays encrypted to the account's own key, separately from the public follow list.
 - Remote Nostr profile names are fetched lazily by pubkey and used only when no local alias exists. When both exist, contact UI shows the local alias as primary and the published Nostr name as secondary.
 
 **Add-contact sheet:**
@@ -399,6 +399,7 @@ Embedded web playback allows provider-element fullscreen when supported.
 - Sessions, member snapshots, membership intervals, session deletion tombstones, root posts, post deletion watermarks, reactions, read state, and archive state.
 - Cached media references, downloaded videos, and metadata hydration state.
 - Account-scoped app state (follow-list recency watermark).
+- Signed, encrypted private-preference records and pending backup uploads.
 
 **Storage and caching:**
 
@@ -420,6 +421,10 @@ Embedded web playback allows provider-element fullscreen when supported.
 
 ### Backup and migration expectations
 
+- Private aliases and session archive choices sync through NIP-78 addressable events (`kind:30078`), encrypted to self with NIP-44. Each choice has a separate `d` tag under `linkstr/preferences/v1/`; its keyed identifier does not expose the contact or session ID. The public author, app namespace, and event timestamps remain visible to relays.
+- The newest record for each choice wins; NIP-01's lowest event-ID tiebreak applies at equal timestamps. Clearing an alias and unarchiving a session are saved explicitly. Independent choices do not overwrite one another.
+- Existing aliases and archived sessions are seeded using their original creation dates when no backup record exists, so initial backups do not outrank newer edits. Pending encrypted records survive offline use and retry after reconnect. Logging out and clearing local data also clears that account's pending records.
+- Importing the same `nsec` on a fresh install can restore these preferences when relays retain and return them. Preferences arriving before their contact or session are kept until that content arrives; they do not add contacts to the follow list. This is not a guaranteed backup of all app data.
 - Identity continuity across devices depends on keychain and iCloud Keychain backup conditions.
 - SwiftData participates in iOS backup and restore according to the device's backup mode.
 - If encrypted local data restores without matching key material, encrypted fields are unreadable.
@@ -428,7 +433,7 @@ Embedded web playback allows provider-element fullscreen when supported.
 
 ### Known non-goals
 
-- No offline guaranteed-delivery queue.
+- No offline guaranteed-delivery queue for posts or reactions.
 - No automatic resend of previously failed posts.
 - No public discovery feed or social graph product surface.
 - No text-based post replies.

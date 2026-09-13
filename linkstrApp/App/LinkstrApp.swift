@@ -169,6 +169,7 @@ final class AppBootstrapState: ObservableObject {
     ModelContainer
   typealias SessionFactory = @MainActor (_ modelContext: ModelContext) -> AppSession
   private static let schema = Schema([
+    PrivatePreferenceEntity.self,
     AccountStateEntity.self,
     ContactEntity.self,
     RelayEntity.self,

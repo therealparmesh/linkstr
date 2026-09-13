@@ -145,14 +145,9 @@ extension AppSession {
   }
 
   func setSessionArchived(sessionID: String, archived: Bool) {
-    guard let ownerPubkey = identityService.pubkeyHex else { return }
+    guard identityService.pubkeyHex != nil else { return }
     do {
-      try messageStore.setSessionArchived(
-        sessionID: sessionID,
-        ownerPubkey: ownerPubkey,
-        archived: archived
-      )
-      schedulePushStateSync()
+      try savePrivatePreference(.archive(sessionID: sessionID, archived: archived))
     } catch {
       report(error: error)
     }
@@ -205,6 +200,7 @@ extension AppSession {
       eventID: eventID
     )
     invalidateMemberIntervalCache(sessionID: sessionID)
+    try restorePrivateArchive(sessionID: sessionID)
     return sessionEntity
   }
 }

@@ -252,6 +252,8 @@ final class AppSession: ObservableObject {
   var didEvalHistoricalUnreadPolicy = false
 
   @Published var composeError: String?
+  var privatePreferenceSyncTask: Task<Void, Never>?
+  let privatePreferenceStore: PrivatePreferenceStore
   @Published var pendingSessionNavigationRequest: SessionNavigationRequest?
   @Published var hasIdentity = false
   @Published var didFinishBoot = false
@@ -284,6 +286,7 @@ final class AppSession: ObservableObject {
     )
     self.messageStore = SessionMessageStore(modelContext: modelContext)
     self.accountStateStore = AccountStateStore(modelContext: modelContext)
+    self.privatePreferenceStore = PrivatePreferenceStore(modelContext: modelContext)
   }
 
 }

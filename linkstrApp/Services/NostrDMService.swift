@@ -84,6 +84,10 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
   var onIncoming: ((ReceivedDirectMessage) -> Void)?
   var onFollowList: ((ReceivedFollowList) -> Void)?
   var onProfileMetadata: ((ReceivedProfileMetadata) -> Void)?
+  var onPrivatePreference: ((NostrEvent) -> Void)?
+  var onPrivatePreferencesReady: (() -> Void)?
+  let privatePreferencesSubscriptionID = "linkstr-private-preferences"
+  var pendingAuthenticationEvents: [String: String] = [:]
   var onRelayStatus: ((String, RelayHealthStatus, String?) -> Void)?
   var onInitialBackfillComplete: (() -> Void)?
   var configuredRelayURLs = Set<String>()
@@ -286,6 +290,9 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     onIncoming = nil
     onFollowList = nil
     onProfileMetadata = nil
+    onPrivatePreference = nil
+    onPrivatePreferencesReady = nil
+    pendingAuthenticationEvents.removeAll()
     onRelayStatus = nil
     onInitialBackfillComplete = nil
     keypair = nil
@@ -306,6 +313,9 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     }
   }
 
+}
+
+extension NostrDMService {
   // MARK: - Connection management
 
   func installSubscriptions() {
@@ -319,8 +329,14 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
     if let followListFilter {
       _ = relayPool.subscribe(with: followListFilter, subscriptionId: followListSubscriptionID)
     }
+    if let keypair,
+      let filter = Filter(authors: [keypair.publicKey.hex], kinds: [PrivatePreferenceCodec.kind.rawValue]) {
+      _ = relayPool.subscribe(
+        with: filter,
+        subscriptionId: privatePreferencesSubscriptionID
+      )
+    }
   }
-
 }
 
 // MARK: - Errors

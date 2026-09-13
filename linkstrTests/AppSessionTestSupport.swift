@@ -84,6 +84,7 @@ class AppSessionTestCase: XCTestCase {
     }()
   ) throws -> (AppSession, ModelContainer) {
     let schema = Schema([
+      PrivatePreferenceEntity.self,
       AccountStateEntity.self,
       ContactEntity.self,
       RelayEntity.self,

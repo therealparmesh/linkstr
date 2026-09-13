@@ -1,6 +1,6 @@
 # privacy policy
 
-Last updated: September 12, 2026
+Last updated: September 13, 2026
 
 ## Overview
 
@@ -16,6 +16,7 @@ linkstr stores app data locally for the signed-in account, including:
 
 - Account keys in the device keychain.
 - Contacts, including private aliases you save locally.
+- Encrypted private-preference backup records, including pending uploads.
 - Sessions, member snapshots, and membership intervals.
 - Session deletion tombstones, posts, reactions, delete watermarks, read state, and archive state.
 - Media cache references, downloaded videos, and generated previews.
@@ -38,6 +39,7 @@ When you use linkstr, encrypted session payloads are transmitted through the nos
 
 - Encrypted session payloads for session creation, membership updates, posts, reactions, and delete notices.
 - Your nostr follow list when you add or remove contacts.
+- Private contact aliases and session archive choices in NIP-78 app-data events, encrypted to your own account with NIP-44. Their contents and contact/session identifiers are not public; your public key, app namespace, and event timestamps are visible. Anyone who obtains your secret key can decrypt these backups. Pending changes retry when you reconnect, and restoring depends on relay retention and availability.
 - Standard relay connection metadata that any relay operator can observe, such as connection timing and network-level information.
 
 nostr relays are third-party services. linkstr does not control their retention policies, logs, or privacy practices.
@@ -49,7 +51,7 @@ If you allow notifications, linkstr sends limited routing data to a developer-op
 - APNs device tokens.
 - Associations between your nostr pubkey and those device tokens.
 - Archived conversation IDs used to suppress notifications for archived sessions.
-- Push requests carry the notification type, event and conversation IDs, recipient pubkeys, and reaction emoji when applicable. Reaction notifications may also include the reacted-to post ID so a tap can open that post. These routing fields are not encrypted session content.
+- Push requests carry the notification type, event and conversation IDs, recipient pubkeys, and reaction emoji when applicable. Reaction notifications may also include the reacted-to post ID so a tap can scroll to that post in the session list. These routing fields are not encrypted session content.
 
 The push service is used for notification routing, not message transport. Encrypted session content still travels through nostr relays, not through the push service. Push-dedupe records older than 30 days are removed when the service starts or handles a push request, and authentication nonces expire after five minutes.
 

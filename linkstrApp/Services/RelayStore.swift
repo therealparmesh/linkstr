@@ -243,23 +243,11 @@ final class ContactStore {
     }
   }
 
-  func updateAlias(ownerPubkey: String, targetPubkey: String, alias: String?) throws {
-    let descriptor = FetchDescriptor<ContactEntity>(
-      predicate: #Predicate {
-        $0.ownerPubkey == ownerPubkey && $0.targetPubkey == targetPubkey
-      }
-    )
-    guard let contact = try modelContext.fetch(descriptor).first else {
-      throw ContactStoreError.contactNotFound
-    }
-    try updateAlias(contact, ownerPubkey: ownerPubkey, alias: alias)
-  }
 }
 
 private enum ContactStoreError: LocalizedError {
   case invalidContactKey
   case contactOwnershipMismatch
-  case contactNotFound
 
   var errorDescription: String? {
     switch self {
@@ -267,8 +255,6 @@ private enum ContactStoreError: LocalizedError {
       return "invalid public key (npub)."
     case .contactOwnershipMismatch:
       return "this contact belongs to a different account."
-    case .contactNotFound:
-      return "contact not found."
     }
   }
 }
