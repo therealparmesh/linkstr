@@ -55,11 +55,13 @@ private struct UnregisterDeviceRequestBody: Encodable {
   }
 }
 
-private struct SyncArchivedConversationsRequestBody: Encodable {
+struct PushArchiveState: Encodable, Equatable {
   let archivedConversationIDs: [String]
+  let knownConversationIDs: [String]
 
   enum CodingKeys: String, CodingKey {
     case archivedConversationIDs = "archived_conversation_ids"
+    case knownConversationIDs = "known_conversation_ids"
   }
 }
 
@@ -113,12 +115,12 @@ final class PushAPIClient {
     )
   }
 
-  func syncArchivedConversations(_ conversationIDs: [String], signedBy keypair: Keypair)
+  func syncArchiveState(_ state: PushArchiveState, signedBy keypair: Keypair)
     async throws {
     try await performRequest(
       path: "/v1/conversations/archive-state",
       method: "PUT",
-      body: SyncArchivedConversationsRequestBody(archivedConversationIDs: conversationIDs),
+      body: state,
       signedBy: keypair
     )
   }

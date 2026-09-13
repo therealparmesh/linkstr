@@ -83,8 +83,8 @@ func TestArchiveStateRequiresDeviceAndIsRemovedWithLastDevice(t *testing.T) {
 	store, db := newTestStore(t)
 	ctx := context.Background()
 
-	if err := store.replaceArchivedConversations(ctx, "pubkey", []string{"conversation"}); err != nil {
-		t.Fatalf("replace archive state without device: %v", err)
+	if err := store.replaceArchivedConversations(ctx, "pubkey", []string{"conversation"}, nil); err != nil {
+		t.Fatalf("sync archives without device: %v", err)
 	}
 	assertArchivedConversationCount(t, db, "pubkey", 0)
 
@@ -94,8 +94,8 @@ func TestArchiveStateRequiresDeviceAndIsRemovedWithLastDevice(t *testing.T) {
 	if err := store.upsertDevice(ctx, "pubkey", "second-device-token", "sandbox"); err != nil {
 		t.Fatalf("register second device: %v", err)
 	}
-	if err := store.replaceArchivedConversations(ctx, "pubkey", []string{"conversation"}); err != nil {
-		t.Fatalf("replace archive state with device: %v", err)
+	if err := store.replaceArchivedConversations(ctx, "pubkey", []string{"conversation"}, nil); err != nil {
+		t.Fatalf("sync archives with device: %v", err)
 	}
 	assertArchivedConversationCount(t, db, "pubkey", 1)
 
@@ -116,7 +116,7 @@ func TestDeviceTokenMovesToCurrentPubkey(t *testing.T) {
 	if err := store.upsertDevice(ctx, "old-pubkey", "device-token", "production"); err != nil {
 		t.Fatalf("register old pubkey: %v", err)
 	}
-	if err := store.replaceArchivedConversations(ctx, "old-pubkey", []string{"conversation"}); err != nil {
+	if err := store.replaceArchivedConversations(ctx, "old-pubkey", []string{"conversation"}, nil); err != nil {
 		t.Fatalf("archive old pubkey conversation: %v", err)
 	}
 	if err := store.upsertDevice(ctx, "current-pubkey", "device-token", "production"); err != nil {

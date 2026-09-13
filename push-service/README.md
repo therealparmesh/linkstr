@@ -15,6 +15,10 @@ It does not decrypt linkstr content, watch relays directly, or keep a notificati
 
 Reaction requests can include an optional `post_id` identifying the reacted-to root post. The service passes it through to APNs for `new_emoji_reaction` only; `event_id` remains the reaction event ID used for deduplication. Requests from older clients without `post_id` remain supported, and their notifications open the session rather than a specific post.
 
+`PUT /v1/conversations/archive-state` requires an `archived_conversation_ids` list and accepts an optional `known_conversation_ids` scope. For example, `{"archived_conversation_ids":["session-a"],"known_conversation_ids":["session-a","session-b"]}` suppresses notifications for session A, removes suppression for session B, and leaves other sessions unchanged. An empty scope changes nothing. Missing or null archived lists, malformed lists, empty or padded scope IDs, and archived IDs outside the supplied scope are rejected before any update is applied. Updates are account-scoped and transactional.
+
+The client always supplies a scope containing only saved archive/unarchive choices and session deletions, in batches of up to 200. A restored session's default value is not a saved choice. Older apps omit the scope; a missing or null scope preserves their full-list replacement behavior. Those unscoped requests can still clear notification suppression during an incomplete restore, including choices sent by a newer device.
+
 ## Request auth
 
 Every mutating request is authorized with a signed Nostr HTTP auth event.

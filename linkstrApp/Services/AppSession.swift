@@ -151,7 +151,7 @@ final class AppSession: ObservableObject {
     var clearLocalAccountData: ((String) throws -> Void)?
     var registerPushDevice: ((PushDeviceRegistration) async throws -> Void)?
     var unregisterPushDevice: ((String) async throws -> Void)?
-    var syncArchivedConversationIDs: (([String]) async throws -> Void)?
+    var syncArchiveState: ((PushArchiveState) async throws -> Void)?
     var enqueuePushNotification: ((PushEnqueueRequest) async throws -> Void)?
     var fetchLinkPreview: ((String) async -> LinkPreviewData?)?
   }
@@ -247,7 +247,10 @@ final class AppSession: ObservableObject {
   var isBooting = false
   var isRetryingIdentityLoad = false
   var lastRegisteredPushDeviceSignature: String?
-  var lastArchivedConversationSyncSignature: String?
+  var lastSyncedPushArchiveState: (ownerPubkey: String, state: PushArchiveState)?
+  var pushStateSyncTask: Task<Void, Never>?
+  var pushStateSyncRequested = false
+  var pushStateSyncGeneration = 0
   var suppressUnreadDuringHistoricalRestore = false
   var didEvalHistoricalUnreadPolicy = false
 

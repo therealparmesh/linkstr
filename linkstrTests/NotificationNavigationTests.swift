@@ -7,6 +7,28 @@ import XCTest
 
 @MainActor
 final class NotificationNavigationTests: AppSessionTestCase {
+  func testDeliveredAlertMatchingUsesPostTargetsAndLeavesUnrelatedAlertsAlone() {
+    let payloads: [([AnyHashable: Any], Bool)] = [
+      (["conversation_id": "session", "type": "new_post", "event_id": "post"], true),
+      (
+        [
+          "conversation_id": "session", "type": "new_emoji_reaction", "post_id": "post",
+          "event_id": "reaction"
+        ], true
+      ),
+      (["conversation_id": "other", "type": "new_post", "event_id": "post"], false),
+      (["conversation_id": "session", "type": "new_post", "event_id": "other"], false),
+      (["conversation_id": "session", "type": "new_emoji_reaction", "event_id": "post"], false),
+      (["conversation_id": "session", "type": "unknown", "post_id": "post"], false),
+      (["conversation_id": "session", "type": "new_post", "event_id": 42], false)
+    ]
+    for (payload, expected) in payloads {
+      XCTAssertEqual(
+        PushNotificationService.referencesPost(payload, sessionID: "session", postID: "post"),
+        expected)
+    }
+  }
+
   func testNotificationDestinationsValidateIDsAndPreserveLegacyFallback() {
     let cases: [([AnyHashable: Any], [SessionRoute]?)] = [
       ([:], nil),

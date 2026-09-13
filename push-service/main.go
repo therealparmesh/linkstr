@@ -55,6 +55,7 @@ type unregisterDeviceRequest struct {
 
 type archiveStateRequest struct {
 	ArchivedConversationIDs []string `json:"archived_conversation_ids"`
+	KnownConversationIDs    []string `json:"known_conversation_ids"`
 }
 
 type pushRequest struct {
@@ -208,8 +209,28 @@ func (s *apiServer) handleArchiveState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	archivedConversationIDs := dedupeNonEmpty(req.ArchivedConversationIDs)
-	if err := s.store.replaceArchivedConversations(r.Context(), pubkey, archivedConversationIDs); err != nil {
+	if req.ArchivedConversationIDs == nil {
+		writeError(w, http.StatusBadRequest, "archived_conversation_ids is required")
+		return
+	}
+	archivedIDs := dedupeNonEmpty(req.ArchivedConversationIDs)
+	if req.KnownConversationIDs != nil {
+		knownIDs := make(map[string]bool, len(req.KnownConversationIDs))
+		for _, id := range req.KnownConversationIDs {
+			if id == "" || id != strings.TrimSpace(id) {
+				writeError(w, http.StatusBadRequest, "known_conversation_ids must contain nonempty conversation IDs")
+				return
+			}
+			knownIDs[id] = true
+		}
+		for _, id := range req.ArchivedConversationIDs {
+			if !knownIDs[id] {
+				writeError(w, http.StatusBadRequest, "archived_conversation_ids must be within known_conversation_ids")
+				return
+			}
+		}
+	}
+	if err := s.store.replaceArchivedConversations(r.Context(), pubkey, archivedIDs, req.KnownConversationIDs); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to save archive state")
 		return
 	}

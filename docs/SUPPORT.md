@@ -157,6 +157,12 @@ linkstr uses an APNs push service for iOS notifications. That service stores you
 
 Push alerts use generic text. Tapping a new-post or reaction alert opens the session's posts list without starting a video. Reaction alerts scroll to the reacted-to post once it arrives; older alerts without a target post ID simply open the list. If you start scrolling yourself, linkstr cancels any pending jump. This replaces the current screen even if you already have a post open. Missing or deleted target posts leave you in the list. Old push notifications are not replayed during historical restore.
 
+Opening a post clears its delivered new-post and reaction alerts from Notification Center, including when you open it manually. Alerts for other posts and older reactions without a target post ID stay there. Opening just the app or session list does not clear them.
+
+Archive updates send each saved archive/unarchive choice and clear filtering for deleted sessions. Restoring a session without its preference does not send an assumed unarchive. Sessions omitted from an update stay unchanged on the server, which retains only archived IDs for notification filtering.
+
+Older builds can still archive and unarchive, but their push updates can clear notification suppression during an incomplete restore. Update all devices using the account to use explicit archive choices.
+
 ### Can I use my account in other Nostr apps?
 
 Yes. Your `nsec` is a Nostr secret key, not a linkstr-only credential.
@@ -258,6 +264,8 @@ If linkstr starts in temporary recovery mode, retry startup successfully before 
 linkstr backs up private aliases and archive choices to your Nostr relays, encrypted so only your account can read them. Importing the same `nsec` in linkstr can restore them, including cleared aliases and unarchived sessions. The contact or session must also be restored before its preference appears. This does not make your aliases public or change your public follows.
 
 Changes made offline stay queued on the device until a relay accepts them. Keep the old installation until it has reconnected before switching phones. Restore depends on relay retention and availability; the `nsec` does not restore every local setting, read state, or cached file. Existing on-device encryption is unchanged.
+
+There is no manual backup step. Once the initial preference subscription finishes, linkstr seeds existing aliases and archived sessions that do not have backup records yet. New changes upload while the app is active and a relay is ready, and pending uploads retry on reconnect. Restored archive choices also update push filtering before the session history arrives.
 
 ### Where are videos and previews stored?
 

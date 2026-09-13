@@ -126,7 +126,7 @@ class AppSessionTestCase: XCTestCase {
     clearLocalAccountData: ((String) throws -> Void)? = nil,
     registerPushDevice: ((PushDeviceRegistration) async throws -> Void)? = nil,
     unregisterPushDevice: ((String) async throws -> Void)? = nil,
-    syncArchivedConversationIDs: (([String]) async throws -> Void)? = nil,
+    syncArchiveState: ((PushArchiveState) async throws -> Void)? = nil,
     enqueuePushNotification: ((PushEnqueueRequest) async throws -> Void)? = nil,
     fetchLinkPreview: ((String) async -> LinkPreviewData?)? = nil,
     relaySettingsUserDefaults: UserDefaults? = nil
@@ -149,7 +149,7 @@ class AppSessionTestCase: XCTestCase {
     testingOverrides.clearLocalAccountData = clearLocalAccountData
     testingOverrides.registerPushDevice = registerPushDevice
     testingOverrides.unregisterPushDevice = unregisterPushDevice
-    testingOverrides.syncArchivedConversationIDs = syncArchivedConversationIDs
+    testingOverrides.syncArchiveState = syncArchiveState
     testingOverrides.enqueuePushNotification = enqueuePushNotification
     testingOverrides.fetchLinkPreview = fetchLinkPreview
     return try makeSession(

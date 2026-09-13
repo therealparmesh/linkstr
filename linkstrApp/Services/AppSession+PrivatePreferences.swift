@@ -53,6 +53,7 @@ extension AppSession {
           .archive(sessionID: session.sessionID, archived: true), keypair: keypair, initialDate: session.createdAt
         )
       }
+      schedulePushStateSync()
       schedulePrivatePreferenceSync()
     } catch {
       reportPrivatePreferenceError()

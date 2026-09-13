@@ -1,17 +1,22 @@
 import Foundation
 import NostrSDK
+import SwiftData
 
 // MARK: - Push Notification Management
 
 extension AppSession {
   func resetPushSyncState() {
+    pushStateSyncGeneration += 1
+    pushStateSyncTask?.cancel()
+    pushStateSyncTask = nil
+    pushStateSyncRequested = false
     lastRegisteredPushDeviceSignature = nil
-    lastArchivedConversationSyncSignature = nil
+    lastSyncedPushArchiveState = nil
   }
 
   func shouldManagePushStateForCurrentProcess() -> Bool {
     if testingOverrides.registerPushDevice != nil
-      || testingOverrides.syncArchivedConversationIDs != nil
+      || testingOverrides.syncArchiveState != nil
       || testingOverrides.enqueuePushNotification != nil
       || testingOverrides.unregisterPushDevice != nil {
       return true
@@ -24,44 +29,88 @@ extension AppSession {
 
   func schedulePushStateSync() {
     guard shouldManagePushStateForCurrentProcess() else { return }
-    guard let keypair = identityService.keypair, let ownerPubkey = identityService.pubkeyHex else {
+    guard identityService.keypair != nil else {
       resetPushSyncState()
       return
     }
 
-    let deviceToken = PushNotificationService.shared.deviceTokenHex
-    let apnsEnvironment = PushNotificationService.shared.apnsEnvironment
-    let archivedConversationIDs =
-      (try? messageStore.archivedConversationIDs(ownerPubkey: ownerPubkey)) ?? []
-    let deviceSignature =
-      deviceToken.map { "\(ownerPubkey)|\($0)|\(apnsEnvironment)" }
-    let archiveSignature =
-      "\(ownerPubkey)|\(archivedConversationIDs.sorted().joined(separator: ","))"
-
-    Task { @MainActor in
-      if let deviceToken, lastRegisteredPushDeviceSignature != deviceSignature {
+    pushStateSyncRequested = true
+    guard pushStateSyncTask == nil else { return }
+    let generation = pushStateSyncGeneration
+    pushStateSyncTask = Task { @MainActor [weak self] in
+      guard let self else { return }
+      defer {
+        if self.pushStateSyncGeneration == generation { self.pushStateSyncTask = nil }
+      }
+      while !Task.isCancelled, self.pushStateSyncGeneration == generation,
+        self.pushStateSyncRequested,
+        let keypair = self.identityService.keypair {
+        self.pushStateSyncRequested = false
         do {
-          try await registerPushDevice(
-            PushDeviceRegistration(
-              deviceToken: deviceToken,
-              apnsEnvironment: apnsEnvironment
-            ),
-            signedBy: keypair
-          )
-          lastRegisteredPushDeviceSignature = deviceSignature
+          try await self.syncPushState(signedBy: keypair, generation: generation)
         } catch {
-          NSLog("Push device registration failed: \(error.localizedDescription)")
+          if !Task.isCancelled { NSLog("Push state sync failed: \(error.localizedDescription)") }
         }
       }
+    }
+  }
 
-      guard lastArchivedConversationSyncSignature != archiveSignature else { return }
-      do {
-        try await syncArchivedConversationIDs(archivedConversationIDs, signedBy: keypair)
-        lastArchivedConversationSyncSignature = archiveSignature
-      } catch {
-        NSLog("Push archive sync failed: \(error.localizedDescription)")
+  private func syncPushState(signedBy keypair: Keypair, generation: Int) async throws {
+    let owner = keypair.publicKey.hex
+    let deviceToken = PushNotificationService.shared.deviceTokenHex
+    let environment = PushNotificationService.shared.apnsEnvironment
+    let deviceSignature = deviceToken.map { "\(owner)|\($0)|\(environment)" }
+    if let deviceToken, lastRegisteredPushDeviceSignature != deviceSignature {
+      try await registerPushDevice(
+        PushDeviceRegistration(deviceToken: deviceToken, apnsEnvironment: environment),
+        signedBy: keypair)
+      guard !Task.isCancelled, pushStateSyncGeneration == generation,
+        identityService.pubkeyHex == owner
+      else { return }
+      lastRegisteredPushDeviceSignature = deviceSignature
+      lastSyncedPushArchiveState = nil
+    }
+    let state = try pushArchiveState(keypair: keypair)
+    guard
+      lastSyncedPushArchiveState?.ownerPubkey != owner || lastSyncedPushArchiveState?.state != state
+    else { return }
+    let archivedIDs = Set(state.archivedConversationIDs)
+    // Bounded requests stay below the push service's 64 KiB body limit for session IDs.
+    let batchSize = 200
+    for offset in stride(from: 0, to: state.knownConversationIDs.count, by: batchSize) {
+      try Task.checkCancellation()
+      guard pushStateSyncGeneration == generation, identityService.pubkeyHex == owner else { return }
+      let knownIDs = Array(state.knownConversationIDs.dropFirst(offset).prefix(batchSize))
+      try await syncArchiveState(
+        PushArchiveState(
+          archivedConversationIDs: knownIDs.filter { archivedIDs.contains($0) },
+          knownConversationIDs: knownIDs), signedBy: keypair)
+    }
+    guard !Task.isCancelled, pushStateSyncGeneration == generation,
+      identityService.pubkeyHex == owner
+    else { return }
+    lastSyncedPushArchiveState = (owner, state)
+  }
+
+  private func pushArchiveState(keypair: Keypair) throws -> PushArchiveState {
+    let owner = keypair.publicKey.hex
+    var archivedByID: [String: Bool] = [:]
+    for record in try privatePreferenceStore.records(ownerPubkey: owner) {
+      let preference = try PrivatePreferenceCodec().preference(
+        from: record.event(), keypair: keypair)
+      if case .archive(let sessionID, let archived) = preference {
+        archivedByID[sessionID] = archived
       }
     }
+    let deleted = try modelContext.fetch(
+      FetchDescriptor<SessionDeletionTombstoneEntity>(
+        predicate: #Predicate {
+          $0.ownerPubkey == owner
+        }))
+    for session in deleted { archivedByID[session.sessionID] = false }
+    return PushArchiveState(
+      archivedConversationIDs: archivedByID.filter(\.value).map(\.key).sorted(),
+      knownConversationIDs: archivedByID.keys.sorted())
   }
 
   func schedulePushDeviceUnregistration(deviceToken: String?, keypair: Keypair?) {
@@ -105,16 +154,13 @@ extension AppSession {
     try await PushAPIClient.shared.unregisterDevice(deviceToken: deviceToken, signedBy: keypair)
   }
 
-  private func syncArchivedConversationIDs(_ conversationIDs: [String], signedBy keypair: Keypair)
+  private func syncArchiveState(_ state: PushArchiveState, signedBy keypair: Keypair)
     async throws {
-    if let syncArchivedConversationIDsOverride = testingOverrides.syncArchivedConversationIDs {
-      try await syncArchivedConversationIDsOverride(conversationIDs)
+    if let syncArchiveStateOverride = testingOverrides.syncArchiveState {
+      try await syncArchiveStateOverride(state)
       return
     }
-    try await PushAPIClient.shared.syncArchivedConversations(
-      conversationIDs.sorted(),
-      signedBy: keypair
-    )
+    try await PushAPIClient.shared.syncArchiveState(state, signedBy: keypair)
   }
 
   private func enqueuePushNotification(_ request: PushEnqueueRequest, signedBy keypair: Keypair)

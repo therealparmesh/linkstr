@@ -28,6 +28,29 @@ final class PushNotificationService: NSObject, ObservableObject {
     pendingNavigation = nil
   }
 
+  func clearDeliveredNotifications(sessionID: String, postID: String) async {
+    let center = UNUserNotificationCenter.current()
+    let notifications = await center.deliveredNotifications()
+    guard !Task.isCancelled else { return }
+    let identifiers = notifications.filter {
+      Self.referencesPost($0.request.content.userInfo, sessionID: sessionID, postID: postID)
+    }.map { $0.request.identifier }
+    center.removeDeliveredNotifications(withIdentifiers: identifiers)
+  }
+
+  static func referencesPost(_ userInfo: [AnyHashable: Any], sessionID: String, postID: String) -> Bool {
+    guard !sessionID.isEmpty, !postID.isEmpty,
+      (userInfo["conversation_id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) == sessionID
+    else { return false }
+    let field: String
+    switch userInfo["type"] as? String {
+    case "new_post": field = "event_id"
+    case "new_emoji_reaction": field = "post_id"
+    default: return false
+    }
+    return (userInfo[field] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) == postID
+  }
+
   override init() {
     super.init()
   }

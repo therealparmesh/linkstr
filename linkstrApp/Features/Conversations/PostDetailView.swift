@@ -95,6 +95,7 @@ struct PostDetailView: View {
       guard let post else { return }
       session.markRootPostRead(postID: post.rootID)
       session.refreshMetadataForVisiblePostIfNeeded(post)
+      await PushNotificationService.shared.clearDeliveredNotifications(sessionID: sessionID, postID: post.rootID)
     }
     .task(id: remotePostTextRequestID) {
       remotePostText = await resolvedRemotePostText()

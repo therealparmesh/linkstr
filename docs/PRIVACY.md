@@ -51,6 +51,7 @@ If you allow notifications, linkstr sends limited routing data to a developer-op
 - APNs device tokens.
 - Associations between your nostr pubkey and those device tokens.
 - Archived conversation IDs used to suppress notifications for archived sessions.
+- Archive updates send session IDs with explicit archive/unarchive choices, including clearing archived filtering for deleted sessions. The service processes these updates but retains only archived IDs for this purpose.
 - Push requests carry the notification type, event and conversation IDs, recipient pubkeys, and reaction emoji when applicable. Reaction notifications may also include the reacted-to post ID so a tap can scroll to that post in the session list. These routing fields are not encrypted session content.
 
 The push service is used for notification routing, not message transport. Encrypted session content still travels through nostr relays, not through the push service. Push-dedupe records older than 30 days are removed when the service starts or handles a push request, and authentication nonces expire after five minutes.

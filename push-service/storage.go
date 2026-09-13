@@ -116,12 +116,8 @@ func (s *store) deleteDevice(ctx context.Context, pubkey, deviceToken string) er
 	return err
 }
 
-func (s *store) replaceArchivedConversations(ctx context.Context, pubkey string, conversationIDs []string) error {
+func (s *store) replaceArchivedConversations(ctx context.Context, pubkey string, archivedIDs, knownIDs []string) error {
 	return s.write(ctx, func(ctx context.Context, tx *sql.Tx) error {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM archived_conversations WHERE pubkey = ?`, pubkey); err != nil {
-			return err
-		}
-
 		var hasDevice bool
 		if err := tx.QueryRowContext(
 			ctx,
@@ -133,14 +129,25 @@ func (s *store) replaceArchivedConversations(ctx context.Context, pubkey string,
 		if !hasDevice {
 			return nil
 		}
-
+		// A missing scope preserves full-list updates from older apps; an empty scope changes nothing.
+		if knownIDs == nil {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM archived_conversations WHERE pubkey = ?`, pubkey); err != nil {
+				return err
+			}
+		} else {
+			for _, id := range knownIDs {
+				if _, err := tx.ExecContext(ctx, `DELETE FROM archived_conversations WHERE pubkey = ? AND conversation_id = ?`, pubkey, id); err != nil {
+					return err
+				}
+			}
+		}
 		now := time.Now().Unix()
-		for _, conversationID := range conversationIDs {
+		for _, id := range archivedIDs {
 			if _, err := tx.ExecContext(
 				ctx,
 				`INSERT INTO archived_conversations (pubkey, conversation_id, updated_at) VALUES (?, ?, ?)`,
 				pubkey,
-				conversationID,
+				id,
 				now,
 			); err != nil {
 				return err

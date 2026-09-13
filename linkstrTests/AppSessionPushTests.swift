@@ -110,38 +110,157 @@ final class AppSessionPushTests: AppSessionTestCase {
     XCTAssertEqual(capturedRequests.count, 1)
   }
 
-  func testSetSessionArchivedSyncsArchivedConversationIDsToPushService() async throws {
-    var syncedConversationIDs: [[String]] = []
-    let archiveExpectation = expectation(description: "archive sync")
-    let unarchiveExpectation = expectation(description: "unarchive sync")
+  func testRestoredArchiveReachesPushServiceBeforeSessionHistory() async throws {
+    var updates: [PushArchiveState] = []
+    let (session, container) = try makeSession(syncArchiveState: { updates.append($0) })
+    try session.identityService.createNewIdentity()
+    let keypair = try XCTUnwrap(session.identityService.keypair)
+    defer { try? LocalDataCrypto.shared.clearKey(ownerPubkey: keypair.publicKey.hex) }
+    session.receivePrivatePreference(
+      try PrivatePreferenceCodec().event(
+        for: .archive(sessionID: "not-restored-yet", archived: true), keypair: keypair,
+        createdAt: 100))
+    await session.pushStateSyncTask?.value
+    XCTAssertEqual(updates, [
+      PushArchiveState(archivedConversationIDs: ["not-restored-yet"], knownConversationIDs: ["not-restored-yet"])
+    ])
+    container.mainContext.insert(
+      try SessionDeletionTombstoneEntity(
+        ownerPubkey: keypair.publicKey.hex, sessionID: "not-restored-yet",
+        deletedByPubkey: keypair.publicKey.hex))
+    try container.mainContext.save()
+    session.schedulePushStateSync()
+    await session.pushStateSyncTask?.value
+    XCTAssertEqual(updates.last,
+      PushArchiveState(archivedConversationIDs: [], knownConversationIDs: ["not-restored-yet"]))
+  }
 
-    let (session, container) = try makeSession(
-      syncArchivedConversationIDs: { conversationIDs in
-        syncedConversationIDs.append(conversationIDs.sorted())
-        if syncedConversationIDs.count == 1 {
-          archiveExpectation.fulfill()
-        } else if syncedConversationIDs.count == 2 {
-          unarchiveExpectation.fulfill()
+  func testSessionRestoredBeforeItsPreferenceDoesNotSendAnAssumedUnarchive() async throws {
+    var updates: [PushArchiveState] = []
+    let (session, container) = try makeSession(syncArchiveState: { updates.append($0) })
+    try session.identityService.createNewIdentity()
+    let keypair = try XCTUnwrap(session.identityService.keypair)
+    let owner = keypair.publicKey.hex
+    defer { try? LocalDataCrypto.shared.clearKey(ownerPubkey: owner) }
+    session.schedulePushStateSync()
+    await session.pushStateSyncTask?.value
+    let restored = try insertSessionFixture(
+      in: container.mainContext, ownerPubkey: owner, createdByPubkey: owner,
+      memberPubkeys: [owner], sessionID: "restored-session")
+    session.preparePrivatePreferenceBackup()
+    await session.pushStateSyncTask?.value
+    XCTAssertTrue(updates.isEmpty, "restoring a session does not establish an archive choice")
+    for (timestamp, archived) in [(100, true), (101, false)] {
+      session.receivePrivatePreference(
+        try PrivatePreferenceCodec().event(
+          for: .archive(sessionID: restored.sessionID, archived: archived), keypair: keypair,
+          createdAt: Int64(timestamp)))
+      await session.pushStateSyncTask?.value
+      XCTAssertEqual(restored.isArchived, archived)
+    }
+    XCTAssertEqual(updates, [
+      PushArchiveState(archivedConversationIDs: ["restored-session"], knownConversationIDs: ["restored-session"]),
+      PushArchiveState(archivedConversationIDs: [], knownConversationIDs: ["restored-session"])
+    ])
+  }
+
+  func testPushSyncSerializesChangesDuringAnOutstandingRequest() async throws {
+    let started = expectation(description: "first sync started")
+    var finish: CheckedContinuation<Void, Never>?
+    var updates: [PushArchiveState] = []
+    let (session, container) = try makeSession(syncArchiveState: { state in
+      updates.append(state)
+      if updates.count == 1 {
+        await withCheckedContinuation {
+          finish = $0
+          started.fulfill()
         }
       }
-    )
-
+    })
+    defer { withExtendedLifetime(container) {} }
     try session.identityService.createNewIdentity()
-    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
-    _ = try insertSessionFixture(
-      in: container.mainContext,
-      ownerPubkey: myPubkey,
-      createdByPubkey: myPubkey,
-      memberPubkeys: [myPubkey],
-      sessionID: "session-archive-target"
-    )
+    session.setSessionArchived(sessionID: "session", archived: true)
+    await fulfillment(of: [started], timeout: asyncExpectationTimeoutSeconds)
+    session.setSessionArchived(sessionID: "session", archived: false)
+    await Task.yield()
+    XCTAssertEqual(updates.count, 1)
+    finish?.resume()
+    await session.pushStateSyncTask?.value
+    XCTAssertEqual(updates, [
+      PushArchiveState(archivedConversationIDs: ["session"], knownConversationIDs: ["session"]),
+      PushArchiveState(archivedConversationIDs: [], knownConversationIDs: ["session"])
+    ])
+  }
 
-    session.setSessionArchived(sessionID: "session-archive-target", archived: true)
-    await fulfillment(of: [archiveExpectation], timeout: asyncExpectationTimeoutSeconds)
-    XCTAssertEqual(syncedConversationIDs, [["session-archive-target"]])
+  func testAccountChangeCancelsRemainingPushBatchesAndKeepsTheNewAccountsState() async throws {
+    let started = expectation(description: "old account sync started")
+    var finish: CheckedContinuation<Void, Never>?
+    var updates: [PushArchiveState] = []
+    let (session, container) = try makeSession(syncArchiveState: { state in
+      updates.append(state)
+      if updates.count == 1 {
+        await withCheckedContinuation {
+          finish = $0
+          started.fulfill()
+        }
+      }
+    })
+    defer { withExtendedLifetime(container) {} }
+    try session.identityService.createNewIdentity()
+    let oldIDs = (0..<201).map { "old-session-\($0)" }.sorted()
+    for id in oldIDs { session.setSessionArchived(sessionID: id, archived: true) }
+    await fulfillment(of: [started], timeout: asyncExpectationTimeoutSeconds)
+    let oldTask = session.pushStateSyncTask
+    session.resetPushSyncState()
+    let newAccount = try TestKeyMaterialFactory.makeKeypair()
+    try session.identityService.importNsec(newAccount.privateKey.nsec)
+    session.setSessionArchived(sessionID: "new-session", archived: true)
+    await session.pushStateSyncTask?.value
+    finish?.resume()
+    await oldTask?.value
+    let newState = PushArchiveState(
+      archivedConversationIDs: ["new-session"], knownConversationIDs: ["new-session"])
+    XCTAssertEqual(updates, [
+      PushArchiveState(
+        archivedConversationIDs: Array(oldIDs.prefix(200)), knownConversationIDs: Array(oldIDs.prefix(200))),
+      newState
+    ])
+    XCTAssertEqual(session.lastSyncedPushArchiveState?.ownerPubkey, newAccount.publicKey.hex)
+    XCTAssertEqual(session.lastSyncedPushArchiveState?.state, newState)
+  }
 
-    session.setSessionArchived(sessionID: "session-archive-target", archived: false)
-    await fulfillment(of: [unarchiveExpectation], timeout: asyncExpectationTimeoutSeconds)
-    XCTAssertEqual(syncedConversationIDs, [["session-archive-target"], []])
+  func testMigratedArchiveChoicesRetryAfterPartialFailureWithoutLosingIDs() async throws {
+    var updates: [PushArchiveState] = []
+    let (session, container) = try makeSession(syncArchiveState: { state in
+      updates.append(state)
+      if updates.count == 2 { throw URLError(.notConnectedToInternet) }
+    })
+    try session.identityService.createNewIdentity()
+    let keypair = try XCTUnwrap(session.identityService.keypair)
+    let owner = keypair.publicKey.hex
+    defer { try? LocalDataCrypto.shared.clearKey(ownerPubkey: owner) }
+    let ids = (0..<450).map { _ in UUID().uuidString }.sorted()
+    for id in ids {
+      let entity = try SessionEntity(
+        ownerPubkey: owner, sessionID: id, name: "Session", createdByPubkey: owner,
+        createdAt: .now, updatedAt: .now)
+      entity.isArchived = true
+      container.mainContext.insert(entity)
+    }
+    try container.mainContext.save()
+    for id in ids.suffix(50) {
+      try session.privatePreferenceStore.save(.archive(sessionID: id, archived: false), keypair: keypair)
+    }
+    session.preparePrivatePreferenceBackup()
+    await session.pushStateSyncTask?.value
+    XCTAssertNil(session.lastSyncedPushArchiveState)
+    session.schedulePushStateSync()
+    await session.pushStateSyncTask?.value
+    XCTAssertEqual(updates.map { $0.knownConversationIDs.count }, [200, 200, 200, 200, 50])
+    let retried = updates.dropFirst(2)
+    XCTAssertEqual(retried.flatMap(\.knownConversationIDs), ids)
+    XCTAssertEqual(retried.flatMap(\.archivedConversationIDs), Array(ids.prefix(400)))
+    XCTAssertEqual(session.lastSyncedPushArchiveState?.state,
+      PushArchiveState(archivedConversationIDs: Array(ids.prefix(400)), knownConversationIDs: ids))
   }
 }

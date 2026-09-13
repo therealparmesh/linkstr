@@ -69,24 +69,90 @@ func TestRegisterDeviceAndPushSendsToNonArchivedRecipient(t *testing.T) {
 	}
 }
 
-func TestPushSkipsArchivedConversation(t *testing.T) {
+func TestScopedArchiveStatePreservesUnknownSessions(t *testing.T) {
 	handler, sender := newTestMux(t)
 	senderSecret, _ := testIdentity(t)
 	recipientSecret, recipientPubkey := testIdentity(t)
-	registerTestDevice(t, handler, recipientSecret, "device-token-1", "sandbox")
-	performSignedJSONRequest(
-		t,
-		handler,
-		"PUT",
-		"/v1/conversations/archive-state",
-		archiveStateRequest{ArchivedConversationIDs: []string{"conversation-1"}},
-		recipientSecret,
-		http.StatusAccepted,
-	)
-	sendTestPush(t, handler, senderSecret, recipientPubkey, "event-1")
-
+	registerTestDevice(t, handler, recipientSecret, "device-token", "sandbox")
+	for range 2 {
+		performSignedJSONRequest(t, handler, "PUT", "/v1/conversations/archive-state",
+			archiveStateRequest{[]string{"conversation-1"}, []string{"conversation-1"}}, recipientSecret, http.StatusAccepted)
+	}
+	for _, state := range []archiveStateRequest{
+		{[]string{}, []string{}},
+		{[]string{"unrelated"}, []string{"unrelated"}},
+		{[]string{}, []string{"unrelated"}},
+	} {
+		performSignedJSONRequest(t, handler, "PUT", "/v1/conversations/archive-state",
+			state, recipientSecret, http.StatusAccepted)
+	}
+	registerTestDevice(t, handler, senderSecret, "sender-token", "sandbox")
+	performSignedJSONRequest(t, handler, "PUT", "/v1/conversations/archive-state",
+		archiveStateRequest{[]string{}, []string{"conversation-1"}}, senderSecret, http.StatusAccepted)
+	sendTestPush(t, handler, senderSecret, recipientPubkey, "still-archived")
 	if len(sender.sent) != 0 {
-		t.Fatalf("expected archived conversation to suppress push, got %d sends", len(sender.sent))
+		t.Fatal("an empty, unrelated, or other account's update cleared an archive choice")
+	}
+	performSignedJSONRequest(t, handler, "PUT", "/v1/conversations/archive-state",
+		archiveStateRequest{[]string{}, []string{"conversation-1"}}, recipientSecret, http.StatusAccepted)
+	sendTestPush(t, handler, senderSecret, recipientPubkey, "unarchived")
+	if len(sender.sent) != 1 {
+		t.Fatal("explicit unarchive did not restore notifications")
+	}
+}
+
+func TestUnscopedArchiveStateReplacesTheFullList(t *testing.T) {
+	handler, sender := newTestMux(t)
+	senderSecret, _ := testIdentity(t)
+	recipientSecret, recipientPubkey := testIdentity(t)
+	registerTestDevice(t, handler, recipientSecret, "device-token", "sandbox")
+	performSignedJSONRequest(t, handler, "PUT", "/v1/conversations/archive-state",
+		archiveStateRequest{[]string{"unrelated"}, []string{"unrelated"}}, recipientSecret, http.StatusAccepted)
+	performSignedJSONRequest(t, handler, "PUT", "/v1/conversations/archive-state",
+		map[string]any{"archived_conversation_ids": []string{"conversation-1"}}, recipientSecret, http.StatusAccepted)
+	sendTestPush(t, handler, senderSecret, recipientPubkey, "archived")
+	if len(sender.sent) != 0 {
+		t.Fatal("archive did not suppress notifications")
+	}
+	performSignedJSONRequest(t, handler, "POST", "/v1/push", pushRequest{
+		NotificationType: notificationTypeNewPost, EventID: "unrelated-post",
+		ConversationID: "unrelated", RecipientPubkeys: []string{recipientPubkey},
+	}, senderSecret, http.StatusAccepted)
+	if len(sender.sent) != 1 {
+		t.Fatal("unscoped update did not replace the account's archive state")
+	}
+	performSignedJSONRequest(t, handler, "PUT", "/v1/conversations/archive-state",
+		archiveStateRequest{ArchivedConversationIDs: []string{}}, recipientSecret, http.StatusAccepted)
+	sendTestPush(t, handler, senderSecret, recipientPubkey, "unarchived")
+	if len(sender.sent) != 2 {
+		t.Fatal("unarchive did not restore notifications")
+	}
+}
+
+func TestInvalidArchiveStateCannotClearSavedChoices(t *testing.T) {
+	handler, sender := newTestMux(t)
+	senderSecret, _ := testIdentity(t)
+	recipientSecret, recipientPubkey := testIdentity(t)
+	registerTestDevice(t, handler, recipientSecret, "device-token", "sandbox")
+	performSignedJSONRequest(t, handler, "PUT", "/v1/conversations/archive-state",
+		archiveStateRequest{[]string{"conversation-1"}, []string{"conversation-1"}}, recipientSecret, http.StatusAccepted)
+	invalid := []any{
+		map[string]any{},
+		map[string]any{"archived_conversation_ids": nil},
+		map[string]any{"archived_conversation_ids": "conversation-1"},
+		map[string]any{"archived_conversation_ids": []string{}, "known_conversation_ids": false},
+		archiveStateRequest{[]string{}, []string{"conversation-1", ""}},
+		archiveStateRequest{[]string{}, []string{"conversation-1", " padded "}},
+		archiveStateRequest{[]string{""}, []string{"conversation-1"}},
+		archiveStateRequest{[]string{"unrelated"}, []string{"conversation-1"}},
+	}
+	for _, body := range invalid {
+		performSignedJSONRequest(t, handler, "PUT", "/v1/conversations/archive-state",
+			body, recipientSecret, http.StatusBadRequest)
+	}
+	sendTestPush(t, handler, senderSecret, recipientPubkey, "still-archived")
+	if len(sender.sent) != 0 {
+		t.Fatal("a malformed update cleared an archive choice")
 	}
 }
 
