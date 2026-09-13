@@ -38,11 +38,6 @@ enum IdentityLoadRetryDefaults {
 
 @MainActor
 final class AppSession: ObservableObject {
-  struct SessionNavigationRequest: Identifiable, Equatable {
-    let id = UUID()
-    let sessionID: String
-  }
-
   struct FormMutationResult {
     let didSucceed: Bool
     let errorMessage: String?

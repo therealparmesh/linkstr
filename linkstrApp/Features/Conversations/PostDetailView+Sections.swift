@@ -5,10 +5,6 @@ import UIKit
 // MARK: - PostDetailView Sections
 
 extension PostDetailView {
-  var loadRequestID: String {
-    "\(ownerPubkey)|\(sessionID)|\(postID)"
-  }
-
   var reactionSummaries: [ReactionSummary] {
     ReactionSummary.summaries(
       from: reactions,
@@ -218,7 +214,6 @@ extension PostDetailView {
     Task { @MainActor in
       guard let post else { return }
       _ = await session.toggleReactionAwaitingRelay(emoji: emoji, post: post)
-      await loadContent()
     }
   }
   func refreshPostMetadata(_ post: SessionMessageEntity) {
@@ -232,7 +227,6 @@ extension PostDetailView {
       clearPersistedLocalMedia(for: post)
       mediaReloadID += 1
       _ = await session.refreshPostMetadata(post)
-      await loadContent()
     }
   }
   func metadataRefreshButton(for post: SessionMessageEntity) -> some View {
@@ -318,27 +312,6 @@ extension PostDetailView {
     try? modelContext.save()
   }
 
-  @MainActor
-  func loadContent() async {
-    post = try? fetchPost()
-    reactions = (try? fetchReactions()) ?? []
-    members = (try? fetchMembers()) ?? []
-    contacts = (try? fetchContacts(senderPubkeys: Set(reactions.map(\.senderPubkey)))) ?? []
-  }
-
-  func fetchPost() throws -> SessionMessageEntity? {
-    let storageID = SessionMessageEntity.storageID(
-      ownerPubkey: ownerPubkey,
-      eventID: postID
-    )
-    let descriptor = FetchDescriptor<SessionMessageEntity>(
-      predicate: #Predicate { $0.storageID == storageID }
-    )
-    guard let post = try modelContext.fetch(descriptor).first else { return nil }
-    guard post.conversationID == sessionID, post.kind == .root else { return nil }
-    return post
-  }
-
   func fetchContacts(senderPubkeys: Set<String>) throws -> [ContactEntity] {
     guard !senderPubkeys.isEmpty else { return [] }
 
@@ -349,34 +322,7 @@ extension PostDetailView {
 
     let targetPubkeys = Set(normalizedPubkeys)
     let descriptor = FetchDescriptor<ContactEntity>(
-      predicate: #Predicate { $0.ownerPubkey == ownerPubkey },
-      sortBy: [SortDescriptor(\.createdAt)]
-    )
-    return try modelContext.fetch(descriptor).filter {
-      targetPubkeys.contains($0.targetPubkey)
-    }
-  }
-
-  func fetchReactions() throws -> [SessionReactionEntity] {
-    let descriptor = FetchDescriptor<SessionReactionEntity>(
-      predicate: #Predicate {
-        $0.ownerPubkey == ownerPubkey
-          && $0.sessionID == sessionID
-          && $0.postID == postID
-          && $0.isActive == true
-      },
-      sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
-    )
-    return try modelContext.fetch(descriptor)
-  }
-
-  func fetchMembers() throws -> [SessionMemberEntity] {
-    let descriptor = FetchDescriptor<SessionMemberEntity>(
-      predicate: #Predicate {
-        $0.ownerPubkey == ownerPubkey
-          && $0.sessionID == sessionID
-          && $0.isActive == true
-      },
+      predicate: #Predicate { $0.ownerPubkey == ownerPubkey && targetPubkeys.contains($0.targetPubkey) },
       sortBy: [SortDescriptor(\.createdAt)]
     )
     return try modelContext.fetch(descriptor)

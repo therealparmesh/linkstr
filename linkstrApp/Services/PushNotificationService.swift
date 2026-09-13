@@ -10,30 +10,25 @@ extension Notification.Name {
 }
 
 @MainActor
-final class PushNotificationService: NSObject {
+final class PushNotificationService: NSObject, ObservableObject {
   static let shared = PushNotificationService()
 
   private(set) var deviceTokenHex: String?
 
-  /// Conversation ID from a tapped push notification, stored so it survives
-  /// cold-launch timing where SwiftUI subscribers aren't yet registered.
-  @Published private(set) var pendingConversationID: String?
+  // Keep the latest tap until the app's root view is ready, including cold launch.
+  @Published private(set) var pendingNavigation: SessionNavigationRequest?
 
-  func enqueueConversationNavigation(to rawConversationID: String?) {
-    guard let rawConversationID else { return }
-    let conversationID = rawConversationID.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !conversationID.isEmpty else { return }
-    pendingConversationID = conversationID
+  func enqueueNavigation(userInfo: [AnyHashable: Any]) {
+    guard let request = SessionNavigationRequest(notification: userInfo) else { return }
+    pendingNavigation = request
   }
 
-  /// Reads and clears the pending conversation ID in a single call.
-  func consumePendingConversationID() -> String? {
-    guard let id = pendingConversationID else { return nil }
-    pendingConversationID = nil
-    return id
+  func clearPendingNavigation(id: UUID) {
+    guard pendingNavigation?.id == id else { return }
+    pendingNavigation = nil
   }
 
-  private override init() {
+  override init() {
     super.init()
   }
 
@@ -115,14 +110,14 @@ extension PushNotificationService: UNUserNotificationCenterDelegate {
     withCompletionHandler completionHandler: @escaping () -> Void
   ) {
     let userInfo = response.notification.request.content.userInfo
-    if let conversationID = userInfo["conversation_id"] as? String {
-      Task { @MainActor in
-        PushNotificationService.shared.enqueueConversationNavigation(to: conversationID)
-        completionHandler()
-      }
+    guard response.actionIdentifier == UNNotificationDefaultActionIdentifier else {
+      completionHandler()
       return
     }
-    completionHandler()
+    Task { @MainActor in
+      PushNotificationService.shared.enqueueNavigation(userInfo: userInfo)
+      completionHandler()
+    }
   }
 }
 

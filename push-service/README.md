@@ -1,7 +1,5 @@
 # push-service
 
-_Last updated: August 1, 2026_
-
 Minimal linkstr push backend for iOS APNs delivery.
 
 ## What it does
@@ -14,6 +12,8 @@ Minimal linkstr push backend for iOS APNs delivery.
   - `new_emoji_reaction`
 
 It does not decrypt linkstr content, watch relays directly, or keep a notification inbox.
+
+Reaction requests can include an optional `post_id` identifying the reacted-to root post. The service passes it through to APNs for `new_emoji_reaction` only; `event_id` remains the reaction event ID used for deduplication. Requests from older clients without `post_id` remain supported, and their notifications open the session rather than a specific post.
 
 ## Request auth
 

@@ -19,6 +19,7 @@ type outboundPush struct {
 	ConversationID   string
 	RecipientPubkeys []string
 	Emoji            string
+	PostID           string
 }
 
 type pushSender interface {
@@ -126,6 +127,9 @@ func buildPayload(push outboundPush) *payload.Payload {
 
 	if push.Emoji != "" {
 		builder.Custom("emoji", push.Emoji)
+	}
+	if push.NotificationType == notificationTypeNewEmojiReaction && push.PostID != "" {
+		builder.Custom("post_id", push.PostID)
 	}
 
 	return builder

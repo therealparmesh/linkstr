@@ -7,14 +7,20 @@ private enum RootViewTimingDefaults {
   static let contentTransitionDuration: TimeInterval = 0.3
 }
 
+@MainActor
 struct RootView: View {
   @EnvironmentObject private var session: AppSession
   @EnvironmentObject private var deepLinkHandler: DeepLinkHandler
+  @ObservedObject private var pushNotifications: PushNotificationService
   @State private var toastMessage: String?
   @State private var toastIsSuccess: Bool = false
   @State private var toastOpensRelaySettings = false
   @State private var toastDisplayID = UUID()
   @State private var selectedTab: AppTab = .sessions
+
+  init(pushNotifications: PushNotificationService? = nil) {
+    self.pushNotifications = pushNotifications ?? .shared
+  }
 
   private var sharedLinkDetailBinding: Binding<Bool> {
     Binding(
@@ -76,12 +82,10 @@ struct RootView: View {
           OnboardingView()
             .transition(.opacity)
         } else {
-          NavigationStack {
-            MainTabView(
-              ownerPubkey: session.identityService.pubkeyHex ?? "",
-              selectedTab: $selectedTab
-            )
-          }
+          MainTabView(
+            ownerPubkey: session.identityService.pubkeyHex ?? "",
+            selectedTab: $selectedTab
+          )
           .transition(.opacity)
         }
       }
@@ -112,6 +116,14 @@ struct RootView: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .preferredColorScheme(.dark)
     .tint(LinkstrTheme.accent)
+    .onChange(of: pushNotifications.pendingNavigation?.id, initial: true) { _, _ in
+      guard let request = pushNotifications.pendingNavigation else { return }
+      deepLinkHandler.clearSharedLinkDetail()
+      deepLinkHandler.clearShareDraft()
+      deepLinkHandler.clearMediaSaveDraft()
+      session.pendingSessionNavigationRequest = request
+      pushNotifications.clearPendingNavigation(id: request.id)
+    }
     .onChange(of: session.shouldShowOnboarding) { _, shouldShowOnboarding in
       if shouldShowOnboarding {
         selectedTab = .sessions

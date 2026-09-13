@@ -101,6 +101,7 @@ final class AppSessionPushTests: AppSessionTestCase {
     XCTAssertEqual(capturedRequests[0].conversationID, sessionID)
     XCTAssertEqual(Set(capturedRequests[0].recipientPubkeys), Set([myPubkey, peerPubkey]))
     XCTAssertEqual(capturedRequests[0].emoji, "🔥")
+    XCTAssertEqual(capturedRequests[0].postID, "root-reaction-target")
 
     let didDeactivate = await session.toggleReactionAwaitingRelay(emoji: "🔥", post: post)
 

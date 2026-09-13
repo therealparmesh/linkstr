@@ -13,6 +13,7 @@ struct PushEnqueueRequest: Equatable {
   let conversationID: String
   let recipientPubkeys: [String]
   let emoji: String?
+  var postID: String?
 }
 
 enum PushAPIClientError: LocalizedError {
@@ -68,6 +69,7 @@ private struct EnqueuePushRequestBody: Encodable {
   let conversationID: String
   let recipientPubkeys: [String]
   let emoji: String?
+  let postID: String?
 
   enum CodingKeys: String, CodingKey {
     case notificationType = "notification_type"
@@ -75,6 +77,7 @@ private struct EnqueuePushRequestBody: Encodable {
     case conversationID = "conversation_id"
     case recipientPubkeys = "recipient_pubkeys"
     case emoji
+    case postID = "post_id"
   }
 }
 
@@ -129,7 +132,8 @@ final class PushAPIClient {
         eventID: request.eventID,
         conversationID: request.conversationID,
         recipientPubkeys: request.recipientPubkeys,
-        emoji: request.emoji
+        emoji: request.emoji,
+        postID: request.postID
       ),
       signedBy: keypair
     )

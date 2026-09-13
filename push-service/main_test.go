@@ -102,6 +102,7 @@ func TestPushDedupeSuppressesRepeatDelivery(t *testing.T) {
 		ConversationID:   "conversation-1",
 		RecipientPubkeys: []string{recipientPubkey},
 		Emoji:            "🔥",
+		PostID:           "root-post",
 	}
 	for range 2 {
 		performSignedJSONRequest(t, handler, "POST", "/v1/push", request, senderSecret, http.StatusAccepted)
@@ -109,6 +110,17 @@ func TestPushDedupeSuppressesRepeatDelivery(t *testing.T) {
 
 	if len(sender.sent) != 1 {
 		t.Fatalf("expected dedupe to keep a single send, got %d", len(sender.sent))
+	}
+	encoded, err := buildPayload(sender.sent[0].push).MarshalJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(encoded, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["post_id"] != "root-post" || payload["event_id"] != "event-1" || payload["conversation_id"] != "conversation-1" {
+		t.Fatalf("reaction navigation IDs were lost: %#v", payload)
 	}
 }
 

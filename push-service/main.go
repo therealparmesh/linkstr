@@ -63,6 +63,7 @@ type pushRequest struct {
 	ConversationID   string   `json:"conversation_id"`
 	RecipientPubkeys []string `json:"recipient_pubkeys"`
 	Emoji            string   `json:"emoji,omitempty"`
+	PostID           string   `json:"post_id,omitempty"`
 }
 
 func main() {
@@ -228,6 +229,7 @@ func (s *apiServer) handlePush(w http.ResponseWriter, r *http.Request) {
 		ConversationID:   strings.TrimSpace(req.ConversationID),
 		RecipientPubkeys: dedupeNonEmpty(req.RecipientPubkeys),
 		Emoji:            strings.TrimSpace(req.Emoji),
+		PostID:           strings.TrimSpace(req.PostID),
 	}
 	if err := validatePush(push); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())

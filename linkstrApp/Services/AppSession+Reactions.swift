@@ -48,7 +48,8 @@ extension AppSession {
             eventID: reactionEventID,
             conversationID: draft.payload.conversationID,
             recipientPubkeys: draft.recipientPubkeys,
-            emoji: draft.payload.emoji
+            emoji: draft.payload.emoji,
+            postID: post.rootID
           )
         )
       }

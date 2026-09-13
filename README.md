@@ -264,7 +264,9 @@ linkstr payloads are JSON-encoded and delivered through Nostr gift-wrap direct m
 - Archived conversations do not notify.
 - Reaction deactivations, self-echoed events, and historical relay restore/backfill do not trigger notifications.
 - Foreground presentation remains enabled (banner, list, sound).
-- Tapping a notification navigates to the relevant session.
+- New-post notifications open the session's posts list. Reaction notifications with a target post ID open that post, with the session one back step away; older reaction notifications without that ID open the session.
+- Notification taps replace the current navigation stack and dismiss its sheets, including when the same session or post is already open. Cold-launch taps are retained through app startup; the latest tap wins.
+- Post details observe account- and post-scoped data so posts and reactions arriving after navigation appear without reopening the screen. Missing or deleted destinations show the existing unavailable state.
 - Push alerts use generic text; encrypted session content is fetched and decrypted on-device.
 
 ### Media and link behavior

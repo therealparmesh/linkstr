@@ -86,25 +86,20 @@ extension SessionPostsView {
   }
 
   @ViewBuilder
-  func timelineRow(_ row: SessionTimelineRow, sessionName: String) -> some View {
+  func timelineRow(_ row: SessionTimelineRow) -> some View {
     switch row {
     case .post(let postListRow):
-      postRow(postListRow, sessionName: sessionName)
+      postRow(postListRow)
     case .membershipChange(let changeRow):
       SessionMembershipChangeRowView(row: changeRow)
     }
   }
 
   @ViewBuilder
-  func postRow(_ row: PostListRow, sessionName: String) -> some View {
-    let postLink = NavigationLink {
-      PostDetailView(
-        ownerPubkey: ownerPubkey,
-        sessionID: sessionID,
-        postID: row.post.rootID,
-        sessionName: sessionName
-      )
-    } label: {
+  func postRow(_ row: PostListRow) -> some View {
+    let postLink = NavigationLink(
+      value: SessionRoute.post(sessionID: sessionID, postID: row.post.rootID)
+    ) {
       PostListRowView(
         post: row.post,
         senderLabel: row.senderLabel,

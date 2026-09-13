@@ -31,16 +31,11 @@ struct MainTabView: View {
   private let ownerPubkey: String
   @Binding private var selectedTab: AppTab
 
-  private struct SessionNavigationTarget: Identifiable, Hashable {
-    let sessionID: String
-
-    var id: String { sessionID }
-  }
-
   @State private var isPresentingNewSession = false
   @State private var isPresentingAddContact = false
   @State private var isShowingArchivedSessions = false
-  @State private var selectedSessionTarget: SessionNavigationTarget?
+  @State private var navigationPath: [SessionRoute] = []
+  @State private var navigationID = UUID()
 
   @Query private var sessions: [SessionEntity]
 
@@ -60,6 +55,16 @@ struct MainTabView: View {
   }
 
   var body: some View {
+    NavigationStack(path: $navigationPath) {
+      tabs
+    }
+    .id(navigationID)
+    .onChange(of: session.pendingSessionNavigationRequest?.id, initial: true) { _, _ in
+      navigateToPendingSessionIfNeeded()
+    }
+  }
+
+  private var tabs: some View {
     TabView(selection: $selectedTab) {
       tabContent(.sessions)
         .tag(AppTab.sessions)
@@ -87,11 +92,13 @@ struct MainTabView: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
-    .navigationDestination(item: $selectedSessionTarget) { target in
-      SessionPostsView(
-        ownerPubkey: ownerPubkey,
-        sessionID: target.sessionID
-      )
+    .navigationDestination(for: SessionRoute.self) { route in
+      switch route {
+      case .session(let sessionID):
+        SessionPostsView(ownerPubkey: ownerPubkey, sessionID: sessionID)
+      case .post(let sessionID, let postID):
+        PostDetailView(ownerPubkey: ownerPubkey, sessionID: sessionID, postID: postID)
+      }
     }
     .toolbar {
       ToolbarItem(placement: .topBarLeading) {
@@ -107,22 +114,13 @@ struct MainTabView: View {
         isShowingArchivedSessions = false
       }
       if newValue != .sessions {
-        selectedSessionTarget = nil
+        navigationPath = []
       }
     }
     .onChange(of: archivedSessionCount) { _, count in
       if count == 0, isShowingArchivedSessions {
         isShowingArchivedSessions = false
       }
-    }
-    .onAppear {
-      navigateToPendingSessionIfNeeded()
-    }
-    .onChange(of: session.pendingSessionNavigationRequest?.id) { _, _ in
-      navigateToPendingSessionIfNeeded()
-    }
-    .onChange(of: sessions.map(\.sessionID).stableTaskID) { _, _ in
-      navigateToPendingSessionIfNeeded()
     }
     .sheet(isPresented: $isPresentingNewSession) {
       NewSessionSheet(ownerPubkey: ownerPubkey)
@@ -207,15 +205,17 @@ struct MainTabView: View {
 
   private func openSession(_ sessionID: String) {
     selectedTab = .sessions
-    let target = SessionNavigationTarget(sessionID: sessionID)
-    guard selectedSessionTarget != target else { return }
-    selectedSessionTarget = target
+    navigationPath = [.session(sessionID)]
   }
 
   private func navigateToPendingSessionIfNeeded() {
     guard let request = session.pendingSessionNavigationRequest else { return }
-    guard sessions.contains(where: { $0.sessionID == request.sessionID }) else { return }
-    openSession(request.sessionID)
+    selectedTab = .sessions
+    isPresentingNewSession = false
+    isPresentingAddContact = false
+    navigationPath = request.path
+    // Replace the stack's identity to dismiss any child sheet, even for the same destination.
+    navigationID = request.id
     session.clearPendingSessionNavigationRequest()
   }
 }

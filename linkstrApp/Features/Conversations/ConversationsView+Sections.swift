@@ -125,7 +125,7 @@ struct SessionPostsView: View {
             } else {
               LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(contentState.timelineRows) { row in
-                  timelineRow(row, sessionName: sessionEntity.name)
+                  timelineRow(row)
                 }
               }
             }
