@@ -1,6 +1,6 @@
 # privacy policy
 
-Last updated: September 13, 2026
+Last updated: September 14, 2026
 
 ## Overview
 
@@ -15,7 +15,7 @@ linkstr does not run ads, analytics, or behavioral tracking.
 linkstr stores app data locally for the signed-in account, including:
 
 - Account keys in the device keychain.
-- Contacts, including private aliases you save locally.
+- Contacts, including private aliases you save locally and cached public Nostr profile names.
 - Encrypted private-preference backup records, including pending uploads.
 - Sessions, member snapshots, and membership intervals.
 - Session deletion tombstones, posts, reactions, delete watermarks, read state, and archive state.
@@ -23,7 +23,7 @@ linkstr stores app data locally for the signed-in account, including:
 - Local per-account encryption keys used to protect sensitive stored fields at rest.
 - Existing encrypted local data requires its original per-account encryption key. If that key is unavailable after a restore, linkstr preserves the encrypted data instead of generating a replacement key. The `nsec` alone cannot decrypt these local fields.
 
-Sensitive local fields are encrypted at rest with per-account local keys. Operational identifiers and timestamps may remain plaintext locally for indexing and query purposes.
+Sensitive local fields are encrypted at rest with per-account local keys. Public Nostr profile names, operational identifiers, and timestamps may remain plaintext locally.
 
 Downloaded videos and generated previews are device-local. Video cache is treated as disposable cache and may be trimmed automatically with least-recently-used eviction once local video cache reaches about 1 GB. Media saved via the share sheet goes to Photos or a Files location you choose.
 

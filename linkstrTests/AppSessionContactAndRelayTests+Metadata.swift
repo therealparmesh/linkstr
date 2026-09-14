@@ -5,6 +5,40 @@ import XCTest
 @testable import linkstr
 
 extension AppSessionContactAndRelayTests {
+  func testContactProfileCachePersistsAndRemainsAccountScoped() throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let schema = Schema([ContactEntity.self])
+    let configuration = ModelConfiguration(schema: schema, url: directory.appendingPathComponent("contacts.store"))
+    let owner = try TestKeyMaterialFactory.makePubkeyHex()
+    let otherOwner = try TestKeyMaterialFactory.makePubkeyHex()
+    let target = try TestKeyMaterialFactory.makePubkeyHex()
+    let profile = KnownProfileSnapshot(
+      chosenName: "Saved Name", updatedAt: Date(timeIntervalSince1970: 200), eventID: "profile"
+    )
+
+    do {
+      let container = try ModelContainer(for: schema, configurations: [configuration])
+      let store = ContactStore(modelContext: container.mainContext)
+      try store.replaceFollowedPubkeys(ownerPubkey: owner, pubkeyHexes: [target])
+      try store.replaceFollowedPubkeys(ownerPubkey: otherOwner, pubkeyHexes: [target])
+      _ = try store.updateProfile(profile, ownerPubkey: owner, targetPubkey: target)
+    }
+
+    let container = try ModelContainer(for: schema, configurations: [configuration])
+    let contacts = try fetchContacts(in: container.mainContext)
+    let contact = try XCTUnwrap(contacts.first { $0.ownerPubkey == owner })
+    let otherContact = try XCTUnwrap(contacts.first { $0.ownerPubkey == otherOwner })
+    XCTAssertEqual(contact.profileSnapshot, profile)
+    XCTAssertEqual(contact.displayName, "Saved Name")
+    XCTAssertNil(otherContact.profileSnapshot)
+
+    let store = ContactStore(modelContext: container.mainContext)
+    try store.replaceFollowedPubkeys(ownerPubkey: owner, pubkeyHexes: [])
+    XCTAssertEqual(try fetchContacts(in: container.mainContext).map(\.ownerPubkey), [otherOwner])
+  }
+
   func testUpdateOwnProfileNamePublishesMergedMetadataContentAndPersistsState() async throws {
     var publishedEvent: NostrEvent?
     let (session, container) = try makeSession(

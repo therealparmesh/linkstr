@@ -10,6 +10,23 @@ final class ContactEntity {
 
   var encryptedAlias: String
   var createdAt: Date
+  var nostrProfileName: String?
+  var profileMetadataUpdatedAt: Date?
+  var profileMetadataEventID: String?
+
+  var profileSnapshot: KnownProfileSnapshot? {
+    get {
+      guard let updatedAt = profileMetadataUpdatedAt else { return nil }
+      return KnownProfileSnapshot(
+        chosenName: nostrProfileName, updatedAt: updatedAt, eventID: profileMetadataEventID
+      )
+    }
+    set {
+      nostrProfileName = newValue?.chosenName
+      profileMetadataUpdatedAt = newValue?.updatedAt
+      profileMetadataEventID = newValue?.eventID
+    }
+  }
 
   @Transient private var _localAlias: String??
   var localAlias: String? {
@@ -32,7 +49,7 @@ final class ContactEntity {
   }
 
   var displayName: String {
-    localAlias ?? npub
+    localAlias ?? nostrProfileName ?? npub
   }
 
   init(

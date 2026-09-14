@@ -200,7 +200,11 @@ final class ContactStore {
     return NostrValueNormalizer.dedupedNormalizedPubkeyHexes(contacts.map(\.targetPubkey))
   }
 
-  func replaceFollowedPubkeys(ownerPubkey: String, pubkeyHexes: [String]) throws {
+  func replaceFollowedPubkeys(
+    ownerPubkey: String,
+    pubkeyHexes: [String],
+    knownProfiles: [String: KnownProfileSnapshot] = [:]
+  ) throws {
     let normalizedSet = Set(NostrValueNormalizer.dedupedNormalizedPubkeyHexes(pubkeyHexes))
 
     let existing = try fetchContacts(ownerPubkey: ownerPubkey)
@@ -216,9 +220,9 @@ final class ContactStore {
     }
 
     for pubkey in normalizedSet where existingByPubkey[pubkey] == nil {
-      modelContext.insert(
-        try ContactEntity(ownerPubkey: ownerPubkey, targetPubkey: pubkey, alias: nil)
-      )
+      let contact = try ContactEntity(ownerPubkey: ownerPubkey, targetPubkey: pubkey, alias: nil)
+      contact.profileSnapshot = knownProfiles[pubkey]
+      modelContext.insert(contact)
     }
 
     for (pubkey, contact) in existingByPubkey where normalizedSet.contains(pubkey) == false {
@@ -226,6 +230,34 @@ final class ContactStore {
     }
 
     try modelContext.save()
+  }
+
+  func updateProfile(
+    _ profile: KnownProfileSnapshot, ownerPubkey: String, targetPubkey: String
+  ) throws -> KnownProfileSnapshot {
+    var descriptor = FetchDescriptor<ContactEntity>(predicate: #Predicate {
+      $0.ownerPubkey == ownerPubkey && $0.targetPubkey == targetPubkey
+    })
+    descriptor.fetchLimit = 1
+    guard let contact = try modelContext.fetch(descriptor).first else { return profile }
+    let previousProfile = contact.profileSnapshot
+    if let previousProfile,
+      !NostrValueNormalizer.shouldApplyStateUpdate(
+        currentUpdatedAt: previousProfile.updatedAt,
+        currentEventID: previousProfile.eventID,
+        incomingUpdatedAt: profile.updatedAt,
+        incomingEventID: profile.eventID
+      ) {
+      return previousProfile
+    }
+    contact.profileSnapshot = profile
+    do {
+      try modelContext.save()
+    } catch {
+      contact.profileSnapshot = previousProfile
+      throw error
+    }
+    return profile
   }
 
   func updateAlias(_ contact: ContactEntity, ownerPubkey: String, alias: String?) throws {

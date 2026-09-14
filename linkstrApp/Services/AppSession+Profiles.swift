@@ -54,7 +54,7 @@ extension AppSession {
   func preferredChosenName(for contact: ContactEntity) -> String? {
     let normalizedPubkey =
       NostrValueNormalizer.normalizedPubkeyHex(contact.targetPubkey) ?? contact.targetPubkey
-    return remoteProfilesByPubkey[normalizedPubkey]?.chosenName
+    return (remoteProfilesByPubkey[normalizedPubkey] ?? contact.profileSnapshot)?.chosenName
   }
 
   func updateRemoteProfileSnapshot(
@@ -63,6 +63,7 @@ extension AppSession {
     createdAt: Date,
     eventID: String?
   ) {
+    guard let ownerPubkey = identityService.pubkeyHex else { return }
     let normalizedPubkey = NostrValueNormalizer.normalizedPubkeyHex(pubkeyHex) ?? pubkeyHex
     let normalizedEventID = NostrValueNormalizer.normalizedEventID(eventID)
     if let existing = remoteProfilesByPubkey[normalizedPubkey],
@@ -74,11 +75,19 @@ extension AppSession {
       ) {
       return
     }
-    remoteProfilesByPubkey[normalizedPubkey] = KnownProfileSnapshot(
+    let profile = KnownProfileSnapshot(
       chosenName: NostrProfileMetadata.normalizedChosenName(chosenName),
       updatedAt: createdAt,
       eventID: normalizedEventID
     )
+    do {
+      remoteProfilesByPubkey[normalizedPubkey] = try contactStore.updateProfile(
+        profile, ownerPubkey: ownerPubkey, targetPubkey: normalizedPubkey
+      )
+    } catch {
+      report(error: error)
+      return
+    }
     inFlightRemoteProfilePubkeys.remove(normalizedPubkey)
     pendingRemoteProfilePubkeys.remove(normalizedPubkey)
   }

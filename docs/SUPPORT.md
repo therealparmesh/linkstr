@@ -1,6 +1,6 @@
 # linkstr support
 
-_Last updated: September 13, 2026_
+_Last updated: September 14, 2026_
 
 linkstr is a private link-sharing app built on [Nostr](https://nostr.com). You create or join private sessions, share links inside those sessions, and react with emoji. This page describes the current shipped behavior in plain language.
 
@@ -26,6 +26,8 @@ Your active account is stored in the device keychain. If you use iCloud Keychain
 5. Tap the top-right add icon.
 
 Adding the same contact again updates the saved alias instead of creating a duplicate. To edit an alias later, tap the contact row.
+
+Contacts keep their last fetched public Nostr name on this device, so names remain available after reopening or offline. Names refresh from relays when available; your private alias always takes priority.
 
 The bottom footer shows validation and relay status only. The keyboard return key advances from the public key field into alias and submits from alias.
 

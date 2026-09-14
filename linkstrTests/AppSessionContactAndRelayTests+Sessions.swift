@@ -52,13 +52,24 @@ extension AppSessionContactAndRelayTests {
     XCTAssertNil(restoredSession.profileNameErrorMessage)
   }
 
-  func testBootDoesNotRestoreRemoteProfileDirectoryAcrossSessions() async throws {
+  func testBootRestoresContactNamesWithoutSuppressingRefreshOrPersistingNonContacts() async throws {
     let relaySettingsUserDefaults = makeRelaySettingsUserDefaults()
     let (session, container) = try makeSession(
       relaySettingsUserDefaults: relaySettingsUserDefaults
     )
     try session.identityService.createNewIdentity()
     let participantPubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    let contactKeypair = try TestKeyMaterialFactory.makeKeypair()
+    let didAdd = await session.addContact(npub: contactKeypair.publicKey.npub, alias: "")
+    XCTAssertTrue(didAdd)
+    session.ingestProfileMetadataForTesting(
+      try makeIncomingProfileMetadata(
+        eventID: "profile-restored-contact",
+        authorPubkey: contactKeypair.publicKey.hex,
+        createdAt: Date(timeIntervalSince1970: 250),
+        chosenName: "Saved Contact Name"
+      )
+    )
 
     session.ingestProfileMetadataForTesting(
       try makeIncomingProfileMetadata(
@@ -71,6 +82,11 @@ extension AppSessionContactAndRelayTests {
 
     var restoredOverrides = AppSession.TestingOverrides()
     restoredOverrides.skipNostrNetworkStartup = true
+    var requests: [[String]] = []
+    restoredOverrides.requestProfileMetadata = { pubkeys in
+      requests.append(pubkeys)
+      return true
+    }
     let restoredSession = AppSession(
       modelContext: container.mainContext,
       relaySettingsUserDefaults: relaySettingsUserDefaults,
@@ -81,6 +97,13 @@ extension AppSessionContactAndRelayTests {
 
     let restoredIdentity = restoredSession.resolvedIdentity(for: participantPubkey, contacts: [])
     XCTAssertEqual(restoredIdentity.displayName, restoredIdentity.npub)
+    let contact = try XCTUnwrap(fetchContacts(in: container.mainContext).first)
+    XCTAssertEqual(restoredSession.resolvedIdentity(for: contact).displayName, "Saved Contact Name")
+    XCTAssertEqual(restoredSession.searchableNames(for: contact), ["Saved Contact Name"])
+    XCTAssertTrue(requests.isEmpty)
+    restoredSession.requestRemoteProfilesIfNeeded(pubkeyHexes: [contact.targetPubkey])
+    restoredSession.requestRemoteProfilesIfNeeded(pubkeyHexes: [contact.targetPubkey])
+    XCTAssertEqual(requests, [[contact.targetPubkey]])
   }
 
   func testResolvedIdentityHidesDuplicateNPubLineWhenNoNameExists() throws {

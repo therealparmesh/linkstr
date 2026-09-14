@@ -1,6 +1,6 @@
 # linkstr
 
-_Last updated: September 13, 2026_
+_Last updated: September 14, 2026_
 
 linkstr is an iOS app for private link sharing on [Nostr](https://nostr.com). You create private sessions, share links with people you trust, react with emojis, and play supported video directly inside the app when a provider allows it.
 
@@ -357,6 +357,7 @@ Embedded web playback allows provider-element fullscreen when supported.
 - Follow-list recency watermarks are persisted per account so an app restart does not allow stale follow-list rollback.
 - Aliases are private per-account data. They are backed up to relays encrypted to the account's own key, separately from the public follow list.
 - Remote Nostr profile names are fetched lazily by pubkey and used only when no local alias exists. When both exist, contact UI shows the local alias as primary and the published Nostr name as secondary.
+- Contacts retain their last fetched public profile name locally for immediate display after reopening or offline. Lazy lookups still refresh names each launch; persisted event ordering prevents stale replies from restoring an older or cleared name. Names for non-contacts remain memory-only.
 
 **Add-contact sheet:**
 

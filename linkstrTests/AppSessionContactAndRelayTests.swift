@@ -116,13 +116,14 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
 
     let didUpdateAlias = session.updateContactAlias(initialContact, alias: "Alice Local")
     XCTAssertTrue(didUpdateAlias)
+    session.resetRemoteProfileStateInMemory()
     let resolvedIdentity = session.resolvedIdentity(for: initialContact)
     XCTAssertEqual(resolvedIdentity.displayName, "Alice Local")
     XCTAssertEqual(resolvedIdentity.aliasedChosenName, "Alice From Nostr")
   }
 
-  func testIncomingProfileMetadataIgnoresOlderReplaceableEvent() async throws {
-    let (session, container) = try makeSession()
+  func testIncomingProfileMetadataPreservesOrderingAndClearedNamesAcrossRestarts() async throws {
+    let (session, container) = try makeSession(requestProfileMetadata: { _ in true })
     try session.identityService.createNewIdentity()
     let npub = try TestKeyMaterialFactory.makeNPub()
 
@@ -138,18 +139,35 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
         chosenName: "New Name"
       )
     )
-    session.ingestProfileMetadataForTesting(
-      try makeIncomingProfileMetadata(
-        eventID: "profile-old",
-        authorPubkey: contact.targetPubkey,
-        createdAt: Date(timeIntervalSince1970: 100),
-        chosenName: "Old Name"
+    let cases: [(KnownProfileSnapshot, String?)] = [
+      (.init(chosenName: "Old Name", updatedAt: Date(timeIntervalSince1970: 100), eventID: "profile-old"), "New Name"),
+      (.init(chosenName: "Earlier Tie", updatedAt: Date(timeIntervalSince1970: 200), eventID: "profile-a"), "New Name"),
+      (.init(chosenName: nil, updatedAt: Date(timeIntervalSince1970: 200), eventID: "profile-z"), nil),
+      (.init(chosenName: "New Name", updatedAt: Date(timeIntervalSince1970: 200), eventID: "profile-new"), nil),
+      (
+        .init(chosenName: "Updated Name", updatedAt: Date(timeIntervalSince1970: 201), eventID: "profile-next"),
+        "Updated Name"
       )
-    )
+    ]
+    for (profile, expectedName) in cases {
+      session.resetRemoteProfileStateInMemory()
+      session.requestRemoteProfilesIfNeeded(pubkeyHexes: [contact.targetPubkey])
+      XCTAssertTrue(session.inFlightRemoteProfilePubkeys.contains(contact.targetPubkey))
+      session.ingestProfileMetadataForTesting(
+        try makeIncomingProfileMetadata(
+          eventID: try XCTUnwrap(profile.eventID),
+          authorPubkey: contact.targetPubkey,
+          createdAt: profile.updatedAt,
+          chosenName: profile.chosenName
+        )
+      )
 
-    let identity = session.resolvedIdentity(for: contact)
-    XCTAssertEqual(identity.displayName, "New Name")
-    XCTAssertEqual(identity.chosenName, "New Name")
+      XCTAssertEqual(session.resolvedIdentity(for: contact).chosenName, expectedName)
+      XCTAssertEqual(contact.nostrProfileName, expectedName)
+      XCTAssertEqual(session.remoteProfilesByPubkey[contact.targetPubkey], contact.profileSnapshot)
+      XCTAssertFalse(session.inFlightRemoteProfilePubkeys.contains(contact.targetPubkey))
+      XCTAssertFalse(session.pendingRemoteProfilePubkeys.contains(contact.targetPubkey))
+    }
   }
 
   func testIncomingProfileMetadataCachesNamesForNonContacts() async throws {
@@ -189,6 +207,7 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     let didAdd = await session.addContact(npub: keypair.publicKey.npub, alias: "")
     XCTAssertTrue(didAdd)
 
+    session.resetRemoteProfileStateInMemory()
     let contact = try XCTUnwrap(fetchContacts(in: container.mainContext).first)
     let identity = session.resolvedIdentity(for: contact)
     XCTAssertEqual(identity.chosenName, "Known Before Follow")

@@ -234,7 +234,8 @@ extension AppSession {
   ) throws {
     try contactStore.replaceFollowedPubkeys(
       ownerPubkey: ownerPubkey,
-      pubkeyHexes: followedPubkeys
+      pubkeyHexes: followedPubkeys,
+      knownProfiles: remoteProfilesByPubkey
     )
     try restorePrivatePreferences()
     try aliasMutation?()
