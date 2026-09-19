@@ -1,6 +1,6 @@
 # linkstr
 
-_Last updated: September 14, 2026_
+_Last updated: September 19, 2026_
 
 linkstr is an iOS app for private link sharing on [Nostr](https://nostr.com). You create private sessions, share links with people you trust, react with emojis, and play supported video directly inside the app when a provider allows it.
 
@@ -12,7 +12,8 @@ This repo contains the iOS app and the small Go push service used for APNs routi
 | ------------------------------------------------------ | ------------------------------------------------ |
 | [docs/SUPPORT.md](docs/SUPPORT.md)                     | Product support and user-facing behavior         |
 | [docs/PRIVACY.md](docs/PRIVACY.md)                     | Privacy details                                  |
-| [docs/APP_STORE_CONNECT.md](docs/APP_STORE_CONNECT.md) | App Store Connect checklist                      |
+| [docs/CONTACTS.md](docs/CONTACTS.md)                   | Contact synchronization and discovery            |
+| [docs/APP_STORE_CONNECT.md](docs/APP_STORE_CONNECT.md) | App Store Connect copy                           |
 | [push-service/README.md](push-service/README.md)       | Push-service setup, operations, and request auth |
 | [docs/future/](docs/future/)                           | Future proposals (not yet shipped)               |
 
@@ -86,7 +87,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 | Log out and clear local data |        ✓        |         ✓         |          —          |
 | Delete account               |        ✓        |         ✓         |          ✓          |
 
-- "Log out and clear local data" and "Delete account" both remove account-scoped local data: contacts, sessions, session members, membership intervals, posts, session deletion tombstones, reactions, cached media references, and local encryption key material for that owner scope.
+- "Log out and clear local data" and "Delete account" both remove account-scoped local data: contacts, incoming follows, sessions, session members, membership intervals, posts, session deletion tombstones, reactions, cached media references, and local encryption key material for that owner scope.
 - "Delete account" includes a two-step destructive confirmation flow. When relays are available, it also publishes an empty follow list (`kind:3`) and a Nostr request-to-vanish (`kind:62`) to enabled relays.
 - "Delete account" does not invalidate the `nsec`; the key remains usable for sign-in later.
 - "Delete account" is send-gated like other relay-backed mutations and does not proceed while relay confirmation is unavailable.
@@ -120,7 +121,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 **Archive:**
 
 - Sessions can be archived or unarchived from the session members/manage sheet.
-- The session list shows active sessions by default. When archived sessions exist, a header archive toggle icon appears to the left of the compose action.
+- The session list shows active sessions by default. When archived sessions exist, an archive toggle appears in the top-left toolbar.
 - Tapping the archive icon switches between active and archived list mode; the filled icon state indicates archive mode.
 - Switching away from the sessions tab resets the list mode back to active. Archive is non-destructive.
 
@@ -235,7 +236,9 @@ linkstr is built around private sessions, not one-off direct messages. A session
 
 ### Relay delivery and ingest
 
-linkstr payloads are JSON-encoded and delivered through Nostr gift-wrap direct messages. Outgoing publish waits for relay `OK` acceptance with a timeout, and fanout only counts as successful once every published gift-wrap has at least one accepted relay path.
+linkstr sends JSON payloads as unsigned kind `44001` rumors, encrypted with NIP-44 and wrapped using [NIP-59](https://github.com/nostr-protocol/nips/blob/master/59.md). The sender signs the inner seal; each recipient's outer gift wrap uses an independent random key. Sending also includes a copy for the sender.
+
+Publication waits for relay `OK` acceptance with a timeout. A send succeeds only when at least one relay accepts each published gift wrap.
 
 **Accepted payload kinds:**
 
@@ -248,14 +251,18 @@ linkstr payloads are JSON-encoded and delivered through Nostr gift-wrap direct m
 
 **Ingest rules:**
 
-- Ignore anything that cannot be decoded or validated. Deduplicate by event ID.
+- Verify incoming event IDs and signatures before dispatch.
+- For gift wraps, verify the kind-13 seal's ID and signature and require empty seal tags. The rumor must be unsigned, its ID must match its calculated hash, and its author must match the seal's signer. This author check prevents impersonation, as described in [NIP-17](https://github.com/nostr-protocol/nips/blob/master/17.md#encrypting).
+- Validate the app payload before recording deduplication IDs. Authentication applies to both live delivery and history restore.
 - Duplicate gift-wraps for the same root merge transport IDs into the existing stored post instead of creating duplicates.
 - `session_create` requires both sender and receiver in the member set. For an existing session it is accepted only from the stored creator.
 - `session_members` is accepted only from the stored creator. It can bootstrap a missing session when the snapshot includes sender, receiver, and a non-empty session name.
 - Root posts and reactions are persisted only when sender and receiver are active at the event timestamp. Out-of-order events are staged in memory until the missing dependency arrives.
-- Delete notices are applied only when the delete sender matches the original root sender.
+- `root_delete` requires the original post's sender; `session_delete` requires the session creator.
 - Late relay connections widen backfill coverage and retry staged events without tearing down the app-level relay lifecycle.
 - Live relay subscriptions use `since` filters that account for the gift-wrap timestamp obfuscation window so recently published events are not filtered out.
+
+Stored decrypted history does not retain the original signed seals, so it cannot be authenticated again locally. Upgrades preserve that history. Valid messages from earlier app versions use the same format and keys.
 
 ### Notifications
 
@@ -353,8 +360,8 @@ Embedded web playback allows provider-element fullscreen when supported.
 
 - Contacts mirror the account's Nostr follow list (`kind:3`, NIP-02).
 - Add and remove actions publish a full replacement follow-list event and wait for relay acceptance.
-- Incoming follow-list events from the signed-in author reconcile local contacts (newer timestamp wins; equal timestamp uses lexicographic event-ID tiebreak).
-- Follow-list recency watermarks are persisted per account so an app restart does not allow stale follow-list rollback.
+- Incoming follow-list events from the signed-in author reconcile local contacts (newer timestamp wins; equal timestamp keeps the lowest event ID).
+- Follow-list changes are serialized and use the accepted event timestamp and ID. Recency watermarks persist per account so an app restart does not allow stale follow-list rollback.
 - Aliases are private per-account data. They are backed up to relays encrypted to the account's own key, separately from the public follow list.
 - Remote Nostr profile names are fetched lazily by pubkey and used only when no local alias exists. When both exist, contact UI shows the local alias as primary and the published Nostr name as secondary.
 - Contacts retain their last fetched public profile name locally for immediate display after reopening or offline. Lazy lookups still refresh names each launch; persisted event ordering prevents stale replies from restoring an older or cleared name. Names for non-contacts remain memory-only.
@@ -370,12 +377,20 @@ Embedded web playback allows provider-element fullscreen when supported.
 - Public-key helper controls render directly below the field in the same compact control row pattern used by the post composer.
 - Re-adding the same contact updates the saved alias; it does not create a duplicate or republish the follow list.
 
-**Contact management** supports add, long-press remove, and alias edit.
+**Contact management:**
+
+- The top-left toolbar button switches between **contacts** and **added you**, matching the archived-session control. The heading and search reflect the selected list. The top-right button adds a contact manually.
+- The **added you** list shows public follows found on configured relays, with **add back** or **added** on each row. Results are cached per account and can be refreshed or paged with **load more**. Discovery checks authors' latest lists for unfollows and labels offline or partial results.
+- Session members offer **add contact** for people not already saved, for both creators and other members. This preserves existing aliases, session membership, and unsaved session edits.
+- Contacts can be removed from the row's **…** menu, the detail screen, a long-press menu, or an accessibility action. Removal requires confirmation and relay acceptance; shared sessions and posts remain available.
+
+See [contact synchronization](docs/CONTACTS.md) for persistence and relay behavior.
 
 ### You tab
 
 - Exposes the current account `npub`.
 - Lets the user publish, update, or clear an optional Nostr profile name. Submitting with the keyboard return key or the save button applies the change and dismisses the keyboard.
+- Sequential profile edits use increasing timestamps. A newer profile received while a save is pending remains authoritative, and a failed local save is reported instead of shown as successful.
 - Provides a QR code with the current profile name above it (when set), a short scan hint below it, raw key text, and a copy action.
 
 ### Deep links
@@ -397,7 +412,7 @@ Embedded web playback allows provider-element fullscreen when supported.
 **Persisted local data:**
 
 - Relay configuration and enabled state when persisted.
-- Contacts and private aliases.
+- Contacts, private aliases, and account-scoped incoming-follow state, including unfollow watermarks.
 - Sessions, member snapshots, membership intervals, session deletion tombstones, root posts, post deletion watermarks, reactions, read state, and archive state.
 - Cached media references, downloaded videos, and metadata hydration state.
 - Account-scoped app state (follow-list recency watermark).
@@ -407,13 +422,13 @@ Embedded web playback allows provider-element fullscreen when supported.
 
 - SwiftData persistence is local-first and survives app relaunch.
 - Cached video files live under `Library/Caches` and are treated as disposable device cache with LRU eviction at approximately 1 GB.
-- Settings → Storage can purge downloaded videos or clear hydrated metadata and thumbnails across all local accounts retained on the device.
+- Settings → Storage can purge downloaded videos or clear hydrated metadata and thumbnails across all local accounts retained on the device. File deletion follows a successful database save; shared files remain until no stored message references them.
 
 **Scoping and encryption:**
 
 - Local entities are owner-scoped by pubkey. Account scoping is enforced in storage and query paths to prevent cross-account bleed.
 - "Log out (keep local data)" preserves persisted entities so the same account can log back in later.
-- "Log out and clear local data" removes the signed-in account's persisted entities, managed thumbnails, cached videos, and cache references.
+- "Log out and clear local data" removes the signed-in account's persisted entities and cache references, and deletes managed files no longer referenced by any retained account.
 - If account-scoped local cleanup cannot fully complete, the app surfaces an error instead of reporting a clean success.
 - Sensitive content fields are encrypted at rest with per-owner local keys (aliases, session and member identity values, URLs, notes, metadata, and creator keys).
 - Operational identifiers and timestamps remain plaintext in local storage for indexing and querying.
@@ -439,7 +454,7 @@ Embedded web playback allows provider-element fullscreen when supported.
 
 - No offline guaranteed-delivery queue for posts or reactions.
 - No automatic resend of previously failed posts.
-- No public discovery feed or social graph product surface.
+- No public post feed.
 - No text-based post replies.
 
 ---
@@ -475,6 +490,8 @@ open linkstr.xcodeproj
 ```
 
 This runs both the iOS unit tests (via `xcodebuild`) and the push-service Go tests in one pass.
+
+`NostrEventValidationTests` covers relay decoding, outgoing envelopes, recipient and sender copies, invalid signatures and authors, and history pagination. `AppSessionIngestTests+Authentication` checks that forged membership updates and deletes cannot change stored state while authorized messages still work. Contact tests are described in [contact synchronization](docs/CONTACTS.md#verification).
 
 ### Lint
 

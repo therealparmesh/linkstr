@@ -1,8 +1,8 @@
 # linkstr support
 
-_Last updated: September 14, 2026_
+_Last updated: September 19, 2026_
 
-linkstr is a private link-sharing app built on [Nostr](https://nostr.com). You create or join private sessions, share links inside those sessions, and react with emoji. This page describes the current shipped behavior in plain language.
+linkstr is a private link-sharing app built on [Nostr](https://nostr.com). You create or join private sessions, share links inside those sessions, and react with emoji. This page explains how to use the app.
 
 ---
 
@@ -11,7 +11,7 @@ linkstr is a private link-sharing app built on [Nostr](https://nostr.com). You c
 ### Create or import an account
 
 1. Open linkstr.
-2. Choose **Create account** for a new account, or import an existing secret key (`nsec`).
+2. Choose **create account** for a new account, or import an existing secret key (`nsec`).
 3. If you create a new account, copy the displayed `nsec` and store it somewhere safe.
 4. Optionally set a public profile name.
 
@@ -25,11 +25,23 @@ Your active account is stored in the device keychain. If you use iCloud Keychain
 4. Optionally save a private alias.
 5. Tap the top-right add icon.
 
-Adding the same contact again updates the saved alias instead of creating a duplicate. To edit an alias later, tap the contact row.
+Adding the same contact through this form updates the saved alias instead of creating a duplicate. To edit an alias later, tap the contact row.
 
 Contacts keep their last fetched public Nostr name on this device, so names remain available after reopening or offline. Names refresh from relays when available; your private alias always takes priority.
 
 The bottom footer shows validation and relay status only. The keyboard return key advances from the public key field into alias and submits from alias.
+
+### See who added you
+
+1. Open the Contacts tab.
+2. Tap the person with a checkmark in the top-left toolbar to open **added you**.
+3. Tap **add back** beside someone to save them. People already in your contacts show **added**.
+
+Tap the toolbar button again to return to contacts. The top-right add-contact button is available in both lists.
+
+The list shows public Nostr follows found on your configured relays, including follows made in other Nostr apps. Pull to refresh or use **load more** when available. Saved results remain visible offline. The status tells you when some results could not be checked, and people may be missing if their follow lists are unavailable on your relays.
+
+You can also tap **add contact** in a session's members view. Any member can use it, and adding a contact leaves session membership and unsaved session edits unchanged.
 
 ### Create a session
 
@@ -71,12 +83,12 @@ The bottom footer shows validation and relay status only. The keyboard return ke
 | Save shared media              | Use the iOS share sheet from another app, choose linkstr, then choose save media. linkstr prepares supported media and lets you choose Photos or Files.                                         |
 | Share a deep link              | Open post detail and tap the share button in the top-right corner. The shared link carries only the normalized URL; linkstr fetches preview metadata again when the recipient opens it.         |
 | Delete your own post           | Long-press the post row in the session view.                                                                                                                                                    |
-| Archive or unarchive a session | Open a session, tap the members button, and use **Archive Session** or **Unarchive Session**.                                                                                                   |
-| View archived sessions         | Tap the archive icon in the sessions header.                                                                                                                                                    |
+| Archive or unarchive a session | Open a session, tap the members button, and use **archive session** or **unarchive session**.                                                                                                   |
+| View archived sessions         | Tap the archive icon in the top-left Sessions toolbar.                                                                                                                                          |
 | Rename a session               | Open a session, tap the members button, and edit the session name.                                                                                                                              |
-| Delete a session               | Open a session, tap the members button, and use **Delete Session** in the manage sheet.                                                                                                         |
+| Delete a session               | Open a session, tap the members button, and use **delete session** in the manage sheet.                                                                                                         |
 | Add or remove members          | Open a session and use the members button.                                                                                                                                                      |
-| Copy a member's public key     | Open a session, tap the members button, then long-press a current member and choose **Copy Public Key**.                                                                                        |
+| Copy a member's public key     | Open a session, tap the members button, then long-press a current member and choose **copy public key**.                                                                                        |
 
 Only the session creator can rename sessions, delete them, or change session membership.
 
@@ -88,7 +100,7 @@ Open Settings to manage relays.
 - You can add your own relay URLs.
 - Enabled relays can be toggled on or off.
 - Relay rows can be removed.
-- **Restore defaults** puts you back on the current default relay set.
+- **restore defaults** puts you back on the current default relay set.
 - Tapping a relay connection alert opens relay settings.
 
 ---
@@ -116,7 +128,7 @@ linkstr accepts normal web URLs, but in-app playback is provider-dependent.
 
 Local video playback loops without a repeat limit by default, inline and fullscreen. Turn off **loop local videos** in Settings → Playback to stop at the end of each video. Your choice is saved on this device and applies across accounts. Embedded playback behavior is controlled by the provider.
 
-When local extraction succeeds, linkstr can cache the media on-device and offer **Save to Photos** or **Save to Files**. Embed-only playback stays network-backed and does not offer local export controls.
+When local extraction succeeds, linkstr can cache the media on-device and offer **save to photos** or **save to files**. Embed-only playback stays network-backed and does not offer local export controls.
 
 ---
 
@@ -171,8 +183,8 @@ Yes. Your `nsec` is a Nostr secret key, not a linkstr-only credential.
 
 ### What happens if I log out?
 
-- **Log out (keep local data)** removes the active identity from memory and keychain state but keeps the signed-in account's local sessions, posts, contacts, and caches on the device.
-- **Log out and clear local data** removes the active identity and deletes that account's local data, including caches, from the device.
+- **log out (keep local data)** removes the active identity from memory and keychain state but keeps the signed-in account's local sessions, posts, contacts, and caches on the device.
+- **log out and clear local data** removes the active identity and deletes that account's local data. Cached files still used by another saved account are kept.
 
 ### What happens if I delete my account?
 
@@ -188,7 +200,7 @@ Yes. Open the session and tap the members button. That sheet shows the session n
 
 ### Can I archive a session?
 
-Yes. Open the session, tap the members button, and use **Archive Session** or **Unarchive Session**.
+Yes. Open the session, tap the members button, and use **archive session** or **unarchive session**.
 
 Archive changes whether the session appears in the active or archived list. This private choice syncs across linkstr devices using the same account. It does not delete the session or its posts.
 
@@ -231,7 +243,7 @@ If you delete and reinstall the app without restoring its local data, linkstr re
 
 ### Can I delete a session?
 
-Yes. Open the session, tap the members button, and use **Delete Session** in the manage sheet.
+Yes. Open the session, tap the members button, and use **delete session** in the manage sheet.
 
 Delete is creator-only and requires confirmation. When it succeeds, linkstr removes the session from active and archived lists on this device, sends an encrypted delete notice to known members, and tries a best-effort relay-side delete for older transport copies when possible.
 
@@ -239,7 +251,7 @@ Delete is permanent for linkstr UX. There is no restore flow.
 
 ### Can I remove a contact?
 
-Yes. Long-press the contact row and choose **Remove contact**. linkstr publishes an updated follow list to relays and removes the contact locally.
+Yes. Open the contact row's **…** menu and choose **remove contact**, or tap **remove contact** in the contact detail screen. Long-press also works. After you confirm, linkstr updates your public follow list and removes the contact. Shared sessions and posts remain available. If relays reject the update, the contact stays saved and the app shows an error.
 
 ### Can I save videos?
 
@@ -251,7 +263,7 @@ Yes, for content you have the right to save. Save and export are available only 
 
 ### What data is stored locally?
 
-linkstr stores account-scoped sessions, member snapshots and intervals, session deletion tombstones, posts, reactions, read state, archive state, contacts, and media cache references on the device. Sensitive content fields are encrypted at rest with local per-owner keys.
+linkstr stores your sessions, posts, reactions, contacts, read and archive choices, and media cache on the device, separately for each account. It also keeps records of membership changes, deletions, and public follows and unfollows so older relay responses cannot undo newer changes. Sensitive content fields are encrypted with local keys for each account.
 
 ### Where are account keys stored?
 
@@ -292,7 +304,7 @@ Archived sessions do not send notifications.
 
 1. Confirm your internet connection works.
 2. Open Settings and check that at least one relay is enabled.
-3. If needed, use **Restore defaults** in the relays section to go back to the current default relay set.
+3. If needed, use **restore defaults** in the relays section to go back to the current default relay set.
 4. Bring the app back to the foreground and leave it open for a few seconds. linkstr treats this like a light reopen: it stops relay runtime whenever the app leaves the foreground and does one clean rebuild from a disconnected baseline when it becomes active again.
 5. If it still does not recover, force-quit and reopen the app.
 
@@ -307,17 +319,17 @@ Historical replay depends on relay retention. linkstr can retry out-of-order pos
 ### Videos won't play
 
 1. Check your network connection.
-2. Switch between **Try local playback** and **Use embedded**.
+2. Switch between **try local playback** and **use embedded**.
 3. If a cached copy was auto-trimmed, try local playback again to re-cache it.
 4. Use the refresh button in post detail if that post's metadata seems stale or missing.
-5. Use **Open in browser** if the provider blocks embedded playback.
+5. Use **open in browser** if the provider blocks embedded playback.
 
 ### A preview looks stale or wrong
 
 1. Use the refresh button in post detail to re-fetch metadata for that post.
 2. Open the session, the post detail, or the shared-link screen and let linkstr rebuild the preview if metadata is still missing.
 3. Settings can clear saved preview metadata if you want linkstr to rebuild it.
-4. If the provider itself is serving bad metadata, use **Open in browser**.
+4. If the provider itself is serving bad metadata, use **open in browser**.
 
 ### I can't scan a QR code
 

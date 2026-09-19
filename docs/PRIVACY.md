@@ -1,10 +1,10 @@
 # privacy policy
 
-Last updated: September 14, 2026
+Last updated: September 19, 2026
 
 ## Overview
 
-linkstr is a private link-sharing app built on nostr. Your account keys stay on your device. Encrypted session content moves through the nostr relays you choose. If you enable notifications, a small amount of routing data is also stored by the developer-operated push service so Apple Push Notification service can reach your device.
+linkstr is a private link-sharing app built on Nostr. Your account keys stay on your device. Encrypted session content moves through the Nostr relays you choose. If you enable notifications, a small amount of routing data is also stored by the developer-operated push service so Apple Push Notification service can reach your device.
 
 linkstr does not run ads, analytics, or behavioral tracking.
 
@@ -16,6 +16,7 @@ linkstr stores app data locally for the signed-in account, including:
 
 - Account keys in the device keychain.
 - Contacts, including private aliases you save locally and cached public Nostr profile names.
+- Public follows and unfollows found on configured relays, stored separately for each account. Records include follower public keys, event timestamps, and event IDs so older results cannot undo newer changes.
 - Encrypted private-preference backup records, including pending uploads.
 - Sessions, member snapshots, and membership intervals.
 - Session deletion tombstones, posts, reactions, delete watermarks, read state, and archive state.
@@ -23,7 +24,7 @@ linkstr stores app data locally for the signed-in account, including:
 - Local per-account encryption keys used to protect sensitive stored fields at rest.
 - Existing encrypted local data requires its original per-account encryption key. If that key is unavailable after a restore, linkstr preserves the encrypted data instead of generating a replacement key. The `nsec` alone cannot decrypt these local fields.
 
-Sensitive local fields are encrypted at rest with per-account local keys. Public Nostr profile names, operational identifiers, and timestamps may remain plaintext locally.
+Sensitive local fields are encrypted at rest with per-account local keys. Public Nostr profile names and follow relationships, operational identifiers, and timestamps may remain plaintext locally.
 
 Downloaded videos and generated previews are device-local. Video cache is treated as disposable cache and may be trimmed automatically with least-recently-used eviction once local video cache reaches about 1 GB. Media saved via the share sheet goes to Photos or a Files location you choose.
 
@@ -33,28 +34,29 @@ During relay sync, linkstr may temporarily stage out-of-order session, post, del
 
 Those in-memory buffers are not sent to the push service. They are cleared when app runtime state resets.
 
-### On nostr relays
+### On Nostr relays
 
-When you use linkstr, encrypted session payloads are transmitted through the nostr relays you configure. Depending on what you do in the app, relays may receive:
+When you use linkstr, encrypted session payloads are transmitted through the Nostr relays you configure. Depending on what you do in the app, relays may receive:
 
 - Encrypted session payloads for session creation, membership updates, posts, reactions, and delete notices.
-- Your nostr follow list when you add or remove contacts.
+- Your public Nostr follow list when you add or remove contacts, including through **added you** or a session's members view.
+- Requests for public follow lists that reference your key and for those authors' latest lists while **added you** is open. The relays you use can see these requests.
 - Private contact aliases and session archive choices in NIP-78 app-data events, encrypted to your own account with NIP-44. Their contents and contact/session identifiers are not public; your public key, app namespace, and event timestamps are visible. Anyone who obtains your secret key can decrypt these backups. Pending changes retry when you reconnect, and restoring depends on relay retention and availability.
 - Standard relay connection metadata that any relay operator can observe, such as connection timing and network-level information.
 
-nostr relays are third-party services. linkstr does not control their retention policies, logs, or privacy practices.
+Nostr relays are third-party services. linkstr does not control their retention policies, logs, or privacy practices.
 
 ### In the push service
 
 If you allow notifications, linkstr sends limited routing data to a developer-operated push service:
 
 - APNs device tokens.
-- Associations between your nostr pubkey and those device tokens.
+- Associations between your Nostr pubkey and those device tokens.
 - Archived conversation IDs used to suppress notifications for archived sessions.
 - Archive updates send session IDs with explicit archive/unarchive choices, including clearing archived filtering for deleted sessions. The service processes these updates but retains only archived IDs for this purpose.
 - Push requests carry the notification type, event and conversation IDs, recipient pubkeys, and reaction emoji when applicable. Reaction notifications may also include the reacted-to post ID so a tap can scroll to that post in the session list. These routing fields are not encrypted session content.
 
-The push service is used for notification routing, not message transport. Encrypted session content still travels through nostr relays, not through the push service. Push-dedupe records older than 30 days are removed when the service starts or handles a push request, and authentication nonces expire after five minutes.
+The push service is used for notification routing, not message transport. Encrypted session content still travels through Nostr relays, not through the push service. Push-dedupe records older than 30 days are removed when the service starts or handles a push request, and authentication nonces expire after five minutes.
 
 The push service does not store decrypted post text, reaction text, or session payload plaintext. Push banners use generic notification text. Historical relay restore does not replay old push notifications.
 
@@ -78,7 +80,7 @@ linkstr does not:
 ### Photos library (add only)
 
 - Purpose: export videos to Photos.
-- Used only when you choose `save to photos`.
+- Used only when you choose **save to photos**.
 - Content is saved locally to your library; linkstr does not upload it as part of that action.
 
 ### Notifications
@@ -113,7 +115,7 @@ Downloaded media from those providers is stored locally on your device only, unl
 - Media cache may also be removed automatically by cache eviction or iOS storage pressure.
 - Relay-side data retention depends on each relay operator.
 - APNs device tokens remain until you unregister, log out, switch the device to another account, or Apple permanently rejects the token. Archived conversation IDs are removed with the last registered token for a pubkey. Push-dedupe records older than 30 days are removed at the next service startup or push request.
-- If you delete your account in linkstr and relays are available, the app can publish an empty follow list and a nostr vanish request to enabled relays, but your `nsec` remains valid unless you discard it yourself.
+- If you delete your account in linkstr and relays are available, the app can publish an empty follow list and a Nostr vanish request to enabled relays, but your `nsec` remains valid unless you discard it yourself.
 
 ## Your choices
 
@@ -125,7 +127,7 @@ You can:
 - Log out while keeping local data.
 - Log out and clear local data for the signed-in account.
 - Delete your account in-app.
-- Export your `nsec` and use it in other nostr apps.
+- Export your `nsec` and use it in other Nostr apps.
 
 ## Children's privacy
 
