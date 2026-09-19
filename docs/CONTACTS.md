@@ -4,7 +4,11 @@ Contacts mirror the signed-in account's public Nostr kind-3 follow list. Incomin
 
 ## Contact actions
 
-Contact additions and removals require confirmation. Contact and session-member rows use **…** for non-destructive actions. Removal stays in the long-press menu and accessibility actions; contact detail also has a **remove contact** button. Session-member rows omit contact-status badges. The expandable **add members** list excludes existing members; adding or removing a member changes the draft only after confirmation and takes effect when the creator saves.
+Contact additions and removals require confirmation. Tap a contact row to edit it; long-press for **copy public key** followed by **remove contact**. Both actions are available as accessibility actions. Contact detail also has a **remove contact** button.
+
+The **added you** list has a compact add-contact button and supports copying public keys from its long-press menu. Saved contacts show a checkmark with a descriptive accessibility label.
+
+Session-member rows keep **…** for non-destructive actions and omit contact-status badges. Removal stays in the long-press menu and accessibility actions. The expandable **add members** list excludes existing members; adding or removing a member changes the draft only after confirmation and takes effect when the creator saves.
 
 `ContactMutationQueue` serializes additions, removals, and account deletion so each action uses the last completed follow list. Quick-add leaves existing contacts and aliases unchanged. The manual add form can update an existing alias.
 
@@ -40,4 +44,4 @@ Public profiles use the same NIP-01 ordering as follow lists. A published empty 
 
 Run `scripts/test.sh` for the app and push-service suites. `ContactManagementTests` covers queued mutations, concurrent remote changes, cancellation, aliases, and profile request limits. `ContactDiscoveryTests` covers follow ordering, account isolation, invalid events, subscription lifecycle, duplicate delivery, and pagination boundaries. The disk migration fixture in `PrivatePreferenceTests` checks that adding incoming-follow storage preserves encrypted aliases.
 
-For UI verification, check both toolbar modes, search reset, empty and partial results, adding contacts from **added you** and session members, and removal from both list and detail. Row **…** menus must omit removal; long-press menus and accessibility actions must still reach its confirmation. Verify that cancellation leaves contacts and membership unchanged, member actions preserve unsaved session edits, and the add-members list excludes people already in the draft. Returning from contact detail must restore the toolbar. Selectable public keys and post links must retain their native copy and share menus.
+For UI verification, check both toolbar modes, search reset, empty and partial results, adding contacts from **added you** and session members, and removal from both list and detail. Contact lists must have no **…** menus. Tapping a contact must open editing; long-press must show **copy public key** above **remove contact**. Session-member **…** menus must omit removal. Long-press menus and accessibility actions must still reach removal confirmation. Verify that cancellation leaves contacts and membership unchanged, member actions preserve unsaved session edits, and the add-members list excludes people already in the draft. Returning from contact detail must restore the toolbar. Selectable public keys and post links must retain their native copy and share menus.

@@ -107,27 +107,8 @@ struct ContactsView: View {
             LazyVStack(spacing: 0) {
               ForEach(visibleContacts) { row in
                 if let contact = row.contact {
-                  HStack(spacing: 0) {
-                    Button { selectedContact = contact } label: { ContactRowView(identity: row.identity) }
-                      .buttonStyle(.plain)
-                    Menu {
-                      Button("edit contact", systemImage: "pencil") {
-                        selectedContact = contact
-                      }
-                      Button("copy public key", systemImage: "doc.on.doc") {
-                        UIPasteboard.general.string = row.identity.npub
-                      }
-                    } label: {
-                      Image(systemName: "ellipsis")
-                        .frame(
-                          width: LinkstrTheme.minimumInteractiveDimension,
-                          height: LinkstrTheme.minimumInteractiveDimension
-                        )
-                    }
-                    .tint(LinkstrTheme.textSecondary)
-                    .accessibilityLabel("contact actions for \(row.identity.displayName)")
-                  }
-                  .contentShape(Rectangle())
+                  Button { selectedContact = contact } label: { ContactRowView(identity: row.identity) }
+                  .buttonStyle(.plain)
                   .overlay(alignment: .bottom) { LinkstrListRowDivider(leadingInset: 62) }
                   .contextMenu {
                     Button("copy public key", systemImage: "doc.on.doc") {
@@ -136,6 +117,10 @@ struct ContactsView: View {
                     Button("remove contact", systemImage: "person.crop.circle.badge.minus", role: .destructive) {
                       pendingContactRemoval = contact
                     }
+                  }
+                  .accessibilityHint("edit contact")
+                  .accessibilityAction(named: Text("copy public key")) {
+                    UIPasteboard.general.string = row.identity.npub
                   }
                   .accessibilityAction(named: Text("remove contact")) { pendingContactRemoval = contact }
                 }
@@ -170,6 +155,7 @@ private struct ContactRowView: View {
       Image(systemName: "chevron.right")
         .font(LinkstrTheme.font(.caption, weight: .semibold))
         .foregroundStyle(LinkstrTheme.textTertiary)
+        .accessibilityHidden(true)
     }
     .padding(.vertical, LinkstrTheme.fieldVerticalPadding)
     .contentShape(Rectangle())

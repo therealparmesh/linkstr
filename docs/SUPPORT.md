@@ -35,9 +35,9 @@ The bottom footer shows validation and relay status only. The keyboard return ke
 
 1. Open the Contacts tab.
 2. Tap the person with a checkmark in the top-left toolbar to open **added you**.
-3. Open someone's **…** menu and choose **add contact**, then confirm. People already in your contacts show **added**.
+3. Tap the add-contact button beside someone, then confirm. People already in your contacts show a checkmark.
 
-Tap the toolbar button again to return to contacts. The top-right add-contact button is available in both lists.
+Long-press a row to **copy public key**. Tap the toolbar button again to return to contacts. The top-right add-contact button is available in both lists.
 
 The list shows public Nostr follows found on your configured relays, including follows made in other Nostr apps. Pull to refresh or use **load more** when available. Saved results remain visible offline. The status tells you when some results could not be checked, and people may be missing if their follow lists are unavailable on your relays.
 

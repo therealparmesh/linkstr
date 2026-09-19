@@ -80,27 +80,24 @@ struct AddedYouView: View {
               )
               .frame(maxWidth: .infinity, alignment: .leading)
               if row.contact != nil {
-                Label("added", systemImage: "checkmark")
+                Image(systemName: "checkmark")
                   .font(LinkstrTheme.font(.caption, weight: .medium))
                   .foregroundStyle(LinkstrTheme.textSecondary)
+                  .frame(width: LinkstrTheme.minimumInteractiveDimension)
                   .accessibilityLabel("\(row.identity.displayName) is in your contacts")
-              }
-              Menu {
-                if row.contact == nil {
-                  Button("add contact", systemImage: "person.badge.plus") { pendingContactAddition = row }
+              } else {
+                Button { pendingContactAddition = row } label: {
+                  Image(systemName: "person.badge.plus")
+                    .frame(
+                      width: LinkstrTheme.minimumInteractiveDimension,
+                      height: LinkstrTheme.minimumInteractiveDimension
+                    )
+                    .contentShape(Rectangle())
                 }
-                Button("copy public key", systemImage: "doc.on.doc") {
-                  UIPasteboard.general.string = row.identity.npub
-                }
-              } label: {
-                Image(systemName: "ellipsis")
-                  .frame(
-                    width: LinkstrTheme.minimumInteractiveDimension,
-                    height: LinkstrTheme.minimumInteractiveDimension
-                  )
+                .buttonStyle(.plain)
+                .foregroundStyle(LinkstrTheme.accent)
+                .accessibilityLabel("add \(row.identity.displayName) to contacts")
               }
-              .tint(LinkstrTheme.textSecondary)
-              .accessibilityLabel("contact actions for \(row.identity.displayName)")
             }
             .padding(.vertical, LinkstrTheme.fieldVerticalPadding)
             .contentShape(Rectangle())
