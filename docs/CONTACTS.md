@@ -4,6 +4,8 @@ Contacts mirror the signed-in account's public Nostr kind-3 follow list. Incomin
 
 ## Contact actions
 
+Contact additions and removals require confirmation. Session rows use a single actions menu and omit contact-status badges. The expandable **add members** list excludes existing members; adding or removing a member changes the draft only after confirmation and takes effect when the creator saves.
+
 `ContactMutationQueue` serializes additions, removals, and account deletion so each action uses the last completed follow list. Quick-add leaves existing contacts and aliases unchanged. The manual add form can update an existing alias.
 
 Publishing preserves non-contact tags and metadata on retained contact tags. A successful update saves the contacts, alias changes, and accepted event timestamp and ID together. Follow lists use NIP-01 ordering: the newer timestamp wins, with the lowest event ID breaking a tie.
@@ -38,4 +40,4 @@ Public profiles use the same NIP-01 ordering as follow lists. A published empty 
 
 Run `scripts/test.sh` for the app and push-service suites. `ContactManagementTests` covers queued mutations, concurrent remote changes, cancellation, aliases, and profile request limits. `ContactDiscoveryTests` covers follow ordering, account isolation, invalid events, subscription lifecycle, duplicate delivery, and pagination boundaries. The disk migration fixture in `PrivatePreferenceTests` checks that adding incoming-follow storage preserves encrypted aliases.
 
-For UI verification, check both toolbar modes, search reset, empty and partial results, add back, member quick-add for creators and other members, and removal from both list and detail. Verify that returning from contact detail restores the toolbar and that quick-add preserves unsaved session edits.
+For UI verification, check both toolbar modes, search reset, empty and partial results, add back, member quick-add for creators and other members, and removal from both list and detail. Verify that cancellation leaves contacts and membership unchanged, member actions preserve unsaved session edits, and the add-members list excludes people already in the draft. Returning from contact detail must restore the toolbar.

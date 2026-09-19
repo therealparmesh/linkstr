@@ -117,40 +117,45 @@ extension SessionManagementSheet {
     filteredContacts: [ContactEntity]
   ) -> some View {
     let lastContactID = filteredContacts.last?.id
-    LinkstrInsetSection(title: "add from contacts") {
-      if !hasContacts {
-        LinkstrNoContactsPrompt {
-          focusedField = nil
-          isPresentingAddContact = true
-        }
-      } else {
-        LinkstrSearchField(prompt: "search contacts", text: $query)
-
-        if filteredContacts.isEmpty {
-          Text("no contacts match.")
-            .font(LinkstrTheme.font(.footnote))
-            .foregroundStyle(LinkstrTheme.textSecondary)
+    LinkstrInsetSection(title: "add members") {
+      DisclosureGroup(isExpanded: $isShowingAvailableContacts) {
+        if !hasContacts {
+          LinkstrNoContactsPrompt {
+            focusedField = nil
+            isPresentingAddContact = true
+          }
         } else {
-          VStack(spacing: 0) {
-            ForEach(filteredContacts) { contact in
-              managementContactRow(contact, isLast: contact.id == lastContactID)
+          LinkstrSearchField(prompt: "search contacts", text: $query)
+            .padding(.top, LinkstrTheme.compactSpacing)
+
+          if filteredContacts.isEmpty {
+            Text(query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+              ? "all your contacts are already in this session." : "no contacts match.")
+              .font(LinkstrTheme.font(.footnote))
+              .foregroundStyle(LinkstrTheme.textSecondary)
+          } else {
+            VStack(spacing: 0) {
+              ForEach(filteredContacts) { contact in
+                managementContactRow(contact, isLast: contact.id == lastContactID)
+              }
             }
           }
         }
+      } label: {
+        Label("choose from contacts", systemImage: "person.badge.plus")
+          .font(LinkstrTheme.font(.footnote, weight: .semibold))
+          .frame(minHeight: LinkstrTheme.minimumInteractiveDimension)
       }
+      .tint(LinkstrTheme.accent)
+      .disabled(isSaving || isDeletingSession)
     }
   }
 
   @ViewBuilder
   private func managementContactRow(_ contact: ContactEntity, isLast: Bool) -> some View {
     let identity = session.resolvedIdentity(for: contact)
-    let contactHex = contact.targetPubkey
     Button {
-      if includedMemberHexes.contains(contactHex) {
-        includedMemberHexes.remove(contactHex)
-      } else {
-        includedMemberHexes.insert(contactHex)
-      }
+      pendingMemberChange = ContactPresentation(pubkey: contact.targetPubkey, identity: identity, contact: contact)
     } label: {
       HStack(spacing: LinkstrTheme.rowSpacing) {
         LinkstrContactAvatar(name: identity.displayName, size: 38)
@@ -161,20 +166,15 @@ extension SessionManagementSheet {
 
         Spacer()
 
-        Image(
-          systemName: includedMemberHexes.contains(contactHex)
-            ? "checkmark.circle.fill" : "circle"
-        )
-        .font(LinkstrTheme.font(.title3, weight: .semibold))
-        .foregroundStyle(
-          includedMemberHexes.contains(contactHex)
-            ? LinkstrTheme.accent : LinkstrTheme.textTertiary
-        )
+        Image(systemName: "plus.circle")
+          .font(LinkstrTheme.font(.title3, weight: .semibold))
+          .foregroundStyle(LinkstrTheme.accent)
       }
       .padding(.vertical, LinkstrTheme.listRowVerticalPadding)
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
+    .accessibilityLabel("add \(identity.displayName) to session")
 
     if !isLast {
       LinkstrListRowDivider(leadingInset: 50)
@@ -272,8 +272,8 @@ extension SessionManagementSheet {
 
   var archiveFooterText: String {
     sessionEntity.isArchived
-      ? "unarchiving returns this session to the main sessions list on this device."
-      : "archiving hides this session from the main sessions list on this device."
+      ? "unarchiving returns this session to the main sessions list."
+      : "archiving hides this session from the main sessions list."
   }
 
   var deleteFooterText: String {
@@ -294,7 +294,9 @@ extension SessionManagementSheet {
 
   func filteredContacts(contacts: [ContactEntity]) -> [ContactEntity] {
     RecipientSearchLogic.filteredContacts(
-      contacts,
+      contacts.filter {
+        !includedMemberHexes.contains($0.targetPubkey) && $0.targetPubkey != session.identityService.pubkeyHex
+      },
       query: query,
       displayName: { session.resolvedIdentity(for: $0).displayName },
       npub: \.npub,

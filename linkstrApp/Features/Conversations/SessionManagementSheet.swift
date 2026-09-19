@@ -19,6 +19,9 @@ struct SessionManagementSheet: View {
   @State var sessionName = ""
   @State var includedMemberHexes = Set<String>()
   @State var query = ""
+  @State var isShowingAvailableContacts = false
+  @State var pendingContactAddition: ContactPresentation?
+  @State var pendingMemberChange: ContactPresentation?
   @State var isSaving = false
   @State var isDeletingSession = false
   @State var isPresentingDeleteConfirmation = false
@@ -77,8 +80,9 @@ struct SessionManagementSheet: View {
               }
             }
             LinkstrInsetSection(
-              title: "current members",
-              accessory: "\(currentMembers.count + 1)"
+              title: "members",
+              accessory: "\(currentMembers.count + 1) including you",
+              footer: canManageSession ? "membership changes take effect when you save." : nil
             ) {
               if currentMembers.isEmpty {
                 Text("only you are in this session.")
@@ -102,25 +106,30 @@ struct SessionManagementSheet: View {
 
                       Spacer()
 
-                      AddContactButton(
-                        pubkey: memberHex, displayName: identity.displayName, isAdded: member.contact != nil
-                      )
-                      .disabled(isSaving || isDeletingSession)
-
-                      if canManageSession {
-                        Button(role: .destructive) {
-                          includedMemberHexes.remove(memberHex)
-                        } label: {
-                          Image(systemName: "minus.circle.fill")
-                            .font(LinkstrTheme.font(.title3, weight: .semibold))
-                            .foregroundStyle(LinkstrTheme.destructive)
-                            .frame(
-                              width: LinkstrTheme.minimumInteractiveDimension,
-                              height: LinkstrTheme.minimumInteractiveDimension
-                            )
+                      Menu {
+                        if member.contact == nil {
+                          Button("add contact", systemImage: "person.badge.plus") {
+                            pendingContactAddition = member
+                          }
                         }
-                        .accessibilityLabel("remove \(identity.displayName) from session")
+                        Button("copy public key", systemImage: "doc.on.doc") {
+                          UIPasteboard.general.string = identity.npub
+                        }
+                        if canManageSession {
+                          Button("remove from session", systemImage: "person.badge.minus", role: .destructive) {
+                            pendingMemberChange = member
+                          }
+                        }
+                      } label: {
+                        Image(systemName: "ellipsis")
+                          .frame(
+                            width: LinkstrTheme.minimumInteractiveDimension,
+                            height: LinkstrTheme.minimumInteractiveDimension
+                          )
                       }
+                      .tint(LinkstrTheme.textSecondary)
+                      .accessibilityLabel("member actions for \(identity.displayName)")
+                      .disabled(isSaving || isDeletingSession)
                     }
                     .padding(.vertical, LinkstrTheme.listRowVerticalPadding)
                     .contextMenu {
@@ -179,6 +188,27 @@ struct SessionManagementSheet: View {
             .disabled(isSaving || isDeletingSession || !canSave)
             .tint(LinkstrTheme.accent)
           }
+        }
+      }
+      .contactAddition(pending: $pendingContactAddition)
+      .alert(
+        pendingMemberChange.map { includedMemberHexes.contains($0.pubkey) }
+          == true ? "remove from session" : "add to session",
+        isPresented: Binding(
+          get: { pendingMemberChange != nil }, set: { if !$0 { pendingMemberChange = nil } }
+        ), presenting: pendingMemberChange
+      ) { member in
+        Button("cancel", role: .cancel) {}
+        if includedMemberHexes.contains(member.pubkey) {
+          Button("remove from session", role: .destructive) { includedMemberHexes.remove(member.pubkey) }
+        } else {
+          Button("add to session") { includedMemberHexes.insert(member.pubkey) }
+        }
+      } message: { member in
+        if includedMemberHexes.contains(member.pubkey) {
+          Text("remove \(member.identity.displayName) from this session when you save? your contacts stay unchanged.")
+        } else {
+          Text("add \(member.identity.displayName) to this session when you save?")
         }
       }
       .alert("delete session", isPresented: $isPresentingDeleteConfirmation) {

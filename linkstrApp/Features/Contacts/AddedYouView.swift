@@ -8,6 +8,7 @@ struct AddedYouView: View {
   let ownerPubkey: String
   let contacts: [ContactEntity]
   @Binding var query: String
+  @State private var pendingContactAddition: ContactPresentation?
   @Query private var relationships: [FollowRelationshipEntity]
 
   init(
@@ -78,10 +79,18 @@ struct AddedYouView: View {
                 primaryFont: LinkstrTheme.font(.subheadline, weight: .medium)
               )
               .frame(maxWidth: .infinity, alignment: .leading)
-              AddContactButton(
-                pubkey: row.pubkey, displayName: row.identity.displayName,
-                isAdded: row.contact != nil, title: "add back"
-              )
+              if row.contact != nil {
+                Label("added", systemImage: "checkmark")
+                  .font(LinkstrTheme.font(.caption, weight: .medium))
+                  .foregroundStyle(LinkstrTheme.textSecondary)
+                  .accessibilityLabel("\(row.identity.displayName) is in your contacts")
+              } else {
+                Button("add back") { pendingContactAddition = row }
+                  .font(LinkstrTheme.font(.caption, weight: .medium))
+                  .frame(minHeight: LinkstrTheme.minimumInteractiveDimension)
+                  .tint(LinkstrTheme.accent)
+                  .accessibilityLabel("add back, \(row.identity.displayName)")
+              }
             }
             .padding(.vertical, LinkstrTheme.fieldVerticalPadding)
             .overlay(alignment: .bottom) { LinkstrListRowDivider(leadingInset: 62) }
@@ -108,6 +117,7 @@ struct AddedYouView: View {
       .padding(.bottom, LinkstrTheme.screenBottomPadding)
       .linkstrReadableContent()
     }
+    .contactAddition(pending: $pendingContactAddition)
     .linkstrKeyboardDismissal()
     .refreshable { discovery.refresh() }
     .task(id: visibleRows.map(\.pubkey).stableTaskID) {

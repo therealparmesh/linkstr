@@ -1,54 +1,45 @@
 import SwiftUI
 import UIKit
 
-struct AddContactButton: View {
+private struct ContactAdditionModifier: ViewModifier {
   @EnvironmentObject private var session: AppSession
-  let pubkey: String
-  let displayName: String
-  let isAdded: Bool
-  var title = "add contact"
+  @Binding var pending: ContactPresentation?
   @State private var isAdding = false
   @State private var errorMessage: String?
 
-  var body: some View {
-    VStack(alignment: .trailing, spacing: 4) {
-      if isAdded {
-        Label("added", systemImage: "checkmark")
-          .foregroundStyle(LinkstrTheme.textSecondary)
-          .accessibilityLabel("\(displayName) is in your contacts")
-      } else {
-        Button {
-          guard !isAdding else { return }
-          isAdding = true
-          errorMessage = nil
-          Task { @MainActor in
-            let result = await session.performFormMutation {
-              await session.ensureContact(pubkey: pubkey)
-            }
-            isAdding = false
-            errorMessage = result.errorMessage
-          }
-        } label: {
-          Group {
-            if isAdding { ProgressView() } else { Text(title) }
-          }
-          .frame(
-            minWidth: LinkstrTheme.minimumInteractiveDimension,
-            minHeight: LinkstrTheme.minimumInteractiveDimension
+  func body(content: Content) -> some View {
+    content
+      .disabled(isAdding)
+      .alert(
+        "add contact",
+        isPresented: Binding(
+          get: { pending != nil }, set: { if !$0 { pending = nil } }
+        ), presenting: pending
+      ) { person in
+        Button("cancel", role: .cancel) {}
+        Button("add contact") { add(person) }
+      } message: { person in
+        Text("add \(person.identity.displayName) to your contacts and public follow list?")
+      }
+      .safeAreaInset(edge: .bottom, spacing: 0) {
+        if isAdding || errorMessage != nil {
+          LinkstrSheetStatusFooter(
+            message: isAdding ? "adding contact..." : (errorMessage ?? ""),
+            messageColor: isAdding ? LinkstrTheme.textSecondary : LinkstrTheme.destructive
           )
         }
-        .disabled(isAdding)
-        .tint(LinkstrTheme.accent)
-        .accessibilityLabel(isAdding ? "adding \(displayName) to contacts" : "\(title), \(displayName)")
       }
-      if !isAdded, let errorMessage {
-        Text(errorMessage)
-          .foregroundStyle(LinkstrTheme.destructive)
-          .fixedSize(horizontal: false, vertical: true)
-      }
+  }
+
+  private func add(_ person: ContactPresentation) {
+    guard !isAdding else { return }
+    isAdding = true
+    errorMessage = nil
+    Task { @MainActor in
+      let result = await session.performFormMutation { await session.ensureContact(pubkey: person.pubkey) }
+      isAdding = false
+      errorMessage = result.errorMessage
     }
-    .font(LinkstrTheme.font(.caption, weight: .medium))
-    .frame(minHeight: LinkstrTheme.minimumInteractiveDimension)
   }
 }
 
@@ -101,6 +92,10 @@ private struct ContactRemovalModifier: ViewModifier {
 }
 
 extension View {
+  func contactAddition(pending: Binding<ContactPresentation?>) -> some View {
+    modifier(ContactAdditionModifier(pending: pending))
+  }
+
   func contactRemoval(pending: Binding<ContactEntity?>, didRemove: @escaping () -> Void = {})
     -> some View {
     modifier(ContactRemovalModifier(pending: pending, didRemove: didRemove))

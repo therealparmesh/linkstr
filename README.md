@@ -375,13 +375,14 @@ Embedded web playback allows provider-element fullscreen when supported.
 - Input supports manual entry, paste, and QR scan.
 - A valid `npub` triggers an identity preview that lazily looks up the published Nostr name.
 - Public-key helper controls render directly below the field in the same compact control row pattern used by the post composer.
-- Re-adding the same contact updates the saved alias; it does not create a duplicate or republish the follow list.
+- Adding a contact requires confirmation. Re-adding the same contact updates the saved alias; it does not create a duplicate or republish the follow list.
 
 **Contact management:**
 
 - The top-left toolbar button switches between **contacts** and **added you**, matching the archived-session control. The heading and search reflect the selected list. The top-right button adds a contact manually.
 - The **added you** list shows public follows found on configured relays, with **add back** or **added** on each row. Results are cached per account and can be refreshed or paged with **load more**. Discovery checks authors' latest lists for unfollows and labels offline or partial results.
-- Session members offer **add contact** for people not already saved, for both creators and other members. This preserves existing aliases, session membership, and unsaved session edits.
+- Each session member has a **…** menu with **copy public key**, **add contact** when needed, and creator-only **remove from session**. Contact additions require confirmation and preserve existing aliases, session membership, and unsaved session edits.
+- The **add members** section expands to show contacts who are not in the session. Membership changes require confirmation and take effect when the creator saves.
 - Contacts can be removed from the row's **…** menu, the detail screen, a long-press menu, or an accessibility action. Removal requires confirmation and relay acceptance; shared sessions and posts remain available.
 
 See [contact synchronization](docs/CONTACTS.md) for persistence and relay behavior.

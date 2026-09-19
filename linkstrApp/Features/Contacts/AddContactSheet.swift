@@ -13,18 +13,15 @@ struct AddContactSheet: View {
   @State private var npub = ""
   @State private var alias = ""
   @State private var isSubmitting = false
+  @State private var isPresentingConfirmation = false
   @State private var isPresentingScanner = false
   @State private var scannerErrorMessage: String?
   @State private var mutationFeedback = LinkstrSheetMutationFeedback()
   @FocusState private var focusedField: Field?
-  private let isNPubPrefilled: Bool
-
-  init(prefilledNPub: String? = nil) {
-    _npub = State(initialValue: prefilledNPub ?? "")
-    isNPubPrefilled = !(prefilledNPub ?? "").isEmpty
-  }
 
   var body: some View {
+    let existingContact = contactForPreview
+    let actionTitle = existingContact == nil ? "add contact" : "save contact"
     NavigationStack {
       ZStack {
         LinkstrBackgroundView()
@@ -38,31 +35,29 @@ struct AddContactSheet: View {
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled(true)
                 .focused($focusedField, equals: .npub)
-                .disabled(isSubmitting || isNPubPrefilled)
+                .disabled(isSubmitting)
                 .submitLabel(.next)
                 .onSubmit {
                   focusedField = .alias
                 }
                 .linkstrInputField()
 
-              if !isNPubPrefilled {
-                LinkstrInputAssistRow(
-                  showClear: !npub.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                  isDisabled: isSubmitting,
-                  onPaste: {
-                    pasteFromClipboard()
-                    scannerErrorMessage = nil
-                  },
-                  onScan: {
-                    scannerErrorMessage = nil
-                    isPresentingScanner = true
-                  },
-                  onClear: {
-                    npub = ""
-                    scannerErrorMessage = nil
-                  }
-                )
-              }
+              LinkstrInputAssistRow(
+                showClear: !npub.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                isDisabled: isSubmitting,
+                onPaste: {
+                  pasteFromClipboard()
+                  scannerErrorMessage = nil
+                },
+                onScan: {
+                  scannerErrorMessage = nil
+                  isPresentingScanner = true
+                },
+                onClear: {
+                  npub = ""
+                  scannerErrorMessage = nil
+                }
+              )
             }
 
             if let previewIdentity {
@@ -92,7 +87,7 @@ struct AddContactSheet: View {
                 .focused($focusedField, equals: .alias)
                 .disabled(isSubmitting)
                 .submitLabel(.done)
-                .onSubmit(submitFollow)
+                .onSubmit(confirmFollow)
                 .linkstrInputField()
             }
           }
@@ -123,19 +118,32 @@ struct AddContactSheet: View {
 
         ToolbarItem(placement: .topBarTrailing) {
           Button {
-            submitFollow()
+            confirmFollow()
           } label: {
             if isSubmitting {
               ProgressView()
                 .frame(width: 30, height: 30, alignment: .center)
             } else {
-              Image(systemName: "person.crop.circle.badge.plus")
+              Image(systemName: existingContact == nil ? "person.crop.circle.badge.plus" : "checkmark")
                 .linkstrToolbarIconLabel()
             }
           }
-          .accessibilityLabel("add contact")
+          .accessibilityLabel(actionTitle)
           .tint(LinkstrTheme.accent)
           .disabled(!canSubmit)
+        }
+      }
+      .alert(actionTitle, isPresented: $isPresentingConfirmation) {
+        Button("cancel", role: .cancel) {}
+        Button(actionTitle, action: submitFollow)
+      } message: {
+        if let existingContact {
+          let name = session.resolvedIdentity(for: existingContact).displayName
+          Text(normalizedAliasPreview == nil
+            ? "clear your private alias for \(name)?"
+            : "save this private alias for \(name)?")
+        } else {
+          Text("add \(previewIdentity?.displayName ?? npub) to your contacts and public follow list?")
         }
       }
       .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -197,6 +205,12 @@ struct AddContactSheet: View {
     }
   }
 
+  private func confirmFollow() {
+    guard canSubmit else { return }
+    focusedField = nil
+    isPresentingConfirmation = true
+  }
+
   private func submitFollow() {
     guard canSubmit else { return }
     focusedField = nil
@@ -228,6 +242,11 @@ struct AddContactSheet: View {
   private var previewPubkeyHex: String? {
     let candidate = ContactKeyParser.extractNPub(from: npub) ?? npub
     return NostrValueNormalizer.normalizedPubkeyHex(fromAnyPublicKeyString: candidate)
+  }
+
+  private var contactForPreview: ContactEntity? {
+    guard let owner = session.identityService.pubkeyHex, let target = previewPubkeyHex else { return nil }
+    return try? session.contactStore.contact(ownerPubkey: owner, targetPubkey: target)
   }
 
   private var previewIdentity: LinkstrResolvedIdentity? {

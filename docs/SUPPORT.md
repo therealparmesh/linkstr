@@ -23,25 +23,25 @@ Your active account is stored in the device keychain. If you use iCloud Keychain
 2. Tap the add-contact button.
 3. Paste an `npub` or scan a QR code.
 4. Optionally save a private alias.
-5. Tap the top-right add icon.
+5. Tap the top-right add icon, then confirm **add contact**.
 
-Adding the same contact through this form updates the saved alias instead of creating a duplicate. To edit an alias later, tap the contact row.
+Adding the same contact through this form updates the saved alias instead of creating a duplicate. The top-right button changes to **save contact**, and confirmation says whether the alias will be saved or cleared. To edit an alias later, tap the contact row.
 
 Contacts keep their last fetched public Nostr name on this device, so names remain available after reopening or offline. Names refresh from relays when available; your private alias always takes priority.
 
-The bottom footer shows validation and relay status only. The keyboard return key advances from the public key field into alias and submits from alias.
+The bottom footer shows validation and relay status only. The keyboard return key advances from the public key field into alias and asks for confirmation from alias.
 
 ### See who added you
 
 1. Open the Contacts tab.
 2. Tap the person with a checkmark in the top-left toolbar to open **added you**.
-3. Tap **add back** beside someone to save them. People already in your contacts show **added**.
+3. Tap **add back** beside someone, then confirm **add contact**. People already in your contacts show **added**.
 
 Tap the toolbar button again to return to contacts. The top-right add-contact button is available in both lists.
 
 The list shows public Nostr follows found on your configured relays, including follows made in other Nostr apps. Pull to refresh or use **load more** when available. Saved results remain visible offline. The status tells you when some results could not be checked, and people may be missing if their follow lists are unavailable on your relays.
 
-You can also tap **add contact** in a session's members view. Any member can use it, and adding a contact leaves session membership and unsaved session edits unchanged.
+You can also open a member's **…** menu and choose **add contact**, then confirm. Any member can use it, and adding a contact leaves session membership and unsaved session edits unchanged.
 
 ### Create a session
 
@@ -87,8 +87,8 @@ The bottom footer shows validation and relay status only. The keyboard return ke
 | View archived sessions         | Tap the archive icon in the top-left Sessions toolbar.                                                                                                                                          |
 | Rename a session               | Open a session, tap the members button, and edit the session name.                                                                                                                              |
 | Delete a session               | Open a session, tap the members button, and use **delete session** in the manage sheet.                                                                                                         |
-| Add or remove members          | Open a session and use the members button.                                                                                                                                                      |
-| Copy a member's public key     | Open a session, tap the members button, then long-press a current member and choose **copy public key**.                                                                                        |
+| Add or remove members          | Open session members. Expand **choose from contacts** to add someone, or use their **…** menu to **remove from session**. Confirm the change, then save.                                        |
+| Copy a member's public key     | Open a session, tap the members button, then use a member's **…** menu or long-press their row and choose **copy public key**.                                                                  |
 
 Only the session creator can rename sessions, delete them, or change session membership.
 
@@ -206,7 +206,7 @@ Archive changes whether the session appears in the active or archived list. This
 
 ### What happens when I add or remove a member?
 
-Adding someone publishes a new session snapshot with the full member list. That person can receive content sent after they become an active member. Older posts are not retroactively shared with them.
+The member list shows your draft changes. Adding or removing someone requires confirmation, then the top-right save button publishes the updated member list. Canceling the sheet discards those changes. Adding a member does not change your contacts. That person can receive content sent after they become an active member. Older posts are not retroactively shared with them.
 
 Removing someone publishes another full snapshot. They stop receiving future posts and reactions, but anything they already received remains theirs.
 
