@@ -251,10 +251,11 @@ extension SessionMessageStore {
 
   private func clearCachedMedia(messages: [SessionMessageEntity]) throws {
     var didChange = false
+    var clearedMediaURLs = Set<URL>()
     for message in messages {
       if let cachedMediaURL = ManagedLocalFileScope.shared.managedFileURL(
         fromPath: message.cachedMediaPath) {
-        try? FileManager.default.removeItem(at: cachedMediaURL)
+        clearedMediaURLs.insert(cachedMediaURL)
       }
 
       let hadCachedMedia =
@@ -268,13 +269,13 @@ extension SessionMessageStore {
     }
     if didChange {
       try modelContext.save()
+      removeManagedFiles(at: clearedMediaURLs)
     }
   }
 
   private func clearCachedMetadata(messages: [SessionMessageEntity]) throws {
     var didChange = false
-    var clearedStorageIDs = Set<String>()
-    var clearedThumbnailPaths = Set<String>()
+    var clearedThumbnailURLs = Set<URL>()
     for message in messages {
       let currentThumbnailPath = ManagedLocalFileScope.shared.normalizedManagedPath(
         message.thumbnailURL)
@@ -282,21 +283,15 @@ extension SessionMessageStore {
       guard hadCachedMetadata else { continue }
 
       if let currentThumbnailPath {
-        clearedThumbnailPaths.insert(currentThumbnailPath)
+        clearedThumbnailURLs.insert(URL(fileURLWithPath: currentThumbnailPath))
       }
       try message.setMetadata(title: nil, thumbnailURL: nil)
-      clearedStorageIDs.insert(message.storageID)
       didChange = true
     }
 
     if didChange {
       try modelContext.save()
-      for thumbnailPath in clearedThumbnailPaths {
-        pruneManagedThumbnailIfUnreferenced(
-          thumbnailPath: thumbnailPath,
-          excludingStorageIDs: clearedStorageIDs
-        )
-      }
+      removeManagedFiles(at: clearedThumbnailURLs)
     }
   }
 
@@ -322,28 +317,6 @@ extension SessionMessageStore {
     )
   }
 
-  private func pruneManagedThumbnailIfUnreferenced(
-    thumbnailPath: String,
-    excludingStorageIDs: Set<String> = []
-  ) {
-    guard
-      let managedThumbnailURL = ManagedLocalFileScope.shared.managedFileURL(fromPath: thumbnailPath)
-    else {
-      return
-    }
-
-    let messages = (try? modelContext.fetch(FetchDescriptor<SessionMessageEntity>())) ?? []
-    let hasOtherReference = messages.contains { message in
-      guard !excludingStorageIDs.contains(message.storageID) else { return false }
-      return ManagedLocalFileScope.shared.normalizedManagedPath(message.thumbnailURL)
-        == managedThumbnailURL.path
-    }
-    guard !hasOtherReference else { return }
-
-    ThumbnailImageCache.shared.removeImage(at: managedThumbnailURL.path)
-    try? FileManager.default.removeItem(at: managedThumbnailURL)
-  }
-
   func managedStoredFileURLs(for messages: [SessionMessageEntity]) -> Set<URL> {
     Set(
       messages.flatMap { message in
@@ -356,7 +329,10 @@ extension SessionMessageStore {
   }
 
   func removeManagedFiles(at fileURLs: Set<URL>) {
-    for fileURL in fileURLs {
+    guard !fileURLs.isEmpty, let remainingMessages = try? storageMessages() else { return }
+    let retainedURLs = managedStoredFileURLs(for: remainingMessages)
+    for fileURL in fileURLs.subtracting(retainedURLs) {
+      ThumbnailImageCache.shared.removeImage(at: fileURL.path)
       try? FileManager.default.removeItem(at: fileURL)
     }
   }

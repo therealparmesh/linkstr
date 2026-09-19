@@ -27,9 +27,9 @@ extension NostrDMService {
     return .live
   }
 
-  func handleIncomingEvent(_ relayEvent: RelayEvent) {
+  func handleIncomingEvent(_ event: NostrEvent, subscriptionID: String) {
     guard let keypair else { return }
-    let event = relayEvent.event
+    guard (try? verifyEvent(event)) != nil else { return }
     if event.kind == PrivatePreferenceCodec.kind {
       if event.pubkey == keypair.publicKey.hex,
         event.firstValueForRawTagName("d")?.hasPrefix(PrivatePreferenceCodec.namespace) == true {
@@ -40,7 +40,7 @@ extension NostrDMService {
 
     switch event.kind {
     case .followList:
-      handleFollowListEvent(event)
+      if event.pubkey == keypair.publicKey.hex { handleFollowListEvent(event) }
       return
     case .metadata:
       handleMetadataEvent(event)
@@ -51,25 +51,28 @@ extension NostrDMService {
       return
     }
 
-    trackBackfillProgress(for: relayEvent)
-    processGiftWrap(event, keypair: keypair, subscriptionId: relayEvent.subscriptionId)
+    trackBackfillProgress(for: event, subscriptionID: subscriptionID)
+    processGiftWrap(event, keypair: keypair, subscriptionID: subscriptionID)
   }
 
-  func processGiftWrap(_ event: NostrEvent, keypair: Keypair, subscriptionId: String) {
+  private func processGiftWrap(_ event: NostrEvent, keypair: Keypair, subscriptionID: String) {
     guard let wrapped = event as? GiftWrapEvent else {
       return
     }
-    guard rememberProcessedGiftWrapEventIDIfNeeded(wrapped.id) else { return }
-
-    guard let rumor = try? wrapped.unsealedRumor(using: keypair.privateKey) else {
-      return
-    }
-
-    guard rumor.kind == linkstrRumorKind else { return }
+    // NIP-59 authenticates the sender through the seal; decryption alone does not verify authorship.
+    guard !processedGiftWrapEventIDs.contains(wrapped.id),
+      let seal = try? wrapped.unwrappedSeal(using: keypair.privateKey),
+      seal.kind == .seal, seal.tags.isEmpty,
+      (try? verifyEvent(seal)) != nil,
+      let rumor = try? seal.unsealedRumor(using: keypair.privateKey),
+      rumor.isRumor, rumor.pubkey == seal.pubkey, rumor.id == rumor.calculatedId,
+      rumor.kind == linkstrRumorKind
+    else { return }
 
     guard let payload = decodeValidatedPayload(from: rumor.content) else {
       return
     }
+    _ = rememberProcessedGiftWrapEventIDIfNeeded(wrapped.id)
 
     let alreadyProcessedRumor = processedEventIDs.contains(rumor.id)
     guard !alreadyProcessedRumor || payload.kind == .root else { return }
@@ -81,10 +84,10 @@ extension NostrDMService {
       ReceivedDirectMessage(
         eventID: rumor.id,
         transportEventID: wrapped.id,
-        senderPubkey: rumor.pubkey,
+        senderPubkey: seal.pubkey,
         payload: payload,
         createdAt: rumor.createdDate,
-        source: directMessageSource(for: subscriptionId)
+        source: directMessageSource(for: subscriptionID)
       ))
   }
 
@@ -99,7 +102,7 @@ extension NostrDMService {
         eventID: followListEvent.id,
         authorPubkey: followListEvent.pubkey,
         followedPubkeys: followedPubkeys,
-        createdAt: followListEvent.createdDate
+        createdAt: followListEvent.createdDate, tags: followListEvent.tags
       ))
   }
 
@@ -187,15 +190,18 @@ extension NostrDMService {
       installSubscriptions()
       maybeRestartBackfillForLateRelay(relayURL: relayURL)
       startBackfillIfNeeded()
+      if let relayPool { contactDiscovery?.connect(relayPool) }
       onRelayStatus?(relayURL, .connected, nil)
     case .connecting:
       onRelayStatus?(relayURL, .connecting, nil)
     case .notConnected:
+      contactDiscovery?.relayDisconnected(relayURL)
       pruneRelayFromBackfillWaitlists(relayURL: relayURL)
       pruneRelayFromPublishWaitlists(relayURL: relayURL)
       onRelayStatus?(relayURL, .disconnected, nil)
       scheduleReconnect()
     case .error(let error):
+      contactDiscovery?.relayDisconnected(relayURL)
       pruneRelayFromBackfillWaitlists(relayURL: relayURL)
       pruneRelayFromPublishWaitlists(relayURL: relayURL)
       onRelayStatus?(relayURL, .failed, error.localizedDescription)
@@ -226,6 +232,7 @@ extension NostrDMService {
       if okSuccess == true {
         onRelayStatus?(relayURL, .connected, nil)
         installSubscriptions()
+        if let relayPool { contactDiscovery?.connect(relayPool) }
       }
       return
     }
@@ -237,6 +244,14 @@ extension NostrDMService {
     }
     if let closedSubscriptionID, activeBackfillStates[closedSubscriptionID] != nil {
       completeBackfillPage(subscriptionID: closedSubscriptionID)
+    }
+    if let eoseSubscriptionID {
+      contactDiscovery?.complete(relayURL: relayURL, subscriptionID: eoseSubscriptionID)
+      completeProfileQuery(relayURL: relayURL, subscriptionID: eoseSubscriptionID)
+    }
+    if let closedSubscriptionID {
+      contactDiscovery?.complete(relayURL: relayURL, subscriptionID: closedSubscriptionID, failed: true)
+      completeProfileQuery(relayURL: relayURL, subscriptionID: closedSubscriptionID, failed: true)
     }
     if let readOnlyMessage {
       onRelayStatus?(relayURL, .readOnly, readOnlyMessage)
@@ -251,65 +266,6 @@ extension NostrDMService {
     }
   }
 
-  // MARK: - Testing
-
-  #if DEBUG
-    func seedBackfillCoverageForTesting(
-      activeRelayURLs: [String] = [],
-      completedRelayURLs: [String] = [],
-      hasActiveBackfill: Bool,
-      isCompleted: Bool
-    ) {
-      currentBackfillRelayURLs = Set(activeRelayURLs)
-      completedBackfillRelayURLs = Set(completedRelayURLs)
-      completedBackfillKinds = isCompleted ? [.recipient, .author] : []
-      if hasActiveBackfill {
-        activeBackfillStates = [
-          "test-backfill": BackfillState(
-            kind: .recipient,
-            page: 0,
-            until: nil,
-            pageSize: backfillPageSize,
-            expectedRelayURLs: Set(activeRelayURLs)
-          )
-        ]
-      } else {
-        activeBackfillStates.removeAll()
-      }
-    }
-
-    func simulateLateRelayConnectionForTesting(_ relayURL: String) {
-      maybeRestartBackfillForLateRelay(relayURL: relayURL)
-    }
-
-    func simulateBackfillCoverageFinalizationForTesting(
-      relayURLs: [String],
-      initialCompletionAlreadyNotified: Bool
-    ) {
-      currentBackfillRelayURLs = Set(relayURLs)
-      activeBackfillStates.removeAll()
-      completedBackfillKinds = [.recipient, .author]
-      didNotifyInitialBackfillCompletion = initialCompletionAlreadyNotified
-      finalizeBackfillCoverageIfNeeded()
-      notifyInitialBackfillCompletionIfNeeded()
-    }
-
-    var testingCurrentBackfillRelayURLs: Set<String> {
-      currentBackfillRelayURLs
-    }
-
-    var testingCompletedBackfillRelayURLs: Set<String> {
-      completedBackfillRelayURLs
-    }
-
-    var testingActiveBackfillCount: Int {
-      activeBackfillStates.count
-    }
-
-    var testingCompletedBackfillKindCount: Int {
-      completedBackfillKinds.count
-    }
-  #endif
 }
 
 // MARK: - RelayDelegate
@@ -318,7 +274,7 @@ extension NostrDMService: RelayDelegate {
   nonisolated func relayStateDidChange(_ relay: Relay, state: Relay.State) {
     let relayURL = relay.url.absoluteString
     Task { @MainActor [weak self] in
-      guard let self else { return }
+      guard let self, self.relayPool?.relays.contains(where: { $0 === relay }) == true else { return }
       self.handleRelayStateDidChange(relayURL: relayURL, state: state)
     }
   }
@@ -359,7 +315,7 @@ extension NostrDMService: RelayDelegate {
     }
 
     Task { @MainActor [weak self] in
-      guard let self else { return }
+      guard let self, self.relayPool?.relays.contains(where: { $0 === relay }) == true else { return }
       self.handleRelayResponse(
         RelayCallbackParams(
           relayURL: relayURL,
@@ -373,5 +329,13 @@ extension NostrDMService: RelayDelegate {
     }
   }
 
-  nonisolated func relay(_ relay: Relay, didReceive event: RelayEvent) {}
+  nonisolated func relay(_ relay: Relay, didReceive event: RelayEvent) {
+    guard event.event.kind == .followList else { return }
+    Task { @MainActor [weak self] in
+      guard let self, self.relayPool?.relays.contains(where: { $0 === relay }) == true else { return }
+      self.contactDiscovery?.receive(
+        event.event, subscriptionID: event.subscriptionId, relayURL: relay.url.absoluteString
+      )
+    }
+  }
 }

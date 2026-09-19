@@ -5,6 +5,26 @@ import XCTest
 @testable import linkstr
 
 extension AppSessionContactAndRelayTests {
+  func testCancelledRelayWaitStopsWithoutSettingAnOfflineError() async throws {
+    let (session, _) = try makeSession(disableNostrStartup: false, hasConnectedRelays: { false })
+    try session.identityService.createNewIdentity()
+    let finished = expectation(description: "cancelled relay wait")
+    let waiting = Task {
+      do {
+        try await session.prepareRelayMutationIfNeeded(timeoutSeconds: 2, pollIntervalSeconds: 0.05)
+        XCTFail("cancelled relay wait must not succeed")
+      } catch is CancellationError {
+        XCTAssertNil(session.composeError)
+      } catch {
+        XCTFail("unexpected error: \(error)")
+      }
+      finished.fulfill()
+    }
+    await Task.yield()
+    waiting.cancel()
+    await fulfillment(of: [finished], timeout: 1)
+  }
+
   func testUpdateOwnProfileNameRejectsOverlongNames() async throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()

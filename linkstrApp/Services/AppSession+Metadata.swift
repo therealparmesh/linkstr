@@ -18,79 +18,42 @@ extension AppSession {
       return false
     }
 
-    let normalizedProfileName: String?
     do {
-      normalizedProfileName = try NostrProfileMetadata.validatedOwnChosenName(profileName)
-    } catch {
-      profileNameErrorMessage = error.localizedDescription
-      composeError = error.localizedDescription
-      return false
-    }
-
-    let metadataEvent: NostrEvent
-    do {
-      metadataEvent = try buildProfileMetadataEvent(
-        normalizedProfileName: normalizedProfileName,
-        keypair: keypair
-      )
-    } catch {
-      profileNameErrorMessage = error.localizedDescription
-      report(error: error)
-      return false
-    }
-
-    return await publishProfileMetadata(
-      metadataEvent: metadataEvent,
-      ownerPubkey: ownerPubkey,
-      normalizedProfileName: normalizedProfileName,
-      timeoutSeconds: timeoutSeconds,
-      pollIntervalSeconds: pollIntervalSeconds
-    )
-  }
-
-  private func buildProfileMetadataEvent(
-    normalizedProfileName: String?,
-    keypair: Keypair
-  ) throws -> NostrEvent {
-    let metadataContent = try NostrProfileMetadata.mergedContent(
-      existingContent: currentProfileMetadataContent,
-      chosenName: normalizedProfileName
-    )
-    return try NostrEvent.Builder<NostrEvent>(kind: .metadata)
-      .content(metadataContent)
-      .build(signedBy: keypair)
-  }
-
-  private func publishProfileMetadata(
-    metadataEvent: NostrEvent,
-    ownerPubkey: String,
-    normalizedProfileName: String?,
-    timeoutSeconds: TimeInterval,
-    pollIntervalSeconds: TimeInterval
-  ) async -> Bool {
-    let metadataContent = metadataEvent.content
-    do {
+      let normalizedProfileName = try NostrProfileMetadata.validatedOwnChosenName(profileName)
       try await prepareRelayMutationIfNeeded(
-        timeoutSeconds: timeoutSeconds,
-        pollIntervalSeconds: pollIntervalSeconds
-      )
+        timeoutSeconds: timeoutSeconds, pollIntervalSeconds: pollIntervalSeconds)
+      guard !Task.isCancelled, identityService.pubkeyHex == ownerPubkey else { return false }
+      let sourceService = nostrService
+      let timestamp = try await nextPublicationTimestamp(
+        after: latestAppliedProfileMetadataCreatedAt, subject: "profile",
+        publicationOverridden: testingOverrides.publishRelayEvent != nil)
+      guard !Task.isCancelled, identityService.pubkeyHex == ownerPubkey, nostrService === sourceService
+      else { return false }
+      let content = try NostrProfileMetadata.mergedContent(
+        existingContent: currentProfileMetadataContent, chosenName: normalizedProfileName)
+      let event = try NostrEvent.Builder<NostrEvent>(kind: .metadata)
+        .createdAt(timestamp).content(content).build(signedBy: keypair)
       if isRelayPublicationEnabledForCurrentProcess() {
-        _ = try await publishEventAwaitingRelayAcceptance(metadataEvent)
+        _ = try await publishEventAwaitingRelayAcceptance(event)
       }
-      persistOwnProfileMetadataState(
-        ownerPubkey: ownerPubkey,
-        chosenName: normalizedProfileName,
-        content: metadataContent,
-        createdAt: metadataEvent.createdDate,
-        eventID: metadataEvent.id
-      )
+      guard !Task.isCancelled, identityService.pubkeyHex == ownerPubkey, nostrService === sourceService
+      else { return false }
+      guard event.id == latestAppliedProfileMetadataEventID
+        || shouldApplyOwnProfileMetadata(createdAt: event.createdDate, eventID: event.id) else {
+        throw NostrServiceError.publishRejected("profile changed on another device. try again.")
+      }
+      try persistOwnProfileMetadataState(
+        ownerPubkey: ownerPubkey, chosenName: normalizedProfileName, content: content,
+        createdAt: event.createdDate, eventID: event.id)
       profileNameErrorMessage = nil
       composeError = nil
       return true
     } catch MutationPreparationError.relayBlocked {
+      guard identityService.pubkeyHex == ownerPubkey, !Task.isCancelled else { return false }
       profileNameErrorMessage = composeError
       return false
     } catch {
+      guard identityService.pubkeyHex == ownerPubkey, !Task.isCancelled else { return false }
       profileNameErrorMessage = error.localizedDescription
       report(error: error)
       return false
@@ -182,7 +145,8 @@ extension AppSession {
       metadataRefreshRetryAfterByStorageID.removeValue(forKey: message.storageID)
       return false
     }
-    defer { updateMetadataRefreshCooldown(for: message) }
+    let storageID = message.storageID
+    let owner = message.ownerPubkey
 
     let preview: LinkPreviewData?
     if let fetchLinkPreview = testingOverrides.fetchLinkPreview {
@@ -190,6 +154,9 @@ extension AppSession {
     } else {
       preview = await URLMetadataService.shared.fetchPreview(for: url)
     }
+    guard !Task.isCancelled, identityService.pubkeyHex == owner,
+      let message = try messageStore.message(storageID: storageID) else { return false }
+    defer { updateMetadataRefreshCooldown(for: message) }
     guard let preview else { return false }
 
     let currentTitle = LinkMetadataRefreshPolicy.normalizedTitle(message.metadataTitle)
@@ -270,17 +237,24 @@ extension AppSession {
 
   @discardableResult
   func refreshPostMetadata(_ message: SessionMessageEntity) async -> Bool {
+    let owner = message.ownerPubkey
+    let storageID = message.storageID
+    guard identityService.pubkeyHex == owner else { return false }
     do {
       if let urlString = message.url, let url = URL(string: urlString) {
         await invalidateTransientMediaCaches(for: url)
       }
+      guard !Task.isCancelled, identityService.pubkeyHex == owner,
+        let message = try messageStore.message(storageID: storageID) else { return false }
       let didRefreshMetadata = try await refreshMetadata(for: message, force: true)
+      guard !Task.isCancelled, identityService.pubkeyHex == owner else { return false }
       if didRefreshMetadata {
         try modelContext.save()
       }
       composeError = nil
       return didRefreshMetadata
     } catch {
+      guard !Task.isCancelled, identityService.pubkeyHex == owner else { return false }
       report(error: error)
       return false
     }
@@ -293,24 +267,14 @@ extension AppSession {
     let normalizedEventID = NostrValueNormalizer.normalizedEventID(incoming.eventID)
 
     if incoming.authorPubkey == ownerPubkey {
-      guard
-        NostrValueNormalizer.shouldApplyStateUpdate(
-          currentUpdatedAt: latestAppliedProfileMetadataCreatedAt,
-          currentEventID: latestAppliedProfileMetadataEventID,
-          incomingUpdatedAt: incoming.createdAt,
-          incomingEventID: normalizedEventID
-        )
-      else {
-        return
+      guard shouldApplyOwnProfileMetadata(createdAt: incoming.createdAt, eventID: normalizedEventID) else { return }
+      do {
+        try persistOwnProfileMetadataState(
+          ownerPubkey: ownerPubkey, chosenName: incoming.chosenName, content: incoming.rawContent,
+          createdAt: incoming.createdAt, eventID: normalizedEventID)
+      } catch {
+        report(error: error)
       }
-
-      persistOwnProfileMetadataState(
-        ownerPubkey: ownerPubkey,
-        chosenName: incoming.chosenName,
-        content: incoming.rawContent,
-        createdAt: incoming.createdAt,
-        eventID: normalizedEventID
-      )
       return
     }
 
@@ -343,31 +307,26 @@ extension AppSession {
     }
   }
 
-  func persistOwnProfileMetadataState(
-    ownerPubkey: String,
-    chosenName: String?,
-    content: String?,
-    createdAt: Date,
-    eventID: String?
-  ) {
-    let normalizedChosenName = NostrProfileMetadata.normalizedChosenName(chosenName)
-    let normalizedEventID = NostrValueNormalizer.normalizedEventID(eventID)
-    currentProfileName = normalizedChosenName
-    currentProfileMetadataContent = content?.trimmingCharacters(in: .whitespacesAndNewlines)
-    latestAppliedProfileMetadataCreatedAt = createdAt
-    latestAppliedProfileMetadataEventID = normalizedEventID
-
-    do {
-      try accountStateStore.setProfileMetadata(
-        ownerPubkey: ownerPubkey,
-        chosenName: normalizedChosenName,
-        content: currentProfileMetadataContent,
-        createdAt: createdAt,
-        eventID: normalizedEventID
-      )
-    } catch {
-      report(error: error)
-    }
+  private func shouldApplyOwnProfileMetadata(createdAt: Date, eventID: String?) -> Bool {
+    NostrValueNormalizer.shouldApplyReplaceableEvent(
+      currentUpdatedAt: latestAppliedProfileMetadataCreatedAt,
+      currentEventID: latestAppliedProfileMetadataEventID,
+      incomingUpdatedAt: createdAt, incomingEventID: eventID)
   }
 
+  private func persistOwnProfileMetadataState(
+    ownerPubkey: String, chosenName: String?, content: String?, createdAt: Date, eventID: String?
+  ) throws {
+    let normalizedChosenName = NostrProfileMetadata.normalizedChosenName(chosenName)
+    let normalizedEventID = NostrValueNormalizer.normalizedEventID(eventID)
+    let trimmedContent = content?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let normalizedContent = trimmedContent?.isEmpty == true ? nil : trimmedContent
+    try accountStateStore.setProfileMetadata(
+      ownerPubkey: ownerPubkey, chosenName: normalizedChosenName, content: normalizedContent,
+      createdAt: createdAt, eventID: normalizedEventID)
+    currentProfileName = normalizedChosenName
+    currentProfileMetadataContent = normalizedContent
+    latestAppliedProfileMetadataCreatedAt = createdAt
+    latestAppliedProfileMetadataEventID = normalizedEventID
+  }
 }

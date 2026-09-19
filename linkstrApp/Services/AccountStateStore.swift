@@ -1,4 +1,5 @@
 import Foundation
+import NostrSDK
 import SwiftData
 
 struct ProfileMetadataSnapshot {
@@ -26,14 +27,22 @@ final class AccountStateStore {
     )
   }
 
-  func setFollowListWatermark(ownerPubkey: String, createdAt: Date, eventID: String?) throws {
+  func followListTags(ownerPubkey: String) throws -> [Tag] {
+    guard let data = try accountState(ownerPubkey: ownerPubkey)?.followListTags else { return [] }
+    return try JSONDecoder().decode([Tag].self, from: data)
+  }
+
+  func stageFollowListState(
+    ownerPubkey: String, createdAt: Date, eventID: String?, tags: [Tag]
+  ) throws {
     let state = try ensureAccountState(ownerPubkey: ownerPubkey)
     let normalizedEventID = NostrValueNormalizer.normalizedEventID(eventID)
-    if state.followListUpdatedAt == createdAt && state.followListEventID == normalizedEventID {
+    if state.followListUpdatedAt == createdAt && state.followListEventID == normalizedEventID,
+      state.followListTags != nil {
       return
     }
     state.setFollowListWatermark(createdAt: createdAt, eventID: normalizedEventID)
-    try modelContext.save()
+    state.followListTags = try JSONEncoder().encode(tags)
   }
 
   func profileMetadata(ownerPubkey: String) throws -> ProfileMetadataSnapshot {
@@ -55,6 +64,8 @@ final class AccountStateStore {
     createdAt: Date,
     eventID: String?
   ) throws {
+    // Save unrelated changes first so rollback only affects this profile update.
+    try modelContext.save()
     let state = try ensureAccountState(ownerPubkey: ownerPubkey)
     let normalizedName = NostrProfileMetadata.normalizedChosenName(chosenName)
     let normalizedContent = content?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -74,7 +85,10 @@ final class AccountStateStore {
       createdAt: createdAt,
       eventID: normalizedEventID
     )
-    try modelContext.save()
+    do { try modelContext.save() } catch {
+      modelContext.rollback()
+      throw error
+    }
   }
 
   func deleteAccountState(ownerPubkey: String) throws {
@@ -84,9 +98,10 @@ final class AccountStateStore {
   }
 
   private func accountState(ownerPubkey: String) throws -> AccountStateEntity? {
-    let descriptor = FetchDescriptor<AccountStateEntity>(
+    var descriptor = FetchDescriptor<AccountStateEntity>(
       predicate: #Predicate { $0.ownerPubkey == ownerPubkey }
     )
+    descriptor.fetchLimit = 1
     return try modelContext.fetch(descriptor).first
   }
 
@@ -96,7 +111,6 @@ final class AccountStateStore {
     }
     let state = AccountStateEntity(ownerPubkey: ownerPubkey)
     modelContext.insert(state)
-    try modelContext.save()
     return state
   }
 }

@@ -5,6 +5,109 @@ import XCTest
 @testable import linkstr
 
 extension AppSessionContactAndRelayTests {
+  func testMetadataResponseDoesNotUpdateADeletedPost() async throws {
+    var release: CheckedContinuation<LinkPreviewData?, Never>?
+    let started = expectation(description: "metadata request")
+    let (session, container) = try makeSession(fetchLinkPreview: { _ in
+      await withCheckedContinuation {
+        release = $0
+        started.fulfill()
+      }
+    })
+    try session.identityService.createNewIdentity()
+    let message = try makeMetadataRoot(
+      eventID: "deleted", url: "metadata-test-deleted",
+      ownerPubkey: XCTUnwrap(session.identityService.pubkeyHex))
+    let storageID = message.storageID
+    container.mainContext.insert(message)
+    try container.mainContext.save()
+    let refresh = Task { try await session.refreshMetadata(for: message, force: true) }
+    await fulfillment(of: [started], timeout: 1)
+    container.mainContext.delete(message)
+    try container.mainContext.save()
+    release?.resume(returning: LinkPreviewData(title: "obsolete", thumbnailPath: nil))
+
+    let changed = try await refresh.value
+    XCTAssertFalse(changed)
+    XCTAssertNil(try session.messageStore.message(storageID: storageID))
+    XCTAssertNil(session.metadataRefreshRetryAfterByStorageID[storageID])
+  }
+
+  func testNewerProfileReceivedDuringPublicationIsNotOverwritten() async throws {
+    var release: CheckedContinuation<Void, Never>?
+    let started = expectation(description: "profile publication")
+    var published: NostrEvent?
+    let (session, container) = try makeSession(
+      disableNostrStartup: false, hasConnectedRelays: { true },
+      publishRelayEvent: { event in
+        published = event
+        await withCheckedContinuation {
+          release = $0
+          started.fulfill()
+        }
+        return event.id
+      })
+    try session.identityService.createNewIdentity()
+    let owner = try XCTUnwrap(session.identityService.pubkeyHex)
+    let publication = Task { await session.updateOwnProfileName("Local") }
+    await fulfillment(of: [started], timeout: 1)
+    let newerDate = try XCTUnwrap(published?.createdDate).addingTimeInterval(1)
+    session.ingestProfileMetadataForTesting(
+      try makeIncomingProfileMetadata(
+        eventID: "newer", authorPubkey: owner, createdAt: newerDate, chosenName: "Remote"))
+    release?.resume()
+
+    let result = await publication.value
+    XCTAssertFalse(result)
+    XCTAssertEqual(session.currentProfileName, "Remote")
+    XCTAssertEqual(try fetchAccountStates(in: container.mainContext).first?.nostrProfileName, "Remote")
+    XCTAssertEqual(session.profileNameErrorMessage, "profile changed on another device. try again.")
+  }
+
+  func testSequentialProfileEditsPublishIncreasingTimestamps() async throws {
+    var events: [NostrEvent] = []
+    let (session, _) = try makeSession(
+      disableNostrStartup: false, hasConnectedRelays: { true },
+      publishRelayEvent: { event in
+        events.append(event)
+        return event.id
+      })
+    try session.identityService.createNewIdentity()
+    let first = await session.updateOwnProfileName("First")
+    let second = await session.updateOwnProfileName("Second")
+    XCTAssertTrue(first)
+    XCTAssertTrue(second)
+    XCTAssertEqual(events.count, 2)
+    XCTAssertGreaterThan(try XCTUnwrap(events.last?.createdAt), try XCTUnwrap(events.first?.createdAt))
+    XCTAssertEqual(session.currentProfileName, "Second")
+  }
+
+  func testProfilePublicationCannotUpdateAccountAfterIdentityChanges() async throws {
+    var release: CheckedContinuation<Void, Never>?
+    let started = expectation(description: "profile publication")
+    let (session, _) = try makeSession(
+      disableNostrStartup: false, hasConnectedRelays: { true },
+      publishRelayEvent: { event in
+        await withCheckedContinuation {
+          release = $0
+          started.fulfill()
+        }
+        return event.id
+      })
+    try session.identityService.createNewIdentity()
+    let replacement = try TestKeyMaterialFactory.makeKeypair()
+    let publication = Task { await session.updateOwnProfileName("Old Account") }
+    await fulfillment(of: [started], timeout: 1)
+    session.importNsec(replacement.privateKey.nsec)
+    release?.resume()
+    let result = await publication.value
+
+    XCTAssertFalse(result)
+    XCTAssertEqual(session.identityService.pubkeyHex, replacement.publicKey.hex)
+    XCTAssertNil(session.currentProfileName)
+    XCTAssertNil(session.profileNameErrorMessage)
+  }
+
   func testContactProfileCachePersistsAndRemainsAccountScoped() throws {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

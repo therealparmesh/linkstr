@@ -24,16 +24,16 @@ struct LinkstrResolvedIdentity: Equatable {
     npub.localizedCaseInsensitiveCompare(displayName) != .orderedSame
   }
 
-  init(localAlias: String?, chosenName: String?, pubkeyHex: String) {
+  init(localAlias: String?, chosenName: String?, pubkeyHex: String, npub: String? = nil) {
     let normalizedAlias = localAlias?.trimmingCharacters(in: .whitespacesAndNewlines)
     let normalizedChosenName = NostrProfileMetadata.normalizedChosenName(chosenName)
     let resolvedNPub =
-      PublicKey(
+      npub ?? PublicKey(
         hex: NostrValueNormalizer.normalizedPubkeyHex(pubkeyHex) ?? pubkeyHex
       )?.npub ?? pubkeyHex
 
     self.chosenName = normalizedChosenName
-    npub = resolvedNPub
+    self.npub = resolvedNPub
 
     let aliasValue = normalizedAlias?.isEmpty == false ? normalizedAlias : nil
     if let aliasValue {

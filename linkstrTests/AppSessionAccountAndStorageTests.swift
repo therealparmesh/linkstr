@@ -281,3 +281,36 @@ final class AppSessionAccountAndStorageTests: AppSessionTestCase {
   }
 
 }
+
+extension AppSessionAccountAndStorageTests {
+  func testSessionDeletionPreservesCacheFilesReferencedByAnotherAccount() throws {
+    let (session, container) = try makeSession()
+    let firstOwner = try TestKeyMaterialFactory.makePubkeyHex()
+    let secondOwner = try TestKeyMaterialFactory.makePubkeyHex()
+    let thumbnailURL = makeManagedThumbnailURL()
+    let videoURL = makeManagedVideoURL()
+    defer {
+      try? FileManager.default.removeItem(at: thumbnailURL)
+      try? FileManager.default.removeItem(at: videoURL)
+    }
+    try Data("shared thumbnail".utf8).write(to: thumbnailURL)
+    try Data("shared video".utf8).write(to: videoURL)
+    for (owner, label) in [(firstOwner, "first"), (secondOwner, "second")] {
+      try insertRetainedAccountStorageFixture(
+        in: container.mainContext, ownerPubkey: owner, label: label,
+        thumbnailURL: thumbnailURL, cachedMediaURL: videoURL)
+    }
+
+    try session.messageStore.applySessionDeletion(
+      ownerPubkey: firstOwner, sessionID: "session-first", deletedByPubkey: firstOwner,
+      updatedAt: .now, eventID: "delete-first")
+    XCTAssertTrue(FileManager.default.fileExists(atPath: thumbnailURL.path))
+    XCTAssertTrue(FileManager.default.fileExists(atPath: videoURL.path))
+    XCTAssertEqual(try fetchMessages(in: container.mainContext).map(\.ownerPubkey), [secondOwner])
+
+    try session.messageStore.clearAllSessionData(ownerPubkey: secondOwner)
+    XCTAssertFalse(FileManager.default.fileExists(atPath: thumbnailURL.path))
+    XCTAssertFalse(FileManager.default.fileExists(atPath: videoURL.path))
+  }
+
+}

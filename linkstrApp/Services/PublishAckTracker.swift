@@ -12,30 +12,24 @@ struct PublishAckCompletion: Equatable {
 
 struct PublishAckTracker {
   private struct EventState {
-    var expectedRelayURLs: Set<String>
-    var failedRelayMessagesByURL: [String: String]
+    var pendingRelayURLs: Set<String>
+    var rejectionMessage: String?
   }
 
   private struct BatchState {
+    let expectedRelayURLs: Set<String>
     var eventStates: [String: EventState]
   }
 
   private var batchStateByID: [UUID: BatchState] = [:]
-  private var batchIDByEventID: [String: UUID] = [:]
 
   mutating func registerBatch(eventIDs: [String], expectedRelayURLs: Set<String>) -> UUID {
-    let normalizedEventIDs = Array(Set(eventIDs)).sorted()
     let batchID = UUID()
-    let eventState = EventState(
-      expectedRelayURLs: expectedRelayURLs,
-      failedRelayMessagesByURL: [:]
-    )
+    let eventState = EventState(pendingRelayURLs: expectedRelayURLs)
     batchStateByID[batchID] = BatchState(
-      eventStates: Dictionary(uniqueKeysWithValues: normalizedEventIDs.map { ($0, eventState) })
+      expectedRelayURLs: expectedRelayURLs,
+      eventStates: Dictionary(uniqueKeysWithValues: Set(eventIDs).map { ($0, eventState) })
     )
-    for eventID in normalizedEventIDs {
-      batchIDByEventID[eventID] = batchID
-    }
     return batchID
   }
 
@@ -44,36 +38,34 @@ struct PublishAckTracker {
     eventID: String,
     success: Bool,
     message: String
-  ) -> PublishAckCompletion? {
-    guard let batchID = batchIDByEventID[eventID], var batchState = batchStateByID[batchID],
-      var eventState = batchState.eventStates[eventID]
-    else {
-      return nil
-    }
+  ) -> [PublishAckCompletion] {
+    var completions: [PublishAckCompletion] = []
+    for batchID in Array(batchStateByID.keys) {
+      guard var batchState = batchStateByID[batchID],
+        var eventState = batchState.eventStates[eventID],
+        batchState.expectedRelayURLs.contains(relayURL)
+      else { continue }
 
-    if success {
-      batchState.eventStates.removeValue(forKey: eventID)
-      batchIDByEventID.removeValue(forKey: eventID)
-      if batchState.eventStates.isEmpty {
-        batchStateByID.removeValue(forKey: batchID)
-        return PublishAckCompletion(batchID: batchID, outcome: .succeeded)
+      if success {
+        batchState.eventStates.removeValue(forKey: eventID)
+        if batchState.eventStates.isEmpty {
+          batchStateByID.removeValue(forKey: batchID)
+          completions.append(PublishAckCompletion(batchID: batchID, outcome: .succeeded))
+          continue
+        }
+      } else {
+        guard eventState.pendingRelayURLs.remove(relayURL) != nil else { continue }
+        if eventState.pendingRelayURLs.isEmpty {
+          batchStateByID.removeValue(forKey: batchID)
+          completions.append(PublishAckCompletion(batchID: batchID, outcome: .failed(message)))
+          continue
+        }
+        eventState.rejectionMessage = message
+        batchState.eventStates[eventID] = eventState
       }
       batchStateByID[batchID] = batchState
-      return nil
     }
-
-    eventState.failedRelayMessagesByURL[relayURL] = message
-    eventState.expectedRelayURLs.remove(relayURL)
-    if eventState.expectedRelayURLs.isEmpty {
-      let failureMessage =
-        eventState.failedRelayMessagesByURL.values.first ?? "relays rejected this message."
-      removeBatch(batchID)
-      return PublishAckCompletion(batchID: batchID, outcome: .failed(failureMessage))
-    }
-
-    batchState.eventStates[eventID] = eventState
-    batchStateByID[batchID] = batchState
-    return nil
+    return completions
   }
 
   mutating func pruneRelay(_ relayURL: String) -> [PublishAckCompletion] {
@@ -85,11 +77,11 @@ struct PublishAckTracker {
       var failedBatch = false
       for eventID in Array(batchState.eventStates.keys) {
         guard var eventState = batchState.eventStates[eventID] else { continue }
-        guard eventState.expectedRelayURLs.remove(relayURL) != nil else { continue }
+        guard eventState.pendingRelayURLs.remove(relayURL) != nil else { continue }
 
-        if eventState.expectedRelayURLs.isEmpty {
+        if eventState.pendingRelayURLs.isEmpty {
           let failureMessage =
-            eventState.failedRelayMessagesByURL.values.first ?? "relay connection dropped."
+            eventState.rejectionMessage ?? "relay connection dropped."
           removeBatch(batchID)
           completions.append(
             PublishAckCompletion(batchID: batchID, outcome: .failed(failureMessage))
@@ -110,16 +102,12 @@ struct PublishAckTracker {
   }
 
   mutating func removeBatch(_ batchID: UUID) {
-    guard let batchState = batchStateByID.removeValue(forKey: batchID) else { return }
-    for eventID in batchState.eventStates.keys {
-      batchIDByEventID.removeValue(forKey: eventID)
-    }
+    batchStateByID.removeValue(forKey: batchID)
   }
 
   mutating func cancelAll() -> [UUID] {
     let batchIDs = Array(batchStateByID.keys)
     batchStateByID.removeAll()
-    batchIDByEventID.removeAll()
     return batchIDs
   }
 }

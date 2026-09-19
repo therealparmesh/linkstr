@@ -26,6 +26,7 @@ struct ReceivedFollowList {
   let authorPubkey: String
   let followedPubkeys: [String]
   let createdAt: Date
+  var tags: [Tag] = []
 }
 
 struct ReceivedProfileMetadata {
@@ -46,7 +47,7 @@ enum NostrDMTimingDefaults {
 }
 
 @MainActor
-final class NostrDMService: NSObject, ObservableObject, EventCreating {
+final class NostrDMService: NSObject, ObservableObject, EventCreating, EventVerifying {
   enum BackfillSubscriptionKind: String {
     case recipient
     case author
@@ -64,6 +65,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
   }
 
   var relayPool: RelayPool?
+  weak var contactDiscovery: ContactDiscovery?
   private var eventCancellable: AnyCancellable?
   var processedEventIDs = Set<String>()
   var processedEventIDOrder: [String] = []
@@ -84,6 +86,9 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
   var onIncoming: ((ReceivedDirectMessage) -> Void)?
   var onFollowList: ((ReceivedFollowList) -> Void)?
   var onProfileMetadata: ((ReceivedProfileMetadata) -> Void)?
+  var onProfileLookupComplete: ((UUID, Bool) -> Void)?
+  var profileQueries: [String: ProfileQuery] = [:]
+  var profileQueryTasks: [String: Task<Void, Never>] = [:]
   var onPrivatePreference: ((NostrEvent) -> Void)?
   var onPrivatePreferencesReady: (() -> Void)?
   let privatePreferencesSubscriptionID = "linkstr-private-preferences"
@@ -223,7 +228,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
       eventCancellable = relayPool.events
         .receive(on: DispatchQueue.main)
         .sink { [weak self] relayEvent in
-          self?.handleIncomingEvent(relayEvent)
+          self?.handleIncomingEvent(relayEvent.event, subscriptionID: relayEvent.subscriptionId)
         }
 
       recipientFilter = Filter(
@@ -257,6 +262,11 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating {
   // MARK: - Lifecycle
 
   func stop() {
+    contactDiscovery?.disconnect()
+    profileQueryTasks.values.forEach { $0.cancel() }
+    profileQueryTasks.removeAll()
+    profileQueries.removeAll()
+    onProfileLookupComplete = nil
     shouldMaintainConnection = false
     reconnectTask?.cancel()
     reconnectTask = nil

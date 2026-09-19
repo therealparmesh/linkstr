@@ -198,16 +198,78 @@ extension NostrDMService {
 
   // MARK: - Progress tracking
 
-  func trackBackfillProgress(for relayEvent: RelayEvent) {
-    if var backfill = activeBackfillStates[relayEvent.subscriptionId] {
+  func trackBackfillProgress(for event: NostrEvent, subscriptionID: String) {
+    if var backfill = activeBackfillStates[subscriptionID] {
       backfill.receivedGiftWrapCount += 1
-      let createdAt = Int64(relayEvent.event.createdAt)
+      let createdAt = event.createdAt
       if let oldest = backfill.oldestCreatedAt {
         backfill.oldestCreatedAt = min(oldest, createdAt)
       } else {
         backfill.oldestCreatedAt = createdAt
       }
-      activeBackfillStates[relayEvent.subscriptionId] = backfill
+      activeBackfillStates[subscriptionID] = backfill
     }
   }
+}
+
+extension NostrDMService {
+  // MARK: - Testing
+
+  #if DEBUG
+    func seedBackfillCoverageForTesting(
+      activeRelayURLs: [String] = [],
+      completedRelayURLs: [String] = [],
+      hasActiveBackfill: Bool,
+      isCompleted: Bool
+    ) {
+      currentBackfillRelayURLs = Set(activeRelayURLs)
+      completedBackfillRelayURLs = Set(completedRelayURLs)
+      completedBackfillKinds = isCompleted ? [.recipient, .author] : []
+      if hasActiveBackfill {
+        activeBackfillStates = [
+          "test-backfill": BackfillState(
+            kind: .recipient,
+            page: 0,
+            until: nil,
+            pageSize: backfillPageSize,
+            expectedRelayURLs: Set(activeRelayURLs)
+          )
+        ]
+      } else {
+        activeBackfillStates.removeAll()
+      }
+    }
+
+    func simulateLateRelayConnectionForTesting(_ relayURL: String) {
+      maybeRestartBackfillForLateRelay(relayURL: relayURL)
+    }
+
+    func simulateBackfillCoverageFinalizationForTesting(
+      relayURLs: [String],
+      initialCompletionAlreadyNotified: Bool
+    ) {
+      currentBackfillRelayURLs = Set(relayURLs)
+      activeBackfillStates.removeAll()
+      completedBackfillKinds = [.recipient, .author]
+      didNotifyInitialBackfillCompletion = initialCompletionAlreadyNotified
+      finalizeBackfillCoverageIfNeeded()
+      notifyInitialBackfillCompletionIfNeeded()
+    }
+
+    var testingCurrentBackfillRelayURLs: Set<String> {
+      currentBackfillRelayURLs
+    }
+
+    var testingCompletedBackfillRelayURLs: Set<String> {
+      completedBackfillRelayURLs
+    }
+
+    var testingActiveBackfillCount: Int {
+      activeBackfillStates.count
+    }
+
+    var testingCompletedBackfillKindCount: Int {
+      completedBackfillKinds.count
+    }
+  #endif
 }

@@ -7,7 +7,7 @@ extension AppSession {
     LinkstrResolvedIdentity(
       localAlias: contact.localAlias,
       chosenName: preferredChosenName(for: contact),
-      pubkeyHex: contact.targetPubkey
+      pubkeyHex: contact.targetPubkey, npub: contact.npub
     )
   }
 
@@ -45,7 +45,9 @@ extension AppSession {
 
 extension AppSession {
   func resetRemoteProfileStateInMemory() {
-    remoteProfileLookupGeneration += 1
+    pauseRemoteProfileRequests()
+    remoteProfileAttempts.removeAll()
+    remoteProfileRetryAfter.removeAll()
     remoteProfilesByPubkey = [:]
     inFlightRemoteProfilePubkeys.removeAll()
     pendingRemoteProfilePubkeys.removeAll()
@@ -67,7 +69,7 @@ extension AppSession {
     let normalizedPubkey = NostrValueNormalizer.normalizedPubkeyHex(pubkeyHex) ?? pubkeyHex
     let normalizedEventID = NostrValueNormalizer.normalizedEventID(eventID)
     if let existing = remoteProfilesByPubkey[normalizedPubkey],
-      !NostrValueNormalizer.shouldApplyStateUpdate(
+      !NostrValueNormalizer.shouldApplyReplaceableEvent(
         currentUpdatedAt: existing.updatedAt,
         currentEventID: existing.eventID,
         incomingUpdatedAt: createdAt,
@@ -90,6 +92,8 @@ extension AppSession {
     }
     inFlightRemoteProfilePubkeys.remove(normalizedPubkey)
     pendingRemoteProfilePubkeys.remove(normalizedPubkey)
+    remoteProfileAttempts.removeValue(forKey: normalizedPubkey)
+    remoteProfileRetryAfter.removeValue(forKey: normalizedPubkey)
   }
 }
 
@@ -97,66 +101,72 @@ extension AppSession {
 
 extension AppSession {
   func requestRemoteProfilesIfNeeded(pubkeyHexes: [String]) {
-    let missingPubkeys = NostrValueNormalizer.dedupedNormalizedPubkeyHexes(pubkeyHexes).filter {
-      remoteProfilesByPubkey[$0] == nil && inFlightRemoteProfilePubkeys.contains($0) == false
+    let missing = NostrValueNormalizer.dedupedNormalizedPubkeyHexes(pubkeyHexes).filter {
+      remoteProfilesByPubkey[$0] == nil && !inFlightRemoteProfilePubkeys.contains($0)
     }
-    guard !missingPubkeys.isEmpty else { return }
-    guard canFetchRemoteProfilesInCurrentProcess else { return }
-    submitRemoteProfileLookupIfPossible(missingPubkeys)
+    pendingRemoteProfilePubkeys.formUnion(missing)
+    retryPendingRemoteProfileRequestsIfNeeded()
   }
 
-  func markRemoteProfilesInFlight(_ pubkeyHexes: [String]) {
-    let normalizedPubkeys = NostrValueNormalizer.dedupedNormalizedPubkeyHexes(pubkeyHexes)
-    guard !normalizedPubkeys.isEmpty else { return }
-    inFlightRemoteProfilePubkeys.formUnion(normalizedPubkeys)
-    let retryDelayNanoseconds = remoteProfileRetryNanoseconds
-    let generation = remoteProfileLookupGeneration
-    Task { [weak self, normalizedPubkeys] in
-      try? await Task.sleep(nanoseconds: retryDelayNanoseconds)
+  func pauseRemoteProfileRequests() {
+    remoteProfileLookups.values.forEach { $0.timeout.cancel() }
+    remoteProfileLookups.removeAll()
+    pendingRemoteProfilePubkeys.formUnion(inFlightRemoteProfilePubkeys)
+    inFlightRemoteProfilePubkeys.removeAll()
+  }
+
+  func markRemoteProfilesInFlight(_ pubkeyHexes: [String], requestID: UUID) {
+    inFlightRemoteProfilePubkeys.formUnion(pubkeyHexes)
+    for key in pubkeyHexes { remoteProfileAttempts[key, default: 0] += 1 }
+    let attempt = pubkeyHexes.compactMap { remoteProfileAttempts[$0] }.max() ?? 1
+    let delay = remoteProfileRetryNanoseconds * UInt64(1 << min(attempt - 1, 2))
+    let timeout = Task { [weak self] in
+      do { try await Task.sleep(nanoseconds: delay) } catch { return }
       guard !Task.isCancelled else { return }
-      await MainActor.run { [weak self, normalizedPubkeys] in
-        guard let self else { return }
-        guard self.remoteProfileLookupGeneration == generation else { return }
-        self.inFlightRemoteProfilePubkeys.subtract(normalizedPubkeys)
-        let unresolvedPubkeys = normalizedPubkeys.filter { self.remoteProfilesByPubkey[$0] == nil }
-        guard !unresolvedPubkeys.isEmpty else { return }
-        self.pendingRemoteProfilePubkeys.formUnion(unresolvedPubkeys)
-        self.retryPendingRemoteProfileRequestsIfNeeded()
+      self?.finishRemoteProfileLookup(requestID, completed: false)
+    }
+    remoteProfileLookups[requestID] = (pubkeyHexes, timeout)
+  }
+
+  func finishRemoteProfileLookup(_ requestID: UUID, completed: Bool) {
+    guard let lookup = remoteProfileLookups.removeValue(forKey: requestID) else { return }
+    lookup.timeout.cancel()
+    for key in lookup.keys where inFlightRemoteProfilePubkeys.contains(key) {
+      inFlightRemoteProfilePubkeys.remove(key)
+      guard remoteProfilesByPubkey[key] == nil else { continue }
+      pendingRemoteProfilePubkeys.insert(key)
+      if completed || remoteProfileAttempts[key, default: 0] >= 3 {
+        remoteProfileRetryAfter[key] = Date.now.addingTimeInterval(300)
       }
     }
+    retryPendingRemoteProfileRequestsIfNeeded()
   }
 
   var canFetchRemoteProfilesInCurrentProcess: Bool {
     testingOverrides.requestProfileMetadata != nil || shouldFetchMetadataForCurrentProcess()
   }
 
-  func submitRemoteProfileLookupIfPossible(_ pubkeyHexes: [String]) {
-    let normalizedPubkeys = NostrValueNormalizer.dedupedNormalizedPubkeyHexes(pubkeyHexes).filter {
-      remoteProfilesByPubkey[$0] == nil
-    }
-    guard !normalizedPubkeys.isEmpty else { return }
-
-    let didRequest: Bool
-    if let requestProfileMetadata = testingOverrides.requestProfileMetadata {
-      didRequest = requestProfileMetadata(normalizedPubkeys)
-    } else {
-      didRequest = nostrService.requestProfileMetadata(pubkeyHexes: normalizedPubkeys)
-    }
-
-    if didRequest {
-      pendingRemoteProfilePubkeys.subtract(normalizedPubkeys)
-      markRemoteProfilesInFlight(normalizedPubkeys)
-    } else {
-      pendingRemoteProfilePubkeys.formUnion(normalizedPubkeys)
-    }
-  }
-
   func retryPendingRemoteProfileRequestsIfNeeded() {
     guard canFetchRemoteProfilesInCurrentProcess else { return }
-    let pendingPubkeys = pendingRemoteProfilePubkeys.filter {
-      remoteProfilesByPubkey[$0] == nil && inFlightRemoteProfilePubkeys.contains($0) == false
+    let now = Date.now
+    let pending = pendingRemoteProfilePubkeys.filter {
+      remoteProfilesByPubkey[$0] == nil && !inFlightRemoteProfilePubkeys.contains($0)
+        && (remoteProfileRetryAfter[$0] ?? .distantPast) <= now
+    }.sorted()
+    let available = max(0, 2 - remoteProfileLookups.count) * 50
+    let ready = Array(pending.prefix(available))
+    for offset in stride(from: 0, to: ready.count, by: 50) {
+      let keys = Array(ready[offset..<min(offset + 50, ready.count)])
+      for key in keys where remoteProfileRetryAfter[key] != nil {
+        remoteProfileAttempts.removeValue(forKey: key)
+        remoteProfileRetryAfter.removeValue(forKey: key)
+      }
+      let requestID = UUID()
+      let didRequest = testingOverrides.requestProfileMetadata?(keys)
+        ?? nostrService.requestProfileMetadata(pubkeyHexes: keys, requestID: requestID)
+      guard didRequest else { return }
+      pendingRemoteProfilePubkeys.subtract(keys)
+      markRemoteProfilesInFlight(keys, requestID: requestID)
     }
-    guard !pendingPubkeys.isEmpty else { return }
-    submitRemoteProfileLookupIfPossible(Array(pendingPubkeys))
   }
 }

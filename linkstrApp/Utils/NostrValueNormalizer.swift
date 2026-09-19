@@ -63,6 +63,17 @@ enum NostrValueNormalizer {
     return normalized
   }
 
+  // NIP-01 resolves equal timestamps by the lowest event ID.
+  static func shouldApplyReplaceableEvent(
+    currentUpdatedAt: Date?, currentEventID: String?, incomingUpdatedAt: Date, incomingEventID: String?
+  ) -> Bool {
+    guard let currentUpdatedAt else { return true }
+    if incomingUpdatedAt != currentUpdatedAt { return incomingUpdatedAt > currentUpdatedAt }
+    guard let incomingToken = normalizedEventID(incomingEventID) else { return false }
+    guard let currentToken = normalizedEventID(currentEventID) else { return true }
+    return incomingToken < currentToken
+  }
+
   static func shouldApplyStateUpdate(
     currentUpdatedAt: Date?,
     currentEventID: String?,

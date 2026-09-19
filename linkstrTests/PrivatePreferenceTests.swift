@@ -99,8 +99,9 @@ final class PrivatePreferenceTests: AppSessionTestCase {
     }
     XCTAssertTrue(
       try session.contactStore.followedPubkeys(ownerPubkey: owner.publicKey.hex).isEmpty)
-    try session.persistLocalFollowedPubkeys(
-      ownerPubkey: owner.publicKey.hex, followedPubkeys: [contactPubkey])
+    try session.applyFollowListState(ReceivedFollowList(
+      eventID: "follow", authorPubkey: owner.publicKey.hex,
+      followedPubkeys: [contactPubkey], createdAt: Date(timeIntervalSince1970: 101)))
     let contact = try XCTUnwrap(container.mainContext.fetch(FetchDescriptor<ContactEntity>()).first)
     XCTAssertEqual(contact.localAlias, "friend")
     let conversation = try insertSessionFixture(
@@ -184,7 +185,7 @@ final class PrivatePreferenceTests: AppSessionTestCase {
       ).isEmpty)
   }
 
-  func testAddingBackupStoragePreservesExistingEncryptedAliasesOnDisk() throws {
+  func testAddingContactAndBackupStoragePreservesExistingEncryptedAliasesOnDisk() throws {
     let owner = try XCTUnwrap(Keypair())
     let pubkey = try XCTUnwrap(Keypair()).publicKey.hex
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -204,7 +205,9 @@ final class PrivatePreferenceTests: AppSessionTestCase {
       try container.mainContext.save()
       return contact.encryptedAlias
     }
-    let schema = Schema([ContactEntity.self, SessionEntity.self, PrivatePreferenceEntity.self])
+    let schema = Schema([
+      ContactEntity.self, SessionEntity.self, PrivatePreferenceEntity.self, FollowRelationshipEntity.self
+    ])
     let container = try ModelContainer(
       for: schema, configurations: [ModelConfiguration(schema: schema, url: url)])
     let contact = try XCTUnwrap(container.mainContext.fetch(FetchDescriptor<ContactEntity>()).first)

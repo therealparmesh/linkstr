@@ -6,6 +6,7 @@ final class AccountStateEntity {
   @Attribute(.unique) var ownerPubkey: String
   var followListUpdatedAt: Date?
   var followListEventID: String?
+  var followListTags: Data?
   var nostrProfileName: String?
   var profileMetadataContent: String?
   var profileMetadataUpdatedAt: Date?

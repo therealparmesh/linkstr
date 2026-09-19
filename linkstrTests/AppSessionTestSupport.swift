@@ -11,12 +11,14 @@ class AppSessionTestCase: XCTestCase {
   let shortRemoteProfileLookupRetryNanoseconds: UInt64 = 50_000_000
   let asyncExpectationTimeoutSeconds: TimeInterval = 1.0
   private var relaySettingsSuiteNames: [String] = []
+  private var modelContainers: [ModelContainer] = []
 
   override func setUpWithError() throws {
     try KeychainStore.shared.delete("nostr_nsec")
   }
 
   override func tearDownWithError() throws {
+    modelContainers.removeAll()
     try KeychainStore.shared.delete("nostr_nsec")
     for suiteName in relaySettingsSuiteNames {
       UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
@@ -87,6 +89,7 @@ class AppSessionTestCase: XCTestCase {
       PrivatePreferenceEntity.self,
       AccountStateEntity.self,
       ContactEntity.self,
+      FollowRelationshipEntity.self,
       RelayEntity.self,
       SessionEntity.self,
       SessionMemberEntity.self,
@@ -98,6 +101,7 @@ class AppSessionTestCase: XCTestCase {
     ])
     let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
     let container = try ModelContainer(for: schema, configurations: [configuration])
+    modelContainers.append(container)
     return (
       AppSession(
         modelContext: container.mainContext,

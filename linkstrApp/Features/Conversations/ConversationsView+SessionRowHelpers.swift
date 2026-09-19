@@ -280,19 +280,16 @@ extension SessionManagementSheet {
     "deleting removes this session from the app and sends delete notices to known members."
   }
 
-  func visibleCurrentMembers(contacts: [ContactEntity]) -> [String] {
-    let myPubkey = session.identityService.pubkeyHex
-    return
-      includedMemberHexes
-      .filter { memberHex in
-        guard let myPubkey else { return true }
-        return memberHex != myPubkey
-      }
-      .sorted {
-        session.displayName(for: $0, contacts: contacts).localizedCaseInsensitiveCompare(
-          session.displayName(for: $1, contacts: contacts)
-        ) == .orderedAscending
-      }
+  func visibleCurrentMembers(contacts: [ContactEntity]) -> [ContactPresentation] {
+    let index = Dictionary(contacts.map { ($0.targetPubkey, $0) }, uniquingKeysWith: { first, _ in first })
+    return includedMemberHexes.filter { $0 != session.identityService.pubkeyHex }.map { key in
+      ContactPresentation(
+        pubkey: key,
+        identity: index[key].map { session.resolvedIdentity(for: $0) }
+          ?? session.resolvedIdentity(for: key, contacts: []),
+        contact: index[key]
+      )
+    }.sorted(by: ContactPresentation.ordered)
   }
 
   func filteredContacts(contacts: [ContactEntity]) -> [ContactEntity] {
@@ -307,10 +304,10 @@ extension SessionManagementSheet {
 
   func profileLookupPubkeys(
     contacts: [ContactEntity],
-    currentMembers: [String]
+    currentMembers: [ContactPresentation]
   ) -> [String] {
     var pubkeys = contacts.map(\.targetPubkey)
-    pubkeys.append(contentsOf: currentMembers)
+    pubkeys.append(contentsOf: currentMembers.map(\.pubkey))
     return NostrValueNormalizer.dedupedNormalizedPubkeyHexes(pubkeys)
   }
 

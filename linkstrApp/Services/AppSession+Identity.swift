@@ -111,6 +111,7 @@ extension AppSession {
 
 extension AppSession {
   func refreshIdentityState() {
+    if contactDiscovery.owner != identityService.pubkeyHex { contactDiscovery.reset() }
     hasIdentity = identityService.keypair != nil
     guard let ownerPubkey = identityService.pubkeyHex else {
       resetPushSyncState()

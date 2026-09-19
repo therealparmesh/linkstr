@@ -172,6 +172,7 @@ final class AppBootstrapState: ObservableObject {
     PrivatePreferenceEntity.self,
     AccountStateEntity.self,
     ContactEntity.self,
+    FollowRelationshipEntity.self,
     RelayEntity.self,
     SessionEntity.self,
     SessionMemberEntity.self,

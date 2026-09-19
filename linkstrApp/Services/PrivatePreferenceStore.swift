@@ -24,7 +24,9 @@ final class PrivatePreferenceStore {
     })).first
   }
 
-  func save(_ preference: PrivatePreference, keypair: Keypair, initialDate: Date? = nil) throws {
+  func save(
+    _ preference: PrivatePreference, keypair: Keypair, initialDate: Date? = nil, saveImmediately: Bool = true
+  ) throws {
     let existing = try record(for: preference, keypair: keypair)
     if initialDate != nil, existing != nil { return }
     let previous = try existing?.event()
@@ -33,7 +35,7 @@ final class PrivatePreferenceStore {
       Int64((initialDate ?? .now).timeIntervalSince1970), (previous?.createdAt ?? 0) + 1
     )
     let event = try codec.event(for: preference, keypair: keypair, createdAt: timestamp)
-    try persist(event, existing: existing, needsPublish: true)
+    try persist(event, existing: existing, needsPublish: true, saveImmediately: saveImmediately)
   }
 
   @discardableResult
@@ -70,7 +72,9 @@ final class PrivatePreferenceStore {
     try context.save()
   }
 
-  private func persist(_ event: NostrEvent, existing: PrivatePreferenceEntity?, needsPublish: Bool) throws {
+  private func persist(
+    _ event: NostrEvent, existing: PrivatePreferenceEntity?, needsPublish: Bool, saveImmediately: Bool = true
+  ) throws {
     guard let identifier = event.firstValueForRawTagName("d") else {
       throw PrivatePreferenceError.invalidEvent
     }
@@ -79,6 +83,7 @@ final class PrivatePreferenceStore {
       let oldPending = existing.needsPublish
       existing.eventData = try JSONEncoder().encode(event)
       existing.needsPublish = needsPublish
+      guard saveImmediately else { return }
       do {
         try context.save()
       } catch {
@@ -89,6 +94,7 @@ final class PrivatePreferenceStore {
     } else {
       let record = try PrivatePreferenceEntity(event: event, identifier: identifier, needsPublish: needsPublish)
       context.insert(record)
+      guard saveImmediately else { return }
       do {
         try context.save()
       } catch {

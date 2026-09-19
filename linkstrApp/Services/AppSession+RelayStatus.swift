@@ -3,6 +3,21 @@ import Foundation
 // MARK: - Relay Status & Connectivity
 
 extension AppSession {
+  func nextPublicationTimestamp(after updatedAt: Date?, subject: String, publicationOverridden: Bool)
+    async throws -> Int64 {
+    let next = Int64(updatedAt?.timeIntervalSince1970 ?? 0) + 1
+    let now = Int64(Date.now.timeIntervalSince1970)
+    if isRelayPublicationEnabledForCurrentProcess(), !publicationOverridden, next > now {
+      guard next - now <= 5 else {
+        throw NostrServiceError.publishRejected(
+          "\(subject) timestamp is ahead of this device. check your clock and try again.")
+      }
+      try await Task.sleep(nanoseconds: UInt64(next - now) * 1_000_000_000)
+    }
+    try Task.checkCancellation()
+    return max(next, Int64(Date.now.timeIntervalSince1970))
+  }
+
   func isRelayConnectionAlertMessage(_ message: String) -> Bool {
     message == noEnabledRelaysMessage
       || message == relayOfflineMessage
@@ -228,6 +243,7 @@ extension AppSession {
     let deadline = Date.now.addingTimeInterval(timeout)
 
     while true {
+      guard !Task.isCancelled else { return false }
       switch relaySendWaitState() {
       case .ready:
         clearRelaySendBlockingErrorIfPresent()
@@ -258,14 +274,11 @@ extension AppSession {
     timeoutSeconds: TimeInterval,
     pollIntervalSeconds: TimeInterval
   ) async throws {
+    try Task.checkCancellation()
     guard isRelayPublicationEnabledForCurrentProcess() else { return }
-    guard
-      await awaitRelayReadyForSend(
-        timeoutSeconds: timeoutSeconds,
-        pollIntervalSeconds: pollIntervalSeconds
-      )
-    else {
-      throw MutationPreparationError.relayBlocked
-    }
+    let isReady = await awaitRelayReadyForSend(
+      timeoutSeconds: timeoutSeconds, pollIntervalSeconds: pollIntervalSeconds)
+    try Task.checkCancellation()
+    guard isReady else { throw MutationPreparationError.relayBlocked }
   }
 }

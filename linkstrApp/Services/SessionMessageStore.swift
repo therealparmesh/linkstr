@@ -35,9 +35,10 @@ final class SessionMessageStore {
   }
 
   func message(storageID: String) throws -> SessionMessageEntity? {
-    let descriptor = FetchDescriptor<SessionMessageEntity>(
+    var descriptor = FetchDescriptor<SessionMessageEntity>(
       predicate: #Predicate { $0.storageID == storageID }
     )
+    descriptor.fetchLimit = 1
     return try modelContext.fetch(descriptor).first
   }
 
@@ -62,26 +63,29 @@ final class SessionMessageStore {
   }
 
   func hasPersistedConversationState(ownerPubkey: String) throws -> Bool {
-    let sessionDescriptor = FetchDescriptor<SessionEntity>(
+    var sessionDescriptor = FetchDescriptor<SessionEntity>(
       predicate: #Predicate { $0.ownerPubkey == ownerPubkey }
     )
+    sessionDescriptor.fetchLimit = 1
     if !(try modelContext.fetch(sessionDescriptor)).isEmpty {
       return true
     }
 
     let rootKindRaw = SessionMessageKind.root.rawValue
-    let messageDescriptor = FetchDescriptor<SessionMessageEntity>(
+    var messageDescriptor = FetchDescriptor<SessionMessageEntity>(
       predicate: #Predicate {
         $0.ownerPubkey == ownerPubkey && $0.kindRaw == rootKindRaw
       }
     )
+    messageDescriptor.fetchLimit = 1
     if !(try modelContext.fetch(messageDescriptor)).isEmpty {
       return true
     }
 
-    let tombstoneDescriptor = FetchDescriptor<SessionDeletionTombstoneEntity>(
+    var tombstoneDescriptor = FetchDescriptor<SessionDeletionTombstoneEntity>(
       predicate: #Predicate { $0.ownerPubkey == ownerPubkey }
     )
+    tombstoneDescriptor.fetchLimit = 1
     return !(try modelContext.fetch(tombstoneDescriptor)).isEmpty
   }
 

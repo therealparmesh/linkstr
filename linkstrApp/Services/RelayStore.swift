@@ -152,19 +152,13 @@ final class ContactStore {
     self.modelContext = modelContext
   }
 
-  private func fetchContacts(ownerPubkey: String, sortedByDisplayName: Bool = false) throws
+  private func fetchContacts(ownerPubkey: String) throws
     -> [ContactEntity] {
     let descriptor = FetchDescriptor<ContactEntity>(
       predicate: #Predicate { $0.ownerPubkey == ownerPubkey },
       sortBy: [SortDescriptor(\.createdAt)]
     )
-    let contacts = try modelContext.fetch(descriptor)
-    if sortedByDisplayName {
-      return contacts.sorted {
-        $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
-      }
-    }
-    return contacts
+    return try modelContext.fetch(descriptor)
   }
 
   func clearAllContacts(ownerPubkey: String) throws {
@@ -185,14 +179,12 @@ final class ContactStore {
     return trimmed.isEmpty ? nil : trimmed
   }
 
-  func hasContact(ownerPubkey: String, withTargetPubkey targetPubkey: String) -> Bool {
-    var descriptor = FetchDescriptor<ContactEntity>(
-      predicate: #Predicate {
-        $0.ownerPubkey == ownerPubkey && $0.targetPubkey == targetPubkey
-      }
-    )
+  func contact(ownerPubkey: String, targetPubkey: String) throws -> ContactEntity? {
+    var descriptor = FetchDescriptor<ContactEntity>(predicate: #Predicate {
+      $0.ownerPubkey == ownerPubkey && $0.targetPubkey == targetPubkey
+    })
     descriptor.fetchLimit = 1
-    return ((try? modelContext.fetch(descriptor)) ?? []).isEmpty == false
+    return try modelContext.fetch(descriptor).first
   }
 
   func followedPubkeys(ownerPubkey: String) throws -> [String] {
@@ -200,11 +192,13 @@ final class ContactStore {
     return NostrValueNormalizer.dedupedNormalizedPubkeyHexes(contacts.map(\.targetPubkey))
   }
 
+  @discardableResult
   func replaceFollowedPubkeys(
     ownerPubkey: String,
     pubkeyHexes: [String],
-    knownProfiles: [String: KnownProfileSnapshot] = [:]
-  ) throws {
+    knownProfiles: [String: KnownProfileSnapshot] = [:],
+    save: Bool = true
+  ) throws -> [ContactEntity] {
     let normalizedSet = Set(NostrValueNormalizer.dedupedNormalizedPubkeyHexes(pubkeyHexes))
 
     let existing = try fetchContacts(ownerPubkey: ownerPubkey)
@@ -219,30 +213,29 @@ final class ContactStore {
       }
     }
 
+    var added: [ContactEntity] = []
     for pubkey in normalizedSet where existingByPubkey[pubkey] == nil {
       let contact = try ContactEntity(ownerPubkey: ownerPubkey, targetPubkey: pubkey, alias: nil)
       contact.profileSnapshot = knownProfiles[pubkey]
       modelContext.insert(contact)
+      added.append(contact)
     }
 
     for (pubkey, contact) in existingByPubkey where normalizedSet.contains(pubkey) == false {
       modelContext.delete(contact)
     }
 
-    try modelContext.save()
+    if save { try modelContext.save() }
+    return added
   }
 
   func updateProfile(
     _ profile: KnownProfileSnapshot, ownerPubkey: String, targetPubkey: String
   ) throws -> KnownProfileSnapshot {
-    var descriptor = FetchDescriptor<ContactEntity>(predicate: #Predicate {
-      $0.ownerPubkey == ownerPubkey && $0.targetPubkey == targetPubkey
-    })
-    descriptor.fetchLimit = 1
-    guard let contact = try modelContext.fetch(descriptor).first else { return profile }
+    guard let contact = try contact(ownerPubkey: ownerPubkey, targetPubkey: targetPubkey) else { return profile }
     let previousProfile = contact.profileSnapshot
     if let previousProfile,
-      !NostrValueNormalizer.shouldApplyStateUpdate(
+      !NostrValueNormalizer.shouldApplyReplaceableEvent(
         currentUpdatedAt: previousProfile.updatedAt,
         currentEventID: previousProfile.eventID,
         incomingUpdatedAt: profile.updatedAt,

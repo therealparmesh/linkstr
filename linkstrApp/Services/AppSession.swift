@@ -204,6 +204,8 @@ final class AppSession: ObservableObject {
   let identityService: IdentityService
   let modelContext: ModelContext
   var isUsingRecoveryStore = false
+  let contactMutations = ContactMutationQueue()
+  let contactDiscovery: ContactDiscovery
   let contactStore: ContactStore
   let relayStore: RelayStore
   let messageStore: SessionMessageStore
@@ -239,7 +241,9 @@ final class AppSession: ObservableObject {
   var currentProfileMetadataContent: String?
   var inFlightRemoteProfilePubkeys = Set<String>()
   var pendingRemoteProfilePubkeys = Set<String>()
-  var remoteProfileLookupGeneration = 0
+  var remoteProfileAttempts: [String: Int] = [:]
+  var remoteProfileRetryAfter: [String: Date] = [:]
+  var remoteProfileLookups: [UUID: (keys: [String], timeout: Task<Void, Never>)] = [:]
   var pendingIncomingMessages: [PendingIncomingMessage] = []
   var isDrainingPendingIncomingMessages = false
   var memberIntervalCache: [String: [SessionMemberIntervalEntity]] = [:]
@@ -283,6 +287,7 @@ final class AppSession: ObservableObject {
     self.identityService = IdentityService()
     self.nostrService = NostrDMService()
     self.contactStore = ContactStore(modelContext: modelContext)
+    self.contactDiscovery = ContactDiscovery(modelContext: modelContext)
     self.relayStore = RelayStore(
       modelContext: modelContext,
       userDefaults: relaySettingsUserDefaults

@@ -5,6 +5,7 @@ import NostrSDK
 
 extension AppSession {
   func replaceNostrService() {
+    pauseRemoteProfileRequests()
     privatePreferenceSyncTask?.cancel()
     privatePreferenceSyncTask = nil
     nostrService.stop()
@@ -209,7 +210,12 @@ extension AppSession {
       onFollowList: onFollowList,
       onProfileMetadata: onProfileMetadata
     )
+    nostrService.contactDiscovery = contactDiscovery
     let sourceService = nostrService
+    nostrService.onProfileLookupComplete = { [weak self, weak sourceService] requestID, completed in
+      guard let self, let sourceService, self.nostrService === sourceService else { return }
+      if completed { self.finishRemoteProfileLookup(requestID, completed: true) }
+    }
     nostrService.onPrivatePreference = { [weak self, weak sourceService] event in
       guard let self, let sourceService, self.nostrService === sourceService else { return }
       self.receivePrivatePreference(event)

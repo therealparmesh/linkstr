@@ -54,6 +54,7 @@ extension AppSession {
   }
 
   func importNsec(_ nsec: String) {
+    contactMutations.cancel()
     do {
       try identityService.importNsec(nsec)
       pendingCreatedAccountNsec = nil
@@ -67,6 +68,7 @@ extension AppSession {
   }
 
   func logOut(clearLocalData: Bool) {
+    contactMutations.cancel()
     let ownerPubkey = identityService.pubkeyHex
     let keypair = identityService.keypair
     let deviceToken = PushNotificationService.shared.deviceTokenHex
@@ -99,6 +101,14 @@ extension AppSession {
     timeoutSeconds: TimeInterval = RelayMutationDefaults.timeoutSeconds,
     pollIntervalSeconds: TimeInterval = RelayMutationDefaults.pollIntervalSeconds
   ) async -> Bool {
+    let owner = identityService.pubkeyHex
+    return await contactMutations.run { [self] in
+      guard identityService.pubkeyHex == owner else { return false }
+      return await deleteAccountSerially(timeoutSeconds: timeoutSeconds, pollIntervalSeconds: pollIntervalSeconds)
+    }
+  }
+
+  private func deleteAccountSerially(timeoutSeconds: TimeInterval, pollIntervalSeconds: TimeInterval) async -> Bool {
     guard let keypair = identityService.keypair, let ownerPubkey = identityService.pubkeyHex else {
       composeError = "you're signed out. sign in to manage this account."
       return false
@@ -109,8 +119,10 @@ extension AppSession {
         timeoutSeconds: timeoutSeconds,
         pollIntervalSeconds: pollIntervalSeconds
       )
+      guard !Task.isCancelled, identityService.pubkeyHex == ownerPubkey else { return false }
       if isRelayPublicationEnabledForCurrentProcess() {
         _ = try await publishFollowListAwaitingRelayAcceptance(followedPubkeyHexes: [])
+        guard !Task.isCancelled, identityService.pubkeyHex == ownerPubkey else { return false }
         _ = try await publishEventAwaitingRelayAcceptance(
           makeVanishEvent(
             relayURLs: try relayStore.fetchRelays().filter(\.isEnabled).map(\.url),
@@ -121,10 +133,11 @@ extension AppSession {
     } catch MutationPreparationError.relayBlocked {
       return false
     } catch {
-      report(error: error)
+      if !Task.isCancelled, identityService.pubkeyHex == ownerPubkey { report(error: error) }
       return false
     }
 
+    guard !Task.isCancelled, identityService.pubkeyHex == ownerPubkey else { return false }
     let deviceToken = PushNotificationService.shared.deviceTokenHex
     schedulePushDeviceUnregistration(deviceToken: deviceToken, keypair: keypair)
     resetRuntimeSessionState()
@@ -169,6 +182,7 @@ extension AppSession {
 
     do {
       try contactStore.clearAllContacts(ownerPubkey: ownerPubkey)
+      try contactDiscovery.clear(ownerPubkey: ownerPubkey)
     } catch {
       failures.append("couldn't remove local contacts.")
     }

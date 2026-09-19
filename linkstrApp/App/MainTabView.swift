@@ -34,6 +34,7 @@ struct MainTabView: View {
   @State private var isPresentingNewSession = false
   @State private var isPresentingAddContact = false
   @State private var isShowingArchivedSessions = false
+  @State private var isShowingAddedYou = false
   @State private var navigationPath: [SessionRoute] = []
   @State private var navigationID = UUID()
 
@@ -113,6 +114,9 @@ struct MainTabView: View {
       if oldValue == .sessions, newValue != .sessions {
         isShowingArchivedSessions = false
       }
+      if oldValue == .contacts, newValue != .contacts {
+        isShowingAddedYou = false
+      }
       if newValue != .sessions {
         navigationPath = []
       }
@@ -148,7 +152,17 @@ struct MainTabView: View {
       } else {
         EmptyView()
       }
-    case .contacts, .you, .settings:
+    case .contacts:
+      Button { isShowingAddedYou.toggle() } label: {
+        Image(
+          systemName: isShowingAddedYou
+            ? "person.crop.circle.fill.badge.checkmark" : "person.crop.circle.badge.checkmark"
+        )
+        .linkstrToolbarIconLabel()
+      }
+      .accessibilityLabel(isShowingAddedYou ? "show contacts" : "show people who added you")
+      .tint(LinkstrTheme.accent)
+    case .you, .settings:
       EmptyView()
     }
   }
@@ -194,6 +208,7 @@ struct MainTabView: View {
     case .contacts:
       ContactsView(
         ownerPubkey: ownerPubkey,
+        isShowingAddedYou: $isShowingAddedYou,
         addContact: { isPresentingAddContact = true }
       )
     case .you:

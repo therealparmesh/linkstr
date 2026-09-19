@@ -2,6 +2,13 @@ import Foundation
 import NostrSDK
 
 extension NostrDMService {
+  struct ProfileQuery {
+    let requestID: UUID
+    let expectedRelays: Set<String>
+    var completedRelays = Set<String>()
+    var failed = false
+  }
+
   func sendAwaitingRelayAcceptance(
     payload: LinkstrPayload,
     toMany recipientPubkeyHexes: [String],
@@ -30,27 +37,6 @@ extension NostrDMService {
     )
   }
 
-  func publishFollowListAwaitingRelayAcceptance(
-    followedPubkeyHexes: [String],
-    timeoutSeconds: TimeInterval = NostrDMTimingDefaults.relayAcceptanceTimeoutSeconds
-  ) async throws -> String {
-    guard relayPool != nil else {
-      throw NostrServiceError.relayUnavailable
-    }
-    guard let keypair else {
-      throw NostrServiceError.missingIdentity
-    }
-
-    let parsedPubkeys = try parsePublicKeys(followedPubkeyHexes)
-    let followEvent = try followList(withPubkeys: parsedPubkeys.map(\.hex), signedBy: keypair)
-    _ = try await publishEventsAwaitingRelayAcceptance(
-      [followEvent],
-      timeoutSeconds: timeoutSeconds
-    )
-
-    return followEvent.id
-  }
-
   func publishEventAwaitingRelayAcceptance(
     _ event: NostrEvent,
     timeoutSeconds: TimeInterval = NostrDMTimingDefaults.relayAcceptanceTimeoutSeconds
@@ -68,7 +54,7 @@ extension NostrDMService {
   }
 
   @discardableResult
-  func requestProfileMetadata(pubkeyHexes: [String]) -> Bool {
+  func requestProfileMetadata(pubkeyHexes: [String], requestID: UUID) -> Bool {
     guard let relayPool else { return false }
     let normalizedPubkeys = NostrValueNormalizer.dedupedNormalizedPubkeyHexes(pubkeyHexes)
     guard !normalizedPubkeys.isEmpty else { return false }
@@ -84,12 +70,11 @@ extension NostrDMService {
     }
 
     let subscriptionID = "linkstr-profile-lookup-\(UUID().uuidString.lowercased())"
+    profileQueries[subscriptionID] = ProfileQuery(requestID: requestID, expectedRelays: expectedRelayURLs)
     _ = relayPool.subscribe(with: filter, subscriptionId: subscriptionID)
-    Task { @MainActor [weak self] in
-      guard let self else { return }
-      try? await Task.sleep(nanoseconds: NostrDMTimingDefaults.profileLookupTimeoutNanoseconds)
-      guard !Task.isCancelled else { return }
-      self.relayPool?.closeSubscription(with: subscriptionID)
+    profileQueryTasks[subscriptionID] = Task { [weak self] in
+      do { try await Task.sleep(nanoseconds: NostrDMTimingDefaults.profileLookupTimeoutNanoseconds) } catch { return }
+      self?.finishProfileQuery(subscriptionID, completed: false)
     }
     return true
   }
@@ -240,17 +225,14 @@ extension NostrDMService {
     success: Bool,
     message: String
   ) {
-    guard
-      let completion = publishAckTracker.acknowledge(
-        relayURL: relayURL,
-        eventID: eventID,
-        success: success,
-        message: message
-      )
-    else {
-      return
+    for completion in publishAckTracker.acknowledge(
+      relayURL: relayURL, eventID: eventID, success: success, message: message
+    ) {
+      completePendingPublication(completion)
     }
+  }
 
+  private func completePendingPublication(_ completion: PublishAckCompletion) {
     switch completion.outcome {
     case .succeeded:
       finishPendingPublishBatch(
@@ -266,17 +248,26 @@ extension NostrDMService {
 
   func pruneRelayFromPublishWaitlists(relayURL: String) {
     for completion in publishAckTracker.pruneRelay(relayURL) {
-      switch completion.outcome {
-      case .succeeded:
-        finishPendingPublishBatch(
-          batchID: completion.batchID, result: .success(()), removeFromTracker: false)
-      case .failed(let failureMessage):
-        finishPendingPublishBatch(
-          batchID: completion.batchID,
-          result: .failure(NostrServiceError.publishRejected(failureMessage)),
-          removeFromTracker: false
-        )
-      }
+      completePendingPublication(completion)
     }
+  }
+}
+
+extension NostrDMService {
+  func completeProfileQuery(relayURL: String, subscriptionID: String, failed: Bool = false) {
+    guard var query = profileQueries[subscriptionID], query.expectedRelays.contains(relayURL) else { return }
+    query.failed = query.failed || failed
+    query.completedRelays.insert(relayURL)
+    profileQueries[subscriptionID] = query
+    if query.completedRelays.isSuperset(of: query.expectedRelays) {
+      finishProfileQuery(subscriptionID, completed: !query.failed)
+    }
+  }
+
+  func finishProfileQuery(_ id: String, completed: Bool) {
+    guard let query = profileQueries.removeValue(forKey: id) else { return }
+    profileQueryTasks.removeValue(forKey: id)?.cancel()
+    relayPool?.closeSubscription(with: id)
+    onProfileLookupComplete?(query.requestID, completed)
   }
 }

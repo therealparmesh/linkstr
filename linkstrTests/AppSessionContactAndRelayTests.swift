@@ -141,8 +141,11 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     )
     let cases: [(KnownProfileSnapshot, String?)] = [
       (.init(chosenName: "Old Name", updatedAt: Date(timeIntervalSince1970: 100), eventID: "profile-old"), "New Name"),
-      (.init(chosenName: "Earlier Tie", updatedAt: Date(timeIntervalSince1970: 200), eventID: "profile-a"), "New Name"),
-      (.init(chosenName: nil, updatedAt: Date(timeIntervalSince1970: 200), eventID: "profile-z"), nil),
+      (
+        .init(chosenName: "Larger ID Tie", updatedAt: Date(timeIntervalSince1970: 200), eventID: "profile-z"),
+        "New Name"
+      ),
+      (.init(chosenName: nil, updatedAt: Date(timeIntervalSince1970: 200), eventID: "profile-a"), nil),
       (.init(chosenName: "New Name", updatedAt: Date(timeIntervalSince1970: 200), eventID: "profile-new"), nil),
       (
         .init(chosenName: "Updated Name", updatedAt: Date(timeIntervalSince1970: 201), eventID: "profile-next"),

@@ -182,11 +182,11 @@ extension AppSessionIngestTests {
 
     session.ingestFollowListForTesting(
       ReceivedFollowList(
-        eventID: "follow-z", authorPubkey: myPubkey,
+        eventID: "follow-a", authorPubkey: myPubkey,
         followedPubkeys: [winnerPubkey], createdAt: tieDate))
     session.ingestFollowListForTesting(
       ReceivedFollowList(
-        eventID: "follow-a", authorPubkey: myPubkey,
+        eventID: "follow-z", authorPubkey: myPubkey,
         followedPubkeys: [loserPubkey], createdAt: tieDate))
 
     let contacts = try fetchContacts(in: container.mainContext)
