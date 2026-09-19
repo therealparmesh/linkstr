@@ -91,13 +91,9 @@ struct SessionManagementSheet: View {
               } else {
                 VStack(spacing: 0) {
                   ForEach(currentMembers) { member in
-                    let memberHex = member.pubkey
                     let identity = member.identity
                     HStack(spacing: LinkstrTheme.rowSpacing) {
-                      LinkstrContactAvatar(
-                        name: identity.displayName,
-                        size: 38
-                      )
+                      LinkstrContactAvatar(name: identity.displayName, size: 38)
 
                       LinkstrContactIdentityView(
                         identity: identity,
@@ -115,11 +111,6 @@ struct SessionManagementSheet: View {
                         Button("copy public key", systemImage: "doc.on.doc") {
                           UIPasteboard.general.string = identity.npub
                         }
-                        if canManageSession {
-                          Button("remove from session", systemImage: "person.badge.minus", role: .destructive) {
-                            pendingMemberChange = member
-                          }
-                        }
                       } label: {
                         Image(systemName: "ellipsis")
                           .frame(
@@ -132,14 +123,26 @@ struct SessionManagementSheet: View {
                       .disabled(isSaving || isDeletingSession)
                     }
                     .padding(.vertical, LinkstrTheme.listRowVerticalPadding)
+                    .contentShape(Rectangle())
                     .contextMenu {
                       Button("copy public key", systemImage: "doc.on.doc") {
                         UIPasteboard.general.string = identity.npub
                       }
+                      if canManageSession {
+                        Button("remove from session", systemImage: "person.badge.minus", role: .destructive) {
+                          pendingMemberChange = member
+                        }
+                        .disabled(isSaving || isDeletingSession)
+                      }
                     }
                     .accessibilityAction(named: Text("copy public key")) { UIPasteboard.general.string = identity.npub }
+                    .accessibilityActions {
+                      if canManageSession, !isSaving, !isDeletingSession {
+                        Button("remove from session") { pendingMemberChange = member }
+                      }
+                    }
 
-                    if memberHex != currentMembers.last?.pubkey {
+                    if member.pubkey != currentMembers.last?.pubkey {
                       LinkstrListRowDivider(leadingInset: 50)
                     }
                   }

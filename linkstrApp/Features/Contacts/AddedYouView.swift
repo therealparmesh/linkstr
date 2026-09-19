@@ -84,15 +84,26 @@ struct AddedYouView: View {
                   .font(LinkstrTheme.font(.caption, weight: .medium))
                   .foregroundStyle(LinkstrTheme.textSecondary)
                   .accessibilityLabel("\(row.identity.displayName) is in your contacts")
-              } else {
-                Button("add back") { pendingContactAddition = row }
-                  .font(LinkstrTheme.font(.caption, weight: .medium))
-                  .frame(minHeight: LinkstrTheme.minimumInteractiveDimension)
-                  .tint(LinkstrTheme.accent)
-                  .accessibilityLabel("add back, \(row.identity.displayName)")
               }
+              Menu {
+                if row.contact == nil {
+                  Button("add contact", systemImage: "person.badge.plus") { pendingContactAddition = row }
+                }
+                Button("copy public key", systemImage: "doc.on.doc") {
+                  UIPasteboard.general.string = row.identity.npub
+                }
+              } label: {
+                Image(systemName: "ellipsis")
+                  .frame(
+                    width: LinkstrTheme.minimumInteractiveDimension,
+                    height: LinkstrTheme.minimumInteractiveDimension
+                  )
+              }
+              .tint(LinkstrTheme.textSecondary)
+              .accessibilityLabel("contact actions for \(row.identity.displayName)")
             }
             .padding(.vertical, LinkstrTheme.fieldVerticalPadding)
+            .contentShape(Rectangle())
             .overlay(alignment: .bottom) { LinkstrListRowDivider(leadingInset: 62) }
             .contextMenu {
               Button("copy public key", systemImage: "doc.on.doc") {

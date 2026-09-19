@@ -4,7 +4,7 @@ Contacts mirror the signed-in account's public Nostr kind-3 follow list. Incomin
 
 ## Contact actions
 
-Contact additions and removals require confirmation. Session rows use a single actions menu and omit contact-status badges. The expandable **add members** list excludes existing members; adding or removing a member changes the draft only after confirmation and takes effect when the creator saves.
+Contact additions and removals require confirmation. Contact and session-member rows use **…** for non-destructive actions. Removal stays in the long-press menu and accessibility actions; contact detail also has a **remove contact** button. Session-member rows omit contact-status badges. The expandable **add members** list excludes existing members; adding or removing a member changes the draft only after confirmation and takes effect when the creator saves.
 
 `ContactMutationQueue` serializes additions, removals, and account deletion so each action uses the last completed follow list. Quick-add leaves existing contacts and aliases unchanged. The manual add form can update an existing alias.
 
@@ -20,7 +20,7 @@ Removing a contact records a cleared private alias for backup. Shared sessions a
 
 ## Added you
 
-The top-left Contacts toolbar button switches to **added you**, using the same pattern as archived sessions. Its person-with-checkmark icon fills when selected. Both lists keep their own search text and the top-right add-contact button. Leaving the tab returns it to Contacts. Contact detail has its own back and save controls.
+The top-left Contacts toolbar button switches to **added you**, using the same pattern as archived sessions. Its person-with-checkmark icon fills when selected. Both lists keep their own search text and the top-right add-contact button. Use a person's **…** menu to **add contact** or **copy public key**. Leaving the tab returns it to Contacts. Contact detail has its own back and save controls.
 
 `ContactDiscovery` shares the app's relay connections. It finds kind-3 events containing the owner's public key, then requests those authors' latest lists without requiring that tag. This second request can find unfollows. Visible rows receive live author updates, and a separate subscription finds new follows while historical pages load.
 
@@ -40,4 +40,4 @@ Public profiles use the same NIP-01 ordering as follow lists. A published empty 
 
 Run `scripts/test.sh` for the app and push-service suites. `ContactManagementTests` covers queued mutations, concurrent remote changes, cancellation, aliases, and profile request limits. `ContactDiscoveryTests` covers follow ordering, account isolation, invalid events, subscription lifecycle, duplicate delivery, and pagination boundaries. The disk migration fixture in `PrivatePreferenceTests` checks that adding incoming-follow storage preserves encrypted aliases.
 
-For UI verification, check both toolbar modes, search reset, empty and partial results, add back, member quick-add for creators and other members, and removal from both list and detail. Verify that cancellation leaves contacts and membership unchanged, member actions preserve unsaved session edits, and the add-members list excludes people already in the draft. Returning from contact detail must restore the toolbar.
+For UI verification, check both toolbar modes, search reset, empty and partial results, adding contacts from **added you** and session members, and removal from both list and detail. Row **…** menus must omit removal; long-press menus and accessibility actions must still reach its confirmation. Verify that cancellation leaves contacts and membership unchanged, member actions preserve unsaved session edits, and the add-members list excludes people already in the draft. Returning from contact detail must restore the toolbar. Selectable public keys and post links must retain their native copy and share menus.

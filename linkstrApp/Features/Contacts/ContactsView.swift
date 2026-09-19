@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import UIKit
 
 struct ContactsView: View {
   @EnvironmentObject private var session: AppSession
@@ -110,8 +111,11 @@ struct ContactsView: View {
                     Button { selectedContact = contact } label: { ContactRowView(identity: row.identity) }
                       .buttonStyle(.plain)
                     Menu {
-                      Button("remove contact", systemImage: "person.crop.circle.badge.minus", role: .destructive) {
-                        pendingContactRemoval = contact
+                      Button("edit contact", systemImage: "pencil") {
+                        selectedContact = contact
+                      }
+                      Button("copy public key", systemImage: "doc.on.doc") {
+                        UIPasteboard.general.string = row.identity.npub
                       }
                     } label: {
                       Image(systemName: "ellipsis")
@@ -123,8 +127,12 @@ struct ContactsView: View {
                     .tint(LinkstrTheme.textSecondary)
                     .accessibilityLabel("contact actions for \(row.identity.displayName)")
                   }
+                  .contentShape(Rectangle())
                   .overlay(alignment: .bottom) { LinkstrListRowDivider(leadingInset: 62) }
                   .contextMenu {
+                    Button("copy public key", systemImage: "doc.on.doc") {
+                      UIPasteboard.general.string = row.identity.npub
+                    }
                     Button("remove contact", systemImage: "person.crop.circle.badge.minus", role: .destructive) {
                       pendingContactRemoval = contact
                     }
@@ -164,5 +172,6 @@ private struct ContactRowView: View {
         .foregroundStyle(LinkstrTheme.textTertiary)
     }
     .padding(.vertical, LinkstrTheme.fieldVerticalPadding)
+    .contentShape(Rectangle())
   }
 }

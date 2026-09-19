@@ -35,7 +35,7 @@ The bottom footer shows validation and relay status only. The keyboard return ke
 
 1. Open the Contacts tab.
 2. Tap the person with a checkmark in the top-left toolbar to open **added you**.
-3. Tap **add back** beside someone, then confirm **add contact**. People already in your contacts show **added**.
+3. Open someone's **…** menu and choose **add contact**, then confirm. People already in your contacts show **added**.
 
 Tap the toolbar button again to return to contacts. The top-right add-contact button is available in both lists.
 
@@ -87,7 +87,7 @@ The bottom footer shows validation and relay status only. The keyboard return ke
 | View archived sessions         | Tap the archive icon in the top-left Sessions toolbar.                                                                                                                                          |
 | Rename a session               | Open a session, tap the members button, and edit the session name.                                                                                                                              |
 | Delete a session               | Open a session, tap the members button, and use **delete session** in the manage sheet.                                                                                                         |
-| Add or remove members          | Open session members. Expand **choose from contacts** to add someone, or use their **…** menu to **remove from session**. Confirm the change, then save.                                        |
+| Add or remove members          | Open session members. Expand **choose from contacts** to add someone, or long-press their row to **remove from session**. Confirm the change, then save.                                        |
 | Copy a member's public key     | Open a session, tap the members button, then use a member's **…** menu or long-press their row and choose **copy public key**.                                                                  |
 
 Only the session creator can rename sessions, delete them, or change session membership.
@@ -251,7 +251,7 @@ Delete is permanent for linkstr UX. There is no restore flow.
 
 ### Can I remove a contact?
 
-Yes. Open the contact row's **…** menu and choose **remove contact**, or tap **remove contact** in the contact detail screen. Long-press also works. After you confirm, linkstr updates your public follow list and removes the contact. Shared sessions and posts remain available. If relays reject the update, the contact stays saved and the app shows an error.
+Yes. Long-press the contact row and choose **remove contact**, or tap **remove contact** in the contact detail screen. After you confirm, linkstr updates your public follow list and removes the contact. Shared sessions and posts remain available. If relays reject the update, the contact stays saved and the app shows an error.
 
 ### Can I save videos?
 

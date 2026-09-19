@@ -212,7 +212,7 @@ struct SettingsView: View {
           UIImpactFeedbackGenerator(style: .light).impactOccurred()
           session.removeRelay(relay)
         } label: {
-          Label("remove", systemImage: "trash")
+          Label("remove relay", systemImage: "minus.circle")
             .font(LinkstrTheme.font(.caption, weight: .medium))
         }
         .buttonStyle(.plain)

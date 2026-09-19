@@ -109,6 +109,7 @@ extension SessionPostsView {
         hasUnreadPost: row.hasUnreadPost,
         reactionSummaries: row.reactionSummaries
       )
+      .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
     .onAppear {
