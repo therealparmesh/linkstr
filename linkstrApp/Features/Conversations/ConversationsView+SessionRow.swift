@@ -97,11 +97,16 @@ struct NewSessionSheet: View {
                             selectedNPubs.contains(contact.npub)
                               ? LinkstrTheme.accent : LinkstrTheme.textTertiary
                           )
+                          .accessibilityHidden(true)
                         }
                         .padding(.vertical, LinkstrTheme.listRowVerticalPadding)
                         .contentShape(Rectangle())
                       }
                       .buttonStyle(.plain)
+                      .accessibilityValue(selectedNPubs.contains(contact.npub) ? "selected" : "not selected")
+                      .accessibilityHint(
+                        selectedNPubs.contains(contact.npub) ? "remove from session" : "add to session"
+                      )
 
                       if contact.id != lastContactID {
                         LinkstrListRowDivider(leadingInset: 50)

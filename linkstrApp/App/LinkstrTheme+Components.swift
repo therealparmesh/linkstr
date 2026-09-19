@@ -68,6 +68,7 @@ struct LinkstrSearchField: View {
       Image(systemName: "magnifyingglass")
         .font(LinkstrTheme.font(.footnote, weight: .semibold))
         .foregroundStyle(LinkstrTheme.textTertiary)
+        .accessibilityHidden(true)
 
       TextField(prompt, text: $text)
         .font(LinkstrTheme.font(.footnote))
@@ -255,7 +256,7 @@ struct LinkstrCenteredEmptyStateView: View {
             .font(LinkstrTheme.font(.title2, weight: .semibold))
             .foregroundStyle(LinkstrTheme.accent)
         }
-
+        .accessibilityHidden(true)
       Text(title)
         .font(LinkstrTheme.font(.headline, weight: .semibold))
         .foregroundStyle(LinkstrTheme.textPrimary)
