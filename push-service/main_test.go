@@ -29,11 +29,12 @@ func (s *capturingSender) send(_ context.Context, device registeredDevice, push 
 	return s.sendErr
 }
 
-func TestRegisterDeviceAndPushSendsToNonArchivedRecipient(t *testing.T) {
+func TestRegisteredDevicesReceivePushesOnlyFromOtherAccounts(t *testing.T) {
 	handler, sender := newTestMux(t)
 	senderSecret, senderPubkey := testIdentity(t)
 	recipientSecret, recipientPubkey := testIdentity(t)
 	registerTestDevice(t, handler, recipientSecret, "device-token-1", "sandbox")
+	registerTestDevice(t, handler, senderSecret, "sender-device-token", "sandbox")
 
 	recorder := performSignedJSONRequest(
 		t,
@@ -66,6 +67,11 @@ func TestRegisterDeviceAndPushSendsToNonArchivedRecipient(t *testing.T) {
 	}
 	if sender.sent[0].push.NotificationType != notificationTypeNewPost {
 		t.Fatalf("unexpected push: %#v", sender.sent[0].push)
+	}
+
+	sendTestPush(t, handler, senderSecret, senderPubkey, "self-only-event")
+	if len(sender.sent) != 1 {
+		t.Fatalf("self-only recipients must not produce another push: %#v", sender.sent)
 	}
 }
 
@@ -226,15 +232,6 @@ func TestUnregisterDeviceRemovesPushTarget(t *testing.T) {
 	}
 }
 
-func TestPushSkipsSelfSendRecipients(t *testing.T) {
-	handler, sender := newTestMux(t)
-	senderSecret, senderPubkey := testIdentity(t)
-	sendTestPush(t, handler, senderSecret, senderPubkey, "event-1")
-	if len(sender.sent) != 0 {
-		t.Fatalf("expected self-send recipients to be skipped, got %d sends", len(sender.sent))
-	}
-}
-
 func TestMissingAuthorizationIsRejected(t *testing.T) {
 	handler, _ := newTestMux(t)
 	body, err := json.Marshal(registerDeviceRequest{
@@ -282,19 +279,36 @@ func TestAuthorizationNonceReplayIsRejected(t *testing.T) {
 	}
 }
 
-func TestOversizedRequestIsRejected(t *testing.T) {
+func TestRequestBodySizeLimit(t *testing.T) {
 	handler, _ := newTestMux(t)
 	secret, _ := testIdentity(t)
-	body := bytes.Repeat([]byte("x"), maxRequestBodyBytes+1)
-	request, err := signedJSONRequest("POST", "/v1/devices/register", body, secret)
+	payload, err := json.Marshal(registerDeviceRequest{
+		DeviceToken: "device-token", APNSEnvironment: "sandbox",
+	})
 	if err != nil {
-		t.Fatalf("build signed request: %v", err)
+		t.Fatal(err)
 	}
 
-	recorder := httptest.NewRecorder()
-	handler.ServeHTTP(recorder, request)
-	if recorder.Code != http.StatusBadRequest {
-		t.Fatalf("expected oversized request to be rejected, got %d", recorder.Code)
+	for _, testCase := range []struct {
+		name   string
+		size   int
+		status int
+	}{
+		{"at limit", maxRequestBodyBytes, http.StatusAccepted},
+		{"over limit", maxRequestBodyBytes + 1, http.StatusBadRequest},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			body := append(payload, bytes.Repeat([]byte(" "), testCase.size-len(payload))...)
+			request, err := signedJSONRequest("POST", "/v1/devices/register", body, secret)
+			if err != nil {
+				t.Fatalf("build signed request: %v", err)
+			}
+			recorder := httptest.NewRecorder()
+			handler.ServeHTTP(recorder, request)
+			if recorder.Code != testCase.status {
+				t.Fatalf("expected %d, got %d body=%s", testCase.status, recorder.Code, recorder.Body.String())
+			}
+		})
 	}
 }
 

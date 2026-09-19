@@ -239,7 +239,7 @@ extension AppSessionContactAndRelayTests {
     )
 
     let secondToastDeadline = Date(timeIntervalSinceNow: 0.2)
-    while session.composeError != nil, Date() < secondToastDeadline {
+    while session.composeError == nil, Date() < secondToastDeadline {
       RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.01))
     }
 

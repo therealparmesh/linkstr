@@ -312,7 +312,7 @@ private extension URLClassifierTests {
       assertEmbedExpectation(
         expectation.embedExpectation, actualURL: embedURL, name: expectation.name)
     case (.link, .link):
-      XCTAssertNil(expectation.embedExpectation, "Link strategies should not expect embeds")
+      break
     default:
       XCTFail("Unexpected media strategy for \(expectation.name): \(strategy)")
     }

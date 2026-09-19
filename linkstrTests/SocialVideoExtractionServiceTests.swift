@@ -22,32 +22,18 @@ final class SocialVideoExtractionServiceTests: XCTestCase {
     XCTAssertEqual(media.map(\.playbackURL), [candidateURL])
   }
 
-  func testDirectMP4URLResolvesWithoutPageScrape() async throws {
-    let url = try XCTUnwrap(URL(string: "https://cdn.example.com/videos/sample.mp4"))
+  func testDirectMediaURLsResolveWithoutPageScraping() async throws {
+    for fileName in ["sample.mp4", "master.m3u8"] {
+      let url = try XCTUnwrap(URL(string: "https://cdn.example.com/videos/\(fileName)"))
+      let state = await SocialVideoExtractionService.shared.extractPlayableMedia(from: url)
 
-    let state = await SocialVideoExtractionService.shared.extractPlayableMedia(from: url)
-
-    guard case .ready(let media) = state else {
-      XCTFail("expected direct mp4 URL to resolve as playable media")
-      return
+      guard case .ready(let media) = state else {
+        XCTFail("Expected direct media to resolve: \(fileName)")
+        continue
+      }
+      XCTAssertEqual(media.map(\.playbackURL), [url], fileName)
+      XCTAssertFalse(try XCTUnwrap(media.first).isLocalFile, fileName)
     }
-    let first = try XCTUnwrap(media.first)
-    XCTAssertEqual(first.playbackURL, url)
-    XCTAssertFalse(first.isLocalFile)
-  }
-
-  func testDirectHLSURLResolvesWithoutPageScrape() async throws {
-    let url = try XCTUnwrap(URL(string: "https://cdn.example.com/videos/master.m3u8"))
-
-    let state = await SocialVideoExtractionService.shared.extractPlayableMedia(from: url)
-
-    guard case .ready(let media) = state else {
-      XCTFail("expected direct hls URL to resolve as playable media")
-      return
-    }
-    let first = try XCTUnwrap(media.first)
-    XCTAssertEqual(first.playbackURL, url)
-    XCTAssertFalse(first.isLocalFile)
   }
 
   func testLikelyMediaURLRecognizesSignedInstagramCDNVideoWithoutMP4Suffix() {

@@ -62,9 +62,10 @@ extension SocialPostParserTests {
 
     let preview = SocialPostHTMLParser.facebookPreview(from: html)
 
-    XCTAssertNotNil(preview)
-    XCTAssertNotNil(preview?.imageURL)
-    XCTAssertTrue(preview?.imageURL?.absoluteString.contains("scontent") == true)
+    XCTAssertEqual(
+      preview?.imageURL?.absoluteString,
+      "https://scontent.xx.fbcdn.net/v/t51.82787-15/photo.jpg?_nc_cat=111&ccb=1-7"
+    )
   }
 
   func testFacebookPreviewReturnsNilForEmptyHTML() {

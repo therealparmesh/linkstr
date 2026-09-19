@@ -80,40 +80,6 @@ final class AppSessionMutationTests: AppSessionTestCase {
     XCTAssertNotEqual(session.pendingSessionNavigationRequest?.id, firstRequestID)
   }
 
-  func testCreateSessionPostAwaitingRelaySendsWhenLiveRelayConnectionExists() async throws {
-    let (session, container) = try makeSession(
-      disableNostrStartup: false,
-      hasConnectedRelays: { true },
-      sendPayload: { _, _ in
-        SentPayloadReceipt(
-          rumorEventID: "await-root-event",
-          publishedEventIDs: ["giftwrap-await-root-1", "giftwrap-await-root-2"]
-        )
-      }
-    )
-    try session.identityService.createNewIdentity()
-    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
-    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
-    let sessionEntity = try insertSessionFixture(
-      in: container.mainContext,
-      ownerPubkey: myPubkey,
-      createdByPubkey: myPubkey,
-      memberPubkeys: [myPubkey, peerPubkey]
-    )
-
-    let didCreate = await session.createSessionPostAwaitingRelay(
-      url: "https://example.com/path",
-      note: nil,
-      session: sessionEntity,
-      timeoutSeconds: shortRelayMutationTimeoutSeconds,
-      pollIntervalSeconds: shortRelayMutationPollIntervalSeconds
-    )
-
-    XCTAssertTrue(didCreate)
-    XCTAssertNil(session.composeError)
-    XCTAssertEqual(try fetchMessages(in: container.mainContext).count, 1)
-  }
-
   func testCreateSessionPostAwaitingRelayWithReadOnlyRelaysShowsReadOnlyMessage() async throws {
     let (session, container) = try makeSession(disableNostrStartup: false)
     try session.identityService.createNewIdentity()
@@ -278,7 +244,10 @@ final class AppSessionMutationTests: AppSessionTestCase {
     )
 
     XCTAssertTrue(didCreate)
-    let message = try XCTUnwrap(try fetchMessages(in: container.mainContext).first)
+    XCTAssertNil(session.composeError)
+    let messages = try fetchMessages(in: container.mainContext)
+    XCTAssertEqual(messages.count, 1)
+    let message = try XCTUnwrap(messages.first)
     XCTAssertEqual(message.eventID, "root-rumor-id")
     XCTAssertEqual(message.rootID, "root-rumor-id")
     XCTAssertEqual(message.publishedTransportEventIDs, ["giftwrap-root-a", "giftwrap-root-b"])

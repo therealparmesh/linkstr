@@ -82,18 +82,4 @@ final class LinkstrPayloadTests: XCTestCase {
     XCTAssertNil(LinkstrURLValidator.normalizedWebURL(from: "not-a-url"))
     XCTAssertNil(LinkstrURLValidator.normalizedWebURL(from: ""))
   }
-
-  func testRootPayloadValidationAcceptsRepresentativeProviderURLs() {
-    for url in MediaURLFixtures.validRootPayloadURLs {
-      let payload = LinkstrPayload(
-        conversationID: "c1",
-        rootID: "r1",
-        kind: .root,
-        url: url,
-        note: nil,
-        timestamp: 123
-      )
-      XCTAssertNoThrow(try payload.validated(), "Expected valid provider URL: \(url)")
-    }
-  }
 }

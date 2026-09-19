@@ -76,11 +76,7 @@ final class SocialPostParserTests: XCTestCase {
       " • Instagram reel",
       " • Instagram photo",
       " • Instagram video",
-      " • Instagram",
-      " \u{2022} Instagram reel",
-      " \u{2022} Instagram photo",
-      " \u{2022} Instagram video",
-      " \u{2022} Instagram"
+      " • Instagram"
     ]
 
     for suffix in suffixes {
@@ -215,13 +211,15 @@ final class SocialPostParserTests: XCTestCase {
     let html = """
       <html><head>
       <meta property="og:description" content="1K likes, 5 comments - creator on Feb 14, 2026: \
-      &quot;Line one. Line two. Line three.&quot;. " />
+      &quot;Line one.
+      Line two.
+      Line three.&quot;. " />
       </head></html>
       """
 
     let preview = SocialPostHTMLParser.instagramPreview(from: html)
 
-    XCTAssertEqual(preview?.bodyText, "Line one. Line two. Line three.")
+    XCTAssertEqual(preview?.bodyText, "Line one.\nLine two.\nLine three.")
   }
 
   func testInstagramPreviewExtractsBodyWithSmartQuotes() {

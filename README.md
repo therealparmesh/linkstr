@@ -492,6 +492,8 @@ open linkstr.xcodeproj
 
 This runs both the iOS unit tests (via `xcodebuild`) and the push-service Go tests in one pass.
 
+Tests cover observable behavior and distinct failure paths. Reuse coverage when a broader test already checks the same behavior. For asynchronous work, check the state before and after completion; for rejected input, use a valid control so the test cannot pass for an unrelated reason. Generated HTML and native gestures also need UI verification; checking for source strings does not prove they work.
+
 `NostrEventValidationTests` covers relay decoding, outgoing envelopes, recipient and sender copies, invalid signatures and authors, and history pagination. `AppSessionIngestTests+Authentication` checks that forged membership updates and deletes cannot change stored state while authorized messages still work. Contact tests are described in [contact synchronization](docs/CONTACTS.md#verification).
 
 ### Lint

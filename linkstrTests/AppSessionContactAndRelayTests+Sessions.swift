@@ -139,39 +139,21 @@ extension AppSessionContactAndRelayTests {
     XCTAssertFalse(identity.showsNPubLine)
   }
 
-  func testRemoveContactUpdatesLocalFollowSet() async throws {
-    let (session, container) = try makeSession()
-    try session.identityService.createNewIdentity()
-    let firstNPub = try TestKeyMaterialFactory.makeNPub()
-    let secondNPub = try TestKeyMaterialFactory.makeNPub()
-
-    let didAddFirst = await session.addContact(npub: firstNPub, alias: "First")
-    XCTAssertTrue(didAddFirst)
-    let didAddSecond = await session.addContact(npub: secondNPub, alias: "Second")
-    XCTAssertTrue(didAddSecond)
-
-    let contactsBeforeDelete = try fetchContacts(in: container.mainContext)
-    XCTAssertEqual(contactsBeforeDelete.count, 2)
-    let firstContact = try XCTUnwrap(
-      contactsBeforeDelete.first { $0.npub == firstNPub }
-    )
-
-    let didRemove = await session.removeContact(firstContact)
-    XCTAssertTrue(didRemove)
-
-    let contactsAfterDelete = try fetchContacts(in: container.mainContext)
-    XCTAssertEqual(contactsAfterDelete.count, 1)
-    XCTAssertFalse(contactsAfterDelete.contains(where: { $0.npub == firstNPub }))
-    XCTAssertTrue(contactsAfterDelete.contains(where: { $0.npub == secondNPub }))
-  }
-
   func testRemoveContactPublishesUpdatedFollowListBeforeLocalRemoval() async throws {
     var publishedFollowLists: [[String]] = []
+    var removalPublication: CheckedContinuation<Void, Never>?
+    let removalStarted = expectation(description: "contact removal publication")
     let (session, container) = try makeSession(
       disableNostrStartup: false,
       hasConnectedRelays: { true },
       publishFollowList: { followedPubkeys in
         publishedFollowLists.append(followedPubkeys)
+        if publishedFollowLists.count == 3 {
+          await withCheckedContinuation {
+            removalPublication = $0
+            removalStarted.fulfill()
+          }
+        }
         return "follow-list-remove-contact"
       }
     )
@@ -188,11 +170,18 @@ extension AppSessionContactAndRelayTests {
     let firstContact = try XCTUnwrap(contactsBeforeDelete.first { $0.npub == firstNPub })
     let secondContact = try XCTUnwrap(contactsBeforeDelete.first { $0.npub == secondNPub })
 
-    let didRemove = await session.removeContact(
-      firstContact,
-      timeoutSeconds: shortRelayMutationTimeoutSeconds,
-      pollIntervalSeconds: shortRelayMutationPollIntervalSeconds
-    )
+    let removal = Task {
+      await session.removeContact(
+        firstContact,
+        timeoutSeconds: shortRelayMutationTimeoutSeconds,
+        pollIntervalSeconds: shortRelayMutationPollIntervalSeconds
+      )
+    }
+    await fulfillment(of: [removalStarted], timeout: asyncExpectationTimeoutSeconds)
+    XCTAssertEqual(
+      Set(try fetchContacts(in: container.mainContext).map(\.npub)), Set([firstNPub, secondNPub]))
+    removalPublication?.resume()
+    let didRemove = await removal.value
 
     XCTAssertTrue(didRemove)
     XCTAssertEqual(publishedFollowLists.last, [secondContact.targetPubkey])

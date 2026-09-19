@@ -143,13 +143,4 @@ extension MediaURLFixtures {
     )
   ]
 
-  static let validRootPayloadURLs: [String] = [
-    "https://www.tiktok.com/@acct/video/7596114833477537054",
-    "https://www.instagram.com/share/reel/DUSWiOIDivu/",
-    "https://www.facebook.com/share/r/213286701716863/",
-    "https://www.youtube.com/shorts/aqz-KE-bpKQ",
-    "https://rumble.com/v8tc4h9-zelensky-has-rolled-the-world-in-less-than-2-minutes.html",
-    "https://x.com/jack/status/20",
-    "https://fixupx.com/nyjets/status/924685391524798464/video/1"
-  ]
 }

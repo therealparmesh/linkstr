@@ -132,7 +132,7 @@ extension AppSessionIngestTests {
     XCTAssertNil(message.readAt)
   }
 
-  func testIngestIgnoresBackdatedReactionFromCurrentlyInactiveMember() throws {
+  func testIngestRejectsReactionsFromRemovedMembersIncludingBackdatedEvents() throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
     let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
@@ -157,39 +157,15 @@ extension AppSessionIngestTests {
         id: "session-members-remove-backdated-reaction-peer", sender: creatorPubkey, time: 1710,
         sessionID: sessionID),
       members: [creatorPubkey, myPubkey])
-    ingestReaction(
-      session,
-      IngestOp(
-        id: "reaction-backdated-from-removed-peer", sender: peerPubkey, time: 1705,
-        sessionID: sessionID),
-      rootID: rootEventID)
+    for timestamp in [1705.0, 1715.0] {
+      ingestReaction(
+        session,
+        IngestOp(
+          id: "reaction-from-removed-peer-\(timestamp)", sender: peerPubkey, time: timestamp,
+          sessionID: sessionID),
+        rootID: rootEventID)
 
-    XCTAssertTrue(try fetchReactions(in: container.mainContext).isEmpty)
-  }
-
-  func testIngestIgnoresReactionFromInactiveMember() throws {
-    let (session, container) = try makeSession()
-    try session.identityService.createNewIdentity()
-    let myPubkey = try XCTUnwrap(session.identityService.pubkeyHex)
-    let creatorPubkey = try TestKeyMaterialFactory.makePubkeyHex()
-    let peerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
-    let sessionID = "session-reaction-membership-guard"
-
-    ingestSessionCreate(
-      session,
-      IngestOp(id: "session-create-3", sender: creatorPubkey, time: 300, sessionID: sessionID),
-      name: "Reaction Guard",
-      members: [creatorPubkey, myPubkey, peerPubkey])
-    ingestSessionMembers(
-      session,
-      IngestOp(
-        id: "session-members-remove-peer", sender: creatorPubkey, time: 310, sessionID: sessionID),
-      members: [creatorPubkey, myPubkey])
-    ingestReaction(
-      session,
-      IngestOp(id: "reaction-from-removed-peer", sender: peerPubkey, time: 320, sessionID: sessionID),
-      rootID: "missing-root", emoji: "👀")
-
-    XCTAssertTrue(try fetchReactions(in: container.mainContext).isEmpty)
+      XCTAssertTrue(try fetchReactions(in: container.mainContext).isEmpty, "timestamp: \(timestamp)")
+    }
   }
 }

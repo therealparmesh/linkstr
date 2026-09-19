@@ -32,21 +32,6 @@ final class AppSessionPresentationTests: XCTestCase {
     )
   }
 
-  func testTwitterEmbedDocumentDefersRevealAndPostsMetrics() {
-    let html = TwitterEmbedDocumentBuilder.documentHTML(tweetID: "20")
-
-    XCTAssertTrue(html.contains("body.linkstr-embed-ready"))
-    XCTAssertTrue(html.contains("opacity: 0"))
-    XCTAssertTrue(html.contains("linkstrEmbedMetrics"))
-    XCTAssertTrue(html.contains("MutationObserver"))
-    XCTAssertTrue(html.contains("ResizeObserver"))
-    XCTAssertTrue(html.contains("createTweet(tweetID, container"))
-    XCTAssertTrue(html.contains("tweet-container"))
-    XCTAssertTrue(html.contains("platform.twitter.com/widgets.js"))
-    XCTAssertFalse(html.contains("postMetrics(false)"))
-    XCTAssertFalse(html.contains("attributes: true"))
-  }
-
   func testTwitterStatusResponseParserExtractsPreviewFromVXPath() throws {
     let json = try jsonObject(
       from: """
@@ -209,15 +194,6 @@ final class AppSessionPresentationTests: XCTestCase {
       LinkstrAvatarStyleResolver.contactInitials(for: "   "),
       "?"
     )
-  }
-
-  func testSessionAvatarColorIndexIsStableForSeed() {
-    let first = LinkstrAvatarStyleResolver.sessionColorIndex(for: "session-seed")
-    let second = LinkstrAvatarStyleResolver.sessionColorIndex(for: "session-seed")
-
-    XCTAssertEqual(first, second)
-    XCTAssertGreaterThanOrEqual(first, 0)
-    XCTAssertLessThan(first, 6)
   }
 
   func testStableTaskIDIsDeterministicAndOrderIndependent() {

@@ -32,6 +32,8 @@ final class ContactManagementTests: AppSessionTestCase {
       fetchContacts(in: container.mainContext).first { $0.targetPubkey == removedKey })
     let removed = await session.removeContact(removedContact)
     XCTAssertTrue(removed)
+    XCTAssertEqual(
+      Set(try fetchContacts(in: container.mainContext).map(\.targetPubkey)), Set([retainedKey, newKey]))
     let tags = try session.accountStateStore.followListTags(ownerPubkey: owner)
     XCTAssertTrue(tags.contains(retainedTag))
     XCTAssertTrue(tags.contains(otherTag))

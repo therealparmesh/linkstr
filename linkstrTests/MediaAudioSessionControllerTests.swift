@@ -5,20 +5,6 @@ import XCTest
 
 @MainActor
 final class MediaAudioSessionControllerTests: XCTestCase {
-  func testAcquirePlaybackConfiguresAndActivatesPlaybackSession() {
-    let backend = FakeMediaAudioSessionBackend()
-    let controller = MediaAudioSessionController(backend: backend)
-
-    controller.acquirePlayback()
-
-    XCTAssertEqual(controller.retainCount, 1)
-    XCTAssertEqual(
-      backend.categoryCalls,
-      [.init(category: .playback, mode: .moviePlayback, options: [])]
-    )
-    XCTAssertEqual(backend.activeCalls, [.init(active: true, options: [])])
-  }
-
   func testMultipleAcquiresActivateOnlyOnceUntilFinalRelease() {
     let backend = FakeMediaAudioSessionBackend()
     let controller = MediaAudioSessionController(backend: backend)
@@ -28,7 +14,10 @@ final class MediaAudioSessionControllerTests: XCTestCase {
     controller.releasePlayback()
 
     XCTAssertEqual(controller.retainCount, 1)
-    XCTAssertEqual(backend.categoryCalls.count, 1)
+    XCTAssertEqual(
+      backend.categoryCalls,
+      [.init(category: .playback, mode: .moviePlayback, options: [])]
+    )
     XCTAssertEqual(backend.activeCalls, [.init(active: true, options: [])])
 
     controller.releasePlayback()
