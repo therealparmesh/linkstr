@@ -29,12 +29,13 @@ actor AsyncRequestCache<Key: Hashable & Sendable, Value: Sendable> {
 
     if let request = inFlightRequests[key] {
       let value = await request.value
-      return Task.isCancelled ? nil : value
+      return Task.isCancelled || request.isCancelled ? nil : value
     }
 
     let request = Task { await load() }
     inFlightRequests[key] = request
     let value = await request.value
+    guard !request.isCancelled else { return nil }
     inFlightRequests[key] = nil
 
     if let value, maximumCachedValueCount > 0, shouldCache(value) {
@@ -45,6 +46,7 @@ actor AsyncRequestCache<Key: Hashable & Sendable, Value: Sendable> {
   }
 
   func invalidate(_ key: Key) {
+    inFlightRequests.removeValue(forKey: key)?.cancel()
     cachedValues.removeValue(forKey: key)
     cachedValueOrder.removeAll { $0 == key }
   }

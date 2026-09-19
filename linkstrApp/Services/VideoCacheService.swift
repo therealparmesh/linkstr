@@ -139,7 +139,8 @@ actor VideoCacheService {
   func downloadMP4(from remoteURL: URL, headers: [String: String]) async throws -> URL {
     let destination = cachedFileURL(for: remoteURL, preferredExtension: "mp4")
     if fileManager.fileExists(atPath: destination.path) {
-      registerCachedMedia(at: destination)
+      touchCachedMedia(at: destination)
+      enforceVideoCacheLimitIfNeeded(preserving: destination)
       return destination
     }
 
@@ -147,16 +148,16 @@ actor VideoCacheService {
     headers.forEach { request.setValue($1, forHTTPHeaderField: $0) }
 
     let (tmpURL, response) = try await URLSession.shared.download(for: request)
+    defer { try? fileManager.removeItem(at: tmpURL) }
     try Task.checkCancellation()
     guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
       throw URLError(.badServerResponse)
     }
 
-    if fileManager.fileExists(atPath: destination.path) {
-      try? fileManager.removeItem(at: destination)
+    // Another download may have completed while this request was suspended.
+    if !fileManager.fileExists(atPath: destination.path) {
+      try fileManager.moveItem(at: tmpURL, to: destination)
     }
-
-    try fileManager.moveItem(at: tmpURL, to: destination)
     registerCachedMedia(at: destination)
     return destination
   }
@@ -180,7 +181,11 @@ actor VideoCacheService {
         continue
       }
 
-      try? fileManager.removeItem(at: entry.url)
+      do {
+        try fileManager.removeItem(at: entry.url)
+      } catch {
+        continue
+      }
       totalBytes -= entry.bytes
       if totalBytes <= maxVideoCacheBytes {
         break

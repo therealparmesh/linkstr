@@ -119,6 +119,7 @@
 		A00903BAE63FB3A173D33A5D /* NostrSDK in Frameworks */ = {isa = PBXBuildFile; productRef = A73B5D00E0403A54A02BD1C7 /* NostrSDK */; };
 		A010D608D2DB3D5C155DCB2C /* AppSession+Persistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EE33A8A926071254F631AA1 /* AppSession+Persistence.swift */; };
 		A0C514C45CF917B5D689A331 /* AppSessionTestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38A471A89B13B8583C493EA6 /* AppSessionTestSupport.swift */; };
+		A2EBEAFA19670C8B8AE4868E /* VideoCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A75F6B611B4862EFCC27D49 /* VideoCacheTests.swift */; };
 		A35BF9C1FB26D4F9A6085101 /* SessionMessageEntity+Helpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97E48BBAC2DB46F972474A8C /* SessionMessageEntity+Helpers.swift */; };
 		A376AA608E7FB7ACBFEF05BB /* AsyncRequestCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB16E81CE29D8702DE41EE9D /* AsyncRequestCacheTests.swift */; };
 		A480D1E9F593B8091ACF70D4 /* SocialVideoExtractionService+Discovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = C88EE7B18AE327026435CC85 /* SocialVideoExtractionService+Discovery.swift */; };
@@ -276,6 +277,7 @@
 		43634DFD597954899CD5FF3E /* AppSessionAccountAndStorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSessionAccountAndStorageTests.swift; sourceTree = "<group>"; };
 		45EAAE84FFB794FA5280622D /* MediaAudioSessionController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaAudioSessionController.swift; sourceTree = "<group>"; };
 		496DA3E6D798CF3AB47E0456 /* YouView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouView.swift; sourceTree = "<group>"; };
+		4A75F6B611B4862EFCC27D49 /* VideoCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoCacheTests.swift; sourceTree = "<group>"; };
 		4B1E0AE2E51507C4C3B32D1C /* LinkstrPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkstrPayload.swift; sourceTree = "<group>"; };
 		4E26BDA3D85ADA347E71A241 /* AppSessionTestSupport+Helpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppSessionTestSupport+Helpers.swift"; sourceTree = "<group>"; };
 		4E537303C3401BCF6BC22940 /* AppSessionContactAndRelayTests+Sessions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppSessionContactAndRelayTests+Sessions.swift"; sourceTree = "<group>"; };
@@ -737,6 +739,7 @@
 				018EF7FE363C253BA3B1E859 /* SocialPostParserTests+TikTok.swift */,
 				CA40A356B1060651B3B3C3CC /* SocialVideoExtractionServiceTests.swift */,
 				AFAAB973AAAA0912756DDAF5 /* URLClassifierTests.swift */,
+				4A75F6B611B4862EFCC27D49 /* VideoCacheTests.swift */,
 			);
 			path = linkstrTests;
 			sourceTree = "<group>";
@@ -1065,6 +1068,7 @@
 				E7EF6C2EE6939C035928BC94 /* SocialPostParserTests.swift in Sources */,
 				8D290EFA71ECBCEBE812B8F9 /* SocialVideoExtractionServiceTests.swift in Sources */,
 				2C760A1729F3DB232FFA2B38 /* URLClassifierTests.swift in Sources */,
+				A2EBEAFA19670C8B8AE4868E /* VideoCacheTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

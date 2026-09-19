@@ -47,6 +47,30 @@ final class AsyncRequestCacheTests: XCTestCase {
     XCTAssertEqual(retainedValue, 2)
     XCTAssertEqual(reloadedValue, 4)
   }
+
+  func testInvalidationDiscardsInFlightResultWithoutReplacingFreshValue() async throws {
+    let cache = AsyncRequestCache<String, Int>(maximumCachedValueCount: 2)
+    let loader = ControlledAsyncLoader(value: 1)
+    let staleRequest = Task {
+      await cache.value(for: "same") { await loader.load() }
+    }
+    let startDeadline = Date(timeIntervalSinceNow: 1)
+    while await loader.currentCallCount() == 0, Date() < startDeadline {
+      try await Task.sleep(nanoseconds: 1_000_000)
+    }
+    let callCount = await loader.currentCallCount()
+    XCTAssertEqual(callCount, 1)
+
+    await cache.invalidate("same")
+    let freshValue = await cache.value(for: "same") { 2 }
+    await loader.finish()
+    let staleValue = await staleRequest.value
+    let cachedValue = await cache.value(for: "same") { 3 }
+
+    XCTAssertNil(staleValue)
+    XCTAssertEqual(freshValue, 2)
+    XCTAssertEqual(cachedValue, 2)
+  }
 }
 
 private actor ControlledAsyncLoader {
