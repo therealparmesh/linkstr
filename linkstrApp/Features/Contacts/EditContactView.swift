@@ -28,7 +28,7 @@ struct EditContactView: View {
           ) {
             HStack(spacing: LinkstrTheme.rowSpacing) {
               LinkstrContactAvatar(name: identity.displayName, size: 54)
-              LinkstrContactIdentityView(identity: identity, lineLimit: 2)
+              LinkstrContactIdentityView(identity: identity, nameLineLimit: 2)
             }
           }
 
@@ -57,9 +57,10 @@ struct EditContactView: View {
 
           LinkstrInsetSection(title: "public key (npub)") {
             Text(contact.npub)
+              .typesettingLanguage(.init(languageCode: .unavailable))
               .font(LinkstrTheme.font(.footnote))
               .foregroundStyle(LinkstrTheme.textSecondary)
-              .lineLimit(1)
+              .fixedSize(horizontal: false, vertical: true)
               .textSelection(.enabled)
               .linkstrInputField()
           }

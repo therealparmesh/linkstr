@@ -25,7 +25,7 @@ Your active account is stored in the device keychain. If you use iCloud Keychain
 4. Optionally save a private alias.
 5. Tap the top-right add icon, then confirm **add contact**.
 
-Adding the same contact through this form updates the saved alias instead of creating a duplicate. The top-right button changes to **save contact**, and confirmation says whether the alias will be saved or cleared. To edit an alias later, tap the contact row.
+Adding the same contact through this form updates the saved alias instead of creating a duplicate. The top-right button changes to **save contact**, and confirmation says whether the alias will be saved or cleared. To edit an alias later, tap the contact row. Public keys wrap in full in contact and member lists, the preview, and contact detail. Long-press a contact or member-picker row to copy its public key; current session members have the same action in their **…** menu. In the preview and contact detail, you can also long-press the key text to select and copy it.
 
 Contacts keep their last fetched public Nostr name on this device, so names remain available after reopening or offline. Names refresh from relays when available; your private alias always takes priority.
 

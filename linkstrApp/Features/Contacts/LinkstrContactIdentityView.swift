@@ -9,28 +9,31 @@ struct LinkstrContactIdentityView: View {
   var aliasedNostrNameColor: Color = LinkstrTheme.accentPink
   var npubColor: Color = LinkstrTheme.textSecondary
   var spacing: CGFloat = LinkstrTheme.metaSpacing
-  var lineLimit: Int = 1
+  var nameLineLimit: Int = 1
 
   var body: some View {
     VStack(alignment: .leading, spacing: spacing) {
-      Text(identity.displayName)
-        .font(primaryFont)
-        .foregroundStyle(primaryColor)
-        .lineLimit(lineLimit)
+      if identity.showsNPubLine {
+        Text(identity.displayName)
+          .font(primaryFont)
+          .foregroundStyle(primaryColor)
+          .lineLimit(nameLineLimit)
+      }
 
       if let aliasedNostrName = identity.aliasedChosenName {
         Text(aliasedNostrName)
           .font(secondaryFont)
           .foregroundStyle(aliasedNostrNameColor.opacity(0.88))
-          .lineLimit(lineLimit)
+          .lineLimit(nameLineLimit)
       }
 
-      if identity.showsNPubLine {
-        Text(identity.npub)
-          .font(npubFont)
-          .foregroundStyle(npubColor)
-          .lineLimit(lineLimit)
-      }
+      Text(identity.npub)
+        .typesettingLanguage(.init(languageCode: .unavailable))
+        .font(identity.showsNPubLine ? npubFont : primaryFont)
+        .foregroundStyle(identity.showsNPubLine ? npubColor : primaryColor)
+        .lineLimit(nil)
+        .fixedSize(horizontal: false, vertical: true)
+        .textSelection(.enabled)
     }
   }
 }

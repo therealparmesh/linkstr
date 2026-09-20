@@ -121,6 +121,7 @@ struct YouView: View {
       footer: "copy this public key to add this account elsewhere."
     ) {
       Text(npub)
+        .typesettingLanguage(.init(languageCode: .unavailable))
         .font(LinkstrTheme.font(.footnote))
         .foregroundStyle(LinkstrTheme.textSecondary)
         .textSelection(.enabled)

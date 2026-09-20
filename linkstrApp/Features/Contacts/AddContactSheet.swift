@@ -67,7 +67,7 @@ struct AddContactSheet: View {
                   LinkstrContactIdentityView(
                     identity: previewIdentity,
                     primaryFont: LinkstrTheme.font(.subheadline, weight: .medium),
-                    lineLimit: 2
+                    nameLineLimit: 2
                   )
                   .frame(maxWidth: .infinity, alignment: .leading)
                 }

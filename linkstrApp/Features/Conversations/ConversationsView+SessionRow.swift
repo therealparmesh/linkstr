@@ -103,6 +103,14 @@ struct NewSessionSheet: View {
                         .contentShape(Rectangle())
                       }
                       .buttonStyle(.plain)
+                      .contextMenu {
+                        Button("copy public key", systemImage: "doc.on.doc") {
+                          UIPasteboard.general.string = identity.npub
+                        }
+                      }
+                      .accessibilityAction(named: Text("copy public key")) {
+                        UIPasteboard.general.string = identity.npub
+                      }
                       .accessibilityValue(selectedNPubs.contains(contact.npub) ? "selected" : "not selected")
                       .accessibilityHint(
                         selectedNPubs.contains(contact.npub) ? "remove from session" : "add to session"
