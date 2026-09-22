@@ -382,9 +382,9 @@ Embedded web playback allows provider-element fullscreen when supported.
 - The top-left toolbar button switches between **contacts** and **added you**, matching the archived-session control. The heading and search reflect the selected list. The top-right button adds a contact manually.
 - The **added you** list shows public follows found on configured relays. Tap the add-contact button beside someone to add them; saved contacts show a checkmark. Long-press a row to **copy public key**. Results are cached per account and can be refreshed or paged with **load more**. Discovery checks authors' latest lists for unfollows and labels offline or partial results.
 - Public keys wrap in full in contact and member rows, the add-contact preview, and contact detail. Row menus copy the complete key; preview and detail text also support native selection and copying.
-- Tap a contact row to edit it. Session-member rows use **…** for **copy public key** and **add contact** when needed. Contact additions require confirmation and preserve existing aliases, session membership, and unsaved session edits.
+- Tap a contact row to edit it. Session-member rows show an add-contact button only for people outside your contacts. Contact additions require confirmation and preserve existing aliases, session membership, and unsaved session edits.
 - The **add members** section expands to show contacts who are not in the session. Membership changes require confirmation and take effect when the creator saves.
-- Long-press a contact row for **copy public key** and **remove contact**, or a session-member row for creator-only **remove from session**. Both actions also have accessibility actions. Contact detail retains its **remove contact** button. Contact removal requires confirmation and relay acceptance; shared sessions and posts remain available.
+- Long-press a contact row for **copy public key** and **remove contact**, or a session-member row for **copy public key** and creator-only **remove from session**. Both actions also have accessibility actions. Contact detail retains its **remove contact** button. Contact removal requires confirmation and relay acceptance; shared sessions and posts remain available.
 
 See [contact synchronization](docs/CONTACTS.md) for persistence and relay behavior.
 

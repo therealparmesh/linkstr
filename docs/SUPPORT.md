@@ -25,7 +25,7 @@ Your active account is stored in the device keychain. If you use iCloud Keychain
 4. Optionally save a private alias.
 5. Tap the top-right add icon, then confirm **add contact**.
 
-Adding the same contact through this form updates the saved alias instead of creating a duplicate. The top-right button changes to **save contact**, and confirmation says whether the alias will be saved or cleared. To edit an alias later, tap the contact row. Public keys wrap in full in contact and member lists, the preview, and contact detail. Long-press a contact or member-picker row to copy its public key; current session members have the same action in their **…** menu. In the preview and contact detail, you can also long-press the key text to select and copy it.
+Adding the same contact through this form updates the saved alias instead of creating a duplicate. The top-right button changes to **save contact**, and confirmation says whether the alias will be saved or cleared. To edit an alias later, tap the contact row. Public keys wrap in full in contact and member lists, the preview, and contact detail. Long-press a contact or session-member row to copy its public key. In the preview and contact detail, you can also long-press the key text to select and copy it.
 
 Contacts keep their last fetched public Nostr name on this device, so names remain available after reopening or offline. Names refresh from relays when available; your private alias always takes priority.
 
@@ -41,7 +41,7 @@ Long-press a row to **copy public key**. Tap the toolbar button again to return 
 
 The list shows public Nostr follows found on your configured relays, including follows made in other Nostr apps. Pull to refresh or use **load more** when available. Saved results remain visible offline. The status tells you when some results could not be checked, and people may be missing if their follow lists are unavailable on your relays.
 
-You can also open a member's **…** menu and choose **add contact**, then confirm. Any member can use it, and adding a contact leaves session membership and unsaved session edits unchanged.
+You can also tap the add-contact button beside a member who is not in your contacts, then confirm. Any member can use it, and adding a contact leaves session membership and unsaved session edits unchanged.
 
 ### Create a session
 
@@ -88,7 +88,7 @@ The bottom footer shows validation and relay status only. The keyboard return ke
 | Rename a session               | Open a session, tap the members button, and edit the session name.                                                                                                                              |
 | Delete a session               | Open a session, tap the members button, and use **delete session** in the manage sheet.                                                                                                         |
 | Add or remove members          | Open session members. Expand **choose from contacts** to add someone, or long-press their row to **remove from session**. Confirm the change, then save.                                        |
-| Copy a member's public key     | Open a session, tap the members button, then use a member's **…** menu or long-press their row and choose **copy public key**.                                                                  |
+| Copy a member's public key     | Open a session, tap the members button, then long-press a member's row and choose **copy public key**.                                                                                          |
 
 Only the session creator can rename sessions, delete them, or change session membership.
 

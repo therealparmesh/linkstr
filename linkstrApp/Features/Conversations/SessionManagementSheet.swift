@@ -99,28 +99,22 @@ struct SessionManagementSheet: View {
                         identity: identity,
                         primaryFont: LinkstrTheme.font(.footnote, weight: .medium)
                       )
+                      .frame(maxWidth: .infinity, alignment: .leading)
 
-                      Spacer()
-
-                      Menu {
-                        if member.contact == nil {
-                          Button("add contact", systemImage: "person.badge.plus") {
-                            pendingContactAddition = member
-                          }
+                      if member.contact == nil {
+                        Button { pendingContactAddition = member } label: {
+                          Image(systemName: "person.badge.plus")
+                            .frame(
+                              width: LinkstrTheme.minimumInteractiveDimension,
+                              height: LinkstrTheme.minimumInteractiveDimension
+                            )
+                            .contentShape(Rectangle())
                         }
-                        Button("copy public key", systemImage: "doc.on.doc") {
-                          UIPasteboard.general.string = identity.npub
-                        }
-                      } label: {
-                        Image(systemName: "ellipsis")
-                          .frame(
-                            width: LinkstrTheme.minimumInteractiveDimension,
-                            height: LinkstrTheme.minimumInteractiveDimension
-                          )
+                        .buttonStyle(.plain)
+                        .foregroundStyle(LinkstrTheme.accent)
+                        .accessibilityLabel("add \(identity.displayName) to contacts")
+                        .disabled(isSaving || isDeletingSession)
                       }
-                      .tint(LinkstrTheme.textSecondary)
-                      .accessibilityLabel("member actions for \(identity.displayName)")
-                      .disabled(isSaving || isDeletingSession)
                     }
                     .padding(.vertical, LinkstrTheme.listRowVerticalPadding)
                     .contentShape(Rectangle())
