@@ -16,11 +16,10 @@ extension ContactDiscovery {
     let id = "linkstr-contacts-\(UUID().uuidString.lowercased())"
     queries[id] = Query(authors: authors, expectedRelays: relays, limit: limit)
     isLoading = true
-    status = "checking who added you..."
     _ = pool.subscribe(with: filter, subscriptionId: id)
     timeouts[id] = Task { [weak self] in
       do { try await Task.sleep(nanoseconds: 10_000_000_000) } catch { return }
-      self?.finishQuery(id, timedOut: true)
+      self?.finishQuery(id)
     }
     return id
   }
@@ -50,7 +49,6 @@ extension ContactDiscovery {
       // Count valid events even when their saved state is unchanged, so pagination can advance.
       guard query.events.contains(event.id)
         || query.events.count < query.limit * max(1, query.expectedRelays.count) else {
-        hadPartialResults = true
         return
       }
       query.events.insert(event.id)
@@ -65,8 +63,7 @@ extension ContactDiscovery {
           followedPubkeys: event.referencedPubkeys, createdAt: event.createdDate
         ), ownerPubkey: owner)
     } catch {
-      hadPartialResults = true
-      status = "couldn't save all results. try again."
+      // Keep discovery running; a refresh can retry the failed save.
     }
     if isDiscovery, !verifiedAuthors.contains(event.pubkey),
       !queries.values.contains(where: { $0.authors?.contains(event.pubkey) == true }) {
@@ -75,29 +72,22 @@ extension ContactDiscovery {
     }
   }
 
-  func complete(relayURL: String, subscriptionID: String, failed: Bool = false) {
-    if failed, subscriptionID == liveSubscriptionID || subscriptionID == discoveryLiveSubscriptionID {
-      hadPartialResults = true
-      status = "some results couldn't be checked. pull to refresh."
-    }
+  func complete(relayURL: String, subscriptionID: String) {
     guard var query = queries[subscriptionID], query.expectedRelays.contains(relayURL) else {
       return
     }
     query.completedRelays.insert(relayURL)
-    query.failed = query.failed || failed
     queries[subscriptionID] = query
     if query.completedRelays.isSuperset(of: query.expectedRelays) { finishQuery(subscriptionID) }
   }
 
   func relayDisconnected(_ relayURL: String) {
-    for id in Array(queries.keys) { complete(relayURL: relayURL, subscriptionID: id, failed: true) }
-    if connectedRelays.isEmpty { status = "offline. showing saved results." }
+    for id in Array(queries.keys) { complete(relayURL: relayURL, subscriptionID: id) }
   }
 
-  func finishQuery(_ id: String, timedOut: Bool = false) {
+  func finishQuery(_ id: String) {
     guard let query = queries.removeValue(forKey: id) else { return }
     timeouts.removeValue(forKey: id)?.cancel()
-    hadPartialResults = hadPartialResults || timedOut || query.failed
     if let authors = query.authors {
       pool?.closeSubscription(with: id)
       verifiedAuthors.formUnion(authors)
@@ -109,7 +99,6 @@ extension ContactDiscovery {
             pageLimit *= 2
           } else {
             canLoadMore = false
-            hadPartialResults = true
           }
         } else {
           cursor = oldest
@@ -121,12 +110,6 @@ extension ContactDiscovery {
     }
     startAuthorQueries()
     isLoading = !queries.isEmpty
-    if !isLoading {
-      status =
-        hadPartialResults
-        ? "some results couldn't be checked. pull to refresh."
-        : "public follows found on your relays."
-    }
   }
 
   func watch(_ pubkey: String, visible: Bool) {

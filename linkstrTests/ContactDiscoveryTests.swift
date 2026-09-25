@@ -83,7 +83,7 @@ final class ContactDiscoveryTests: XCTestCase {
     }
   }
 
-  func testFullTimestampPageNeverSkipsTheBoundaryAndReportsItsLimit() throws {
+  func testFullTimestampPageNeverSkipsTheBoundaryAndStopsAtItsLimit() throws {
     let discovery = try makeDiscovery()
     for limit in [200, 200, 400, 800, 1_600] {
       discovery.queries["page"] = ContactDiscovery.Query(
@@ -94,7 +94,6 @@ final class ContactDiscoveryTests: XCTestCase {
       XCTAssertEqual(discovery.cursor, 100)
     }
     XCTAssertFalse(discovery.canLoadMore)
-    XCTAssertTrue(discovery.hadPartialResults)
   }
 
   func testQueryIgnoresUnexpectedRelaysAndDoesNotTreatDuplicatesAsOverflow() throws {
@@ -113,7 +112,6 @@ final class ContactDiscoveryTests: XCTestCase {
     discovery.receive(follow, subscriptionID: "page", relayURL: "expected")
     XCTAssertEqual(try discovery.records(ownerPubkey: owner).count, 1)
     XCTAssertEqual(discovery.queries["page"]?.events.count, 1)
-    XCTAssertFalse(discovery.hadPartialResults)
   }
 
   private func makeDiscovery() throws -> ContactDiscovery {

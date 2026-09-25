@@ -22,7 +22,10 @@ struct AddedYouView: View {
     _relationships = Query(
       filter: #Predicate<FollowRelationshipEntity> {
         $0.ownerPubkey == ownerPubkey && $0.followsOwner
-      }, sort: [SortDescriptor(\FollowRelationshipEntity.followerPubkey)])
+      }, sort: [
+        SortDescriptor(\FollowRelationshipEntity.updatedAt, order: .reverse),
+        SortDescriptor(\FollowRelationshipEntity.followerPubkey)
+      ])
   }
 
   private var rows: [ContactPresentation] {
@@ -36,7 +39,7 @@ struct AddedYouView: View {
           ?? session.resolvedIdentity(for: key, contacts: []),
         contact: index[key]
       )
-    }.sorted(by: ContactPresentation.ordered)
+    }
   }
 
   var body: some View {
@@ -46,12 +49,6 @@ struct AddedYouView: View {
       VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
         LinkstrScreenTitle(title: "added you")
         LinkstrSearchField(prompt: "search people", text: $query)
-        HStack {
-          if discovery.isLoading { ProgressView() }
-          Text(discovery.status)
-            .font(LinkstrTheme.font(.caption))
-            .foregroundStyle(LinkstrTheme.textSecondary)
-        }
         if visibleRows.isEmpty, hasSearch {
           LinkstrCenteredEmptyStateView(
             title: "no people found",

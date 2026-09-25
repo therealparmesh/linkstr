@@ -10,11 +10,9 @@ final class ContactDiscovery: ObservableObject, EventVerifying {
     var completedRelays = Set<String>()
     var events = Set<String>()
     var oldestTimestamp: Int?
-    var failed = false
     let limit: Int
   }
 
-  @Published var status = "connect to relays to see who added you."
   @Published var isLoading = false
   @Published var canLoadMore = false
   let context: ModelContext
@@ -32,7 +30,6 @@ final class ContactDiscovery: ObservableObject, EventVerifying {
   var discoveryLiveSubscriptionID: String?
   var cursor: Int?
   var pageLimit = 200
-  var hadPartialResults = false
 
   init(modelContext: ModelContext) { context = modelContext }
 
@@ -57,7 +54,6 @@ final class ContactDiscovery: ObservableObject, EventVerifying {
   func disconnect() {
     closeSubscriptions()
     pool = nil
-    status = "offline. showing saved results."
   }
 
   func reset() {
@@ -70,18 +66,15 @@ final class ContactDiscovery: ObservableObject, EventVerifying {
     guard isVisible, let owner else { return }
     cursor = nil
     pageLimit = 200
-    hadPartialResults = false
     canLoadMore = false
     verifiedAuthors.removeAll()
     do {
       pendingAuthors = Set(
         try records(ownerPubkey: owner).filter(\.followsOwner).map(\.followerPubkey))
     } catch {
-      status = "couldn't load saved results. try again."
       return
     }
     guard !connectedRelays.isEmpty else {
-      status = "connect to relays to see who added you."
       return
     }
     if let filter = Filter(kinds: [3], pubkeys: [owner], limit: 0) {

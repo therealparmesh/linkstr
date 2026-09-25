@@ -250,7 +250,7 @@ extension NostrDMService {
       completeProfileQuery(relayURL: relayURL, subscriptionID: eoseSubscriptionID)
     }
     if let closedSubscriptionID {
-      contactDiscovery?.complete(relayURL: relayURL, subscriptionID: closedSubscriptionID, failed: true)
+      contactDiscovery?.complete(relayURL: relayURL, subscriptionID: closedSubscriptionID)
       completeProfileQuery(relayURL: relayURL, subscriptionID: closedSubscriptionID, failed: true)
     }
     if let readOnlyMessage {
