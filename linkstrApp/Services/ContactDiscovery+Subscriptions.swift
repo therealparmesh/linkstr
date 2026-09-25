@@ -12,14 +12,17 @@ extension ContactDiscovery {
 
   func beginQuery(filter: Filter, authors: Set<String>?, limit: Int) -> String? {
     let relays = connectedRelays
-    guard let pool, !relays.isEmpty else { return nil }
+    guard let pool, !relays.isEmpty else {
+      loadState = .unavailable
+      return nil
+    }
     let id = "linkstr-contacts-\(UUID().uuidString.lowercased())"
     queries[id] = Query(authors: authors, expectedRelays: relays, limit: limit)
-    isLoading = true
+    loadState = .loading
     _ = pool.subscribe(with: filter, subscriptionId: id)
     timeouts[id] = Task { [weak self] in
       do { try await Task.sleep(nanoseconds: 10_000_000_000) } catch { return }
-      self?.finishQuery(id)
+      self?.finishQuery(id, failed: true)
     }
     return id
   }
@@ -63,7 +66,8 @@ extension ContactDiscovery {
           followedPubkeys: event.referencedPubkeys, createdAt: event.createdDate
         ), ownerPubkey: owner)
     } catch {
-      // Keep discovery running; a refresh can retry the failed save.
+      queryFailed = true
+      if !isLoading { loadState = .unavailable }
     }
     if isDiscovery, !verifiedAuthors.contains(event.pubkey),
       !queries.values.contains(where: { $0.authors?.contains(event.pubkey) == true }) {
@@ -72,33 +76,38 @@ extension ContactDiscovery {
     }
   }
 
-  func complete(relayURL: String, subscriptionID: String) {
-    guard var query = queries[subscriptionID], query.expectedRelays.contains(relayURL) else {
+  func complete(relayURL: String, subscriptionID: String, failed: Bool = false) {
+    guard var query = queries[subscriptionID], query.expectedRelays.contains(relayURL),
+      !query.completedRelays.contains(relayURL) else {
       return
     }
+    query.failed = query.failed || failed
     query.completedRelays.insert(relayURL)
     queries[subscriptionID] = query
     if query.completedRelays.isSuperset(of: query.expectedRelays) { finishQuery(subscriptionID) }
   }
 
   func relayDisconnected(_ relayURL: String) {
-    for id in Array(queries.keys) { complete(relayURL: relayURL, subscriptionID: id) }
+    for id in Array(queries.keys) { complete(relayURL: relayURL, subscriptionID: id, failed: true) }
   }
 
-  func finishQuery(_ id: String) {
+  func finishQuery(_ id: String, failed: Bool = false) {
     guard let query = queries.removeValue(forKey: id) else { return }
+    let failed = failed || query.failed
+    queryFailed = queryFailed || failed
     timeouts.removeValue(forKey: id)?.cancel()
     if let authors = query.authors {
       pool?.closeSubscription(with: id)
-      verifiedAuthors.formUnion(authors)
+      if !failed { verifiedAuthors.formUnion(authors) }
     } else {
-      canLoadMore = query.events.count >= query.limit
+      canLoadMore = !failed && query.events.count >= query.limit
       if canLoadMore, let oldest = query.oldestTimestamp {
         if cursor == oldest {
           if pageLimit < 1_600 {
             pageLimit *= 2
           } else {
             canLoadMore = false
+            queryFailed = true
           }
         } else {
           cursor = oldest
@@ -109,7 +118,7 @@ extension ContactDiscovery {
       discoverySubscriptionID = nil
     }
     startAuthorQueries()
-    isLoading = !queries.isEmpty
+    loadState = queries.isEmpty ? (queryFailed ? .unavailable : .ready) : .loading
   }
 
   func watch(_ pubkey: String, visible: Bool) {

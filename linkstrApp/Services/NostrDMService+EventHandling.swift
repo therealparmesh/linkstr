@@ -93,7 +93,8 @@ extension NostrDMService {
 
   private func handleFollowListEvent(_ event: NostrEvent) {
     guard let followListEvent = event as? FollowListEvent else { return }
-    guard rememberProcessedEventIDIfNeeded(followListEvent.id) else { return }
+    guard processedFollowListEventID != followListEvent.id else { return }
+    processedFollowListEventID = followListEvent.id
     let followedPubkeys = followListEvent.followedPubkeys.compactMap { followed in
       NostrValueNormalizer.normalizedPubkeyHex(followed)
     }
@@ -195,12 +196,14 @@ extension NostrDMService {
     case .connecting:
       onRelayStatus?(relayURL, .connecting, nil)
     case .notConnected:
+      completeFollowListQuery(relayURL: relayURL, subscriptionID: followListSubscriptionID, failed: true)
       contactDiscovery?.relayDisconnected(relayURL)
       pruneRelayFromBackfillWaitlists(relayURL: relayURL)
       pruneRelayFromPublishWaitlists(relayURL: relayURL)
       onRelayStatus?(relayURL, .disconnected, nil)
       scheduleReconnect()
     case .error(let error):
+      completeFollowListQuery(relayURL: relayURL, subscriptionID: followListSubscriptionID, failed: true)
       contactDiscovery?.relayDisconnected(relayURL)
       pruneRelayFromBackfillWaitlists(relayURL: relayURL)
       pruneRelayFromPublishWaitlists(relayURL: relayURL)
@@ -246,11 +249,13 @@ extension NostrDMService {
       completeBackfillPage(subscriptionID: closedSubscriptionID)
     }
     if let eoseSubscriptionID {
+      completeFollowListQuery(relayURL: relayURL, subscriptionID: eoseSubscriptionID)
       contactDiscovery?.complete(relayURL: relayURL, subscriptionID: eoseSubscriptionID)
       completeProfileQuery(relayURL: relayURL, subscriptionID: eoseSubscriptionID)
     }
     if let closedSubscriptionID {
-      contactDiscovery?.complete(relayURL: relayURL, subscriptionID: closedSubscriptionID)
+      completeFollowListQuery(relayURL: relayURL, subscriptionID: closedSubscriptionID, failed: true)
+      contactDiscovery?.complete(relayURL: relayURL, subscriptionID: closedSubscriptionID, failed: true)
       completeProfileQuery(relayURL: relayURL, subscriptionID: closedSubscriptionID, failed: true)
     }
     if let readOnlyMessage {

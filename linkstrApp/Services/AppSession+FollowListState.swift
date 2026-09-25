@@ -61,6 +61,11 @@ extension AppSession {
     do {
       try applyFollowListState(incoming)
     } catch {
+      nostrService.followListQueryFailed = true
+      nostrService.processedFollowListEventID = nil
+      if nostrService.contactListLoadState != .loading {
+        nostrService.contactListLoadState = .unavailable
+      }
       report(error: error)
     }
   }

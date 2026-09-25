@@ -4,6 +4,7 @@ import UIKit
 
 struct ContactsView: View {
   @EnvironmentObject private var session: AppSession
+  @ObservedObject private var nostrService: NostrDMService
   let addContact: () -> Void
   let ownerPubkey: String
   @Binding var isShowingAddedYou: Bool
@@ -17,9 +18,10 @@ struct ContactsView: View {
   @State private var query = ""
 
   init(
-    ownerPubkey: String, isShowingAddedYou: Binding<Bool>,
+    ownerPubkey: String, isShowingAddedYou: Binding<Bool>, nostrService: NostrDMService,
     addContact: @escaping () -> Void
   ) {
+    self.nostrService = nostrService
     self.ownerPubkey = ownerPubkey
     self._isShowingAddedYou = isShowingAddedYou
     self.addContact = addContact
@@ -76,14 +78,20 @@ struct ContactsView: View {
         LinkstrScreenTitle(title: "contacts")
           .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
           .padding(.top, LinkstrTheme.screenTopPadding)
-        LinkstrCenteredEmptyStateView(
-          title: "no contacts",
-          systemImage: "person.2.slash",
-          description: "add a contact. invite them when you start a session.",
-          actionTitle: "add contact",
-          actionSystemImage: "person.badge.plus",
-          action: addContact
-        )
+        if nostrService.contactListLoadState == .unavailable {
+          retryState
+        } else if nostrService.contactListLoadState == .ready {
+          LinkstrCenteredEmptyStateView(
+            title: "no contacts",
+            systemImage: "person.2.slash",
+            description: "add a contact. invite them when you start a session.",
+            actionTitle: "add contact",
+            actionSystemImage: "person.badge.plus",
+            action: addContact
+          )
+        } else {
+          Spacer()
+        }
       }
       .linkstrReadableContent()
     } else {
@@ -93,7 +101,10 @@ struct ContactsView: View {
 
           LinkstrSearchField(prompt: "search contacts", text: $query)
 
-          if visibleContacts.isEmpty {
+          if visibleContacts.isEmpty, nostrService.contactListLoadState == .unavailable {
+            retryState
+              .frame(maxWidth: .infinity, minHeight: 220)
+          } else if visibleContacts.isEmpty, nostrService.contactListLoadState == .ready {
             LinkstrCenteredEmptyStateView(
               title: "no contacts found",
               systemImage: "magnifyingglass",
@@ -137,6 +148,19 @@ struct ContactsView: View {
     }
   }
 
+  private var retryState: some View {
+    LinkstrCenteredEmptyStateView(
+      title: "couldn't load contacts",
+      systemImage: "wifi.exclamationmark",
+      description: "check your connection and try again.",
+      actionTitle: "try again",
+      actionSystemImage: "arrow.clockwise",
+      action: {
+        session.startNostrIfPossible()
+        nostrService.refreshFollowList()
+      }
+    )
+  }
 }
 
 private struct ContactRowView: View {

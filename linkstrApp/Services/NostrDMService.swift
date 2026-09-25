@@ -100,7 +100,12 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating, EventVeri
 
   let recipientSubscriptionID = "linkstr-giftwrap-recipient"
   let authorSubscriptionID = "linkstr-giftwrap-author"
-  private let followListSubscriptionID = "linkstr-follow-list-self"
+  @Published var contactListLoadState: ContactListLoadState = .loading
+  var followListSubscriptionID = "linkstr-follow-list-self-\(UUID().uuidString.lowercased())"
+  var pendingFollowListRelays = Set<String>()
+  var followListQueryFailed = false
+  var processedFollowListEventID: String?
+  var followListTimeoutTask: Task<Void, Never>?
   let backfillPageSize = 500
   let processedEventIDLimit = 10_000
   var activeBackfillStates: [String: BackfillState] = [:]
@@ -155,6 +160,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating, EventVeri
 
     let validRelayURLs = reportInvalidRelays(relayURLs: relayURLs, onRelayStatus: onRelayStatus)
     guard !validRelayURLs.isEmpty else {
+      contactListLoadState = .unavailable
       onRelayStatus(
         relayURLs.first ?? "relays",
         .failed,
@@ -163,6 +169,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating, EventVeri
       return
     }
 
+    beginFollowListQuery(relayURLs: Set(validRelayURLs.map(\.absoluteString)))
     configureRelayPool(
       validRelayURLs: validRelayURLs, keypair: keypair, relayURLs: relayURLs,
       onRelayStatus: onRelayStatus)
@@ -252,6 +259,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating, EventVeri
       )
 
     } catch {
+      finishFollowListQuery(unavailable: true)
       let message = "failed to start relay pool: \(error.localizedDescription)"
       for relayURL in relayURLs {
         onRelayStatus(relayURL, .failed, message)
@@ -262,6 +270,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating, EventVeri
   // MARK: - Lifecycle
 
   func stop() {
+    finishFollowListQuery(unavailable: true)
     contactDiscovery?.disconnect()
     profileQueryTasks.values.forEach { $0.cancel() }
     profileQueryTasks.removeAll()
@@ -299,6 +308,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating, EventVeri
     }
     onIncoming = nil
     onFollowList = nil
+    processedFollowListEventID = nil
     onProfileMetadata = nil
     onPrivatePreference = nil
     onPrivatePreferencesReady = nil
@@ -308,6 +318,11 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating, EventVeri
     keypair = nil
     configuredRelayURLs.removeAll()
   }
+
+}
+
+extension NostrDMService {
+  // MARK: - Connection management
 
   func scheduleReconnect() {
     guard shouldMaintainConnection else { return }
@@ -323,10 +338,12 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating, EventVeri
     }
   }
 
-}
-
-extension NostrDMService {
-  // MARK: - Connection management
+  func refreshFollowList() {
+    guard let relayPool, let followListFilter else { return }
+    beginFollowListQuery(relayURLs: Set(relayPool.relays.map { $0.url.absoluteString }))
+    relayPool.connect()
+    _ = relayPool.subscribe(with: followListFilter, subscriptionId: followListSubscriptionID)
+  }
 
   func installSubscriptions() {
     guard let relayPool else { return }
@@ -337,6 +354,9 @@ extension NostrDMService {
       _ = relayPool.subscribe(with: authorFilter, subscriptionId: authorSubscriptionID)
     }
     if let followListFilter {
+      if contactListLoadState != .loading {
+        beginFollowListQuery(relayURLs: connectedFollowListRelays)
+      }
       _ = relayPool.subscribe(with: followListFilter, subscriptionId: followListSubscriptionID)
     }
     if let keypair,

@@ -209,6 +209,7 @@ struct MainTabView: View {
       ContactsView(
         ownerPubkey: ownerPubkey,
         isShowingAddedYou: $isShowingAddedYou,
+        nostrService: session.nostrService,
         addContact: { isPresentingAddContact = true }
       )
     case .you:

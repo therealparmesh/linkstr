@@ -114,6 +114,25 @@ final class ContactDiscoveryTests: XCTestCase {
     XCTAssertEqual(discovery.queries["page"]?.events.count, 1)
   }
 
+  func testCompletionWaitsForExpectedRelaysAndFailureDoesNotAdvancePagination() throws {
+    let discovery = try makeDiscovery()
+    discovery.loadState = .loading
+    discovery.queries["page"] = ContactDiscovery.Query(
+      authors: nil, expectedRelays: ["first", "second"], events: ["event"],
+      oldestTimestamp: 100, limit: 1)
+    discovery.complete(relayURL: "unknown", subscriptionID: "page")
+    discovery.complete(relayURL: "first", subscriptionID: "obsolete")
+    discovery.complete(relayURL: "first", subscriptionID: "page")
+    discovery.complete(relayURL: "first", subscriptionID: "page", failed: true)
+    XCTAssertEqual(discovery.loadState, .loading)
+    discovery.relayDisconnected("second")
+    XCTAssertEqual(discovery.loadState, .unavailable)
+    XCTAssertNil(discovery.cursor)
+    XCTAssertFalse(discovery.canLoadMore)
+    discovery.complete(relayURL: "second", subscriptionID: "page")
+    XCTAssertEqual(discovery.loadState, .unavailable)
+  }
+
   private func makeDiscovery() throws -> ContactDiscovery {
     let schema = Schema([FollowRelationshipEntity.self])
     let container = try ModelContainer(

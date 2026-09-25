@@ -211,7 +211,7 @@ final class AppSession: ObservableObject {
   let messageStore: SessionMessageStore
   let accountStateStore: AccountStateStore
   let testingOverrides: TestingOverrides
-  var nostrService: NostrDMService
+  @Published var nostrService: NostrDMService
   let noEnabledRelaysMessage =
     "no relays are enabled. enable at least one relay in settings."
   let relayOfflineMessage = "you're offline. waiting for a relay connection."

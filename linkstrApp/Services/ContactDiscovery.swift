@@ -8,12 +8,15 @@ final class ContactDiscovery: ObservableObject, EventVerifying {
     let authors: Set<String>?
     let expectedRelays: Set<String>
     var completedRelays = Set<String>()
+    var failed = false
     var events = Set<String>()
     var oldestTimestamp: Int?
     let limit: Int
   }
 
-  @Published var isLoading = false
+  @Published var loadState: ContactListLoadState = .loading
+  var isLoading: Bool { loadState == .loading }
+  var queryFailed = false
   @Published var canLoadMore = false
   let context: ModelContext
   var pool: RelayPool?
@@ -68,6 +71,7 @@ final class ContactDiscovery: ObservableObject, EventVerifying {
     pageLimit = 200
     canLoadMore = false
     verifiedAuthors.removeAll()
+    queryFailed = false
     do {
       pendingAuthors = Set(
         try records(ownerPubkey: owner).filter(\.followsOwner).map(\.followerPubkey))
@@ -89,6 +93,7 @@ final class ContactDiscovery: ObservableObject, EventVerifying {
 
   func loadMore() {
     guard canLoadMore, !isLoading else { return }
+    queryFailed = false
     beginDiscoveryPage()
   }
 
@@ -165,6 +170,6 @@ final class ContactDiscovery: ObservableObject, EventVerifying {
     discoverySubscriptionID = nil
     discoveryLiveSubscriptionID = nil
     liveSubscriptionID = nil
-    isLoading = false
+    loadState = .unavailable
   }
 }

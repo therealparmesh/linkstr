@@ -49,17 +49,30 @@ struct AddedYouView: View {
       VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
         LinkstrScreenTitle(title: "added you")
         LinkstrSearchField(prompt: "search people", text: $query)
-        if visibleRows.isEmpty, hasSearch {
+        if visibleRows.isEmpty, discovery.loadState == .unavailable {
           LinkstrCenteredEmptyStateView(
-            title: "no people found",
+            title: "couldn't load people",
+            systemImage: "wifi.exclamationmark",
+            description: "check your connection and try again.",
+            actionTitle: "try again",
+            actionSystemImage: "arrow.clockwise",
+            action: {
+              session.startNostrIfPossible()
+              discovery.refresh()
+            }
+          )
+          .frame(maxWidth: .infinity, minHeight: 220)
+        } else if visibleRows.isEmpty, hasSearch, discovery.loadState == .ready {
+          LinkstrCenteredEmptyStateView(
+            title: discovery.canLoadMore ? "no matches yet" : "no people found",
             systemImage: "magnifyingglass",
-            description: "try another search.",
+            description: discovery.canLoadMore ? "load more people or try another search." : "try another search.",
             actionTitle: "clear search",
             actionSystemImage: "xmark.circle",
             action: { query = "" }
           )
           .frame(maxWidth: .infinity, minHeight: 220)
-        } else if visibleRows.isEmpty, !discovery.isLoading {
+        } else if visibleRows.isEmpty, discovery.loadState == .ready {
           LinkstrCenteredEmptyStateView(
             title: "no one found yet",
             systemImage: "person.2.slash",

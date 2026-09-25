@@ -75,6 +75,7 @@ extension AppSession {
     do {
       relayURLs = try relayStore.fetchRelays().filter(\.isEnabled).map(\.url)
     } catch {
+      nostrService.finishFollowListQuery(unavailable: true)
       report(error: error)
       return
     }
@@ -84,6 +85,7 @@ extension AppSession {
     }
     if relayURLs.isEmpty {
       handleEmptyRelayURLs(forceRestart: forceRestart)
+      nostrService.finishFollowListQuery(unavailable: true)
       return
     }
     if composeError == noEnabledRelaysMessage {
@@ -141,10 +143,8 @@ extension AppSession {
   func makeFollowListHandler() -> (ReceivedFollowList) -> Void {
     let sourceService = nostrService
     return { [weak self, weak sourceService] followList in
-      Task { @MainActor in
-        guard let self, let sourceService, self.nostrService === sourceService else { return }
-        self.persistIncomingFollowList(followList)
-      }
+      guard let self, let sourceService, self.nostrService === sourceService else { return }
+      self.persistIncomingFollowList(followList)
     }
   }
 
@@ -167,6 +167,7 @@ extension AppSession {
   }
 
   private func handleNostrStartDisabled(forceRestart: Bool) {
+    nostrService.finishFollowListQuery(unavailable: true)
     if !forceRestart {
       clearRelayRuntimeTracking()
     }
