@@ -183,6 +183,7 @@ extension AppSession {
   }
 
   func resetRuntimeSessionState() {
+    preparedPrivatePreferenceOwner = nil
     let relayURLs = enabledRelayURLsSnapshot()
     stopRelayRuntime()
     primeRelayRuntimeStatusForFreshStart(relayURLs: relayURLs)

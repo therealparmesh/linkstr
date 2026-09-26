@@ -3,7 +3,8 @@ import NostrSDK
 import SwiftData
 
 @MainActor
-final class ContactDiscovery: ObservableObject, EventVerifying {
+final class ContactDiscovery: ObservableObject {
+  let eventDecoder = NostrEventDecoder()
   struct Query {
     let authors: Set<String>?
     let expectedRelays: Set<String>

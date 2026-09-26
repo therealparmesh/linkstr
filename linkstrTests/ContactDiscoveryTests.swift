@@ -8,7 +8,7 @@ import XCTest
 final class ContactDiscoveryTests: XCTestCase {
   private var container: ModelContainer?
 
-  func testSignedFollowUnfollowAndStaleReplayRemainAccountScoped() throws {
+  func testSignedFollowUnfollowAndStaleReplayRemainAccountScoped() async throws {
     let discovery = try makeDiscovery()
     let owner = try TestKeyMaterialFactory.makePubkeyHex()
     let otherOwner = try TestKeyMaterialFactory.makePubkeyHex()
@@ -19,12 +19,12 @@ final class ContactDiscoveryTests: XCTestCase {
     discovery.liveSubscriptionID = "author"
     discovery.visibleAuthors = [author.publicKey.hex]
     let follow = try event(author: author, keys: [owner], timestamp: 100)
-    discovery.receive(follow, subscriptionID: "discovery", relayURL: "relay")
+    await discovery.receive(follow, subscriptionID: "discovery", relayURL: "relay")
     XCTAssertEqual(try discovery.records(ownerPubkey: owner).map(\.followsOwner), [true])
 
     let unfollow = try event(author: author, keys: [], timestamp: 101)
-    discovery.receive(unfollow, subscriptionID: "author", relayURL: "relay")
-    discovery.receive(follow, subscriptionID: "discovery", relayURL: "relay")
+    await discovery.receive(unfollow, subscriptionID: "author", relayURL: "relay")
+    await discovery.receive(follow, subscriptionID: "discovery", relayURL: "relay")
     let restarted = ContactDiscovery(modelContext: discovery.context)
     try restarted.persist(
       ReceivedFollowList(
@@ -41,7 +41,7 @@ final class ContactDiscoveryTests: XCTestCase {
     XCTAssertEqual(try restarted.records(ownerPubkey: otherOwner).map(\.followsOwner), [true])
   }
 
-  func testInvalidOrObsoleteSubscriptionCannotCreateRelationships() throws {
+  func testInvalidOrObsoleteSubscriptionCannotCreateRelationships() async throws {
     let discovery = try makeDiscovery()
     let owner = try TestKeyMaterialFactory.makePubkeyHex()
     let author = try XCTUnwrap(Keypair())
@@ -54,10 +54,10 @@ final class ContactDiscoveryTests: XCTestCase {
     object["sig"] = String(repeating: "0", count: 128)
     let invalid = try JSONDecoder().decode(
       NostrEvent.self, from: JSONSerialization.data(withJSONObject: object))
-    discovery.receive(invalid, subscriptionID: "live", relayURL: "relay")
-    discovery.receive(valid, subscriptionID: "obsolete", relayURL: "relay")
+    await discovery.receive(invalid, subscriptionID: "live", relayURL: "relay")
+    await discovery.receive(valid, subscriptionID: "obsolete", relayURL: "relay")
     discovery.hide()
-    discovery.receive(valid, subscriptionID: "live", relayURL: "relay")
+    await discovery.receive(valid, subscriptionID: "live", relayURL: "relay")
     XCTAssertTrue(try discovery.records(ownerPubkey: owner).isEmpty)
   }
 
@@ -96,7 +96,7 @@ final class ContactDiscoveryTests: XCTestCase {
     XCTAssertFalse(discovery.canLoadMore)
   }
 
-  func testQueryIgnoresUnexpectedRelaysAndDoesNotTreatDuplicatesAsOverflow() throws {
+  func testQueryIgnoresUnexpectedRelaysAndDoesNotTreatDuplicatesAsOverflow() async throws {
     let discovery = try makeDiscovery()
     let owner = try TestKeyMaterialFactory.makePubkeyHex()
     let follow = try event(author: XCTUnwrap(Keypair()), keys: [owner], timestamp: 100)
@@ -106,10 +106,10 @@ final class ContactDiscoveryTests: XCTestCase {
     discovery.queries["page"] = ContactDiscovery.Query(
       authors: nil, expectedRelays: ["expected"], limit: 1)
 
-    discovery.receive(follow, subscriptionID: "page", relayURL: "unexpected")
+    await discovery.receive(follow, subscriptionID: "page", relayURL: "unexpected")
     XCTAssertTrue(try discovery.records(ownerPubkey: owner).isEmpty)
-    discovery.receive(follow, subscriptionID: "page", relayURL: "expected")
-    discovery.receive(follow, subscriptionID: "page", relayURL: "expected")
+    await discovery.receive(follow, subscriptionID: "page", relayURL: "expected")
+    await discovery.receive(follow, subscriptionID: "page", relayURL: "expected")
     XCTAssertEqual(try discovery.records(ownerPubkey: owner).count, 1)
     XCTAssertEqual(discovery.queries["page"]?.events.count, 1)
   }

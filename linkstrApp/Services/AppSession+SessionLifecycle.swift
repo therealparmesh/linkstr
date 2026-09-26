@@ -44,6 +44,7 @@ extension AppSession {
   }
 
   func handleAppDidBecomeActive() {
+    guard !isForeground else { return }
     beginForegroundCycle()
     if !isRunningTests && !isEnvironmentFlagEnabled("LINKSTR_SKIP_NOTIFICATION_PROMPT") {
       PushNotificationService.shared.refreshRegistrationIfAuthorized()
@@ -62,7 +63,7 @@ extension AppSession {
     passiveOfflineToastGraceUntil = nil
     cancelPendingOfflineToastIfNeeded()
     cancelPendingNostrStartupIfNeeded()
-    stopRelayRuntime()
+    stopRelayRuntime(preservingHistory: true)
     primeRelayRuntimeStatusForFreshStart(relayURLs: relayURLs)
   }
 

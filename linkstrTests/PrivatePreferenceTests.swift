@@ -43,16 +43,17 @@ final class PrivatePreferenceTests: AppSessionTestCase {
     let archive = PrivatePreference.archive(sessionID: "session", archived: true)
     let aliasEvent = try codec.event(for: alias, keypair: owner, createdAt: 100)
     let archiveEvent = try codec.event(for: archive, keypair: owner, createdAt: 101)
-    try store.receive(aliasEvent, keypair: owner)
-    try store.receive(archiveEvent, keypair: owner)
+    try store.receiveVerified(aliasEvent, preference: alias, keypair: owner)
+    try store.receiveVerified(archiveEvent, preference: archive, keypair: owner)
     XCTAssertEqual(try store.records(ownerPubkey: owner.publicKey.hex).count, 2)
     for (preference, stale) in [
       (PrivatePreference.alias(pubkey: contact, name: nil), aliasEvent),
       (PrivatePreference.archive(sessionID: "session", archived: false), archiveEvent)
     ] {
       let newer = try codec.event(for: preference, keypair: owner, createdAt: 200)
-      try store.receive(newer, keypair: owner)
-      XCTAssertNil(try store.receive(stale, keypair: owner))
+      try store.receiveVerified(newer, preference: preference, keypair: owner)
+      let stalePreference = try codec.preference(from: stale, keypair: owner)
+      XCTAssertNil(try store.receiveVerified(stale, preference: stalePreference, keypair: owner))
       let stored = try XCTUnwrap(store.record(for: preference, keypair: owner))
       XCTAssertEqual(try codec.preference(from: stored.event(), keypair: owner), preference)
       XCTAssertFalse(stored.needsPublish)
@@ -70,8 +71,10 @@ final class PrivatePreferenceTests: AppSessionTestCase {
       try codec.event(
         for: .archive(sessionID: "session", archived: $0), keypair: owner, createdAt: 100)
     }.sorted { $0.id < $1.id }
-    try store.receive(events[0], keypair: owner)
-    XCTAssertNil(try store.receive(events[1], keypair: owner))
+    let firstPreference = try codec.preference(from: events[0], keypair: owner)
+    let stalePreference = try codec.preference(from: events[1], keypair: owner)
+    try store.receiveVerified(events[0], preference: firstPreference, keypair: owner)
+    XCTAssertNil(try store.receiveVerified(events[1], preference: stalePreference, keypair: owner))
     try store.save(preference, keypair: owner)
     let first = try XCTUnwrap(store.record(for: preference, keypair: owner)).event()
     try store.save(.archive(sessionID: "session", archived: false), keypair: owner)
@@ -83,7 +86,7 @@ final class PrivatePreferenceTests: AppSessionTestCase {
     XCTAssertFalse(latest.needsPublish)
   }
 
-  func testBackupArrivingBeforeContactsAndSessionsRestoresWithoutChangingFollows() throws {
+  func testBackupArrivingBeforeContactsAndSessionsRestoresWithoutChangingFollows() async throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
     session.refreshIdentityState()
@@ -94,7 +97,7 @@ final class PrivatePreferenceTests: AppSessionTestCase {
       PrivatePreference.alias(pubkey: contactPubkey, name: "friend"),
       PrivatePreference.archive(sessionID: "session", archived: true)
     ] {
-      session.receivePrivatePreference(
+      await session.receivePrivatePreference(
         try codec.event(for: preference, keypair: owner, createdAt: 100))
     }
     XCTAssertTrue(
@@ -111,14 +114,14 @@ final class PrivatePreferenceTests: AppSessionTestCase {
     )
     try session.restorePrivateArchive(sessionID: "session")
     XCTAssertTrue(conversation.isArchived)
-    session.preparePrivatePreferenceBackup()
+    await session.preparePrivatePreferenceBackup()
     XCTAssertTrue(
       try session.privatePreferenceStore.records(
         ownerPubkey: owner.publicKey.hex, pendingOnly: true
       ).isEmpty)
   }
 
-  func testExistingLocalValuesSeedOnceAndAreNotRecreatedAfterRemoteClears() throws {
+  func testExistingLocalValuesSeedOnceAndAreNotRecreatedAfterRemoteClears() async throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
     session.refreshIdentityState()
@@ -130,17 +133,17 @@ final class PrivatePreferenceTests: AppSessionTestCase {
       createdAt: .distantPast)
     container.mainContext.insert(contact)
     try container.mainContext.save()
-    session.preparePrivatePreferenceBackup()
+    await session.preparePrivatePreferenceBackup()
     let records = try session.privatePreferenceStore.records(
       ownerPubkey: owner.publicKey.hex, pendingOnly: true)
     XCTAssertEqual(records.count, 1)
     let event = try XCTUnwrap(records.first).event()
-    session.preparePrivatePreferenceBackup()
+    await session.preparePrivatePreferenceBackup()
     XCTAssertEqual(try records.first?.event().id, event.id)
-    session.receivePrivatePreference(
+    await session.receivePrivatePreference(
       try codec.event(for: .alias(pubkey: pubkey, name: nil), keypair: owner, createdAt: 100))
     XCTAssertNil(contact.localAlias)
-    session.preparePrivatePreferenceBackup()
+    await session.preparePrivatePreferenceBackup()
     XCTAssertTrue(
       try session.privatePreferenceStore.records(
         ownerPubkey: owner.publicKey.hex, pendingOnly: true
@@ -219,7 +222,7 @@ final class PrivatePreferenceTests: AppSessionTestCase {
     XCTAssertEqual(contact.encryptedAlias, encryptedAlias)
   }
 
-  func testRestoreKeepsUnreadableLocalDataUntilOriginalKeyReturns() throws {
+  func testRestoreKeepsUnreadableLocalDataUntilOriginalKeyReturns() async throws {
     let (session, container) = try makeSession()
     let owner = try XCTUnwrap(Keypair())
     let pubkey = try XCTUnwrap(Keypair()).publicKey.hex
@@ -234,14 +237,14 @@ final class PrivatePreferenceTests: AppSessionTestCase {
     try LocalDataCrypto.shared.clearKey(ownerPubkey: owner.publicKey.hex)
     session.importNsec(owner.privateKey.nsec)
 
-    session.receivePrivatePreference(
+    await session.receivePrivatePreference(
       try codec.event(for: .alias(pubkey: pubkey, name: "synced"), keypair: owner, createdAt: 100))
     XCTAssertEqual(contact.encryptedAlias, ciphertext)
     XCTAssertNil(try KeychainStore.shared.get(keyName))
     XCTAssertNotNil(session.composeError)
 
     try KeychainStore.shared.set(key, for: keyName)
-    try session.restorePrivatePreferences()
+    try await session.restorePrivatePreferences()
     XCTAssertEqual(contact.localAlias, "synced")
     XCTAssertEqual(try KeychainStore.shared.get(keyName), key)
   }

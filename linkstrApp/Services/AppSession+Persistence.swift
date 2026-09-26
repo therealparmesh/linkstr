@@ -3,6 +3,11 @@ import Foundation
 // MARK: - Incoming Message Persistence
 
 extension AppSession {
+  func reportIncomingPersistenceError(_ error: Error) {
+    nostrService.clearProcessedEventHistory()
+    report(error: error)
+  }
+
   func persistIncoming(_ incoming: ReceivedDirectMessage) {
     evaluateInitialHistoricalUnreadPolicyIfNeeded(for: incoming)
     let pending = PendingIncomingMessage(incoming)
@@ -195,7 +200,7 @@ extension AppSession {
         !(try messageStore.hasPersistedConversationState(ownerPubkey: ownerPubkey))
     } catch {
       suppressUnreadDuringHistoricalRestore = false
-      report(error: error)
+      reportIncomingPersistenceError(error)
     }
     didEvalHistoricalUnreadPolicy = true
   }
@@ -247,7 +252,7 @@ extension AppSession {
       }
       return .applied
     } catch {
-      report(error: error)
+      reportIncomingPersistenceError(error)
       return .ignored
     }
   }
@@ -315,7 +320,7 @@ extension AppSession {
       }
       return .applied
     } catch {
-      report(error: error)
+      reportIncomingPersistenceError(error)
       return .ignored
     }
   }
@@ -371,7 +376,7 @@ extension AppSession {
       }
       return .ignored
     } catch {
-      report(error: error)
+      reportIncomingPersistenceError(error)
       return .ignored
     }
   }

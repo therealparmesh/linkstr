@@ -273,7 +273,7 @@ extension AppSession {
           ownerPubkey: ownerPubkey, chosenName: incoming.chosenName, content: incoming.rawContent,
           createdAt: incoming.createdAt, eventID: normalizedEventID)
       } catch {
-        report(error: error)
+        reportIncomingPersistenceError(error)
       }
       return
     }

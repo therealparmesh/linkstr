@@ -47,7 +47,7 @@ enum NostrDMTimingDefaults {
 }
 
 @MainActor
-final class NostrDMService: NSObject, ObservableObject, EventCreating, EventVerifying {
+final class NostrDMService: ObservableObject, EventCreating {
   enum BackfillSubscriptionKind: String {
     case recipient
     case author
@@ -66,7 +66,10 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating, EventVeri
 
   var relayPool: RelayPool?
   weak var contactDiscovery: ContactDiscovery?
-  private var eventCancellable: AnyCancellable?
+  var relayReceiver: NostrRelayReceiver?
+  var receiveTask: Task<Void, Never>?
+  var receiveGeneration = 0
+  let eventDecoder = NostrEventDecoder()
   var processedEventIDs = Set<String>()
   var processedEventIDOrder: [String] = []
   var processedEventIDHead = 0
@@ -89,8 +92,8 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating, EventVeri
   var onProfileLookupComplete: ((UUID, Bool) -> Void)?
   var profileQueries: [String: ProfileQuery] = [:]
   var profileQueryTasks: [String: Task<Void, Never>] = [:]
-  var onPrivatePreference: ((NostrEvent) -> Void)?
-  var onPrivatePreferencesReady: (() -> Void)?
+  var onPrivatePreference: ((NostrEvent) async -> Void)?
+  var onPrivatePreferencesReady: (() async -> Void)?
   let privatePreferencesSubscriptionID = "linkstr-private-preferences"
   var pendingAuthenticationEvents: [String: String] = [:]
   var onRelayStatus: ((String, RelayHealthStatus, String?) -> Void)?
@@ -113,7 +116,6 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating, EventVeri
   var currentBackfillRelayURLs = Set<String>()
   var completedBackfillRelayURLs = Set<String>()
   private var followListFilter: Filter?
-  let payloadDecoder = JSONDecoder()
   let linkstrRumorKind = EventKind.unknown(44_001)
 
   // MARK: - Configuration
@@ -146,7 +148,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating, EventVeri
       return
     }
 
-    stop()
+    stop(clearHistory: self.keypair?.publicKey.hex != keypair.publicKey.hex)
     shouldMaintainConnection = true
 
     applyCallbacks(
@@ -229,14 +231,10 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating, EventVeri
     onRelayStatus: @escaping (String, RelayHealthStatus, String?) -> Void
   ) {
     do {
-      let relayPool = try RelayPool(relayURLs: validRelayURLs, delegate: self)
+      let receiver = makeRelayReceiver()
+      let relayPool = try RelayPool(relayURLs: validRelayURLs, delegate: receiver)
       self.relayPool = relayPool
-
-      eventCancellable = relayPool.events
-        .receive(on: DispatchQueue.main)
-        .sink { [weak self] relayEvent in
-          self?.handleIncomingEvent(relayEvent.event, subscriptionID: relayEvent.subscriptionId)
-        }
+      startReceiving(from: receiver)
 
       recipientFilter = Filter(
         kinds: [EventKind.giftWrap.rawValue],
@@ -269,7 +267,7 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating, EventVeri
 
   // MARK: - Lifecycle
 
-  func stop() {
+  func stop(clearHistory: Bool = true) {
     finishFollowListQuery(unavailable: true)
     contactDiscovery?.disconnect()
     profileQueryTasks.values.forEach { $0.cancel() }
@@ -279,16 +277,17 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating, EventVeri
     shouldMaintainConnection = false
     reconnectTask?.cancel()
     reconnectTask = nil
-    eventCancellable?.cancel()
-    eventCancellable = nil
+    receiveGeneration += 1
+    receiveTask?.cancel()
+    receiveTask = nil
+    relayReceiver?.finish()
+    relayReceiver = nil
     relayPool?.disconnect()
     relayPool = nil
-    processedEventIDs.removeAll()
-    processedEventIDOrder.removeAll()
-    processedEventIDHead = 0
-    processedGiftWrapEventIDs.removeAll()
-    processedGiftWrapEventIDOrder.removeAll()
-    processedGiftWrapEventIDHead = 0
+    if clearHistory {
+      clearProcessedEventHistory()
+      keypair = nil
+    }
     recipientFilter = nil
     authorFilter = nil
     followListFilter = nil
@@ -315,7 +314,6 @@ final class NostrDMService: NSObject, ObservableObject, EventCreating, EventVeri
     pendingAuthenticationEvents.removeAll()
     onRelayStatus = nil
     onInitialBackfillComplete = nil
-    keypair = nil
     configuredRelayURLs.removeAll()
   }
 

@@ -27,7 +27,7 @@ final class ContactLoadingTests: XCTestCase {
     XCTAssertEqual(service.contactListLoadState, .ready)
   }
 
-  func testRetryDeliversTheSameSignedFollowListAgainWithoutRestartingMessages() throws {
+  func testRetryDeliversTheSameSignedFollowListAgainWithoutRestartingMessages() async throws {
     let service = NostrDMService()
     defer { service.stop() }
     let keypair = try XCTUnwrap(Keypair())
@@ -37,11 +37,11 @@ final class ContactLoadingTests: XCTestCase {
     service.onFollowList = { _ in received += 1 }
     service.processedEventIDs = ["message"]
     service.beginFollowListQuery(relayURLs: ["relay"])
-    service.handleIncomingEvent(event, subscriptionID: service.followListSubscriptionID)
-    service.handleIncomingEvent(event, subscriptionID: service.followListSubscriptionID)
+    await service.handleIncomingEvent(event, subscriptionID: service.followListSubscriptionID)
+    await service.handleIncomingEvent(event, subscriptionID: service.followListSubscriptionID)
     XCTAssertEqual(received, 1)
     service.beginFollowListQuery(relayURLs: ["relay"])
-    service.handleIncomingEvent(event, subscriptionID: service.followListSubscriptionID)
+    await service.handleIncomingEvent(event, subscriptionID: service.followListSubscriptionID)
     XCTAssertEqual(received, 2)
     XCTAssertEqual(service.processedEventIDs, ["message"])
   }

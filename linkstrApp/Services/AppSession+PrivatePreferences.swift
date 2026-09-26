@@ -10,10 +10,18 @@ extension AppSession {
     try applyPrivatePreference(preference, ownerPubkey: keypair.publicKey.hex)
   }
 
-  func receivePrivatePreference(_ event: NostrEvent) {
+  func receivePrivatePreference(_ event: NostrEvent) async {
     guard let keypair = identityService.keypair else { return }
+    let sourceService = nostrService
+    let generation = sourceService.receiveGeneration
     do {
-      guard let preference = try privatePreferenceStore.receive(event, keypair: keypair) else { return }
+      let decoded = try await sourceService.eventDecoder.preference(from: event, keypair: keypair)
+      guard !Task.isCancelled, nostrService === sourceService,
+        sourceService.receiveGeneration == generation,
+        identityService.pubkeyHex == keypair.publicKey.hex else { return }
+      guard let preference = try privatePreferenceStore.receiveVerified(
+        event, preference: decoded, keypair: keypair
+      ) else { return }
       try applyPrivatePreference(preference, ownerPubkey: keypair.publicKey.hex)
     } catch PrivatePreferenceError.invalidEvent {
       // Untrusted or undecryptable relay events must not change local preferences.
@@ -22,42 +30,71 @@ extension AppSession {
     }
   }
 
-  func restorePrivatePreferences() throws {
+  func restorePrivatePreferences() async throws {
     guard let keypair = identityService.keypair else { return }
+    let sourceService = nostrService
+    let generation = sourceService.receiveGeneration
     for record in try privatePreferenceStore.records(ownerPubkey: keypair.publicKey.hex) {
-      let preference = try PrivatePreferenceCodec().preference(from: record.event(), keypair: keypair)
-      try applyPrivatePreference(preference, ownerPubkey: keypair.publicKey.hex)
+      let event = try record.event()
+      let preference = try await sourceService.eventDecoder.preference(from: event, keypair: keypair)
+      try Task.checkCancellation()
+      guard nostrService === sourceService, sourceService.receiveGeneration == generation,
+        identityService.pubkeyHex == keypair.publicKey.hex else { throw CancellationError() }
+      // A local edit made during validation takes precedence over this snapshot.
+      guard try record.event().id == event.id else { continue }
+      try applyPrivatePreference(preference, ownerPubkey: keypair.publicKey.hex, syncPush: false)
     }
   }
 
-  func preparePrivatePreferenceBackup() {
+  func preparePrivatePreferenceBackup() async {
     guard let keypair = identityService.keypair else { return }
     let owner = keypair.publicKey.hex
+    guard preparedPrivatePreferenceOwner != owner else {
+      schedulePrivatePreferenceSync()
+      return
+    }
     do {
-      try restorePrivatePreferences()
+      try await restorePrivatePreferences()
       let contacts = try modelContext.fetch(FetchDescriptor<ContactEntity>(predicate: #Predicate {
         $0.ownerPubkey == owner && $0.encryptedAlias != ""
-      }))
+      })).map { (pubkey: $0.targetPubkey, alias: $0.localAlias, createdAt: $0.createdAt) }
       for contact in contacts {
         // Historical dates keep an initial backup from replacing a newer edit on another device.
-        guard let alias = contact.localAlias else { throw PrivatePreferenceError.invalidEvent }
-        try privatePreferenceStore.save(
-          .alias(pubkey: contact.targetPubkey, name: alias), keypair: keypair, initialDate: contact.createdAt
+        guard let alias = contact.alias else { throw PrivatePreferenceError.invalidEvent }
+        try await seedPrivatePreferenceBackup(
+          .alias(pubkey: contact.pubkey, name: alias), keypair: keypair, createdAt: contact.createdAt
         )
       }
       let sessions = try modelContext.fetch(FetchDescriptor<SessionEntity>(predicate: #Predicate {
         $0.ownerPubkey == owner && $0.isArchived
-      }))
+      })).map { (sessionID: $0.sessionID, createdAt: $0.createdAt) }
       for session in sessions {
-        try privatePreferenceStore.save(
-          .archive(sessionID: session.sessionID, archived: true), keypair: keypair, initialDate: session.createdAt
+        try await seedPrivatePreferenceBackup(
+          .archive(sessionID: session.sessionID, archived: true), keypair: keypair, createdAt: session.createdAt
         )
       }
+      preparedPrivatePreferenceOwner = owner
       schedulePushStateSync()
       schedulePrivatePreferenceSync()
+    } catch is CancellationError {
+      return
     } catch {
       reportPrivatePreferenceError()
     }
+  }
+
+  private func seedPrivatePreferenceBackup(
+    _ preference: PrivatePreference, keypair: Keypair, createdAt: Date
+  ) async throws {
+    guard try privatePreferenceStore.record(for: preference, keypair: keypair) == nil else { return }
+    let sourceService = nostrService
+    let generation = sourceService.receiveGeneration
+    let event = try await sourceService.eventDecoder.preferenceEvent(
+      for: preference, keypair: keypair, createdAt: max(1, Int64(createdAt.timeIntervalSince1970)))
+    try Task.checkCancellation()
+    guard nostrService === sourceService, sourceService.receiveGeneration == generation,
+      identityService.pubkeyHex == keypair.publicKey.hex else { throw CancellationError() }
+    try privatePreferenceStore.seed(event, preference: preference, keypair: keypair)
   }
 
   func restorePrivateArchive(sessionID: String) throws {
@@ -69,7 +106,9 @@ extension AppSession {
     try applyPrivatePreference(preference, ownerPubkey: keypair.publicKey.hex)
   }
 
-  func applyPrivatePreference(_ preference: PrivatePreference, ownerPubkey: String) throws {
+  func applyPrivatePreference(
+    _ preference: PrivatePreference, ownerPubkey: String, syncPush: Bool = true
+  ) throws {
     switch preference {
     case .alias(let pubkey, let name):
       let contacts = try modelContext.fetch(FetchDescriptor<ContactEntity>(predicate: #Predicate {
@@ -80,7 +119,7 @@ extension AppSession {
       }
     case .archive(let sessionID, let archived):
       try messageStore.setSessionArchived(sessionID: sessionID, ownerPubkey: ownerPubkey, archived: archived)
-      schedulePushStateSync()
+      if syncPush { schedulePushStateSync() }
     }
   }
 
@@ -90,10 +129,13 @@ extension AppSession {
       let keypair = identityService.keypair else { return }
     guard case .ready = relaySendWaitState() else { return }
     let sourceService = nostrService
+    let generation = sourceService.receiveGeneration
     privatePreferenceSyncTask = Task { @MainActor [weak self, weak sourceService] in
       guard let self, let sourceService else { return }
       defer {
-        if self.nostrService === sourceService { self.privatePreferenceSyncTask = nil }
+        if self.nostrService === sourceService, sourceService.receiveGeneration == generation {
+          self.privatePreferenceSyncTask = nil
+        }
       }
       do {
         while !Task.isCancelled, self.nostrService === sourceService,
@@ -114,6 +156,7 @@ extension AppSession {
   }
 
   private func reportPrivatePreferenceError() {
+    preparedPrivatePreferenceOwner = nil
     composeError = "couldn't sync private preferences. local data is kept; linkstr will retry when you reconnect."
   }
 }

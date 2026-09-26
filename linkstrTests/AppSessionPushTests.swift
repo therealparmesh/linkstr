@@ -116,7 +116,7 @@ final class AppSessionPushTests: AppSessionTestCase {
     try session.identityService.createNewIdentity()
     let keypair = try XCTUnwrap(session.identityService.keypair)
     defer { try? LocalDataCrypto.shared.clearKey(ownerPubkey: keypair.publicKey.hex) }
-    session.receivePrivatePreference(
+    await session.receivePrivatePreference(
       try PrivatePreferenceCodec().event(
         for: .archive(sessionID: "not-restored-yet", archived: true), keypair: keypair,
         createdAt: 100))
@@ -147,11 +147,11 @@ final class AppSessionPushTests: AppSessionTestCase {
     let restored = try insertSessionFixture(
       in: container.mainContext, ownerPubkey: owner, createdByPubkey: owner,
       memberPubkeys: [owner], sessionID: "restored-session")
-    session.preparePrivatePreferenceBackup()
+    await session.preparePrivatePreferenceBackup()
     await session.pushStateSyncTask?.value
     XCTAssertTrue(updates.isEmpty, "restoring a session does not establish an archive choice")
     for (timestamp, archived) in [(100, true), (101, false)] {
-      session.receivePrivatePreference(
+      await session.receivePrivatePreference(
         try PrivatePreferenceCodec().event(
           for: .archive(sessionID: restored.sessionID, archived: archived), keypair: keypair,
           createdAt: Int64(timestamp)))
@@ -251,7 +251,7 @@ final class AppSessionPushTests: AppSessionTestCase {
     for id in ids.suffix(50) {
       try session.privatePreferenceStore.save(.archive(sessionID: id, archived: false), keypair: keypair)
     }
-    session.preparePrivatePreferenceBackup()
+    await session.preparePrivatePreferenceBackup()
     await session.pushStateSyncTask?.value
     XCTAssertNil(session.lastSyncedPushArchiveState)
     session.schedulePushStateSync()

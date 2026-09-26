@@ -147,7 +147,9 @@ extension AppSessionContactAndRelayTests {
     session.simulateRuntimeRelayStatusForTesting(relayURL: relay.url, status: .connected)
     XCTAssertEqual(session.relayStatus(for: relay), .connected)
 
+    let sourceService = session.nostrService
     session.handleAppDidLeaveForeground()
+    XCTAssertTrue(session.nostrService === sourceService)
     XCTAssertEqual(session.relayStatus(for: relay), .disconnected)
 
     session.handleAppDidBecomeActive()
@@ -187,6 +189,7 @@ extension AppSessionContactAndRelayTests {
     XCTAssertEqual(startCount, 1)
     XCTAssertEqual(session.relayStatus(for: relay), .disconnected)
 
+    session.handleAppDidBecomeActive()
     try? await Task.sleep(for: .milliseconds(150))
     XCTAssertEqual(startCount, 1)
 

@@ -12,8 +12,8 @@ extension AppSessionIngestTests {
     let attacker: Keypair
   }
 
-  func testForgedMembershipCannotChangeFutureMessageRecipients() throws {
-    let fixture = try makeAuthenticatedSession()
+  func testForgedMembershipCannotChangeFutureMessageRecipients() async throws {
+    let fixture = try await makeAuthenticatedSession()
     let session = fixture.session
     let container = fixture.container
     let creator = fixture.creator
@@ -26,7 +26,7 @@ extension AppSessionIngestTests {
     let updated = original + [newcomer.publicKey.hex]
     let payload = NostrEventTestSupport.payload(.sessionMembers, members: updated, timestamp: 200)
 
-    try deliverAuthenticatedPayload(payload, author: creator, signer: attacker, to: session.nostrService)
+    try await deliverAuthenticatedPayload(payload, author: creator, signer: attacker, to: session.nostrService)
     XCTAssertEqual(Set(try session.activeMemberPubkeys(sessionID: "session", ownerPubkey: owner)), Set(original))
     XCTAssertEqual(
       Set(try XCTUnwrap(session.resolveOutboundRecipients(
@@ -34,17 +34,17 @@ extension AppSessionIngestTests {
     XCTAssertTrue(session.pendingIncomingMessages.isEmpty)
 
     // A correctly authenticated member still cannot exercise the creator's permissions.
-    try deliverAuthenticatedPayload(payload, author: attacker, signer: attacker, to: session.nostrService)
+    try await deliverAuthenticatedPayload(payload, author: attacker, signer: attacker, to: session.nostrService)
     XCTAssertEqual(Set(try session.activeMemberPubkeys(sessionID: "session", ownerPubkey: owner)), Set(original))
 
-    try deliverAuthenticatedPayload(payload, author: creator, signer: creator, to: session.nostrService)
+    try await deliverAuthenticatedPayload(payload, author: creator, signer: creator, to: session.nostrService)
     XCTAssertEqual(
       Set(try XCTUnwrap(session.resolveOutboundRecipients(
         sessionID: "session", ownerPubkey: owner, senderPubkey: owner))), Set(updated))
   }
 
-  func testForgedDeletesCannotRemovePostsOrSessionsButAuthenticDeletesStillWork() throws {
-    let fixture = try makeAuthenticatedSession()
+  func testForgedDeletesCannotRemovePostsOrSessionsButAuthenticDeletesStillWork() async throws {
+    let fixture = try await makeAuthenticatedSession()
     let session = fixture.session
     let container = fixture.container
     let creator = fixture.creator
@@ -52,14 +52,14 @@ extension AppSessionIngestTests {
     defer { withExtendedLifetime(container) {} }
     let owner = try XCTUnwrap(session.identityService.pubkeyHex)
     defer { try? LocalDataCrypto.shared.clearKey(ownerPubkey: owner) }
-    let root = try deliverAuthenticatedPayload(
+    let root = try await deliverAuthenticatedPayload(
       NostrEventTestSupport.payload(.root, members: [], timestamp: 110),
       author: creator, signer: creator, to: session.nostrService)
     XCTAssertEqual(try fetchMessages(in: container.mainContext).map(\.eventID), [root.id])
 
     for kind in [LinkstrPayloadKind.rootDelete, .sessionDelete] {
       let payload = NostrEventTestSupport.payload(kind, members: [], rootID: root.id, timestamp: 200)
-      try deliverAuthenticatedPayload(payload, author: creator, signer: attacker, to: session.nostrService)
+      try await deliverAuthenticatedPayload(payload, author: creator, signer: attacker, to: session.nostrService)
     }
     XCTAssertEqual(try fetchMessages(in: container.mainContext).map(\.eventID), [root.id])
     XCTAssertNotNil(try session.messageStore.session(sessionID: "session", ownerPubkey: owner))
@@ -68,16 +68,16 @@ extension AppSessionIngestTests {
     XCTAssertTrue(session.pendingIncomingMessages.isEmpty)
 
     let deletion = NostrEventTestSupport.payload(.rootDelete, members: [], rootID: root.id, timestamp: 200)
-    try deliverAuthenticatedPayload(deletion, author: creator, signer: creator, to: session.nostrService)
+    try await deliverAuthenticatedPayload(deletion, author: creator, signer: creator, to: session.nostrService)
     XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
     XCTAssertEqual(try fetchPostDeletions(in: container.mainContext).count, 1)
     let sessionDeletion = NostrEventTestSupport.payload(.sessionDelete, members: [], timestamp: 210)
-    try deliverAuthenticatedPayload(sessionDeletion, author: creator, signer: creator, to: session.nostrService)
+    try await deliverAuthenticatedPayload(sessionDeletion, author: creator, signer: creator, to: session.nostrService)
     XCTAssertNil(try session.messageStore.session(sessionID: "session", ownerPubkey: owner))
     XCTAssertEqual(try fetchSessionDeletionTombstones(in: container.mainContext).count, 1)
   }
 
-  private func makeAuthenticatedSession() throws -> AuthenticatedSessionFixture {
+  private func makeAuthenticatedSession() async throws -> AuthenticatedSessionFixture {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
     let owner = try XCTUnwrap(session.identityService.keypair)
@@ -87,7 +87,7 @@ extension AppSessionIngestTests {
     session.nostrService.onIncoming = { [weak session] in session?.persistIncoming($0) }
     let payload = NostrEventTestSupport.payload(
       .sessionCreate, members: [owner.publicKey.hex, creator.publicKey.hex, attacker.publicKey.hex])
-    try deliverAuthenticatedPayload(payload, author: creator, signer: creator, to: session.nostrService)
+    try await deliverAuthenticatedPayload(payload, author: creator, signer: creator, to: session.nostrService)
     XCTAssertNotNil(try session.messageStore.session(sessionID: "session", ownerPubkey: owner.publicKey.hex))
     return AuthenticatedSessionFixture(session: session, container: container, creator: creator, attacker: attacker)
   }
@@ -95,11 +95,11 @@ extension AppSessionIngestTests {
   @discardableResult
   private func deliverAuthenticatedPayload(
     _ payload: LinkstrPayload, author: Keypair, signer: Keypair, to service: NostrDMService
-  ) throws -> NostrEvent {
+  ) async throws -> NostrEvent {
     let recipient = try XCTUnwrap(service.keypair)
     let rumor = try NostrEventTestSupport.rumor(payload, author: author.publicKey)
     let wrap = try service.giftWrap(withRumor: rumor, toRecipient: recipient.publicKey, signedBy: signer)
-    try NostrEventTestSupport.deliver(wrap, to: service)
+    try await NostrEventTestSupport.deliver(wrap, to: service)
     return rumor
   }
 }

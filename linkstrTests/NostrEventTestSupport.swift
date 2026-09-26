@@ -3,7 +3,7 @@ import XCTest
 
 @testable import linkstr
 
-enum NostrEventTestSupport {
+struct NostrEventTestSupport: EventVerifying {
   static let payloadKinds: [LinkstrPayloadKind] = [
     .root, .rootDelete, .sessionCreate, .sessionMembers, .sessionDelete, .reaction
   ]
@@ -31,14 +31,14 @@ enum NostrEventTestSupport {
   @MainActor
   static func deliver(
     _ event: NostrEvent, to service: NostrDMService, subscriptionID: String = "live"
-  ) throws {
+  ) async throws {
     let object = try JSONSerialization.jsonObject(with: JSONEncoder().encode(event))
     let wire = try JSONSerialization.data(withJSONObject: ["EVENT", subscriptionID, object])
     let response = try JSONDecoder().decode(RelayResponse.self, from: wire)
     guard case .event(let decodedSubscription, let decodedEvent) = response else {
       return XCTFail("expected an event response")
     }
-    service.handleIncomingEvent(decodedEvent, subscriptionID: decodedSubscription)
+    await service.handleIncomingEvent(decodedEvent, subscriptionID: decodedSubscription)
   }
 
   static func changing<T: Codable>(_ event: T, field: String, to value: String) throws -> T {

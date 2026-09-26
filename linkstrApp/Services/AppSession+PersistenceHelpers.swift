@@ -70,7 +70,7 @@ extension AppSession {
       }
       return .ready(session)
     } catch {
-      report(error: error)
+      reportIncomingPersistenceError(error)
       return .ignored
     }
   }
@@ -129,7 +129,7 @@ extension AppSession {
       }
       return true
     } catch {
-      report(error: error)
+      reportIncomingPersistenceError(error)
       return false
     }
   }

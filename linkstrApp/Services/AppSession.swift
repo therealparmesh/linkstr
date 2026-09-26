@@ -259,6 +259,7 @@ final class AppSession: ObservableObject {
   var didEvalHistoricalUnreadPolicy = false
 
   @Published var composeError: String?
+  var preparedPrivatePreferenceOwner: String?
   var privatePreferenceSyncTask: Task<Void, Never>?
   let privatePreferenceStore: PrivatePreferenceStore
   @Published var pendingSessionNavigationRequest: SessionNavigationRequest?

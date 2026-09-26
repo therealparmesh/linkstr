@@ -12,9 +12,16 @@ extension AppSession {
     nostrService = NostrDMService()
   }
 
-  func stopRelayRuntime() {
+  func stopRelayRuntime(preservingHistory: Bool = false) {
     clearRelayRuntimeTracking()
-    replaceNostrService()
+    if preservingHistory {
+      pauseRemoteProfileRequests()
+      privatePreferenceSyncTask?.cancel()
+      privatePreferenceSyncTask = nil
+      nostrService.stop(clearHistory: false)
+    } else {
+      replaceNostrService()
+    }
   }
 
   func beginForegroundCycle() {
@@ -50,24 +57,20 @@ extension AppSession {
       guard !Task.isCancelled else { return }
       guard self.isForeground else { return }
       guard self.identityService.keypair != nil else { return }
-      self.startNostrIfPossible(forceRestart: true)
+      self.startNostrIfPossible()
     }
   }
 
-  func startNostrIfPossible(forceRestart: Bool = false) {
+  func startNostrIfPossible() {
     guard let keypair = identityService.keypair else { return }
 
-    if forceRestart {
-      stopRelayRuntime()
-    }
-
     if shouldDisableNostrStartupForCurrentProcess() {
-      handleNostrStartDisabled(forceRestart: forceRestart)
+      handleNostrStartDisabled()
       return
     }
 
     if isRunningTests, testingOverrides.skipNostrNetworkStartup {
-      handleTestSkipNetworkStartup(keypair: keypair, forceRestart: forceRestart)
+      handleTestSkipNetworkStartup(keypair: keypair)
       return
     }
 
@@ -80,18 +83,18 @@ extension AppSession {
       return
     }
 
-    if forceRestart {
-      primeRelayRuntimeStatusForFreshStart(relayURLs: relayURLs)
-    }
     if relayURLs.isEmpty {
-      handleEmptyRelayURLs(forceRestart: forceRestart)
+      handleEmptyRelayURLs()
       nostrService.finishFollowListQuery(unavailable: true)
       return
     }
     if composeError == noEnabledRelaysMessage {
       composeError = nil
     }
-    relayRuntimeStatusByURL = relayRuntimeStatusByURL.filter { relayURLs.contains($0.key) }
+    if !nostrService.isConfigured(for: keypair, relayURLs: relayURLs) {
+      stopRelayRuntime(preservingHistory: true)
+      primeRelayRuntimeStatusForFreshStart(relayURLs: relayURLs)
+    }
 
     startNostrRuntime(
       keypair: keypair,
@@ -107,36 +110,30 @@ extension AppSession {
   func makeIncomingHandler() -> (ReceivedDirectMessage) -> Void {
     let sourceService = nostrService
     return { [weak self, weak sourceService] incoming in
-      Task { @MainActor in
-        guard let self, let sourceService, self.nostrService === sourceService else { return }
-        self.persistIncoming(incoming)
-      }
+      guard let self, let sourceService, self.nostrService === sourceService else { return }
+      self.persistIncoming(incoming)
     }
   }
 
   func makeRelayStatusHandler() -> (String, RelayHealthStatus, String?) -> Void {
     let sourceService = nostrService
     return { [weak self, weak sourceService] relayURL, status, message in
-      Task { @MainActor in
-        guard let self, let sourceService, self.nostrService === sourceService else { return }
-        guard self.isForeground else { return }
-        self.updateRuntimeRelayStatus(
-          relayURL: relayURL,
-          status: status,
-          message: message
-        )
-        try? self.refreshRelayConnectivityAlert()
-      }
+      guard let self, let sourceService, self.nostrService === sourceService else { return }
+      guard self.isForeground else { return }
+      self.updateRuntimeRelayStatus(
+        relayURL: relayURL,
+        status: status,
+        message: message
+      )
+      try? self.refreshRelayConnectivityAlert()
     }
   }
 
   func makeInitialBackfillCompleteHandler() -> () -> Void {
     let sourceService = nostrService
     return { [weak self, weak sourceService] in
-      Task { @MainActor in
-        guard let self, let sourceService, self.nostrService === sourceService else { return }
-        self.finishInitialHistoricalRestore()
-      }
+      guard let self, let sourceService, self.nostrService === sourceService else { return }
+      self.finishInitialHistoricalRestore()
     }
   }
 
@@ -151,36 +148,25 @@ extension AppSession {
   func makeProfileMetadataHandler() -> (ReceivedProfileMetadata) -> Void {
     let sourceService = nostrService
     return { [weak self, weak sourceService] profileMetadata in
-      Task { @MainActor in
-        guard let self, let sourceService, self.nostrService === sourceService else { return }
-        self.persistIncomingProfileMetadata(profileMetadata)
-      }
+      guard let self, let sourceService, self.nostrService === sourceService else { return }
+      self.persistIncomingProfileMetadata(profileMetadata)
     }
   }
 
-  private func handleEmptyRelayURLs(forceRestart: Bool) {
-    if !forceRestart {
-      stopRelayRuntime()
-    }
+  private func handleEmptyRelayURLs() {
+    stopRelayRuntime()
     composeError = noEnabledRelaysMessage
     hasShownOfflineToastForCurrentOutage = false
   }
 
-  private func handleNostrStartDisabled(forceRestart: Bool) {
+  private func handleNostrStartDisabled() {
     nostrService.finishFollowListQuery(unavailable: true)
-    if !forceRestart {
-      clearRelayRuntimeTracking()
-    }
+    clearRelayRuntimeTracking()
     testingOverrides.onNostrStart?()
   }
 
-  private func handleTestSkipNetworkStartup(keypair: Keypair, forceRestart: Bool) {
-    if forceRestart {
-      let relayURLs = enabledRelayURLsSnapshot()
-      primeRelayRuntimeStatusForFreshStart(relayURLs: relayURLs)
-    } else {
-      clearRelayRuntimeTracking()
-    }
+  private func handleTestSkipNetworkStartup(keypair: Keypair) {
+    clearRelayRuntimeTracking()
     startNostrRuntime(
       keypair: keypair,
       relayURLs: [],
@@ -219,11 +205,11 @@ extension AppSession {
     }
     nostrService.onPrivatePreference = { [weak self, weak sourceService] event in
       guard let self, let sourceService, self.nostrService === sourceService else { return }
-      self.receivePrivatePreference(event)
+      await self.receivePrivatePreference(event)
     }
     nostrService.onPrivatePreferencesReady = { [weak self, weak sourceService] in
       guard let self, let sourceService, self.nostrService === sourceService else { return }
-      self.preparePrivatePreferenceBackup()
+      await self.preparePrivatePreferenceBackup()
     }
   }
 

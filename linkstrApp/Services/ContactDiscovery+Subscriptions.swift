@@ -38,7 +38,8 @@ extension ContactDiscovery {
     }
   }
 
-  func receive(_ event: NostrEvent, subscriptionID: String, relayURL: String) {
+  func receive(_ event: NostrEvent, subscriptionID: String, relayURL: String) async {
+    guard await eventDecoder.isValid(event), !Task.isCancelled else { return }
     guard isVisible, let owner, event.kind == .followList, event.pubkey != owner else { return }
     let isDiscovery =
       subscriptionID == discoverySubscriptionID || subscriptionID == discoveryLiveSubscriptionID
@@ -46,7 +47,6 @@ extension ContactDiscovery {
     let query = queries[subscriptionID]
     guard isDiscovery || isLive || query?.authors?.contains(event.pubkey) == true else { return }
     guard !isDiscovery || event.referencedPubkeys.contains(owner) else { return }
-    do { try verifyEvent(event) } catch { return }
     if var query {
       guard query.expectedRelays.contains(relayURL) else { return }
       // Count valid events even when their saved state is unchanged, so pagination can advance.

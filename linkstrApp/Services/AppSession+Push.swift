@@ -70,7 +70,9 @@ extension AppSession {
       lastRegisteredPushDeviceSignature = deviceSignature
       lastSyncedPushArchiveState = nil
     }
-    let state = try pushArchiveState(keypair: keypair)
+    let state = try await pushArchiveState(keypair: keypair)
+    try Task.checkCancellation()
+    guard pushStateSyncGeneration == generation, identityService.pubkeyHex == owner else { return }
     guard
       lastSyncedPushArchiveState?.ownerPubkey != owner || lastSyncedPushArchiveState?.state != state
     else { return }
@@ -92,12 +94,11 @@ extension AppSession {
     lastSyncedPushArchiveState = (owner, state)
   }
 
-  private func pushArchiveState(keypair: Keypair) throws -> PushArchiveState {
+  private func pushArchiveState(keypair: Keypair) async throws -> PushArchiveState {
     let owner = keypair.publicKey.hex
     var archivedByID: [String: Bool] = [:]
-    for record in try privatePreferenceStore.records(ownerPubkey: owner) {
-      let preference = try PrivatePreferenceCodec().preference(
-        from: record.event(), keypair: keypair)
+    let events = try privatePreferenceStore.records(ownerPubkey: owner).map { try $0.event() }
+    for preference in try await nostrService.eventDecoder.preferences(from: events, keypair: keypair) {
       if case .archive(let sessionID, let archived) = preference {
         archivedByID[sessionID] = archived
       }

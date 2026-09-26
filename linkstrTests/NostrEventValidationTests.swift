@@ -5,7 +5,7 @@ import XCTest
 
 @MainActor
 final class NostrEventValidationTests: XCTestCase {
-  func testPublishedPayloadsRoundTripForRecipientsAndSenderInLiveAndHistoricalDelivery() throws {
+  func testPublishedPayloadsRoundTripForRecipientsAndSenderInLiveAndHistoricalDelivery() async throws {
     let sender = try XCTUnwrap(Keypair())
     let recipients = try (0..<2).map { _ in try XCTUnwrap(Keypair()) }
     let publishing = NostrDMService()
@@ -32,7 +32,7 @@ final class NostrEventValidationTests: XCTestCase {
             receiving.keypair = recipient
             var received: [ReceivedDirectMessage] = []
             receiving.onIncoming = { received.append($0) }
-            try NostrEventTestSupport.deliver(wrap, to: receiving, subscriptionID: subscriptionID)
+            try await NostrEventTestSupport.deliver(wrap, to: receiving, subscriptionID: subscriptionID)
 
             XCTAssertEqual(received.count, 1, "\(kind): \(subscriptionID)")
             XCTAssertEqual(received.first?.payload, payload)
@@ -48,7 +48,7 @@ final class NostrEventValidationTests: XCTestCase {
   private func assertValidPublishedGiftWrap(
     _ event: NostrEvent, sender: Keypair, recipient: Keypair, rumorID: String
   ) throws {
-    let verifier = NostrDMService()
+    let verifier = NostrEventTestSupport()
     let wrap = try XCTUnwrap(event as? GiftWrapEvent)
     XCTAssertEqual(wrap.kind, .giftWrap)
     XCTAssertEqual(wrap.referencedPubkeys, [recipient.publicKey.hex])
@@ -66,7 +66,7 @@ final class NostrEventValidationTests: XCTestCase {
     XCTAssertEqual(rumor.id, rumorID)
   }
 
-  func testGiftWrapRejectsInvalidEventIntegrityBeforeDeduplication() throws {
+  func testGiftWrapRejectsInvalidEventIntegrityBeforeDeduplication() async throws {
     let service = NostrDMService()
     let sender = try XCTUnwrap(Keypair())
     let recipient = try XCTUnwrap(Keypair())
@@ -92,17 +92,17 @@ final class NostrEventValidationTests: XCTestCase {
     service.onIncoming = { received.append($0) }
 
     for invalid in [invalidOuter, invalidSealed, invalidID] {
-      try NostrEventTestSupport.deliver(invalid, to: service)
+      try await NostrEventTestSupport.deliver(invalid, to: service)
       XCTAssertTrue(received.isEmpty)
     }
-    try NostrEventTestSupport.deliver(valid, to: service)
-    try NostrEventTestSupport.deliver(valid, to: service)
+    try await NostrEventTestSupport.deliver(valid, to: service)
+    try await NostrEventTestSupport.deliver(valid, to: service)
     XCTAssertEqual(received.count, 1)
     XCTAssertEqual(received.first?.senderPubkey, sender.publicKey.hex)
     XCTAssertEqual(received.first?.eventID, rumor.id)
   }
 
-  func testImpersonationIsRejectedForEveryPayloadBeforeItCanPoisonLegitimateDelivery() throws {
+  func testImpersonationIsRejectedForEveryPayloadBeforeItCanPoisonLegitimateDelivery() async throws {
     let sender = try XCTUnwrap(Keypair())
     let attacker = try XCTUnwrap(Keypair())
     let recipient = try XCTUnwrap(Keypair())
@@ -117,23 +117,23 @@ final class NostrEventValidationTests: XCTestCase {
         let forged = try service.giftWrap(
           withRumor: rumor, toRecipient: recipient.publicKey, signedBy: attacker)
         // Both signatures and encryption are valid; only the claimed inner author is forged.
-        try service.verifyEvent(forged)
-        try service.verifyEvent(forged.unwrappedSeal(using: recipient.privateKey))
+        try NostrEventTestSupport().verifyEvent(forged)
+        try NostrEventTestSupport().verifyEvent(forged.unwrappedSeal(using: recipient.privateKey))
         XCTAssertEqual(try forged.unsealedRumor(using: recipient.privateKey)?.pubkey, sender.publicKey.hex)
-        try NostrEventTestSupport.deliver(forged, to: service, subscriptionID: subscriptionID)
+        try await NostrEventTestSupport.deliver(forged, to: service, subscriptionID: subscriptionID)
         XCTAssertTrue(received.isEmpty, "\(kind): \(subscriptionID)")
         XCTAssertTrue(service.processedEventIDs.isEmpty)
         XCTAssertTrue(service.processedGiftWrapEventIDs.isEmpty)
 
         let valid = try service.giftWrap(withRumor: rumor, toRecipient: recipient.publicKey, signedBy: sender)
-        try NostrEventTestSupport.deliver(valid, to: service, subscriptionID: subscriptionID)
+        try await NostrEventTestSupport.deliver(valid, to: service, subscriptionID: subscriptionID)
         XCTAssertEqual(received.count, 1)
         XCTAssertEqual(received.first?.senderPubkey, sender.publicKey.hex)
       }
     }
   }
 
-  func testNIP59RejectsSignedRumorsAndTaggedSealsWithoutRestrictingOuterTags() throws {
+  func testNIP59RejectsSignedRumorsAndTaggedSealsWithoutRestrictingOuterTags() async throws {
     let service = NostrDMService()
     let sender = try XCTUnwrap(Keypair())
     let recipient = try XCTUnwrap(Keypair())
@@ -152,18 +152,18 @@ final class NostrEventValidationTests: XCTestCase {
     var received: [ReceivedDirectMessage] = []
     service.onIncoming = { received.append($0) }
     for invalidSeal in [signedRumorSeal, taggedSeal] {
-      try service.verifyEvent(invalidSeal)
-      try NostrEventTestSupport.deliver(
+      try NostrEventTestSupport().verifyEvent(invalidSeal)
+      try await NostrEventTestSupport.deliver(
         service.giftWrap(withSeal: invalidSeal, toRecipient: recipient.publicKey), to: service)
     }
     XCTAssertTrue(received.isEmpty)
     let valid = try service.giftWrap(withSeal: validSeal, toRecipient: recipient.publicKey, tags: [tag], createdAt: 1)
-    try NostrEventTestSupport.deliver(valid, to: service)
+    try await NostrEventTestSupport.deliver(valid, to: service)
     XCTAssertEqual(received.count, 1)
     XCTAssertEqual(received.first?.createdAt, rumor.createdDate)
   }
 
-  func testInvalidPublicEventsCannotReachCallbacksOrSuppressValidEvents() throws {
+  func testInvalidPublicEventsCannotReachCallbacksOrSuppressValidEvents() async throws {
     let service = NostrDMService()
     let owner = try XCTUnwrap(Keypair())
     let other = try XCTUnwrap(Keypair())
@@ -181,19 +181,19 @@ final class NostrEventValidationTests: XCTestCase {
       for: .archive(sessionID: "session", archived: true), keypair: owner, createdAt: 100)
     for event in [follow, profile, preference] {
       let invalid = try NostrEventTestSupport.changing(event, field: "sig", to: String(repeating: "0", count: 128))
-      try NostrEventTestSupport.deliver(invalid, to: service)
+      try await NostrEventTestSupport.deliver(invalid, to: service)
     }
     XCTAssertTrue(follows.isEmpty && profiles.isEmpty && preferences.isEmpty)
     XCTAssertTrue(service.processedEventIDs.isEmpty)
-    for event in [follow, profile, preference] { try NostrEventTestSupport.deliver(event, to: service) }
-    try NostrEventTestSupport.deliver(
+    for event in [follow, profile, preference] { try await NostrEventTestSupport.deliver(event, to: service) }
+    try await NostrEventTestSupport.deliver(
       service.followList(withPubkeys: [owner.publicKey.hex], signedBy: other), to: service)
     XCTAssertEqual(follows.map(\.eventID), [follow.id])
     XCTAssertEqual(profiles.map(\.eventID), [profile.id])
     XCTAssertEqual(preferences.map(\.id), [preference.id])
   }
 
-  func testBackfillCountsValidDuplicateEnvelopesWithoutIngestingDuplicates() throws {
+  func testBackfillCountsValidDuplicateEnvelopesWithoutIngestingDuplicates() async throws {
     let service = NostrDMService()
     let recipient = try XCTUnwrap(Keypair())
     let sender = try XCTUnwrap(Keypair())
@@ -207,10 +207,10 @@ final class NostrEventValidationTests: XCTestCase {
     let rumor = try NostrEventTestSupport.rumor(payload, author: sender.publicKey)
     let wrap = try service.giftWrap(withRumor: rumor, toRecipient: recipient.publicKey, signedBy: sender)
     let invalid = try NostrEventTestSupport.changing(wrap, field: "sig", to: String(repeating: "0", count: 128))
-    try NostrEventTestSupport.deliver(invalid, to: service, subscriptionID: subscriptionID)
+    try await NostrEventTestSupport.deliver(invalid, to: service, subscriptionID: subscriptionID)
     XCTAssertEqual(service.activeBackfillStates[subscriptionID]?.receivedGiftWrapCount, 0)
     XCTAssertNil(service.activeBackfillStates[subscriptionID]?.oldestCreatedAt)
-    for _ in 0..<2 { try NostrEventTestSupport.deliver(wrap, to: service, subscriptionID: subscriptionID) }
+    for _ in 0..<2 { try await NostrEventTestSupport.deliver(wrap, to: service, subscriptionID: subscriptionID) }
     XCTAssertEqual(service.activeBackfillStates[subscriptionID]?.receivedGiftWrapCount, 2)
     XCTAssertEqual(service.activeBackfillStates[subscriptionID]?.oldestCreatedAt, wrap.createdAt)
     XCTAssertEqual(received.count, 1)

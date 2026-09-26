@@ -27,13 +27,24 @@ extension NostrDMService {
     return .live
   }
 
-  func handleIncomingEvent(_ event: NostrEvent, subscriptionID: String) {
+  func handleIncomingEvent(_ event: NostrEvent, subscriptionID: String) async {
     guard let keypair else { return }
-    guard (try? verifyEvent(event)) != nil else { return }
+    let generation = receiveGeneration
+    let decoded = await eventDecoder.decode(
+      event, keypair: keypair, source: directMessageSource(for: subscriptionID),
+      skipGiftWrap: processedGiftWrapEventIDs.contains(event.id)
+    )
+    guard !Task.isCancelled, generation == receiveGeneration, let decoded else { return }
+    await applyDecodedEvent(decoded, event: event, subscriptionID: subscriptionID, keypair: keypair)
+  }
+
+  private func applyDecodedEvent(
+    _ decoded: NostrEventDecoder.DecodedEvent, event: NostrEvent, subscriptionID: String, keypair: Keypair
+  ) async {
     if event.kind == PrivatePreferenceCodec.kind {
       if event.pubkey == keypair.publicKey.hex,
         event.firstValueForRawTagName("d")?.hasPrefix(PrivatePreferenceCodec.namespace) == true {
-        onPrivatePreference?(event)
+        await onPrivatePreference?(event)
       }
       return
     }
@@ -41,54 +52,18 @@ extension NostrDMService {
     switch event.kind {
     case .followList:
       if event.pubkey == keypair.publicKey.hex { handleFollowListEvent(event) }
-      return
     case .metadata:
       handleMetadataEvent(event)
-      return
     case .giftWrap:
-      break
+      trackBackfillProgress(for: event, subscriptionID: subscriptionID)
+      guard let message = decoded.message,
+        rememberProcessedGiftWrapEventIDIfNeeded(event.id) else { return }
+      let isNewRumor = rememberProcessedEventIDIfNeeded(message.eventID)
+      guard isNewRumor || message.payload.kind == .root else { return }
+      onIncoming?(message)
     default:
-      return
+      break
     }
-
-    trackBackfillProgress(for: event, subscriptionID: subscriptionID)
-    processGiftWrap(event, keypair: keypair, subscriptionID: subscriptionID)
-  }
-
-  private func processGiftWrap(_ event: NostrEvent, keypair: Keypair, subscriptionID: String) {
-    guard let wrapped = event as? GiftWrapEvent else {
-      return
-    }
-    // NIP-59 authenticates the sender through the seal; decryption alone does not verify authorship.
-    guard !processedGiftWrapEventIDs.contains(wrapped.id),
-      let seal = try? wrapped.unwrappedSeal(using: keypair.privateKey),
-      seal.kind == .seal, seal.tags.isEmpty,
-      (try? verifyEvent(seal)) != nil,
-      let rumor = try? seal.unsealedRumor(using: keypair.privateKey),
-      rumor.isRumor, rumor.pubkey == seal.pubkey, rumor.id == rumor.calculatedId,
-      rumor.kind == linkstrRumorKind
-    else { return }
-
-    guard let payload = decodeValidatedPayload(from: rumor.content) else {
-      return
-    }
-    _ = rememberProcessedGiftWrapEventIDIfNeeded(wrapped.id)
-
-    let alreadyProcessedRumor = processedEventIDs.contains(rumor.id)
-    guard !alreadyProcessedRumor || payload.kind == .root else { return }
-    if !alreadyProcessedRumor {
-      _ = rememberProcessedEventIDIfNeeded(rumor.id)
-    }
-
-    onIncoming?(
-      ReceivedDirectMessage(
-        eventID: rumor.id,
-        transportEventID: wrapped.id,
-        senderPubkey: seal.pubkey,
-        payload: payload,
-        createdAt: rumor.createdDate,
-        source: directMessageSource(for: subscriptionID)
-      ))
   }
 
   private func handleFollowListEvent(_ event: NostrEvent) {
@@ -123,14 +98,13 @@ extension NostrDMService {
 
   // MARK: - Event ID tracking
 
-  func decodeValidatedPayload(from content: String) -> LinkstrPayload? {
-    guard let data = content.data(using: .utf8),
-      let payload = try? payloadDecoder.decode(LinkstrPayload.self, from: data),
-      (try? payload.validated()) != nil
-    else {
-      return nil
-    }
-    return payload
+  func clearProcessedEventHistory() {
+    processedEventIDs.removeAll()
+    processedEventIDOrder.removeAll()
+    processedEventIDHead = 0
+    processedGiftWrapEventIDs.removeAll()
+    processedGiftWrapEventIDOrder.removeAll()
+    processedGiftWrapEventIDHead = 0
   }
 
   @discardableResult
@@ -212,135 +186,86 @@ extension NostrDMService {
     }
   }
 
-  private struct RelayCallbackParams {
-    let relayURL: String
-    let eoseSubscriptionID: String?
-    let closedSubscriptionID: String?
-    let readOnlyMessage: String?
-    let okEventID: String?
-    let okSuccess: Bool?
-    let okMessage: String?
+}
+
+// MARK: - Ordered relay delivery
+
+extension NostrDMService {
+  func makeRelayReceiver() -> NostrRelayReceiver {
+    NostrRelayReceiver { [weak self] relay, response in
+      Task { @MainActor [weak self] in
+        guard let self, self.relayPool?.relays.contains(where: { $0 === relay }) == true else { return }
+        await self.receive(response, from: relay)
+      }
+    }
   }
 
-  private func handleRelayResponse(_ params: RelayCallbackParams) {
-    let relayURL = params.relayURL
-    let eoseSubscriptionID = params.eoseSubscriptionID
-    let closedSubscriptionID = params.closedSubscriptionID
-    let readOnlyMessage = params.readOnlyMessage
-    let okEventID = params.okEventID
-    let okSuccess = params.okSuccess
-    let okMessage = params.okMessage
-    if let okEventID, pendingAuthenticationEvents[okEventID] == relayURL {
-      pendingAuthenticationEvents.removeValue(forKey: okEventID)
-      if okSuccess == true {
+  func startReceiving(from receiver: NostrRelayReceiver) {
+    relayReceiver = receiver
+    let stream = receiver.stream
+    receiveTask = Task { @MainActor [weak self] in
+      for await input in stream {
+        guard !Task.isCancelled, let self else { return }
+        switch input {
+        case .state(let relay, let state):
+          guard self.relayPool?.relays.contains(where: { $0 === relay }) == true else { continue }
+          self.handleRelayStateDidChange(relayURL: relay.url.absoluteString, state: state)
+        case .response(let relay, let response):
+          guard self.relayPool?.relays.contains(where: { $0 === relay }) == true else { continue }
+          await self.receive(response, from: relay)
+        }
+        await Task.yield()
+      }
+    }
+  }
+
+  private func receive(_ response: RelayResponse, from relay: Relay) async {
+    let relayURL = relay.url.absoluteString
+    switch response {
+    case .event(let subscriptionID, let event):
+      if event.kind == .followList, event.pubkey != keypair?.publicKey.hex {
+        await contactDiscovery?.receive(event, subscriptionID: subscriptionID, relayURL: relayURL)
+      } else {
+        await handleIncomingEvent(event, subscriptionID: subscriptionID)
+      }
+    case .auth(let challenge):
+      authenticate(to: relay, challenge: challenge)
+    case .eose(let subscriptionID):
+      if subscriptionID == privatePreferencesSubscriptionID {
+        await onPrivatePreferencesReady?()
+      } else {
+        handleBackfillEOSE(relayURL: relayURL, subscriptionID: subscriptionID)
+        completeFollowListQuery(relayURL: relayURL, subscriptionID: subscriptionID)
+        contactDiscovery?.complete(relayURL: relayURL, subscriptionID: subscriptionID)
+        completeProfileQuery(relayURL: relayURL, subscriptionID: subscriptionID)
+      }
+    case .closed(let subscriptionID, _):
+      completeBackfillPage(subscriptionID: subscriptionID)
+      completeFollowListQuery(relayURL: relayURL, subscriptionID: subscriptionID, failed: true)
+      contactDiscovery?.complete(relayURL: relayURL, subscriptionID: subscriptionID, failed: true)
+      completeProfileQuery(relayURL: relayURL, subscriptionID: subscriptionID, failed: true)
+    case .ok(let eventID, let success, let message):
+      receiveAcknowledgment(eventID: eventID, success: success, message: message, relayURL: relayURL)
+    default:
+      break
+    }
+  }
+
+  private func receiveAcknowledgment(
+    eventID: String, success: Bool, message: RelayResponse.Message, relayURL: String
+  ) {
+    if pendingAuthenticationEvents[eventID] == relayURL {
+      pendingAuthenticationEvents.removeValue(forKey: eventID)
+      if success {
         onRelayStatus?(relayURL, .connected, nil)
         installSubscriptions()
         if let relayPool { contactDiscovery?.connect(relayPool) }
       }
       return
     }
-    if eoseSubscriptionID == privatePreferencesSubscriptionID {
-      onPrivatePreferencesReady?()
+    if !success, message.prefix == .authRequired || message.prefix == .restricted {
+      onRelayStatus?(relayURL, .readOnly, message.message)
     }
-    if let eoseSubscriptionID, activeBackfillStates[eoseSubscriptionID] != nil {
-      handleBackfillEOSE(relayURL: relayURL, subscriptionID: eoseSubscriptionID)
-    }
-    if let closedSubscriptionID, activeBackfillStates[closedSubscriptionID] != nil {
-      completeBackfillPage(subscriptionID: closedSubscriptionID)
-    }
-    if let eoseSubscriptionID {
-      completeFollowListQuery(relayURL: relayURL, subscriptionID: eoseSubscriptionID)
-      contactDiscovery?.complete(relayURL: relayURL, subscriptionID: eoseSubscriptionID)
-      completeProfileQuery(relayURL: relayURL, subscriptionID: eoseSubscriptionID)
-    }
-    if let closedSubscriptionID {
-      completeFollowListQuery(relayURL: relayURL, subscriptionID: closedSubscriptionID, failed: true)
-      contactDiscovery?.complete(relayURL: relayURL, subscriptionID: closedSubscriptionID, failed: true)
-      completeProfileQuery(relayURL: relayURL, subscriptionID: closedSubscriptionID, failed: true)
-    }
-    if let readOnlyMessage {
-      onRelayStatus?(relayURL, .readOnly, readOnlyMessage)
-    }
-    if let okEventID, let okSuccess, let okMessage {
-      handlePublishAck(
-        relayURL: relayURL,
-        eventID: okEventID,
-        success: okSuccess,
-        message: okMessage
-      )
-    }
-  }
-
-}
-
-// MARK: - RelayDelegate
-
-extension NostrDMService: RelayDelegate {
-  nonisolated func relayStateDidChange(_ relay: Relay, state: Relay.State) {
-    let relayURL = relay.url.absoluteString
-    Task { @MainActor [weak self] in
-      guard let self, self.relayPool?.relays.contains(where: { $0 === relay }) == true else { return }
-      self.handleRelayStateDidChange(relayURL: relayURL, state: state)
-    }
-  }
-
-  nonisolated func relay(_ relay: Relay, didReceive response: RelayResponse) {
-    let relayURL = relay.url.absoluteString
-    var eoseSubscriptionID: String?
-    var closedSubscriptionID: String?
-    var readOnlyMessage: String?
-    var okEventID: String?
-    var okSuccess: Bool?
-    var okMessage: String?
-
-    switch response {
-    case .auth(let challenge):
-      Task { @MainActor [weak self] in
-        self?.authenticate(to: relay, challenge: challenge)
-      }
-      return
-    case .eose(let subscriptionID):
-      eoseSubscriptionID = subscriptionID
-    case .closed(let subscriptionID, _):
-      closedSubscriptionID = subscriptionID
-    case .ok(let eventID, let success, let message):
-      okEventID = eventID
-      okSuccess = success
-      okMessage = message.message
-      if !success {
-        switch message.prefix {
-        case .authRequired, .restricted:
-          readOnlyMessage = message.message
-        default:
-          break
-        }
-      }
-    default:
-      return
-    }
-
-    Task { @MainActor [weak self] in
-      guard let self, self.relayPool?.relays.contains(where: { $0 === relay }) == true else { return }
-      self.handleRelayResponse(
-        RelayCallbackParams(
-          relayURL: relayURL,
-          eoseSubscriptionID: eoseSubscriptionID,
-          closedSubscriptionID: closedSubscriptionID,
-          readOnlyMessage: readOnlyMessage,
-          okEventID: okEventID,
-          okSuccess: okSuccess,
-          okMessage: okMessage
-        ))
-    }
-  }
-
-  nonisolated func relay(_ relay: Relay, didReceive event: RelayEvent) {
-    guard event.event.kind == .followList else { return }
-    Task { @MainActor [weak self] in
-      guard let self, self.relayPool?.relays.contains(where: { $0 === relay }) == true else { return }
-      self.contactDiscovery?.receive(
-        event.event, subscriptionID: event.subscriptionId, relayURL: relay.url.absoluteString
-      )
-    }
+    handlePublishAck(relayURL: relayURL, eventID: eventID, success: success, message: message.message)
   }
 }

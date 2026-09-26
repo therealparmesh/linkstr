@@ -238,11 +238,12 @@ extension SessionMessageStore {
     }
 
     let descriptor = FetchDescriptor<SessionMessageEntity>(
-      predicate: #Predicate { $0.conversationID == sessionID && $0.ownerPubkey == ownerPubkey }
+      predicate: #Predicate {
+        $0.conversationID == sessionID && $0.ownerPubkey == ownerPubkey && $0.isArchived != archived
+      }
     )
     let messages = try modelContext.fetch(descriptor)
     for message in messages {
-      guard message.isArchived != archived else { continue }
       message.isArchived = archived
       didChange = true
     }

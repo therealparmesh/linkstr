@@ -16,7 +16,7 @@ extension AppSession {
         return .ignored
       }
     } catch {
-      report(error: error)
+      reportIncomingPersistenceError(error)
       return .ignored
     }
 
@@ -79,7 +79,7 @@ extension AppSession {
         ))
       return .applied
     } catch {
-      report(error: error)
+      reportIncomingPersistenceError(error)
       return .ignored
     }
   }
@@ -108,7 +108,7 @@ extension AppSession {
         rootID: rootID
       )
     } catch {
-      report(error: error)
+      reportIncomingPersistenceError(error)
       return .ignored
     }
   }
@@ -183,7 +183,7 @@ extension AppSession {
         return .ignored
       }
     } catch {
-      report(error: error)
+      reportIncomingPersistenceError(error)
       return .ignored
     }
     let payloadRootID = incoming.payload.rootID.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -322,7 +322,7 @@ extension AppSession {
       }
       return .applied
     }
-    report(error: error)
+    reportIncomingPersistenceError(error)
     return .ignored
   }
 }
