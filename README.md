@@ -1,6 +1,6 @@
 # linkstr
 
-_Last updated: September 19, 2026_
+_Last updated: September 26, 2026_
 
 linkstr is an iOS app for private link sharing on [Nostr](https://nostr.com). You create private sessions, share links with people you trust, react with emojis, and play supported video directly inside the app when a provider allows it.
 
@@ -228,13 +228,15 @@ linkstr is built around private sessions, not one-off direct messages. A session
 ### Relay send gating
 
 - Relay runtime starts when identity exists and the app is active.
-- Leaving the foreground stops relay runtime so suspended sockets do not linger into the next reopen cycle.
+- Entering the background stops relay connections. Brief inactive states, such as opening Control Center, keep the current runtime.
 - When relay runtime stops or restarts, enabled relays are reset to a `disconnected` baseline so the next start does not inherit stale UI state.
-- Foreground re-entry rebuilds relay runtime from scratch once, like a cold reopen.
+- Foreground re-entry reconnects once and keeps bounded message deduplication for the same account. History is still requested in full so delayed gift wraps remain recoverable; changing accounts clears the cache.
 - Send gating blocks immediately when there are no enabled relays or only read-only relays are available; otherwise it waits for a connection until timeout.
 - No offline outbox exists. Failed sends are not queued for automatic retry.
 
 ### Relay delivery and ingest
+
+Relay events and end-of-history responses are consumed in order. Signature verification and gift-wrap decryption run off the main actor; validated events are persisted on the main actor before completion is reported. Stopping the runtime cancels queued delivery. Send acknowledgments and authentication responses bypass history processing so catch-up does not delay them.
 
 linkstr sends JSON payloads as unsigned kind `44001` rumors, encrypted with NIP-44 and wrapped using [NIP-59](https://github.com/nostr-protocol/nips/blob/master/59.md). The sender signs the inner seal; each recipient's outer gift wrap uses an independent random key. Sending also includes a copy for the sender.
 
@@ -443,6 +445,7 @@ See [contact synchronization](docs/CONTACTS.md) for persistence and relay behavi
 - Private aliases and session archive choices sync through NIP-78 addressable events (`kind:30078`), encrypted to self with NIP-44. Each choice has a separate `d` tag under `linkstr/preferences/v1/`; its keyed identifier does not expose the contact or session ID. The public author, app namespace, and event timestamps remain visible to relays.
 - The newest record for each choice wins; NIP-01's lowest event-ID tiebreak applies at equal timestamps. Clearing an alias and unarchiving a session are saved explicitly. Independent choices do not overwrite one another.
 - Existing aliases and archived sessions are seeded using their original creation dates when no backup record exists, so initial backups do not outrank newer edits. Pending encrypted records survive offline use and retry after reconnect. Logging out and clearing local data also clears that account's pending records.
+- Local preference restoration and initial backup run once per account session after relay history arrives, with retries on failure. Repeated relay completion responses only retry pending uploads. Incoming preference validation, bulk restoration, initial backup encryption, and push archive-state decryption run off the main actor.
 - Importing the same `nsec` on a fresh install can restore these preferences when relays retain and return them. Preferences arriving before their contact or session are kept until that content arrives; they do not add contacts to the follow list. This is not a guaranteed backup of all app data.
 - Push sync sends explicit archive choices from saved private preferences, plus session deletions. Restoring a session alone never establishes an unarchive choice. Updates are serialized and batched; omitted sessions remain unchanged on the server. Existing archived sessions become saved choices during initial preference backup. Restored choices reach push filtering even before session history arrives, and deletion clears its push archive entry. The push service retains archived IDs for offline notification filtering; the encrypted relay records remain the preference backup.
 - Push updates include the IDs whose archive choices are known and which of those IDs are archived. Older builds omit that scope and replace the entire list, retaining the risk of clearing notification suppression for sessions that have not restored yet, including choices sent by a newer device. Updating all devices avoids that older-client behavior.
@@ -495,7 +498,13 @@ This runs both the iOS unit tests (via `xcodebuild`) and the push-service Go tes
 
 Tests cover observable behavior and distinct failure paths. Reuse coverage when a broader test already checks the same behavior. For asynchronous work, check the state before and after completion; for rejected input, use a valid control so the test cannot pass for an unrelated reason. Generated HTML and native gestures also need UI verification; checking for source strings does not prove they work.
 
-`NostrEventValidationTests` covers relay decoding, outgoing envelopes, recipient and sender copies, invalid signatures and authors, and history pagination. `AppSessionIngestTests+Authentication` checks that forged membership updates and deletes cannot change stored state while authorized messages still work. Contact tests are described in [contact synchronization](docs/CONTACTS.md#verification).
+`NostrEventValidationTests` covers relay decoding, outgoing envelopes, recipient and sender copies, invalid signatures and authors, and history pagination. `NostrRelayDeliveryTests` checks history ordering, timely send acknowledgments, cancellation, and account-scoped replay. `AppSessionIngestTests+Authentication` checks that forged membership updates and deletes cannot change stored state while authorized messages still work. Contact tests are described in [contact synchronization](docs/CONTACTS.md#verification).
+
+### Releases
+
+Create the version-bump commit before the implementation commits, using the existing conventional subjects without bodies. Update the app and share extension together. Build numbers change only for the release archive and export; leave their tracked values unchanged.
+
+Archive and export with `xcodebuild`, then validate and upload the IPA with `altool`. Use the Fastlane Spaceship CLI scripts to prepare App Store Connect. Copy all localized metadata, including promotional text, along with screenshots, previews, and review information. Reuse the release notes from 1.3.14 unless new wording is requested. Verify the selected build and TestFlight availability, then confirm before submitting for automatic release after approval.
 
 ### Lint
 

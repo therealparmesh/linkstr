@@ -34,11 +34,11 @@ Discovery pages start at 200 events. Author queries use batches of 50, with at m
 
 Incoming event IDs and signatures are verified before saving. `FollowRelationshipEntity` stores the latest accepted follow or unfollow for each author and account. Unfollow records retain their timestamp and event ID so stale events cannot restore an old relationship. Account cleanup removes these records along with the contacts.
 
-Opening the view, pulling to refresh, or reconnecting rechecks saved results. Leaving the view or replacing the relay service closes subscriptions and cancels query timers. Results depend on the configured relays and may omit follows stored elsewhere.
+Opening the view, pulling to refresh, or reconnecting rechecks saved results. Leaving the view or stopping the relay runtime closes subscriptions and cancels query timers. Backgrounding stops the runtime; returning to the app reconnects and refreshes the visible list. Results depend on the configured relays and may omit follows stored elsewhere.
 
 ## Profile lookup and rendering
 
-Profile lookups use at most two concurrent batches of 50 keys. Failed lookups make at most three attempts. Empty results or exhausted retries wait five minutes before another lookup can retry. Each attempt has a unique ID so a late completion cannot finish a newer request. Account changes clear lookup state; replacing the relay service cancels obsolete timers.
+Profile lookups use at most two concurrent batches of 50 keys. Failed lookups make at most three attempts. Empty results or exhausted retries wait five minutes before another lookup can retry. Each attempt has a unique ID so a late completion cannot finish a newer request. Account changes clear lookup state; stopping the relay runtime cancels obsolete timers.
 
 Public profiles use the same NIP-01 ordering as follow lists. A published empty name is valid metadata. Contact rows resolve names before searching and sorting, and session members use a public-key index to avoid repeated contact scans. Display names prefer the private alias, then the published name, then the `npub`. Public keys wrap in full without hyphenation in contact rows, member lists, previews, and contact detail. Name line limits do not apply to keys. Row menus, including member pickers, copy the complete key without changing selection; preview and detail text also support native selection and copying.
 
