@@ -71,6 +71,8 @@ Profile name changes can be submitted with either the keyboard return key or the
 
 Generic web URLs are valid posts too. In-app playback, local caching, and save/export options depend on the provider and the specific URL. The composer indicates when an in-app view is available.
 
+You can also paste a shared linkstr post link into the link field, or share it back into linkstr through the iOS share sheet. The new post uses the original web URL.
+
 The bottom footer shows validation and relay status only. The keyboard return key on the link field advances into the note field.
 
 ### React, delete, rename, archive, and manage members

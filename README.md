@@ -160,7 +160,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 - The keyboard return key advances from the link field into the note field.
 - Fields: session name (read-only), link (required), note (optional).
 - The link field supports paste and clear helpers rendered directly below the field in a compact control row. Paste replaces the entire field value.
-- Links without a scheme are normalized to `https://`. URL input must be a valid `http` or `https` URL; unsupported schemes are rejected.
+- Links without a scheme are normalized to `https://`. Shared `linkstr://open?url=…` links are unwrapped to the original web URL. Posts store only valid `http` or `https` URLs; other schemes are rejected.
 - Recognized media links surface an inline hint when in-app playback is available.
 - Note text is trimmed and persisted only when non-empty.
 
@@ -408,7 +408,8 @@ See [contact synchronization](docs/CONTACTS.md) for persistence and relay behavi
 - Media save format: `linkstr://save?url=…`
 - Valid deep links open a full-screen shared-link detail, share composer, or media-save surface.
 - Post detail can share the current post as a deep link through the native iOS share sheet.
-- The iOS share extension accepts web URLs, webpages, or text containing a web link, then offers `share link` or `save media`.
+- The iOS share extension accepts web URLs, webpages, shared linkstr post links, or text containing either kind of link, then offers `share link` or `save media`.
+- Sharing a linkstr post link back into the app or pasting it into either composer uses the original web URL, including its query and fragment. Invalid or nested deep links are rejected.
 - `share link` opens a full-screen share composer with the link prefilled, any surrounding text as the optional note, and a separate searchable active-session picker.
 - `save media` opens linkstr to cache supported media and offer Photos or Files as the destination. Shares without a valid web link close without an error.
 - Shared deep links carry only the normalized web URL; title, thumbnail, and provider-specific preview text are fetched when the recipient opens the link.
