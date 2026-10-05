@@ -10,6 +10,7 @@ final class NotificationNavigationTests: AppSessionTestCase {
   func testDeliveredAlertMatchingUsesPostTargetsAndLeavesUnrelatedAlertsAlone() {
     let payloads: [([AnyHashable: Any], Bool)] = [
       (["conversation_id": "session", "type": "new_post", "event_id": "post"], true),
+      (["conversation_id": "session", "type": "new_post", "event_id": "second"], true),
       (
         [
           "conversation_id": "session", "type": "new_emoji_reaction", "post_id": "post",
@@ -24,7 +25,7 @@ final class NotificationNavigationTests: AppSessionTestCase {
     ]
     for (payload, expected) in payloads {
       XCTAssertEqual(
-        PushNotificationService.referencesPost(payload, sessionID: "session", postID: "post"),
+        PushNotificationService.referencesPosts(payload, sessionID: "session", postIDs: ["post", "second"]),
         expected)
     }
   }

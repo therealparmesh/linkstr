@@ -44,10 +44,6 @@ final class PushNotificationService: NSObject, ObservableObject {
     center.removeDeliveredNotifications(withIdentifiers: identifiers)
   }
 
-  static func referencesPost(_ userInfo: [AnyHashable: Any], sessionID: String, postID: String) -> Bool {
-    referencesPosts(userInfo, sessionID: sessionID, postIDs: [postID])
-  }
-
   static func referencesPosts(_ userInfo: [AnyHashable: Any], sessionID: String, postIDs: Set<String>) -> Bool {
     guard !sessionID.isEmpty,
       (userInfo["conversation_id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) == sessionID

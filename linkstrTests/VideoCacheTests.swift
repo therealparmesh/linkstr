@@ -14,55 +14,20 @@ final class VideoCacheTests: XCTestCase {
       LocalFileMetrics.touch(url, date: Date(timeIntervalSince1970: Double(index)))
     }
     let service = VideoCacheService(
-      thumbnailDirectory: directory.appendingPathComponent("thumbnails"), videoDirectory: directory,
+      videoDirectory: directory,
       fileManager: RemovalFailingFileManager(protectedURL: oldest), maxVideoCacheBytes: 8)
 
     await service.registerCachedMedia(at: newest)
-    let usage = await service.currentUsage()
     XCTAssertTrue(FileManager.default.fileExists(atPath: oldest.path))
     XCTAssertFalse(FileManager.default.fileExists(atPath: newer.path))
     XCTAssertTrue(FileManager.default.fileExists(atPath: newest.path))
-    XCTAssertEqual(usage.videoBytes, 8)
-  }
-
-  func testVideoCacheServiceCurrentUsageCountsVideoAndThumbnailBytes() async throws {
-    let rootDirectory = makeTemporaryCacheDirectory()
-    defer { try? FileManager.default.removeItem(at: rootDirectory) }
-
-    let thumbnailDirectory = rootDirectory.appendingPathComponent("thumbnails", isDirectory: true)
-    let videoDirectory = rootDirectory.appendingPathComponent("videos", isDirectory: true)
-    try FileManager.default.createDirectory(
-      at: thumbnailDirectory, withIntermediateDirectories: true)
-    try FileManager.default.createDirectory(at: videoDirectory, withIntermediateDirectories: true)
-
-    let thumbnailData = Data("thumb".utf8)
-    let videoData = Data("video-file".utf8)
-    let thumbnailURL = thumbnailDirectory.appendingPathComponent("one.png")
-    let videoURL = videoDirectory.appendingPathComponent("one.mp4")
-    try thumbnailData.write(to: thumbnailURL, options: .atomic)
-    try videoData.write(to: videoURL, options: .atomic)
-
-    let service = VideoCacheService(
-      thumbnailDirectory: thumbnailDirectory,
-      videoDirectory: videoDirectory,
-      maxVideoCacheBytes: 64
-    )
-
-    let usage = await service.currentUsage()
-
-    XCTAssertEqual(usage.thumbnailBytes, Int64(thumbnailData.count))
-    XCTAssertEqual(usage.videoBytes, Int64(videoData.count))
-    XCTAssertEqual(usage.videoCacheLimitBytes, 64)
   }
 
   func testVideoCacheServiceRegisterEvictsLeastRecentlyUsedVideosWhenOverLimit() async throws {
     let rootDirectory = makeTemporaryCacheDirectory()
     defer { try? FileManager.default.removeItem(at: rootDirectory) }
 
-    let thumbnailDirectory = rootDirectory.appendingPathComponent("thumbnails", isDirectory: true)
     let videoDirectory = rootDirectory.appendingPathComponent("videos", isDirectory: true)
-    try FileManager.default.createDirectory(
-      at: thumbnailDirectory, withIntermediateDirectories: true)
     try FileManager.default.createDirectory(at: videoDirectory, withIntermediateDirectories: true)
 
     let oldestURL = videoDirectory.appendingPathComponent("oldest.mp4")
@@ -78,18 +43,15 @@ final class VideoCacheTests: XCTestCase {
     LocalFileMetrics.touch(newestURL, date: Date(timeIntervalSince1970: 30))
 
     let service = VideoCacheService(
-      thumbnailDirectory: thumbnailDirectory,
       videoDirectory: videoDirectory,
       maxVideoCacheBytes: 8
     )
 
     await service.registerCachedMedia(at: newestURL)
-    let usage = await service.currentUsage()
 
     XCTAssertFalse(FileManager.default.fileExists(atPath: oldestURL.path))
     XCTAssertTrue(FileManager.default.fileExists(atPath: newerURL.path))
     XCTAssertTrue(FileManager.default.fileExists(atPath: newestURL.path))
-    XCTAssertEqual(usage.videoBytes, 8)
   }
 
 }

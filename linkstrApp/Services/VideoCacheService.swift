@@ -7,12 +7,6 @@ struct ManagedStorageUsage: Equatable {
   static let zero = ManagedStorageUsage(previewBytes: 0, cachedMediaBytes: 0)
 }
 
-struct DeviceCacheUsage: Equatable {
-  let thumbnailBytes: Int64
-  let videoBytes: Int64
-  let videoCacheLimitBytes: Int64
-}
-
 enum LocalFileMetrics {
   private static let fileResourceKeys: Set<URLResourceKey> = [
     .isDirectoryKey,
@@ -86,35 +80,22 @@ actor VideoCacheService {
 
   static let defaultMaxVideoCacheBytes: Int64 = 1_000_000_000
   static let shared = VideoCacheService(
-    thumbnailDirectory: ManagedLocalFileScope.shared.thumbnailDirectory,
     videoDirectory: ManagedLocalFileScope.shared.videoDirectory
   )
 
   private let fileManager: FileManager
-  private let thumbnailDirectory: URL
   private let videoDirectory: URL
   private let maxVideoCacheBytes: Int64
   private var runningVideoBytes: Int64?
 
   init(
-    thumbnailDirectory: URL,
     videoDirectory: URL,
     fileManager: FileManager = .default,
     maxVideoCacheBytes: Int64 = defaultMaxVideoCacheBytes
   ) {
     self.fileManager = fileManager
-    self.thumbnailDirectory = Self.normalized(url: thumbnailDirectory)
     self.videoDirectory = Self.normalized(url: videoDirectory)
     self.maxVideoCacheBytes = maxVideoCacheBytes
-  }
-
-  func currentUsage() -> DeviceCacheUsage {
-    DeviceCacheUsage(
-      thumbnailBytes: LocalFileMetrics.allocatedSize(
-        at: thumbnailDirectory, fileManager: fileManager),
-      videoBytes: LocalFileMetrics.allocatedSize(at: videoDirectory, fileManager: fileManager),
-      videoCacheLimitBytes: maxVideoCacheBytes
-    )
   }
 
   func registerCachedMedia(at fileURL: URL) {

@@ -9,13 +9,6 @@ enum ContactListLoadState {
 }
 
 extension NostrDMService {
-  var connectedFollowListRelays: Set<String> {
-    Set(relayPool?.relays.compactMap { relay in
-      if case .connected = relay.state { return relay.url.absoluteString }
-      return nil
-    } ?? [])
-  }
-
   func beginFollowListQuery(relayURLs: Set<String>) {
     followListTimeoutTask?.cancel()
     followListTimeoutTask = nil
