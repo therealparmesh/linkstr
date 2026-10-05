@@ -23,18 +23,6 @@ struct BackupDocument: FileDocument {
 }
 
 extension BackupWorker {
-  func defaultDirectory() -> URL? {
-    guard let container = FileManager.default.url(forUbiquityContainerIdentifier: "iCloud.com.parmscript.linkstr")
-    else { return nil }
-    let directory = container.appendingPathComponent("Documents", isDirectory: true)
-    do {
-      try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-      return directory
-    } catch {
-      return nil
-    }
-  }
-
   func read(_ url: URL) throws -> LinkstrBackup {
     let scoped = url.startAccessingSecurityScopedResource()
     defer { if scoped { url.stopAccessingSecurityScopedResource() } }

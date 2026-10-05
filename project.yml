@@ -74,6 +74,7 @@ targets:
         NSAppTransportSecurity:
           NSAllowsArbitraryLoadsInWebContent: true
         ITSAppUsesNonExemptEncryption: false
+        # Keep existing iCloud backup folders accessible in Files.
         NSUbiquitousContainers:
           iCloud.com.parmscript.linkstr:
             NSUbiquitousContainerIsDocumentScopePublic: true

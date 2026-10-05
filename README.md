@@ -447,7 +447,7 @@ See [contact synchronization](docs/CONTACTS.md) for persistence and relay behavi
 
 ### Backup and migration expectations
 
-Settings' **backup** action exports a `.linkstrbackup` file through Files. It contains the active account's `nsec`, saved sessions and posts, membership history, reactions and deletion records, contacts and profiles, read/archive state, private preferences, and playback/relay settings. Cached videos, thumbnails, previews, drafts, and other accounts are excluded. The file is unencrypted: anyone with it can access the account. The picker prefers the app's iCloud Drive folder when available and also supports other enabled Files providers.
+Settings' **backup** action exports a `.linkstrbackup` file through Files. It contains the active account's `nsec`, saved sessions and posts, membership history, reactions and deletion records, contacts and profiles, read/archive state, private preferences, and playback/relay settings. Cached videos, thumbnails, previews, drafts, and other accounts are excluded. The file is unencrypted: anyone with it can access the account. Files chooses the starting location and remembers the last folder selected. You can choose iCloud Drive, local storage, or another enabled provider; no linkstr folder is required.
 
 **Restore backup** appears only on onboarding. The app validates the file before showing the account, date, and saved counts for confirmation. Invalid keys or data change nothing. Restore works locally and merges retained data for that account: duplicates stay single, read posts stay read, and newer membership, contact, preference, reaction, and deletion state wins. Other accounts are untouched. Playback and relay settings come from the file, including an explicitly empty relay list.
 
@@ -513,7 +513,7 @@ Tests cover observable behavior and distinct failure paths. Reuse coverage when 
 
 ### Releases
 
-Create the version-bump commit before the implementation commits, using the existing conventional subjects without bodies. Update the app and share extension together. Build numbers change only for the release archive and export; leave their tracked values unchanged.
+Create the version-bump commit before the implementation commits, using the existing conventional subjects without bodies. Update the app and share extension versions together. Keep build-number increments for release uploads out of Git: apply them to the archive and export, then restore the committed value.
 
 Archive and export with `xcodebuild`, then validate and upload the IPA with `altool`. Use the Fastlane Spaceship CLI scripts to prepare App Store Connect. Copy all localized metadata, including promotional text, along with screenshots, previews, and review information. Reuse the release notes from 1.3.14 unless new wording is requested. Verify the selected build and TestFlight availability, then confirm before submitting for automatic release after approval.
 

@@ -277,7 +277,7 @@ If linkstr starts in temporary recovery mode, retry startup successfully before 
 
 ### How do backup and restore work?
 
-Open Settings and tap **backup**. Choose where to save the file in Files. The picker prefers iCloud Drive when available; other enabled providers such as Google Drive or Dropbox can also be selected.
+Open Settings and tap **backup**. Choose where to save the file in Files. Files remembers the last folder you selected. If it opens in local storage, use **Browse** to select **iCloud Drive** or another enabled provider, such as Google Drive or Dropbox. No linkstr folder is required.
 
 The file includes your secret key, saved sessions and posts, contacts, membership and deletion history, reactions, read/archive choices, and app settings. It excludes cached videos, thumbnails, and previews. There is no password on the file. Keep it somewhere private: anyone with it can access your account.
 

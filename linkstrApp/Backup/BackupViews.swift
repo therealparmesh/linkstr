@@ -7,7 +7,6 @@ struct BackupSection: View {
   @State private var isPreparing = false
   @State private var isExporting = false
   @State private var document: BackupDocument?
-  @State private var directory: URL?
 
   var body: some View {
     LinkstrInsetSection(
@@ -21,7 +20,6 @@ struct BackupSection: View {
           do {
             let owner = session.identityService.pubkeyHex
             let data = try await session.prepareBackup()
-            directory = await session.backupWorker.defaultDirectory()
             guard session.identityService.pubkeyHex == owner else { return }
             document = BackupDocument(data: data)
             isExporting = true
@@ -48,7 +46,6 @@ struct BackupSection: View {
       case .failure(let error): session.report(error: error)
       }
     }
-    .fileDialogDefaultDirectory(directory)
     .onChange(of: isExporting) { _, presented in
       if !presented { document = nil }
     }
@@ -64,17 +61,11 @@ struct RestoreBackupButton: View {
   @EnvironmentObject private var session: AppSession
   @State private var isImporting = false
   @State private var isReading = false
-  @State private var directory: URL?
   @State private var selection: Selection?
 
   var body: some View {
     Button {
-      isReading = true
-      Task {
-        directory = await session.backupWorker.defaultDirectory()
-        isReading = false
-        isImporting = true
-      }
+      isImporting = true
     } label: {
       LinkstrActionButtonLabel(
         title: isReading ? "reading backup…" : "restore backup", systemImage: "square.and.arrow.down")
@@ -98,7 +89,6 @@ struct RestoreBackupButton: View {
       case .failure(let error): session.report(error: error)
       }
     }
-    .fileDialogDefaultDirectory(directory)
     .sheet(item: $selection) { RestoreBackupSheet(backup: $0.backup) }
   }
 }
