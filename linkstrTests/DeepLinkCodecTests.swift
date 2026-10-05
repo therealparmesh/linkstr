@@ -1,14 +1,70 @@
+import UIKit
 import XCTest
 
 @testable import linkstr
 
 final class DeepLinkCodecTests: XCTestCase {
+  @MainActor
+  func testShareBackWaitsForDismissalAndKeepsLatestValidLink() async throws {
+    let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let previousKeyWindow = scene.windows.first(where: \.isKeyWindow)
+    let window = UIWindow(windowScene: scene)
+    let host = UIViewController()
+    window.rootViewController = host
+    window.makeKeyAndVisible()
+    defer {
+      window.isHidden = true
+      window.rootViewController = nil
+      previousKeyWindow?.makeKeyAndVisible()
+    }
+
+    let shareSheet = UIActivityViewController(
+      activityItems: [URL(string: "https://example.com")!], applicationActivities: nil)
+    shareSheet.popoverPresentationController?.sourceView = host.view
+    await withCheckedContinuation { continuation in
+      host.present(shareSheet, animated: false) { continuation.resume() }
+    }
+    let handler = DeepLinkHandler()
+    let first = try XCTUnwrap(LinkstrDeepLinkCodec.makeShareAppDeepLink(url: "https://example.com/first"))
+    let latest = try XCTUnwrap(LinkstrDeepLinkCodec.makeShareAppDeepLink(url: "https://example.com/latest"))
+    XCTAssertTrue(handler.handle(url: first))
+    XCTAssertNil(handler.pendingShareDraft)
+    XCTAssertTrue(handler.handle(url: latest))
+    XCTAssertFalse(handler.handle(url: URL(string: "linkstr://share?url=ftp://example.com")!))
+
+    let completed = XCTNSPredicateExpectation(
+      predicate: NSPredicate { _, _ in handler.pendingShareDraft != nil }, object: nil)
+    await fulfillment(of: [completed], timeout: 5)
+    XCTAssertNil(host.presentedViewController)
+    XCTAssertEqual(handler.pendingShareDraft?.url, "https://example.com/latest")
+  }
+
   func testAppDeepLinkRoundtrip() throws {
-    let urlString = "https://www.tiktok.com/@acct/video/7596114833477537054"
+    let urlString = "https://example.com/a%20b?first=1&next=a%2Bb#section"
 
     let deepLink = try XCTUnwrap(LinkstrDeepLinkCodec.makeAppDeepLink(url: urlString))
     let parsed = try XCTUnwrap(LinkstrDeepLinkCodec.parseURL(fromAppDeepLink: deepLink))
     XCTAssertEqual(parsed, urlString)
+    XCTAssertEqual(LinkstrDeepLinkCodec.webURL(fromInput: " \n\(deepLink)\n "), urlString)
+    XCTAssertEqual(LinkstrDeepLinkCodec.webURL(fromInput: urlString), urlString)
+    XCTAssertEqual(LinkstrDeepLinkCodec.webURL(fromInput: "example.com/post"), "https://example.com/post")
+    XCTAssertNil(LinkstrURLValidator.normalizedWebURL(from: deepLink.absoluteString))
+  }
+
+  func testPostInputRejectsInvalidAndNestedDeepLinks() {
+    XCTAssertEqual(
+      LinkstrDeepLinkCodec.webURL(fromInput: "linkstr://open?url=https%3A%2F%2Fexample.com%2Fpost"),
+      "https://example.com/post")
+    for input in [
+      "linkstr://open", "linkstr://watch?url=https://example.com/post",
+      "linkstr://open/path?url=https://example.com/post",
+      "linkstr://open?url=https://example.com/post trailing text",
+      "linkstr://open?url=javascript%3Aalert(1)",
+      "linkstr://open?url=linkstr%3A%2F%2Fopen%3Furl%3Dhttps%3A%2F%2Fexample.com",
+      "ftp://example.com/post"
+    ] {
+      XCTAssertNil(LinkstrDeepLinkCodec.webURL(fromInput: input), input)
+    }
   }
 
   func testShareDeepLinkRoundtripWithOptionalNote() throws {

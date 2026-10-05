@@ -44,6 +44,18 @@ enum LinkstrDeepLinkCodec {
     makeDeepLink(host: mediaSaveDeepLinkHost, url: url, note: nil)
   }
 
+  static func webURL(fromInput input: String) -> String? {
+    if let webURL = LinkstrURLValidator.normalizedWebURL(from: input) {
+      return webURL
+    }
+    guard let deepLink = URL(
+      string: input.trimmingCharacters(in: .whitespacesAndNewlines), encodingInvalidCharacters: false
+    ) else {
+      return nil
+    }
+    return parseURL(fromAppDeepLink: deepLink)
+  }
+
   static func parseRoute(fromAppDeepLink url: URL) -> Route? {
     guard url.scheme?.lowercased() == appDeepLinkScheme else {
       return nil

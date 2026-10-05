@@ -157,7 +157,7 @@ enum SharedLinkExtractor {
   }
 
   private static func share(fromURLString urlString: String, note: String?) -> ExtractedShare? {
-    guard let normalizedURL = LinkstrURLValidator.normalizedWebURL(from: urlString) else {
+    guard let normalizedURL = LinkstrDeepLinkCodec.webURL(fromInput: urlString) else {
       return nil
     }
     return ExtractedShare(url: normalizedURL, note: normalizedNote(note))
@@ -166,7 +166,7 @@ enum SharedLinkExtractor {
   private static func share(fromText text: String) -> ExtractedShare? {
     guard let normalized = normalizedText(text) else { return nil }
 
-    if let directURL = LinkstrURLValidator.normalizedWebURL(from: normalized) {
+    if !normalized.contains(where: \.isWhitespace), let directURL = LinkstrDeepLinkCodec.webURL(fromInput: normalized) {
       return ExtractedShare(url: directURL, note: nil)
     }
 
@@ -174,7 +174,7 @@ enum SharedLinkExtractor {
     let nsRange = NSRange(normalized.startIndex..<normalized.endIndex, in: normalized)
     for match in detector.matches(in: normalized, options: [], range: nsRange) {
       guard let matchedURL = match.url else { continue }
-      guard let url = LinkstrURLValidator.normalizedWebURL(from: matchedURL.absoluteString) else {
+      guard let url = LinkstrDeepLinkCodec.webURL(fromInput: matchedURL.absoluteString) else {
         continue
       }
 

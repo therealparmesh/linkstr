@@ -155,7 +155,7 @@ struct NewPostSheet: View {
   }
 
   private var normalizedURL: String? {
-    LinkstrURLValidator.normalizedWebURL(from: url)
+    LinkstrDeepLinkCodec.webURL(fromInput: url)
   }
 
   private var canCreatePostInSession: Bool {

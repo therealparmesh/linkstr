@@ -47,7 +47,7 @@ struct ShareComposerView: View {
   }
 
   var normalizedURL: String? {
-    LinkstrURLValidator.normalizedWebURL(from: link)
+    LinkstrDeepLinkCodec.webURL(fromInput: link)
   }
 
   private var canSend: Bool {
