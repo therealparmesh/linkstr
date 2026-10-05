@@ -62,6 +62,7 @@ extension AppSession {
   }
 
   func startNostrIfPossible() {
+    guard !isRestoringBackup, restoreRecoveryError == nil else { return }
     guard let keypair = identityService.keypair else { return }
 
     if shouldDisableNostrStartupForCurrentProcess() {

@@ -29,17 +29,27 @@ final class PushNotificationService: NSObject, ObservableObject {
   }
 
   func clearDeliveredNotifications(sessionID: String, postID: String) async {
+    await clearDeliveredNotifications(sessionID: sessionID, postIDs: [postID], through: .now) { true }
+  }
+
+  func clearDeliveredNotifications(
+    sessionID: String, postIDs: Set<String>, through date: Date, stillCurrent: () -> Bool
+  ) async {
     let center = UNUserNotificationCenter.current()
     let notifications = await center.deliveredNotifications()
-    guard !Task.isCancelled else { return }
+    guard !Task.isCancelled, stillCurrent() else { return }
     let identifiers = notifications.filter {
-      Self.referencesPost($0.request.content.userInfo, sessionID: sessionID, postID: postID)
+      $0.date <= date && Self.referencesPosts($0.request.content.userInfo, sessionID: sessionID, postIDs: postIDs)
     }.map { $0.request.identifier }
     center.removeDeliveredNotifications(withIdentifiers: identifiers)
   }
 
   static func referencesPost(_ userInfo: [AnyHashable: Any], sessionID: String, postID: String) -> Bool {
-    guard !sessionID.isEmpty, !postID.isEmpty,
+    referencesPosts(userInfo, sessionID: sessionID, postIDs: [postID])
+  }
+
+  static func referencesPosts(_ userInfo: [AnyHashable: Any], sessionID: String, postIDs: Set<String>) -> Bool {
+    guard !sessionID.isEmpty,
       (userInfo["conversation_id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) == sessionID
     else { return false }
     let field: String
@@ -48,7 +58,9 @@ final class PushNotificationService: NSObject, ObservableObject {
     case "new_emoji_reaction": field = "post_id"
     default: return false
     }
-    return (userInfo[field] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) == postID
+    guard let postID = (userInfo[field] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+      !postID.isEmpty else { return false }
+    return postIDs.contains(postID)
   }
 
   override init() {

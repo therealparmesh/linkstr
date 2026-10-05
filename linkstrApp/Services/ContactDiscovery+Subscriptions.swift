@@ -3,26 +3,41 @@ import NostrSDK
 
 extension ContactDiscovery {
   func beginDiscoveryPage() {
-    guard let owner,
-      let filter = Filter(kinds: [3], pubkeys: [owner], until: cursor, limit: pageLimit)
-    else { return }
-    if let discoverySubscriptionID { pool?.closeSubscription(with: discoverySubscriptionID) }
-    discoverySubscriptionID = beginQuery(filter: filter, authors: nil, limit: pageLimit)
+    guard let owner else { return }
+    for (relayURL, page) in discoveryPages where connectedRelays.contains(relayURL) {
+      guard let filter = Filter(kinds: [3], pubkeys: [owner], until: page.until, limit: page.limit) else { continue }
+      _ = beginQuery(filter: filter, authors: nil, relayURL: relayURL, page: page)
+    }
   }
 
-  func beginQuery(filter: Filter, authors: Set<String>?, limit: Int) -> String? {
-    let relays = connectedRelays
+  func beginQuery(
+    filter: Filter, authors: Set<String>?, relayURL: String? = nil, page: RelayHistoryPage? = nil
+  ) -> String? {
+    let relays = relayURL.map { Set([$0]) } ?? connectedRelays
     guard let pool, !relays.isEmpty else {
       loadState = .unavailable
       return nil
     }
     let id = "linkstr-contacts-\(UUID().uuidString.lowercased())"
-    queries[id] = Query(authors: authors, expectedRelays: relays, limit: limit)
+    queries[id] = Query(authors: authors, expectedRelays: relays, page: page)
     loadState = .loading
-    _ = pool.subscribe(with: filter, subscriptionId: id)
-    timeouts[id] = Task { [weak self] in
-      do { try await Task.sleep(nanoseconds: 10_000_000_000) } catch { return }
-      self?.finishQuery(id, failed: true)
+    for relay in pool.relays where relays.contains(relay.url.absoluteString) {
+      do {
+        try relay.subscribe(with: filter, subscriptionId: id)
+      } catch {
+        complete(relayURL: relay.url.absoluteString, subscriptionID: id, failed: true)
+      }
+    }
+    if queries[id] != nil {
+      timeouts[id] = Task { [weak self] in
+        do { try await Task.sleep(nanoseconds: 10_000_000_000) } catch { return }
+        guard let self else { return }
+        if let receiver = self.receiver {
+          receiver.contactDeadline(id)
+        } else {
+          self.finishQuery(id, failed: true)
+        }
+      }
     }
     return id
   }
@@ -34,7 +49,7 @@ extension ContactDiscovery {
       pendingAuthors.subtract(authors)
       guard let filter = Filter(authors: authors.sorted(), kinds: [3], limit: authors.count * 2)
       else { return }
-      _ = beginQuery(filter: filter, authors: authors, limit: authors.count * 2)
+      _ = beginQuery(filter: filter, authors: authors)
     }
   }
 
@@ -42,21 +57,15 @@ extension ContactDiscovery {
     guard await eventDecoder.isValid(event), !Task.isCancelled else { return }
     guard isVisible, let owner, event.kind == .followList, event.pubkey != owner else { return }
     let isDiscovery =
-      subscriptionID == discoverySubscriptionID || subscriptionID == discoveryLiveSubscriptionID
+      queries[subscriptionID]?.page != nil || subscriptionID == discoveryLiveSubscriptionID
     let isLive = subscriptionID == liveSubscriptionID && visibleAuthors.contains(event.pubkey)
     let query = queries[subscriptionID]
     guard isDiscovery || isLive || query?.authors?.contains(event.pubkey) == true else { return }
     guard !isDiscovery || event.referencedPubkeys.contains(owner) else { return }
     if var query {
       guard query.expectedRelays.contains(relayURL) else { return }
-      // Count valid events even when their saved state is unchanged, so pagination can advance.
-      guard query.events.contains(event.id)
-        || query.events.count < query.limit * max(1, query.expectedRelays.count) else {
-        return
-      }
-      query.events.insert(event.id)
-      query.oldestTimestamp = min(
-        query.oldestTimestamp ?? Int(event.createdAt), Int(event.createdAt))
+      guard query.page?.until.map({ event.createdAt <= $0 }) != false else { return }
+      query.page?.record(id: event.id, timestamp: Int(event.createdAt))
       queries[subscriptionID] = query
     }
     do {
@@ -99,23 +108,20 @@ extension ContactDiscovery {
     if let authors = query.authors {
       pool?.closeSubscription(with: id)
       if !failed { verifiedAuthors.formUnion(authors) }
-    } else {
-      canLoadMore = !failed && query.events.count >= query.limit
-      if canLoadMore, let oldest = query.oldestTimestamp {
-        if cursor == oldest {
-          if pageLimit < 1_600 {
-            pageLimit *= 2
-          } else {
-            canLoadMore = false
-            queryFailed = true
-          }
-        } else {
-          cursor = oldest
-          pageLimit = 200
+    } else if let relayURL = query.expectedRelays.first, let page = query.page {
+      pool?.closeSubscription(with: id)
+      if failed {
+        discoveryPages.removeValue(forKey: relayURL)
+      } else {
+        switch page.completion() {
+        case .next(let next): discoveryPages[relayURL] = next
+        case .finished: discoveryPages.removeValue(forKey: relayURL)
+        case .incomplete:
+          discoveryPages.removeValue(forKey: relayURL)
+          queryFailed = true
         }
       }
-      pool?.closeSubscription(with: id)
-      discoverySubscriptionID = nil
+      canLoadMore = !discoveryPages.isEmpty
     }
     startAuthorQueries()
     loadState = queries.isEmpty ? (queryFailed ? .unavailable : .ready) : .loading

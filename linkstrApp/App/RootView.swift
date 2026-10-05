@@ -24,7 +24,7 @@ struct RootView: View {
 
   private var sharedLinkDetailBinding: Binding<Bool> {
     Binding(
-      get: { deepLinkHandler.pendingURLString != nil },
+      get: { canPresentMediaSave && deepLinkHandler.pendingURLString != nil },
       set: { isPresented in
         if !isPresented {
           deepLinkHandler.clearSharedLinkDetail()
@@ -68,14 +68,21 @@ struct RootView: View {
   }
 
   private var canPresentMediaSave: Bool {
-    session.didFinishBoot
+    session.didFinishBoot && !session.isRestoringBackup && session.restoreRecoveryError == nil
   }
 
   var body: some View {
     ZStack {
       LinkstrBackgroundView()
       Group {
-        if !session.didFinishBoot {
+        if let error = session.restoreRecoveryError {
+          LinkstrStorageRecoveryView(
+            title: "restore paused", message: error, primaryActionTitle: "retry restore",
+            onPrimaryAction: { Task { await session.boot() } },
+            secondaryActionTitle: nil, onSecondaryAction: nil)
+        } else if session.didRestoreBackup {
+          LinkstrBootLoadingView(statusMessage: "restoring backup…")
+        } else if !session.didFinishBoot {
           LinkstrBootLoadingView(statusMessage: session.bootStatusMessage)
             .transition(.opacity)
         } else if session.shouldShowOnboarding {

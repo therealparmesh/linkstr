@@ -48,20 +48,15 @@ enum NostrDMTimingDefaults {
 
 @MainActor
 final class NostrDMService: ObservableObject, EventCreating {
-  enum BackfillSubscriptionKind: String {
+  enum BackfillSubscriptionKind: CaseIterable {
     case recipient
-    case author
+    case preferences
   }
 
   struct BackfillState {
     let kind: BackfillSubscriptionKind
-    var page: Int
-    let until: Int?
-    let pageSize: Int
-    var expectedRelayURLs: Set<String>
-    var eoseRelayURLs = Set<String>()
-    var oldestCreatedAt: Int64?
-    var receivedGiftWrapCount = 0
+    let relayURL: String
+    var page: RelayHistoryPage
   }
 
   var relayPool: RelayPool?
@@ -77,7 +72,6 @@ final class NostrDMService: ObservableObject, EventCreating {
   var processedGiftWrapEventIDOrder: [String] = []
   var processedGiftWrapEventIDHead = 0
   private var recipientFilter: Filter?
-  private var authorFilter: Filter?
   var reconnectTask: Task<Void, Never>?
   var shouldMaintainConnection = false
   var publishAckTracker = PublishAckTracker()
@@ -101,8 +95,6 @@ final class NostrDMService: ObservableObject, EventCreating {
   var configuredRelayURLs = Set<String>()
   var didNotifyInitialBackfillCompletion = false
 
-  let recipientSubscriptionID = "linkstr-giftwrap-recipient"
-  let authorSubscriptionID = "linkstr-giftwrap-author"
   @Published var contactListLoadState: ContactListLoadState = .loading
   var followListSubscriptionID = "linkstr-follow-list-self-\(UUID().uuidString.lowercased())"
   var pendingFollowListRelays = Set<String>()
@@ -112,9 +104,13 @@ final class NostrDMService: ObservableObject, EventCreating {
   let backfillPageSize = 500
   let processedEventIDLimit = 10_000
   var activeBackfillStates: [String: BackfillState] = [:]
-  var completedBackfillKinds = Set<BackfillSubscriptionKind>()
-  var currentBackfillRelayURLs = Set<String>()
-  var completedBackfillRelayURLs = Set<String>()
+  var settledHistoryRelays = Set<String>()
+  var backfillTimeoutTasks: [String: Task<Void, Never>] = [:]
+  struct LiveSubscription {
+    let relayURL: String
+    var isReplaying = true
+  }
+  var liveSubscriptions: [String: LiveSubscription] = [:]
   private var followListFilter: Filter?
   let linkstrRumorKind = EventKind.unknown(44_001)
 
@@ -195,9 +191,8 @@ final class NostrDMService: ObservableObject, EventCreating {
     self.keypair = keypair
     configuredRelayURLs = Set(relayURLs)
     activeBackfillStates = [:]
-    completedBackfillKinds = []
-    currentBackfillRelayURLs = []
-    completedBackfillRelayURLs = []
+    settledHistoryRelays = []
+    liveSubscriptions = [:]
     didNotifyInitialBackfillCompletion = false
     liveSubscriptionSince =
       Int(Date.now.timeIntervalSince1970)
@@ -243,13 +238,6 @@ final class NostrDMService: ObservableObject, EventCreating {
         limit: backfillPageSize
       )
 
-      authorFilter = Filter(
-        authors: [keypair.publicKey.hex],
-        kinds: [EventKind.giftWrap.rawValue],
-        since: liveSubscriptionSince,
-        limit: backfillPageSize
-      )
-
       followListFilter = Filter(
         authors: [keypair.publicKey.hex],
         kinds: [EventKind.followList.rawValue],
@@ -289,13 +277,13 @@ final class NostrDMService: ObservableObject, EventCreating {
       keypair = nil
     }
     recipientFilter = nil
-    authorFilter = nil
     followListFilter = nil
     liveSubscriptionSince = nil
     activeBackfillStates.removeAll()
-    completedBackfillKinds.removeAll()
-    currentBackfillRelayURLs.removeAll()
-    completedBackfillRelayURLs.removeAll()
+    settledHistoryRelays.removeAll()
+    liveSubscriptions.removeAll()
+    backfillTimeoutTasks.values.forEach { $0.cancel() }
+    backfillTimeoutTasks.removeAll()
     didNotifyInitialBackfillCompletion = false
     let pendingBatchIDs = publishAckTracker.cancelAll()
     for batchID in pendingBatchIDs {
@@ -343,28 +331,33 @@ extension NostrDMService {
     _ = relayPool.subscribe(with: followListFilter, subscriptionId: followListSubscriptionID)
   }
 
-  func installSubscriptions() {
-    guard let relayPool else { return }
-    if let recipientFilter {
-      _ = relayPool.subscribe(with: recipientFilter, subscriptionId: recipientSubscriptionID)
-    }
-    if let authorFilter {
-      _ = relayPool.subscribe(with: authorFilter, subscriptionId: authorSubscriptionID)
-    }
-    if let followListFilter {
-      if contactListLoadState != .loading {
-        beginFollowListQuery(relayURLs: connectedFollowListRelays)
+  func installSubscriptions(on relay: Relay) {
+    do {
+      for (id, state) in liveSubscriptions where state.relayURL == relay.url.absoluteString {
+        try? relay.closeSubscription(with: id)
+        liveSubscriptions.removeValue(forKey: id)
       }
-      _ = relayPool.subscribe(with: followListFilter, subscriptionId: followListSubscriptionID)
-    }
-    if let keypair,
-      let filter = Filter(authors: [keypair.publicKey.hex], kinds: [PrivatePreferenceCodec.kind.rawValue]) {
-      _ = relayPool.subscribe(
-        with: filter,
-        subscriptionId: privatePreferencesSubscriptionID
-      )
+      if let recipientFilter {
+        let id = "linkstr-live-\(UUID().uuidString.lowercased())"
+        liveSubscriptions[id] = LiveSubscription(relayURL: relay.url.absoluteString)
+        try relay.subscribe(with: recipientFilter, subscriptionId: id)
+      }
+      if let followListFilter {
+        if contactListLoadState != .loading {
+          beginFollowListQuery(relayURLs: [relay.url.absoluteString])
+        }
+        try relay.subscribe(with: followListFilter, subscriptionId: followListSubscriptionID)
+      }
+      if let keypair,
+        let filter = Filter(authors: [keypair.publicKey.hex], kinds: [PrivatePreferenceCodec.kind.rawValue], limit: 0) {
+        try relay.subscribe(with: filter, subscriptionId: privatePreferencesSubscriptionID)
+      }
+      restartHistory(on: relay)
+    } catch {
+      onRelayStatus?(relay.url.absoluteString, .failed, error.localizedDescription)
     }
   }
+
 }
 
 // MARK: - Errors

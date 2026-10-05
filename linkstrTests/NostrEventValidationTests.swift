@@ -200,7 +200,7 @@ final class NostrEventValidationTests: XCTestCase {
     service.keypair = recipient
     let subscriptionID = "linkstr-backfill-security"
     service.activeBackfillStates[subscriptionID] = NostrDMService.BackfillState(
-      kind: .recipient, page: 0, until: nil, pageSize: 500, expectedRelayURLs: ["relay"])
+      kind: .recipient, relayURL: "relay", page: RelayHistoryPage())
     var received: [ReceivedDirectMessage] = []
     service.onIncoming = { received.append($0) }
     let payload = NostrEventTestSupport.payload(.root, members: [])
@@ -208,11 +208,11 @@ final class NostrEventValidationTests: XCTestCase {
     let wrap = try service.giftWrap(withRumor: rumor, toRecipient: recipient.publicKey, signedBy: sender)
     let invalid = try NostrEventTestSupport.changing(wrap, field: "sig", to: String(repeating: "0", count: 128))
     try await NostrEventTestSupport.deliver(invalid, to: service, subscriptionID: subscriptionID)
-    XCTAssertEqual(service.activeBackfillStates[subscriptionID]?.receivedGiftWrapCount, 0)
-    XCTAssertNil(service.activeBackfillStates[subscriptionID]?.oldestCreatedAt)
+    XCTAssertEqual(service.activeBackfillStates[subscriptionID]?.page.eventIDs.count, 0)
+    XCTAssertNil(service.activeBackfillStates[subscriptionID]?.page.oldest)
     for _ in 0..<2 { try await NostrEventTestSupport.deliver(wrap, to: service, subscriptionID: subscriptionID) }
-    XCTAssertEqual(service.activeBackfillStates[subscriptionID]?.receivedGiftWrapCount, 2)
-    XCTAssertEqual(service.activeBackfillStates[subscriptionID]?.oldestCreatedAt, wrap.createdAt)
+    XCTAssertEqual(service.activeBackfillStates[subscriptionID]?.page.eventIDs.count, 1)
+    XCTAssertEqual(service.activeBackfillStates[subscriptionID]?.page.oldest, Int(wrap.createdAt))
     XCTAssertEqual(received.count, 1)
   }
 

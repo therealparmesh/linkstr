@@ -3,273 +3,108 @@ import NostrSDK
 
 extension NostrDMService {
   func connectedRelayURLs() -> Set<String> {
-    guard let relayPool else { return [] }
-    return Set(
-      relayPool.relays.compactMap { relay in
-        if case .connected = relay.state {
-          return relay.url.absoluteString
-        }
-        return nil
-      }
-    )
+    Set(relayPool?.relays.compactMap { relay in
+      if case .connected = relay.state { return relay.url.absoluteString }
+      return nil
+    } ?? [])
   }
 
-  func backfillSubscriptionID(kind: BackfillSubscriptionKind, page: Int, until: Int?) -> String {
-    if let until {
-      return "linkstr-backfill-\(kind.rawValue)-\(page)-\(until)"
+  func restartHistory(on relay: Relay) {
+    cancelHistory(relayURL: relay.url.absoluteString)
+    settledHistoryRelays.remove(relay.url.absoluteString)
+    for kind in BackfillSubscriptionKind.allCases {
+      beginBackfill(kind: kind, relay: relay, page: RelayHistoryPage())
     }
-    return "linkstr-backfill-\(kind.rawValue)-\(page)-latest"
   }
 
-  func makeBackfillFilter(kind: BackfillSubscriptionKind, pubkey: String, until: Int?) -> Filter? {
+  func beginBackfill(kind: BackfillSubscriptionKind, relay: Relay, page: RelayHistoryPage) {
+    guard let keypair else { return }
+    let filter: Filter?
     switch kind {
     case .recipient:
-      return Filter(
-        kinds: [EventKind.giftWrap.rawValue],
-        pubkeys: [pubkey],
-        until: until,
-        limit: backfillPageSize
-      )
-    case .author:
-      return Filter(
-        authors: [pubkey],
-        kinds: [EventKind.giftWrap.rawValue],
-        until: until,
-        limit: backfillPageSize
-      )
+      filter = Filter(kinds: [EventKind.giftWrap.rawValue], pubkeys: [keypair.publicKey.hex],
+                      until: page.until, limit: page.limit)
+    case .preferences:
+      filter = Filter(authors: [keypair.publicKey.hex], kinds: [PrivatePreferenceCodec.kind.rawValue],
+                      until: page.until, limit: page.limit)
+    }
+    guard let filter else { return }
+    let id = "linkstr-backfill-\(UUID().uuidString.lowercased())"
+    activeBackfillStates[id] = BackfillState(kind: kind, relayURL: relay.url.absoluteString, page: page)
+    do {
+      try relay.subscribe(with: filter, subscriptionId: id)
+      backfillTimeoutTasks[id] = Task { [weak self, weak relay] in
+        do { try await Task.sleep(nanoseconds: 15_000_000_000) } catch { return }
+        guard let self, let relay else { return }
+        self.relayReceiver?.historyDeadline(relay, subscriptionID: id)
+      }
+    } catch {
+      finishBackfill(subscriptionID: id, failed: true)
     }
   }
 
-  // MARK: - Backfill state machine
-
-  func startBackfillIfNeeded() {
-    guard let keypair else { return }
-    guard activeBackfillStates.isEmpty else { return }
-    guard completedBackfillKinds.count < 2 else { return }
-    let expectedRelayURLs = connectedRelayURLs()
-    guard !expectedRelayURLs.isEmpty else { return }
-    currentBackfillRelayURLs = expectedRelayURLs
-    if !completedBackfillKinds.contains(.recipient) {
-      beginBackfill(kind: .recipient, page: 0, until: nil, pubkey: keypair.publicKey.hex)
-    }
-    if !completedBackfillKinds.contains(.author) {
-      beginBackfill(kind: .author, page: 0, until: nil, pubkey: keypair.publicKey.hex)
-    }
+  func handleBackfillEOSE(relayURL: String, subscriptionID: String) {
+    guard activeBackfillStates[subscriptionID]?.relayURL == relayURL else { return }
+    finishBackfill(subscriptionID: subscriptionID, failed: false)
   }
 
-  func beginBackfill(
-    kind: BackfillSubscriptionKind,
-    page: Int,
-    until: Int?,
-    pubkey: String
-  ) {
-    let currentlyConnectedRelayURLs = connectedRelayURLs()
-    let expectedRelayURLs: Set<String>
-    if currentBackfillRelayURLs.isEmpty {
-      expectedRelayURLs = currentlyConnectedRelayURLs
-    } else {
-      expectedRelayURLs = currentBackfillRelayURLs.intersection(currentlyConnectedRelayURLs)
-    }
-    guard !expectedRelayURLs.isEmpty else { return }
-    guard let relayPool, let filter = makeBackfillFilter(kind: kind, pubkey: pubkey, until: until)
-    else {
-      markBackfillKindCompleted(kind)
+  func finishBackfill(subscriptionID: String, failed: Bool) {
+    guard let state = activeBackfillStates.removeValue(forKey: subscriptionID) else { return }
+    backfillTimeoutTasks.removeValue(forKey: subscriptionID)?.cancel()
+    let relay = relayPool?.relays.first { $0.url.absoluteString == state.relayURL }
+    try? relay?.closeSubscription(with: subscriptionID)
+    let completion = failed ? RelayHistoryPage.Completion.incomplete : state.page.completion()
+    if case .next(let page) = completion, let relay {
+      beginBackfill(kind: state.kind, relay: relay, page: page)
       return
     }
-    let subscriptionID = backfillSubscriptionID(kind: kind, page: page, until: until)
-    activeBackfillStates[subscriptionID] = BackfillState(
-      kind: kind,
-      page: page,
-      until: until,
-      pageSize: backfillPageSize,
-      expectedRelayURLs: expectedRelayURLs
-    )
-    _ = relayPool.subscribe(with: filter, subscriptionId: subscriptionID)
-  }
-
-  // MARK: - Pagination
-
-  func completeBackfillPage(subscriptionID: String) {
-    guard var state = activeBackfillStates.removeValue(forKey: subscriptionID) else { return }
-    relayPool?.closeSubscription(with: subscriptionID)
-
-    guard let keypair else {
-      markBackfillKindCompleted(state.kind)
-      return
+    if case .incomplete = completion {
+      onRelayStatus?(state.relayURL, .connected, "couldn't finish loading relay history. reconnect to try again.")
     }
-
-    guard state.receivedGiftWrapCount >= state.pageSize else {
-      markBackfillKindCompleted(state.kind)
-      return
+    if !activeBackfillStates.values.contains(where: { $0.relayURL == state.relayURL }) {
+      settledHistoryRelays.insert(state.relayURL)
     }
-    guard let oldestCreatedAt = state.oldestCreatedAt, oldestCreatedAt > 0 else {
-      markBackfillKindCompleted(state.kind)
-      return
+    if state.kind == .preferences {
+      let generation = receiveGeneration
+      Task { [weak self] in
+        guard let self, self.receiveGeneration == generation else { return }
+        await self.onPrivatePreferencesReady?()
+      }
     }
-
-    let nextUntil = Int(oldestCreatedAt - 1)
-    if let priorUntil = state.until, nextUntil >= priorUntil {
-      markBackfillKindCompleted(state.kind)
-      return
-    }
-
-    state.page += 1
-    beginBackfill(
-      kind: state.kind, page: state.page, until: nextUntil, pubkey: keypair.publicKey.hex)
-  }
-
-  func markBackfillKindCompleted(_ kind: BackfillSubscriptionKind) {
-    completedBackfillKinds.insert(kind)
-    finalizeBackfillCoverageIfNeeded()
     notifyInitialBackfillCompletionIfNeeded()
   }
 
-  func finalizeBackfillCoverageIfNeeded() {
-    guard activeBackfillStates.isEmpty else { return }
-    guard completedBackfillKinds.count == 2 else { return }
-    completedBackfillRelayURLs = currentBackfillRelayURLs
-    currentBackfillRelayURLs.removeAll()
+  func cancelHistory(relayURL: String) {
+    for (id, state) in activeBackfillStates where state.relayURL == relayURL {
+      if let relay = relayPool?.relays.first(where: { $0.url.absoluteString == relayURL }) {
+        try? relay.closeSubscription(with: id)
+      }
+      backfillTimeoutTasks.removeValue(forKey: id)?.cancel()
+      activeBackfillStates.removeValue(forKey: id)
+    }
+    settledHistoryRelays.insert(relayURL)
   }
 
   func notifyInitialBackfillCompletionIfNeeded() {
-    guard !didNotifyInitialBackfillCompletion else { return }
-    guard activeBackfillStates.isEmpty else { return }
-    guard completedBackfillKinds.count == 2 else { return }
+    guard !didNotifyInitialBackfillCompletion, activeBackfillStates.isEmpty,
+      settledHistoryRelays.isSuperset(of: configuredRelayURLs) else { return }
     didNotifyInitialBackfillCompletion = true
     onInitialBackfillComplete?()
   }
 
-  // MARK: - EOSE handling
-
-  func handleBackfillEOSE(relayURL: String, subscriptionID: String) {
-    guard var state = activeBackfillStates[subscriptionID] else { return }
-
-    if state.expectedRelayURLs.isEmpty {
-      state.expectedRelayURLs = connectedRelayURLs()
-    }
-    state.eoseRelayURLs.insert(relayURL)
-    activeBackfillStates[subscriptionID] = state
-
-    guard !state.expectedRelayURLs.isEmpty else {
-      completeBackfillPage(subscriptionID: subscriptionID)
-      return
-    }
-    if state.eoseRelayURLs.isSuperset(of: state.expectedRelayURLs) {
-      completeBackfillPage(subscriptionID: subscriptionID)
-    }
-  }
-
-  func pruneRelayFromBackfillWaitlists(relayURL: String) {
-    currentBackfillRelayURLs.remove(relayURL)
-    for key in Array(activeBackfillStates.keys) {
-      guard var state = activeBackfillStates[key] else { continue }
-      guard state.expectedRelayURLs.remove(relayURL) != nil else { continue }
-      activeBackfillStates[key] = state
-      if state.expectedRelayURLs.isEmpty {
-        completeBackfillPage(subscriptionID: key)
-      }
-    }
-  }
-
-  // MARK: - Late relay recovery
-
-  func resetBackfillProgressForLateRelay() {
-    for subscriptionID in activeBackfillStates.keys {
-      relayPool?.closeSubscription(with: subscriptionID)
-    }
-    activeBackfillStates.removeAll()
-    completedBackfillKinds.removeAll()
-    currentBackfillRelayURLs.removeAll()
-    completedBackfillRelayURLs.removeAll()
-  }
-
-  func maybeRestartBackfillForLateRelay(relayURL: String) {
-    if !activeBackfillStates.isEmpty {
-      guard !currentBackfillRelayURLs.isEmpty else { return }
-      guard !currentBackfillRelayURLs.contains(relayURL) else { return }
-      resetBackfillProgressForLateRelay()
-      return
-    }
-
-    guard completedBackfillKinds.count == 2 else { return }
-    guard !completedBackfillRelayURLs.contains(relayURL) else { return }
-    resetBackfillProgressForLateRelay()
-  }
-
-  // MARK: - Progress tracking
-
   func trackBackfillProgress(for event: NostrEvent, subscriptionID: String) {
-    if var backfill = activeBackfillStates[subscriptionID] {
-      backfill.receivedGiftWrapCount += 1
-      let createdAt = event.createdAt
-      if let oldest = backfill.oldestCreatedAt {
-        backfill.oldestCreatedAt = min(oldest, createdAt)
-      } else {
-        backfill.oldestCreatedAt = createdAt
-      }
-      activeBackfillStates[subscriptionID] = backfill
+    guard var state = activeBackfillStates[subscriptionID] else { return }
+    state.page.record(id: event.id, timestamp: Int(event.createdAt))
+    activeBackfillStates[subscriptionID] = state
+  }
+
+  func matchesBackfill(_ event: NostrEvent, subscriptionID: String, relayURL: String) -> Bool {
+    guard let state = activeBackfillStates[subscriptionID], state.relayURL == relayURL,
+      let owner = keypair?.publicKey.hex else { return false }
+    guard state.page.until.map({ event.createdAt <= $0 }) != false else { return false }
+    switch state.kind {
+    case .recipient: return event.kind == .giftWrap && event.referencedPubkeys.contains(owner)
+    case .preferences: return event.kind == PrivatePreferenceCodec.kind && event.pubkey == owner
     }
   }
-}
-
-extension NostrDMService {
-  // MARK: - Testing
-
-  #if DEBUG
-    func seedBackfillCoverageForTesting(
-      activeRelayURLs: [String] = [],
-      completedRelayURLs: [String] = [],
-      hasActiveBackfill: Bool,
-      isCompleted: Bool
-    ) {
-      currentBackfillRelayURLs = Set(activeRelayURLs)
-      completedBackfillRelayURLs = Set(completedRelayURLs)
-      completedBackfillKinds = isCompleted ? [.recipient, .author] : []
-      if hasActiveBackfill {
-        activeBackfillStates = [
-          "test-backfill": BackfillState(
-            kind: .recipient,
-            page: 0,
-            until: nil,
-            pageSize: backfillPageSize,
-            expectedRelayURLs: Set(activeRelayURLs)
-          )
-        ]
-      } else {
-        activeBackfillStates.removeAll()
-      }
-    }
-
-    func simulateLateRelayConnectionForTesting(_ relayURL: String) {
-      maybeRestartBackfillForLateRelay(relayURL: relayURL)
-    }
-
-    func simulateBackfillCoverageFinalizationForTesting(
-      relayURLs: [String],
-      initialCompletionAlreadyNotified: Bool
-    ) {
-      currentBackfillRelayURLs = Set(relayURLs)
-      activeBackfillStates.removeAll()
-      completedBackfillKinds = [.recipient, .author]
-      didNotifyInitialBackfillCompletion = initialCompletionAlreadyNotified
-      finalizeBackfillCoverageIfNeeded()
-      notifyInitialBackfillCompletionIfNeeded()
-    }
-
-    var testingCurrentBackfillRelayURLs: Set<String> {
-      currentBackfillRelayURLs
-    }
-
-    var testingCompletedBackfillRelayURLs: Set<String> {
-      completedBackfillRelayURLs
-    }
-
-    var testingActiveBackfillCount: Int {
-      activeBackfillStates.count
-    }
-
-    var testingCompletedBackfillKindCount: Int {
-      completedBackfillKinds.count
-    }
-  #endif
 }

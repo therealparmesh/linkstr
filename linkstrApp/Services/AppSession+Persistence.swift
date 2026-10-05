@@ -196,8 +196,9 @@ extension AppSession {
     guard let ownerPubkey = identityService.pubkeyHex else { return }
 
     do {
-      suppressUnreadDuringHistoricalRestore =
-        !(try messageStore.hasPersistedConversationState(ownerPubkey: ownerPubkey))
+      let hasRestoredBackup = try accountStateStore.accountState(ownerPubkey: ownerPubkey)?.hasRestoredBackup ?? false
+      suppressUnreadDuringHistoricalRestore = try !hasRestoredBackup
+        && !messageStore.hasPersistedConversationState(ownerPubkey: ownerPubkey)
     } catch {
       suppressUnreadDuringHistoricalRestore = false
       reportIncomingPersistenceError(error)

@@ -105,6 +105,9 @@ struct LinkstrAppMain: App {
                     await readyContext.session.boot()
                   }
                 }
+                .onReceive(readyContext.session.$didRestoreBackup) { restored in
+                  if restored { bootstrap.reload() }
+                }
                 .onReceive(
                   NotificationCenter.default.publisher(
                     for: UIApplication.protectedDataDidBecomeAvailableNotification
@@ -131,6 +134,7 @@ struct LinkstrAppMain: App {
                     break
                   }
                 }
+                .id(ObjectIdentifier(readyContext.session))
             }
           }
           .modelContainer(readyContext.container)
@@ -263,7 +267,8 @@ final class AppBootstrapState: ObservableObject {
   ) throws -> ModelContainer {
     let configuration = ModelConfiguration(
       schema: schema,
-      isStoredInMemoryOnly: isStoredInMemoryOnly
+      isStoredInMemoryOnly: isStoredInMemoryOnly,
+      cloudKitDatabase: .none
     )
     return try ModelContainer(for: schema, configurations: [configuration])
   }

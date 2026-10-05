@@ -13,6 +13,17 @@ extension AppSession {
       isBooting = false
     }
 
+    restoreRecoveryError = nil
+    do {
+      if try await finishBackupActivation() {
+        didRestoreBackup = true
+        return
+      }
+    } catch {
+      restoreRecoveryError = error.localizedDescription
+      return
+    }
+
     await retryIdentityLoadIfNeeded(
       maxAttempts: bootIdentityRetryAttemptCount,
       retryDelayNanoseconds: configuredIdentityRetryDelayNanoseconds
@@ -68,6 +79,10 @@ extension AppSession {
   }
 
   func handleProtectedDataDidBecomeAvailable() {
+    if restoreRecoveryError != nil {
+      Task { await boot() }
+      return
+    }
     guard didFinishBoot, isForeground else { return }
     scheduleNostrStartup(maxAttempts: IdentityLoadRetryDefaults.protectedDataAttempts)
   }

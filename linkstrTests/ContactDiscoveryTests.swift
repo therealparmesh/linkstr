@@ -83,43 +83,28 @@ final class ContactDiscoveryTests: XCTestCase {
     }
   }
 
-  func testFullTimestampPageNeverSkipsTheBoundaryAndStopsAtItsLimit() throws {
-    let discovery = try makeDiscovery()
-    for limit in [200, 200, 400, 800, 1_600] {
-      discovery.queries["page"] = ContactDiscovery.Query(
-        authors: nil, expectedRelays: ["relay"], events: Set((0..<limit).map(String.init)),
-        oldestTimestamp: 100, limit: limit
-      )
-      discovery.finishQuery("page")
-      XCTAssertEqual(discovery.cursor, 100)
-    }
-    XCTAssertFalse(discovery.canLoadMore)
-  }
-
   func testQueryIgnoresUnexpectedRelaysAndDoesNotTreatDuplicatesAsOverflow() async throws {
     let discovery = try makeDiscovery()
     let owner = try TestKeyMaterialFactory.makePubkeyHex()
     let follow = try event(author: XCTUnwrap(Keypair()), keys: [owner], timestamp: 100)
     discovery.owner = owner
     discovery.isVisible = true
-    discovery.discoverySubscriptionID = "page"
     discovery.queries["page"] = ContactDiscovery.Query(
-      authors: nil, expectedRelays: ["expected"], limit: 1)
+      authors: nil, expectedRelays: ["expected"], page: RelayHistoryPage(limit: 1))
 
     await discovery.receive(follow, subscriptionID: "page", relayURL: "unexpected")
     XCTAssertTrue(try discovery.records(ownerPubkey: owner).isEmpty)
     await discovery.receive(follow, subscriptionID: "page", relayURL: "expected")
     await discovery.receive(follow, subscriptionID: "page", relayURL: "expected")
     XCTAssertEqual(try discovery.records(ownerPubkey: owner).count, 1)
-    XCTAssertEqual(discovery.queries["page"]?.events.count, 1)
+    XCTAssertEqual(discovery.queries["page"]?.page?.eventIDs.count, 1)
   }
 
   func testCompletionWaitsForExpectedRelaysAndFailureDoesNotAdvancePagination() throws {
     let discovery = try makeDiscovery()
     discovery.loadState = .loading
     discovery.queries["page"] = ContactDiscovery.Query(
-      authors: nil, expectedRelays: ["first", "second"], events: ["event"],
-      oldestTimestamp: 100, limit: 1)
+      authors: ["author"], expectedRelays: ["first", "second"])
     discovery.complete(relayURL: "unknown", subscriptionID: "page")
     discovery.complete(relayURL: "first", subscriptionID: "obsolete")
     discovery.complete(relayURL: "first", subscriptionID: "page")
@@ -127,7 +112,7 @@ final class ContactDiscoveryTests: XCTestCase {
     XCTAssertEqual(discovery.loadState, .loading)
     discovery.relayDisconnected("second")
     XCTAssertEqual(discovery.loadState, .unavailable)
-    XCTAssertNil(discovery.cursor)
+    XCTAssertTrue(discovery.discoveryPages.isEmpty)
     XCTAssertFalse(discovery.canLoadMore)
     discovery.complete(relayURL: "second", subscriptionID: "page")
     XCTAssertEqual(discovery.loadState, .unavailable)

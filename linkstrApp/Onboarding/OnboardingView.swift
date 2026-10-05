@@ -100,6 +100,8 @@ struct OnboardingView: View {
         }
         .linkstrPrimaryButton()
         .disabled(secretKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+        RestoreBackupButton()
       }
 
       HStack(spacing: 12) {

@@ -74,6 +74,19 @@ targets:
         NSAppTransportSecurity:
           NSAllowsArbitraryLoadsInWebContent: true
         ITSAppUsesNonExemptEncryption: false
+        NSUbiquitousContainers:
+          iCloud.com.parmscript.linkstr:
+            NSUbiquitousContainerIsDocumentScopePublic: true
+            NSUbiquitousContainerName: linkstr
+            NSUbiquitousContainerSupportedFolderLevels: Any
+        UTExportedTypeDeclarations:
+          - UTTypeIdentifier: com.parmscript.linkstr.backup
+            UTTypeDescription: linkstr backup
+            UTTypeConformsTo:
+              - public.data
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - linkstrbackup
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight

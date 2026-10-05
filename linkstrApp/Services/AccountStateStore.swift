@@ -97,7 +97,7 @@ final class AccountStateStore {
     try modelContext.save()
   }
 
-  private func accountState(ownerPubkey: String) throws -> AccountStateEntity? {
+  func accountState(ownerPubkey: String) throws -> AccountStateEntity? {
     var descriptor = FetchDescriptor<AccountStateEntity>(
       predicate: #Predicate { $0.ownerPubkey == ownerPubkey }
     )

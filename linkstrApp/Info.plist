@@ -44,6 +44,18 @@
 	<string>Camera access is used to scan Contact Key (npub) QR codes.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Photo access is used only to save locally downloaded videos to your gallery.</string>
+	<key>NSUbiquitousContainers</key>
+	<dict>
+		<key>iCloud.com.parmscript.linkstr</key>
+		<dict>
+			<key>NSUbiquitousContainerIsDocumentScopePublic</key>
+			<true/>
+			<key>NSUbiquitousContainerName</key>
+			<string>linkstr</string>
+			<key>NSUbiquitousContainerSupportedFolderLevels</key>
+			<string>Any</string>
+		</dict>
+	</dict>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -57,6 +69,26 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 		<string>UIInterfaceOrientationPortrait</string>
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+	</array>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>linkstr backup</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.parmscript.linkstr.backup</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>linkstrbackup</string>
+				</array>
+			</dict>
+		</dict>
 	</array>
 </dict>
 </plist>

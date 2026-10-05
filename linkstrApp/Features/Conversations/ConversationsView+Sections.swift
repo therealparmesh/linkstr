@@ -96,6 +96,7 @@ struct SessionPostsView: View {
   var body: some View {
     let sessionEntity = sessionEntity
     let contentState = contentState
+    let ownerHash = LocalDataCrypto.shared.digestHex(ownerPubkey)
 
     Group {
       if let sessionEntity {
@@ -164,6 +165,18 @@ struct SessionPostsView: View {
     .toolbar {
       if sessionEntity != nil {
         ToolbarItemGroup(placement: .topBarTrailing) {
+          if rootPosts.contains(where: {
+            $0.readAt == nil && !$0.senderMatchesHash(ownerHash)
+          }) {
+            Button {
+              session.markSessionRead(sessionID: sessionID, ownerPubkey: ownerPubkey)
+            } label: {
+              Image(systemName: "checkmark.circle")
+                .linkstrToolbarIconLabel()
+            }
+            .accessibilityLabel("mark all as read")
+            .tint(LinkstrTheme.accent)
+          }
           Button {
             isPresentingMembers = true
           } label: {

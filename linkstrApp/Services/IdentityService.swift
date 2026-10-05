@@ -51,6 +51,10 @@ final class IdentityService: ObservableObject {
     self.keypair = keypair
   }
 
+  func hasStoredIdentity() throws -> Bool {
+    try keychain.get(keychainKey) != nil
+  }
+
   func createNewIdentity() throws {
     guard let keypair = Keypair() else {
       throw IdentityError.keyGenerationFailed

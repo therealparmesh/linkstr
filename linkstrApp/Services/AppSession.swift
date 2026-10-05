@@ -204,6 +204,10 @@ final class AppSession: ObservableObject {
   let identityService: IdentityService
   let modelContext: ModelContext
   var isUsingRecoveryStore = false
+  let backupWorker = BackupWorker()
+  @Published var isRestoringBackup = false
+  @Published var restoreRecoveryError: String?
+  @Published var didRestoreBackup = false
   let contactMutations = ContactMutationQueue()
   let contactDiscovery: ContactDiscovery
   let contactStore: ContactStore

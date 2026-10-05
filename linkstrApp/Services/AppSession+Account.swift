@@ -4,6 +4,7 @@ import Foundation
 
 extension AppSession {
   func createAccount() {
+    guard !isRestoringBackup, restoreRecoveryError == nil else { return }
     guard identityService.keypair == nil else {
       refreshIdentityState()
       return
@@ -54,6 +55,7 @@ extension AppSession {
   }
 
   func importNsec(_ nsec: String) {
+    guard !isRestoringBackup, restoreRecoveryError == nil else { return }
     contactMutations.cancel()
     do {
       try identityService.importNsec(nsec)
@@ -68,6 +70,7 @@ extension AppSession {
   }
 
   func logOut(clearLocalData: Bool) {
+    guard !isRestoringBackup, restoreRecoveryError == nil else { return }
     contactMutations.cancel()
     let ownerPubkey = identityService.pubkeyHex
     let keypair = identityService.keypair

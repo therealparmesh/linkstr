@@ -27,14 +27,36 @@ extension NostrDMService {
     return .live
   }
 
-  func handleIncomingEvent(_ event: NostrEvent, subscriptionID: String) async {
+  func handleIncomingEvent(_ event: NostrEvent, subscriptionID: String, relayURL: String? = nil) async {
     guard let keypair else { return }
     let generation = receiveGeneration
+    if let relayURL, subscriptionID.hasPrefix("linkstr-backfill-"),
+      !matchesBackfill(event, subscriptionID: subscriptionID, relayURL: relayURL) {
+      if activeBackfillStates[subscriptionID]?.relayURL == relayURL {
+        activeBackfillStates[subscriptionID]?.page.invalidResponse = true
+      }
+      return
+    }
+    if let relayURL, event.kind == .giftWrap, !subscriptionID.hasPrefix("linkstr-backfill-") {
+      guard liveSubscriptions[subscriptionID]?.relayURL == relayURL,
+        event.referencedPubkeys.contains(keypair.publicKey.hex) else { return }
+    }
+    let source: DirectMessageIngestSource = liveSubscriptions[subscriptionID]?.isReplaying == true
+      ? .historical : directMessageSource(for: subscriptionID)
     let decoded = await eventDecoder.decode(
-      event, keypair: keypair, source: directMessageSource(for: subscriptionID),
+      event, keypair: keypair, source: source,
       skipGiftWrap: processedGiftWrapEventIDs.contains(event.id)
     )
-    guard !Task.isCancelled, generation == receiveGeneration, let decoded else { return }
+    guard !Task.isCancelled, generation == receiveGeneration else { return }
+    if let relayURL, subscriptionID.hasPrefix("linkstr-backfill-"),
+      !matchesBackfill(event, subscriptionID: subscriptionID, relayURL: relayURL) { return }
+    if let relayURL, subscriptionID.hasPrefix("linkstr-live-"),
+      liveSubscriptions[subscriptionID]?.relayURL != relayURL { return }
+    guard let decoded else {
+      activeBackfillStates[subscriptionID]?.page.invalidResponse = true
+      return
+    }
+    trackBackfillProgress(for: event, subscriptionID: subscriptionID)
     await applyDecodedEvent(decoded, event: event, subscriptionID: subscriptionID, keypair: keypair)
   }
 
@@ -55,7 +77,6 @@ extension NostrDMService {
     case .metadata:
       handleMetadataEvent(event)
     case .giftWrap:
-      trackBackfillProgress(for: event, subscriptionID: subscriptionID)
       guard let message = decoded.message,
         rememberProcessedGiftWrapEventIDIfNeeded(event.id) else { return }
       let isNewRumor = rememberProcessedEventIDIfNeeded(message.eventID)
@@ -157,29 +178,28 @@ extension NostrDMService {
 
   // MARK: - Relay state handling
 
-  private func handleRelayStateDidChange(relayURL: String, state: Relay.State) {
+  private func handleRelayStateDidChange(relay: Relay, state: Relay.State) {
+    let relayURL = relay.url.absoluteString
     switch state {
     case .connected:
-      reconnectTask?.cancel()
-      reconnectTask = nil
-      installSubscriptions()
-      maybeRestartBackfillForLateRelay(relayURL: relayURL)
-      startBackfillIfNeeded()
-      if let relayPool { contactDiscovery?.connect(relayPool) }
       onRelayStatus?(relayURL, .connected, nil)
+      installSubscriptions(on: relay)
+      if let relayPool { contactDiscovery?.connect(relayPool, receiver: relayReceiver) }
     case .connecting:
       onRelayStatus?(relayURL, .connecting, nil)
     case .notConnected:
       completeFollowListQuery(relayURL: relayURL, subscriptionID: followListSubscriptionID, failed: true)
       contactDiscovery?.relayDisconnected(relayURL)
-      pruneRelayFromBackfillWaitlists(relayURL: relayURL)
+      cancelHistory(relayURL: relayURL)
+      notifyInitialBackfillCompletionIfNeeded()
       pruneRelayFromPublishWaitlists(relayURL: relayURL)
       onRelayStatus?(relayURL, .disconnected, nil)
       scheduleReconnect()
     case .error(let error):
       completeFollowListQuery(relayURL: relayURL, subscriptionID: followListSubscriptionID, failed: true)
       contactDiscovery?.relayDisconnected(relayURL)
-      pruneRelayFromBackfillWaitlists(relayURL: relayURL)
+      cancelHistory(relayURL: relayURL)
+      notifyInitialBackfillCompletionIfNeeded()
       pruneRelayFromPublishWaitlists(relayURL: relayURL)
       onRelayStatus?(relayURL, .failed, error.localizedDescription)
       scheduleReconnect()
@@ -209,7 +229,12 @@ extension NostrDMService {
         switch input {
         case .state(let relay, let state):
           guard self.relayPool?.relays.contains(where: { $0 === relay }) == true else { continue }
-          self.handleRelayStateDidChange(relayURL: relay.url.absoluteString, state: state)
+          self.handleRelayStateDidChange(relay: relay, state: state)
+        case .contactDeadline(let id):
+          self.contactDiscovery?.finishQuery(id, failed: true)
+        case .historyDeadline(let relay, let id):
+          guard self.relayPool?.relays.contains(where: { $0 === relay }) == true else { continue }
+          self.finishBackfill(subscriptionID: id, failed: true)
         case .response(let relay, let response):
           guard self.relayPool?.relays.contains(where: { $0 === relay }) == true else { continue }
           await self.receive(response, from: relay)
@@ -226,21 +251,22 @@ extension NostrDMService {
       if event.kind == .followList, event.pubkey != keypair?.publicKey.hex {
         await contactDiscovery?.receive(event, subscriptionID: subscriptionID, relayURL: relayURL)
       } else {
-        await handleIncomingEvent(event, subscriptionID: subscriptionID)
+        await handleIncomingEvent(event, subscriptionID: subscriptionID, relayURL: relayURL)
       }
     case .auth(let challenge):
       authenticate(to: relay, challenge: challenge)
     case .eose(let subscriptionID):
-      if subscriptionID == privatePreferencesSubscriptionID {
-        await onPrivatePreferencesReady?()
-      } else {
+      if liveSubscriptions[subscriptionID]?.relayURL == relayURL {
+        liveSubscriptions[subscriptionID]?.isReplaying = false
+      }
+      if subscriptionID != privatePreferencesSubscriptionID {
         handleBackfillEOSE(relayURL: relayURL, subscriptionID: subscriptionID)
         completeFollowListQuery(relayURL: relayURL, subscriptionID: subscriptionID)
         contactDiscovery?.complete(relayURL: relayURL, subscriptionID: subscriptionID)
         completeProfileQuery(relayURL: relayURL, subscriptionID: subscriptionID)
       }
     case .closed(let subscriptionID, _):
-      completeBackfillPage(subscriptionID: subscriptionID)
+      finishBackfill(subscriptionID: subscriptionID, failed: true)
       completeFollowListQuery(relayURL: relayURL, subscriptionID: subscriptionID, failed: true)
       contactDiscovery?.complete(relayURL: relayURL, subscriptionID: subscriptionID, failed: true)
       completeProfileQuery(relayURL: relayURL, subscriptionID: subscriptionID, failed: true)
@@ -258,8 +284,10 @@ extension NostrDMService {
       pendingAuthenticationEvents.removeValue(forKey: eventID)
       if success {
         onRelayStatus?(relayURL, .connected, nil)
-        installSubscriptions()
-        if let relayPool { contactDiscovery?.connect(relayPool) }
+        if let relay = relayPool?.relays.first(where: { $0.url.absoluteString == relayURL }) {
+          installSubscriptions(on: relay)
+        }
+        if let relayPool { contactDiscovery?.connect(relayPool, receiver: relayReceiver) }
       }
       return
     }

@@ -13,10 +13,9 @@ final class NostrRelayDeliveryTests: XCTestCase {
     service.relayPool = RelayPool(relays: [relay])
     defer { service.stop() }
     let subscriptionID = "linkstr-backfill-order"
-    service.completedBackfillKinds = [.author]
+    service.configuredRelayURLs = [relay.url.absoluteString]
     service.activeBackfillStates[subscriptionID] = NostrDMService.BackfillState(
-      kind: .recipient, page: 0, until: nil, pageSize: 500,
-      expectedRelayURLs: [relay.url.absoluteString])
+      kind: .recipient, relayURL: relay.url.absoluteString, page: RelayHistoryPage())
     let receiver = service.makeRelayReceiver()
     var delivered: [Int64] = []
     var completed: [[Int64]] = []
@@ -54,6 +53,7 @@ final class NostrRelayDeliveryTests: XCTestCase {
     let relay = try Relay(url: XCTUnwrap(URL(string: "ws://127.0.0.1:1")))
     service.relayPool = RelayPool(relays: [relay])
     defer { service.stop() }
+    service.liveSubscriptions["live"] = .init(relayURL: relay.url.absoluteString, isReplaying: false)
     let first = try wrappedPost(timestamp: 1, owner: owner, service: service)
     let second = try wrappedPost(timestamp: 2, owner: owner, service: service)
     let receiver = service.makeRelayReceiver()

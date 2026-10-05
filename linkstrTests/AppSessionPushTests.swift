@@ -209,7 +209,7 @@ final class AppSessionPushTests: AppSessionTestCase {
     try session.identityService.createNewIdentity()
     let oldIDs = (0..<201).map { "old-session-\($0)" }.sorted()
     for id in oldIDs { session.setSessionArchived(sessionID: id, archived: true) }
-    await fulfillment(of: [started], timeout: asyncExpectationTimeoutSeconds)
+    await fulfillment(of: [started], timeout: 10)
     let oldTask = session.pushStateSyncTask
     session.resetPushSyncState()
     let newAccount = try TestKeyMaterialFactory.makeKeypair()
@@ -262,5 +262,30 @@ final class AppSessionPushTests: AppSessionTestCase {
     XCTAssertEqual(retried.flatMap(\.archivedConversationIDs), Array(ids.prefix(400)))
     XCTAssertEqual(session.lastSyncedPushArchiveState?.state,
       PushArchiveState(archivedConversationIDs: Array(ids.prefix(400)), knownConversationIDs: ids))
+  }
+}
+
+extension AppSessionPushTests {
+  func testRestoreRegistrationWaitsForPreviousSessionsLogoutRequest() async throws {
+    let started = expectation(description: "logout request started")
+    var finish: CheckedContinuation<Void, Never>?
+    var order: [String] = []
+    let (oldSession, _) = try makeSession(unregisterPushDevice: { _ in
+      await withCheckedContinuation { finish = $0; started.fulfill() }
+      order.append("unregistered")
+    })
+    let (newSession, _) = try makeSession(registerPushDevice: { _ in order.append("registered") })
+    let keypair = try TestKeyMaterialFactory.makeKeypair()
+    oldSession.schedulePushDeviceUnregistration(deviceToken: "device", keypair: keypair)
+    await fulfillment(of: [started], timeout: asyncExpectationTimeoutSeconds)
+    let registration = Task {
+      try await newSession.registerPushDevice(
+        PushDeviceRegistration(deviceToken: "device", apnsEnvironment: "sandbox"), signedBy: keypair)
+    }
+    await Task.yield()
+    XCTAssertTrue(order.isEmpty)
+    finish?.resume()
+    try await registration.value
+    XCTAssertEqual(order, ["unregistered", "registered"])
   }
 }

@@ -294,22 +294,22 @@ final class LocalDataCrypto {
   }
 
   func decryptString(_ ciphertext: String?, ownerPubkey: String) -> String? {
+    try? decryptStringStrict(ciphertext, ownerPubkey: ownerPubkey)
+  }
+
+  func decryptStringStrict(_ ciphertext: String?, ownerPubkey: String) throws -> String? {
     guard let ciphertext, !ciphertext.isEmpty else { return nil }
     preserveExistingKey(ownerPubkey: ownerPubkey)
-    do {
-      let key = try symmetricKey(for: ownerPubkey, allowCreation: false)
-      guard let combined = Data(base64Encoded: ciphertext) else {
-        throw LocalDataCryptoError.invalidCiphertext
-      }
-      let sealedBox = try AES.GCM.SealedBox(combined: combined)
-      let plaintext = try AES.GCM.open(sealedBox, using: key)
-      guard let value = String(data: plaintext, encoding: .utf8) else {
-        throw LocalDataCryptoError.decryptionFailed
-      }
-      return value
-    } catch {
-      return nil
+    let key = try symmetricKey(for: ownerPubkey, allowCreation: false)
+    guard let combined = Data(base64Encoded: ciphertext) else {
+      throw LocalDataCryptoError.invalidCiphertext
     }
+    let sealedBox = try AES.GCM.SealedBox(combined: combined)
+    let plaintext = try AES.GCM.open(sealedBox, using: key)
+    guard let value = String(data: plaintext, encoding: .utf8) else {
+      throw LocalDataCryptoError.decryptionFailed
+    }
+    return value
   }
 
   func clearKey(ownerPubkey: String) throws {

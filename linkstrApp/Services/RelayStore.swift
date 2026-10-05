@@ -23,6 +23,21 @@ final class RelayStore {
     return makeVirtualDefaultRelays()
   }
 
+  func backupSettings() throws -> LinkstrBackup.Settings {
+    let relays = try fetchPersistedRelays()
+    return .init(
+      loopLocalVideos: userDefaults.object(forKey: "loopLocalVideos") as? Bool ?? true,
+      customRelays: hasCustomizedRelays || !relays.isEmpty,
+      relays: relays.map { .init(url: $0.url, enabled: $0.isEnabled, createdAt: $0.createdAt) })
+  }
+
+  func applyBackupSettings(_ settings: LinkstrBackup.Settings) throws {
+    userDefaults.set(settings.loopLocalVideos, forKey: "loopLocalVideos")
+    userDefaults.set(settings.customRelays, forKey: RelayConfigurationKey.hasCustomizedRelays)
+    // Activation recovery must not be cleared before these restored preferences reach disk.
+    guard userDefaults.synchronize() else { throw BackupError.unavailable }
+  }
+
   func addRelay(url: URL) throws {
     let relayURL = canonicalRelayURLString(from: url)
     let existingRelayURLs = try fetchRelays().map(\.url)

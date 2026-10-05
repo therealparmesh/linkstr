@@ -5,6 +5,21 @@ import SwiftData
 // MARK: - Push Notification Management
 
 extension AppSession {
+  // Registration must follow any in-flight logout request, including across a restored AppSession.
+  private static var pushDeviceMutationTail: Task<Void, Never>?
+
+  private static func queuePushDeviceMutation(
+    _ operation: @escaping @MainActor () async throws -> Void
+  ) -> Task<Void, Error> {
+    let previous = pushDeviceMutationTail
+    let task = Task {
+      await previous?.value
+      try await operation()
+    }
+    pushDeviceMutationTail = Task { _ = try? await task.value }
+    return task
+  }
+
   func resetPushSyncState() {
     pushStateSyncGeneration += 1
     pushStateSyncTask?.cancel()
@@ -28,6 +43,7 @@ extension AppSession {
   }
 
   func schedulePushStateSync() {
+    guard !isRestoringBackup, restoreRecoveryError == nil else { return }
     guard shouldManagePushStateForCurrentProcess() else { return }
     guard identityService.keypair != nil else {
       resetPushSyncState()
@@ -117,9 +133,12 @@ extension AppSession {
   func schedulePushDeviceUnregistration(deviceToken: String?, keypair: Keypair?) {
     guard shouldManagePushStateForCurrentProcess() else { return }
     guard let deviceToken, let keypair else { return }
+    let task = Self.queuePushDeviceMutation { [self] in
+      try await unregisterPushDevice(deviceToken: deviceToken, signedBy: keypair)
+    }
     Task { @MainActor in
       do {
-        try await unregisterPushDevice(deviceToken: deviceToken, signedBy: keypair)
+        try await task.value
       } catch {
         NSLog("Push device unregistration failed: \(error.localizedDescription)")
       }
@@ -138,13 +157,14 @@ extension AppSession {
     }
   }
 
-  private func registerPushDevice(_ registration: PushDeviceRegistration, signedBy keypair: Keypair)
-    async throws {
-    if let registerPushDeviceOverride = testingOverrides.registerPushDevice {
-      try await registerPushDeviceOverride(registration)
-      return
-    }
-    try await PushAPIClient.shared.registerDevice(registration, signedBy: keypair)
+  func registerPushDevice(_ registration: PushDeviceRegistration, signedBy keypair: Keypair) async throws {
+    try await Self.queuePushDeviceMutation { [self] in
+      if let registerPushDeviceOverride = testingOverrides.registerPushDevice {
+        try await registerPushDeviceOverride(registration)
+      } else {
+        try await PushAPIClient.shared.registerDevice(registration, signedBy: keypair)
+      }
+    }.value
   }
 
   private func unregisterPushDevice(deviceToken: String, signedBy keypair: Keypair) async throws {

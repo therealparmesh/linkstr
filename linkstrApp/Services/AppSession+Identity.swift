@@ -56,6 +56,7 @@ extension AppSession {
 
     let attemptCount = max(1, maxAttempts)
     for attempt in 1...attemptCount {
+      guard !isRestoringBackup, restoreRecoveryError == nil, !Task.isCancelled else { return }
       let loadResult = loadIdentityForCurrentProcess()
       refreshIdentityState()
       guard hasIdentity == false else { return }

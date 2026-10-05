@@ -7,6 +7,42 @@ import XCTest
 
 extension AppSessionIngestTests {
 
+  func testMarkSessionReadOnlyChangesCurrentIncomingPostsAndPreservesLateReplay() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let owner = try XCTUnwrap(session.identityService.pubkeyHex)
+    let peer = try TestKeyMaterialFactory.makePubkeyHex()
+    let other = try TestKeyMaterialFactory.makePubkeyHex()
+    for sessionID in ["selected", "other"] {
+      ingestSessionCreate(session, IngestOp(id: "create-\(sessionID)", sender: owner, time: 10,
+                                            sessionID: sessionID), name: sessionID, members: [owner, peer])
+      ingestRoot(session, IngestOp(id: "root-\(sessionID)", sender: peer, time: 20, sessionID: sessionID),
+                 url: "https://example.com/\(sessionID)")
+    }
+    ingestRoot(session, IngestOp(id: "outgoing", sender: owner, time: 20, sessionID: "selected"),
+               url: "https://example.com/outgoing")
+    let foreign = try SessionMessageEntity(
+      eventID: "foreign", ownerPubkey: other, conversationID: "selected", rootID: "foreign", kind: .root,
+      senderPubkey: peer, receiverPubkey: other, url: "https://example.com/foreign", note: nil, timestamp: .now,
+      isArchived: false, linkType: .generic)
+    container.mainContext.insert(foreign)
+    try container.mainContext.save()
+    let date = Date(timeIntervalSince1970: 100)
+    XCTAssertEqual(try session.messageStore.markSessionRead(sessionID: "selected", ownerPubkey: owner, at: date),
+                   ["root-selected"])
+    XCTAssertTrue(try session.messageStore.markSessionRead(sessionID: "selected", ownerPubkey: owner, at: .now).isEmpty)
+    ingestRoot(session, IngestOp(id: "root-selected", sender: peer, time: 20, sessionID: "selected"),
+               url: "https://example.com/selected")
+    ingestRoot(session, IngestOp(id: "late", sender: peer, time: 20, sessionID: "selected"),
+               url: "https://example.com/late", source: .historical)
+    let posts = Dictionary(uniqueKeysWithValues: try fetchMessages(in: container.mainContext).map { ($0.eventID, $0) })
+    XCTAssertEqual(posts["root-selected"]?.readAt, date)
+    XCTAssertNil(posts["root-other"]?.readAt)
+    XCTAssertNil(posts["foreign"]?.readAt)
+    XCTAssertNil(posts["late"]?.readAt)
+    XCTAssertEqual(posts["outgoing"]?.readAt, Date(timeIntervalSince1970: 20))
+  }
+
   func testInitialHistoricalRestoreIntoEmptyStoreMarksInboundRootsRead() throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()

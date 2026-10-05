@@ -5,6 +5,8 @@ final class NostrRelayReceiver: RelayDelegate {
   enum Input {
     case state(Relay, Relay.State)
     case response(Relay, RelayResponse)
+    case historyDeadline(Relay, String)
+    case contactDeadline(String)
   }
 
   let stream: AsyncStream<Input>
@@ -15,6 +17,14 @@ final class NostrRelayReceiver: RelayDelegate {
   init(onControlResponse: @escaping (Relay, RelayResponse) -> Void) {
     self.onControlResponse = onControlResponse
     (stream, continuation) = AsyncStream.makeStream(of: Input.self)
+  }
+
+  func contactDeadline(_ subscriptionID: String) {
+    continuation.yield(.contactDeadline(subscriptionID))
+  }
+
+  func historyDeadline(_ relay: Relay, subscriptionID: String) {
+    continuation.yield(.historyDeadline(relay, subscriptionID))
   }
 
   func finish() {

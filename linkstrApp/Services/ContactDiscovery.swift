@@ -10,9 +10,7 @@ final class ContactDiscovery: ObservableObject {
     let expectedRelays: Set<String>
     var completedRelays = Set<String>()
     var failed = false
-    var events = Set<String>()
-    var oldestTimestamp: Int?
-    let limit: Int
+    var page: RelayHistoryPage?
   }
 
   @Published var loadState: ContactListLoadState = .loading
@@ -21,6 +19,7 @@ final class ContactDiscovery: ObservableObject {
   @Published var canLoadMore = false
   let context: ModelContext
   var pool: RelayPool?
+  weak var receiver: NostrRelayReceiver?
   var owner: String?
   var isVisible = false
   var queries: [String: Query] = [:]
@@ -30,10 +29,8 @@ final class ContactDiscovery: ObservableObject {
   var visibleAuthors = Set<String>()
   var liveUpdateTask: Task<Void, Never>?
   var liveSubscriptionID: String?
-  var discoverySubscriptionID: String?
   var discoveryLiveSubscriptionID: String?
-  var cursor: Int?
-  var pageLimit = 200
+  var discoveryPages: [String: RelayHistoryPage] = [:]
 
   init(modelContext: ModelContext) { context = modelContext }
 
@@ -50,14 +47,16 @@ final class ContactDiscovery: ObservableObject {
     visibleAuthors.removeAll()
   }
 
-  func connect(_ pool: RelayPool) {
+  func connect(_ pool: RelayPool, receiver: NostrRelayReceiver? = nil) {
     self.pool = pool
+    self.receiver = receiver
     if isVisible { refresh() }
   }
 
   func disconnect() {
     closeSubscriptions()
     pool = nil
+    receiver = nil
   }
 
   func reset() {
@@ -68,8 +67,9 @@ final class ContactDiscovery: ObservableObject {
   func refresh() {
     closeSubscriptions()
     guard isVisible, let owner else { return }
-    cursor = nil
-    pageLimit = 200
+    discoveryPages = Dictionary(uniqueKeysWithValues: connectedRelays.map {
+      ($0, RelayHistoryPage(limit: 200, maximumLimit: 1_600))
+    })
     canLoadMore = false
     verifiedAuthors.removeAll()
     queryFailed = false
@@ -168,7 +168,6 @@ final class ContactDiscovery: ObservableObject {
     pendingAuthors.removeAll()
     liveUpdateTask?.cancel()
     liveUpdateTask = nil
-    discoverySubscriptionID = nil
     discoveryLiveSubscriptionID = nil
     liveSubscriptionID = nil
     loadState = .unavailable

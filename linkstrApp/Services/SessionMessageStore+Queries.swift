@@ -153,16 +153,31 @@ extension SessionMessageStore {
     )
     let messages = try modelContext.fetch(descriptor)
 
-    var didChange = false
     let myPubkeyHash = LocalDataCrypto.shared.digestHex(myPubkey)
-    for message in messages where message.kind == .root {
-      guard !message.senderMatchesHash(myPubkeyHash), message.readAt == nil else { continue }
-      message.readAt = .now
-      didChange = true
-    }
+    try markRead(messages.filter {
+      $0.kind == .root && !$0.senderMatchesHash(myPubkeyHash) && $0.readAt == nil
+    }, at: .now)
+  }
 
-    if didChange {
+  func markSessionRead(sessionID: String, ownerPubkey: String, at date: Date) throws -> Set<String> {
+    let senderHash = LocalDataCrypto.shared.digestHex(ownerPubkey)
+    let rootKind = SessionMessageKind.root.rawValue
+    let messages = try modelContext.fetch(FetchDescriptor<SessionMessageEntity>(predicate: #Predicate {
+      $0.ownerPubkey == ownerPubkey && $0.conversationID == sessionID
+        && $0.kindRaw == rootKind && $0.senderPubkeyHash != senderHash && $0.readAt == nil
+    }))
+    try markRead(messages, at: date)
+    return Set(messages.map(\.rootID))
+  }
+
+  private func markRead(_ messages: [SessionMessageEntity], at date: Date) throws {
+    guard !messages.isEmpty else { return }
+    for message in messages { message.readAt = date }
+    do {
       try modelContext.save()
+    } catch {
+      for message in messages { message.readAt = nil }
+      throw error
     }
   }
 

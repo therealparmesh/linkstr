@@ -62,6 +62,7 @@ struct SettingsView: View {
         playbackSection
         relaysSection
         storageSection
+        BackupSection()
         identitySection
       }
       .frame(maxWidth: .infinity, alignment: .leading)

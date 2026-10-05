@@ -13,6 +13,8 @@ final class AccountStateEntity {
   var profileMetadataEventID: String?
   var createdAt: Date
   var updatedAt: Date
+  var hasRestoredBackup: Bool = false
+  var pendingRestoreActivation: String?
 
   init(
     ownerPubkey: String,
