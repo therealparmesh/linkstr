@@ -42,7 +42,7 @@ extension AppSessionIngestTests {
     let deletions = try fetchPostDeletions(in: container.mainContext)
     XCTAssertEqual(deletions.count, 1)
     XCTAssertEqual(deletions.first?.rootID, rootPost.rootID)
-    XCTAssertEqual(deletions.first?.deletedByPubkey, senderPubkey)
+    XCTAssertEqual(deletions.first?.deletedByPubkeyHash, LocalDataCrypto.shared.digestHex(senderPubkey))
   }
 
   func testIngestRootDeleteUsesLatestDeleteEventForTombstoneState() throws {
@@ -76,7 +76,7 @@ extension AppSessionIngestTests {
     let deletion = try XCTUnwrap(
       try fetchPostDeletions(in: container.mainContext).first)
     XCTAssertEqual(deletion.rootID, rootPost.rootID)
-    XCTAssertEqual(deletion.deletedByPubkey, senderPubkey)
+    XCTAssertEqual(deletion.deletedByPubkeyHash, LocalDataCrypto.shared.digestHex(senderPubkey))
     XCTAssertEqual(deletion.updatedAt, Date(timeIntervalSince1970: 825))
     XCTAssertEqual(deletion.lastEventID, "root-delete-z")
   }
@@ -145,7 +145,7 @@ extension AppSessionIngestTests {
     let deletions = try fetchPostDeletions(in: container.mainContext)
     XCTAssertEqual(deletions.count, 1)
     XCTAssertEqual(deletions.first?.rootID, rootEventID)
-    XCTAssertEqual(deletions.first?.deletedByPubkey, senderPubkey)
+    XCTAssertEqual(deletions.first?.deletedByPubkeyHash, LocalDataCrypto.shared.digestHex(senderPubkey))
   }
 
   func testIngestRootDeleteBeforeRootArrivesDiscardsPendingReaction() throws {
@@ -185,7 +185,7 @@ extension AppSessionIngestTests {
     let deletions = try fetchPostDeletions(in: container.mainContext)
     XCTAssertEqual(deletions.count, 1)
     XCTAssertEqual(deletions.first?.rootID, rootEventID)
-    XCTAssertEqual(deletions.first?.deletedByPubkey, creatorPubkey)
+    XCTAssertEqual(deletions.first?.deletedByPubkeyHash, LocalDataCrypto.shared.digestHex(creatorPubkey))
   }
 
   func testIngestRootDeleteIgnoresMismatchedSender() throws {

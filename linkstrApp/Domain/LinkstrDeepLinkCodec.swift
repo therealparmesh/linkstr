@@ -96,20 +96,6 @@ enum LinkstrDeepLinkCodec {
     return urlString
   }
 
-  static func parseShareDraft(fromAppDeepLink url: URL) -> ShareDraft? {
-    guard case .share(let draft) = parseRoute(fromAppDeepLink: url) else {
-      return nil
-    }
-    return draft
-  }
-
-  static func parseMediaSaveDraft(fromAppDeepLink url: URL) -> MediaSaveDraft? {
-    guard case .mediaSave(let draft) = parseRoute(fromAppDeepLink: url) else {
-      return nil
-    }
-    return draft
-  }
-
   private static func makeDeepLink(host: String, url: String?, note: String?) -> URL? {
     guard let url, let normalizedURL = LinkstrURLValidator.normalizedWebURL(from: url) else {
       return nil

@@ -47,7 +47,7 @@ extension AppSessionMutationTests {
     XCTAssertEqual(deletions.count, 1)
     XCTAssertEqual(deletions.first?.sessionID, sessionEntity.sessionID)
     XCTAssertEqual(deletions.first?.rootID, rootPost.rootID)
-    XCTAssertEqual(deletions.first?.deletedByPubkey, myPubkey)
+    XCTAssertEqual(deletions.first?.deletedByPubkeyHash, LocalDataCrypto.shared.digestHex(myPubkey))
   }
 
   func testDeletePostAwaitingRelayUsesStoredGiftWrapIDsAndBroadcastsToKnownFormerMembers()

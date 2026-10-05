@@ -134,7 +134,6 @@ extension AppSessionContactAndRelayTests {
     let contact = try XCTUnwrap(contacts.first { $0.ownerPubkey == owner })
     let otherContact = try XCTUnwrap(contacts.first { $0.ownerPubkey == otherOwner })
     XCTAssertEqual(contact.profileSnapshot, profile)
-    XCTAssertEqual(contact.displayName, "Saved Name")
     XCTAssertNil(otherContact.profileSnapshot)
 
     let store = ContactStore(modelContext: container.mainContext)

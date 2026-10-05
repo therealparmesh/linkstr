@@ -75,9 +75,10 @@ final class DeepLinkCodecTests: XCTestCase {
       )
     )
 
-    let draft = try XCTUnwrap(LinkstrDeepLinkCodec.parseShareDraft(fromAppDeepLink: deepLink))
-    XCTAssertEqual(draft.url, "https://example.com/watch")
-    XCTAssertEqual(draft.note, "worth saving & tagging? yes")
+    XCTAssertEqual(
+      LinkstrDeepLinkCodec.parseRoute(fromAppDeepLink: deepLink),
+      .share(.init(url: "https://example.com/watch", note: "worth saving & tagging? yes"))
+    )
   }
 
   func testShareDeepLinkOmitsBlankNote() throws {
@@ -88,9 +89,10 @@ final class DeepLinkCodecTests: XCTestCase {
       )
     )
 
-    let draft = try XCTUnwrap(LinkstrDeepLinkCodec.parseShareDraft(fromAppDeepLink: deepLink))
-    XCTAssertEqual(draft.url, "https://example.com/watch")
-    XCTAssertNil(draft.note)
+    XCTAssertEqual(
+      LinkstrDeepLinkCodec.parseRoute(fromAppDeepLink: deepLink),
+      .share(.init(url: "https://example.com/watch", note: nil))
+    )
   }
 
   func testShareDeepLinkLimitsNoteLength() throws {
@@ -101,17 +103,20 @@ final class DeepLinkCodecTests: XCTestCase {
       )
     )
 
-    let draft = try XCTUnwrap(LinkstrDeepLinkCodec.parseShareDraft(fromAppDeepLink: deepLink))
-    XCTAssertEqual(draft.note?.count, 4_000)
+    XCTAssertEqual(
+      LinkstrDeepLinkCodec.parseRoute(fromAppDeepLink: deepLink),
+      .share(.init(url: "https://example.com/watch", note: String(repeating: "a", count: 4_000)))
+    )
   }
 
   func testMediaSaveDeepLinkRoundtrip() throws {
     let deepLink = try XCTUnwrap(
       LinkstrDeepLinkCodec.makeMediaSaveAppDeepLink(url: "example.com/video.mp4"))
 
-    let draft = try XCTUnwrap(
-      LinkstrDeepLinkCodec.parseMediaSaveDraft(fromAppDeepLink: deepLink))
-    XCTAssertEqual(draft.url, "https://example.com/video.mp4")
+    XCTAssertEqual(
+      LinkstrDeepLinkCodec.parseRoute(fromAppDeepLink: deepLink),
+      .mediaSave(.init(url: "https://example.com/video.mp4"))
+    )
   }
 
   func testRouteParsingDistinguishesOpenShareAndMediaSave() throws {
@@ -126,15 +131,12 @@ final class DeepLinkCodecTests: XCTestCase {
       LinkstrDeepLinkCodec.parseRoute(fromAppDeepLink: openDeepLink),
       .openURL("https://example.com/open")
     )
-    XCTAssertNil(LinkstrDeepLinkCodec.parseShareDraft(fromAppDeepLink: openDeepLink))
-    XCTAssertNil(LinkstrDeepLinkCodec.parseMediaSaveDraft(fromAppDeepLink: openDeepLink))
 
     XCTAssertEqual(
       LinkstrDeepLinkCodec.parseRoute(fromAppDeepLink: shareDeepLink),
       .share(LinkstrDeepLinkCodec.ShareDraft(url: "https://example.com/share", note: nil))
     )
     XCTAssertNil(LinkstrDeepLinkCodec.parseURL(fromAppDeepLink: shareDeepLink))
-    XCTAssertNil(LinkstrDeepLinkCodec.parseMediaSaveDraft(fromAppDeepLink: shareDeepLink))
 
     XCTAssertEqual(
       LinkstrDeepLinkCodec.parseRoute(fromAppDeepLink: mediaSaveDeepLink),
@@ -142,7 +144,6 @@ final class DeepLinkCodecTests: XCTestCase {
         LinkstrDeepLinkCodec.MediaSaveDraft(url: "https://example.com/video.mp4"))
     )
     XCTAssertNil(LinkstrDeepLinkCodec.parseURL(fromAppDeepLink: mediaSaveDeepLink))
-    XCTAssertNil(LinkstrDeepLinkCodec.parseShareDraft(fromAppDeepLink: mediaSaveDeepLink))
   }
 
   func testAppDeepLinkRejectsUnexpectedSchemeOrHost() throws {
@@ -171,16 +172,16 @@ final class DeepLinkCodecTests: XCTestCase {
 
   func testShareDeepLinkRejectsMissingPayloadURL() {
     XCTAssertNil(
-      LinkstrDeepLinkCodec.parseShareDraft(fromAppDeepLink: URL(string: "linkstr://share")!)
+      LinkstrDeepLinkCodec.parseRoute(fromAppDeepLink: URL(string: "linkstr://share")!)
     )
     XCTAssertNil(
-      LinkstrDeepLinkCodec.parseShareDraft(fromAppDeepLink: URL(string: "linkstr://share?note=hi")!)
+      LinkstrDeepLinkCodec.parseRoute(fromAppDeepLink: URL(string: "linkstr://share?note=hi")!)
     )
   }
 
   func testMediaSaveDeepLinkRejectsMissingPayloadURL() {
     XCTAssertNil(
-      LinkstrDeepLinkCodec.parseMediaSaveDraft(
+      LinkstrDeepLinkCodec.parseRoute(
         fromAppDeepLink: URL(string: "linkstr://save")!)
     )
   }

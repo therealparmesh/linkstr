@@ -57,11 +57,11 @@ extension NostrDMService {
       return
     }
     trackBackfillProgress(for: event, subscriptionID: subscriptionID)
-    await applyDecodedEvent(decoded, event: event, subscriptionID: subscriptionID, keypair: keypair)
+    await applyDecodedEvent(decoded, event: event, keypair: keypair)
   }
 
   private func applyDecodedEvent(
-    _ decoded: NostrEventDecoder.DecodedEvent, event: NostrEvent, subscriptionID: String, keypair: Keypair
+    _ decoded: NostrEventDecoder.DecodedEvent, event: NostrEvent, keypair: Keypair
   ) async {
     if event.kind == PrivatePreferenceCodec.kind {
       if event.pubkey == keypair.publicKey.hex,

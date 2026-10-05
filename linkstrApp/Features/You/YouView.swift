@@ -35,7 +35,7 @@ struct YouView: View {
       ScrollView {
         VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
           LinkstrScreenTitle(title: "you")
-          qrSection(npub: npub)
+          qrSection
           npubSection(npub: npub)
           profileNameSection
         }
@@ -90,7 +90,7 @@ struct YouView: View {
     }
   }
 
-  private func qrSection(npub: String) -> some View {
+  private var qrSection: some View {
     LinkstrInsetSection(
       title: "qr code",
       footer: "scan to add this account."

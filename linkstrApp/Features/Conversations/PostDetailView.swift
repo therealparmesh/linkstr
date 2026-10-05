@@ -8,7 +8,6 @@ struct PostDetailView: View {
 
   let ownerPubkey: String
   let sessionID: String
-  let postID: String
 
   @State var isPresentingEmojiPicker = false
   @State var contacts: [ContactEntity] = []
@@ -26,7 +25,6 @@ struct PostDetailView: View {
   ) {
     self.ownerPubkey = ownerPubkey
     self.sessionID = sessionID
-    self.postID = postID
     let storageID = SessionMessageEntity.storageID(ownerPubkey: ownerPubkey, eventID: postID)
     let rootKind = SessionMessageKind.root.rawValue
     _posts = Query(filter: #Predicate<SessionMessageEntity> {

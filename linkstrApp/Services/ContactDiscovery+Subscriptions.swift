@@ -6,17 +6,17 @@ extension ContactDiscovery {
     guard let owner else { return }
     for (relayURL, page) in discoveryPages where connectedRelays.contains(relayURL) {
       guard let filter = Filter(kinds: [3], pubkeys: [owner], until: page.until, limit: page.limit) else { continue }
-      _ = beginQuery(filter: filter, authors: nil, relayURL: relayURL, page: page)
+      beginQuery(filter: filter, authors: nil, relayURL: relayURL, page: page)
     }
   }
 
-  func beginQuery(
+  private func beginQuery(
     filter: Filter, authors: Set<String>?, relayURL: String? = nil, page: RelayHistoryPage? = nil
-  ) -> String? {
+  ) {
     let relays = relayURL.map { Set([$0]) } ?? connectedRelays
     guard let pool, !relays.isEmpty else {
       loadState = .unavailable
-      return nil
+      return
     }
     let id = "linkstr-contacts-\(UUID().uuidString.lowercased())"
     queries[id] = Query(authors: authors, expectedRelays: relays, page: page)
@@ -39,7 +39,6 @@ extension ContactDiscovery {
         }
       }
     }
-    return id
   }
 
   func startAuthorQueries() {
@@ -49,7 +48,7 @@ extension ContactDiscovery {
       pendingAuthors.subtract(authors)
       guard let filter = Filter(authors: authors.sorted(), kinds: [3], limit: authors.count * 2)
       else { return }
-      _ = beginQuery(filter: filter, authors: authors)
+      beginQuery(filter: filter, authors: authors)
     }
   }
 

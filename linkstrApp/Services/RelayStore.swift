@@ -17,7 +17,7 @@ final class RelayStore {
 
   func fetchRelays() throws -> [RelayEntity] {
     let persistedRelays = try fetchPersistedRelays()
-    if try shouldUseCustomizedRelays(persistedRelays) {
+    if shouldUseCustomizedRelays(persistedRelays) {
       return persistedRelays
     }
     return makeVirtualDefaultRelays()
@@ -76,7 +76,7 @@ final class RelayStore {
 
   private func materializeDefaultsForCustomizationIfNeeded() throws {
     let persistedRelays = try fetchPersistedRelays()
-    guard try !shouldUseCustomizedRelays(persistedRelays) else {
+    guard !shouldUseCustomizedRelays(persistedRelays) else {
       return
     }
 
@@ -92,7 +92,7 @@ final class RelayStore {
     })
   }
 
-  private func shouldUseCustomizedRelays(_ persistedRelays: [RelayEntity]) throws -> Bool {
+  private func shouldUseCustomizedRelays(_ persistedRelays: [RelayEntity]) -> Bool {
     if hasCustomizedRelays {
       return true
     }

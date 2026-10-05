@@ -48,10 +48,6 @@ final class ContactEntity {
     return value
   }
 
-  var displayName: String {
-    localAlias ?? nostrProfileName ?? npub
-  }
-
   init(
     ownerPubkey: String,
     targetPubkey: String,

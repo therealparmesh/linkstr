@@ -17,7 +17,6 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     let contacts = try fetchContacts(in: container.mainContext)
     XCTAssertEqual(contacts.count, 1)
     XCTAssertEqual(contacts.first?.npub, npub)
-    XCTAssertEqual(contacts.first?.displayName, "Alice")
     XCTAssertEqual(contacts.first?.localAlias, "Alice")
     XCTAssertNotEqual(contacts.first?.encryptedAlias, "Alice")
   }
@@ -83,12 +82,12 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
 
     let didUpdate = session.updateContactAlias(alice, alias: "Alice Updated")
     XCTAssertTrue(didUpdate)
-    XCTAssertEqual(alice.displayName, "Alice Updated")
+    XCTAssertEqual(session.resolvedIdentity(for: alice).displayName, "Alice Updated")
 
     let didClearAlias = session.updateContactAlias(alice, alias: "   ")
     XCTAssertTrue(didClearAlias)
     XCTAssertNil(alice.localAlias)
-    XCTAssertEqual(alice.displayName, alice.npub)
+    XCTAssertEqual(session.resolvedIdentity(for: alice).displayName, alice.npub)
   }
 
   func testIncomingProfileMetadataBecomesFallbackDisplayNameUntilAliased() async throws {

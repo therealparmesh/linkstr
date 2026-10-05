@@ -238,15 +238,6 @@ final class SessionPostDeletionEntity {
   var updatedAt: Date
   var lastEventID: String = ""
 
-  @Transient private var _deletedByPubkey: String?
-  var deletedByPubkey: String {
-    if let cached = _deletedByPubkey { return cached }
-    let value =
-      LocalDataCrypto.shared.decryptString(encryptedDeletedByPubkey, ownerPubkey: ownerPubkey)
-    _deletedByPubkey = value
-    return value ?? ""
-  }
-
   init(
     ownerPubkey: String,
     sessionID: String,
