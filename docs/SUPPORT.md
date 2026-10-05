@@ -1,6 +1,6 @@
 # linkstr support
 
-_Last updated: September 26, 2026_
+_Last updated: October 4, 2026_
 
 linkstr is a private link-sharing app built on [Nostr](https://nostr.com). You create or join private sessions, share links inside those sessions, and react with emoji. This page explains how to use the app.
 
@@ -11,7 +11,7 @@ linkstr is a private link-sharing app built on [Nostr](https://nostr.com). You c
 ### Create or import an account
 
 1. Open linkstr.
-2. Choose **create account** for a new account, or import an existing secret key (`nsec`).
+2. Choose **create account** for a new account, import an existing secret key (`nsec`), or choose **restore backup** for a saved linkstr file.
 3. If you create a new account, copy the displayed `nsec` and store it somewhere safe.
 4. Optionally set a public profile name.
 
@@ -171,7 +171,7 @@ linkstr uses an APNs push service for iOS notifications. That service stores you
 
 Push alerts use generic text. Tapping a new-post or reaction alert opens the session's posts list without starting a video. Reaction alerts scroll to the reacted-to post once it arrives; older alerts without a target post ID simply open the list. If you start scrolling yourself, linkstr cancels any pending jump. This replaces the current screen even if you already have a post open. Missing or deleted target posts leave you in the list. Old push notifications are not replayed during historical restore.
 
-Opening a post clears its delivered new-post and reaction alerts from Notification Center, including when you open it manually. Alerts for other posts and older reactions without a target post ID stay there. Opening just the app or session list does not clear them.
+Opening a post clears its delivered new-post and reaction alerts from Notification Center, including when you open it manually. Alerts for other posts and older reactions without a target post ID stay there. Opening just the app or session list does not clear them. **Mark all as read**, beside the members button when unread posts exist, marks the session’s saved incoming posts and clears their matching delivered alerts. It works offline, does not open or play posts, and leaves later arrivals unread.
 
 Archive updates send each saved archive/unarchive choice and clear filtering for deleted sessions. Restoring a session without its preference does not send an assumed unarchive. Sessions omitted from an update stay unchanged on the server, which retains only archived IDs for notification filtering.
 
@@ -269,9 +269,19 @@ linkstr stores your sessions, posts, reactions, contacts, read and archive choic
 
 In the device keychain, with iOS-controlled protection. Simulator fallback storage is used only when simulator keychain access is unavailable.
 
-Restoring encrypted local data also requires its original per-account encryption key, not just the `nsec`. If the key is temporarily unavailable, linkstr keeps the encrypted fields and can read them again when the original key becomes available. It does not generate a replacement key for existing encrypted data or while the persistent store cannot be opened.
+Restoring an encrypted database through an iOS system backup also requires its original per-account encryption key, not just the `nsec`. A linkstr backup file can be restored without the source device’s local key. If the key is temporarily unavailable, linkstr keeps the encrypted fields and can read them again when the original key becomes available. It does not generate a replacement key for existing encrypted data or while the persistent store cannot be opened.
 
 If linkstr starts in temporary recovery mode, retry startup successfully before clearing local account data. The app cannot safely remove account data or its encryption key while the persistent store is unavailable.
+
+### How do backup and restore work?
+
+Open Settings and tap **backup**. Choose where to save the file in Files. The picker prefers iCloud Drive when available; other enabled providers such as Google Drive or Dropbox can also be selected.
+
+The file includes your secret key, saved sessions and posts, contacts, membership and deletion history, reactions, read/archive choices, and app settings. It excludes cached videos, thumbnails, and previews. There is no password on the file. Keep it somewhere private: anyone with it can access your account.
+
+On a fresh installation or after logging out, tap **restore backup**, choose the file, review its account and saved counts, then confirm. No separate secret-key entry is needed. Cancelling or choosing an invalid file leaves saved data unchanged. Restore merges that account's retained data and keeps newer changes, including removed contacts and deleted posts. Other saved accounts are not changed. Settings come from the backup.
+
+Once the file is available locally, restore works offline. Reconnecting to relays can recover additional history they still hold. Duplicate messages merge without changing existing read choices. Keep a backup from a device with the history you need; relays may no longer retain missing messages.
 
 ### Will my aliases and archived sessions restore on a new phone?
 
@@ -279,7 +289,7 @@ linkstr backs up private aliases and archive choices to your Nostr relays, encry
 
 Changes made offline stay queued on the device until a relay accepts them. Keep the old installation until it has reconnected before switching phones. Restore depends on relay retention and availability; the `nsec` does not restore every local setting, read state, or cached file. Existing on-device encryption is unchanged.
 
-There is no manual backup step. Once the initial preference subscription finishes, linkstr seeds existing aliases and archived sessions that do not have backup records yet. New changes upload while the app is active and a relay is ready, and pending uploads retry on reconnect. Restored archive choices also update push filtering before the session history arrives.
+These preferences sync automatically. Once the initial preference history request finishes, linkstr seeds existing aliases and archived sessions that do not have backup records yet. New changes upload while the app is active and a relay is ready, and pending uploads retry on reconnect. Restored archive choices also update push filtering before the session history arrives.
 
 ### Where are videos and previews stored?
 

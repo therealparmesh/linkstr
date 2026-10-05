@@ -1,6 +1,6 @@
 # linkstr
 
-_Last updated: September 26, 2026_
+_Last updated: October 4, 2026_
 
 linkstr is an iOS app for private link sharing on [Nostr](https://nostr.com). You create private sessions, share links with people you trust, react with emojis, and play supported video directly inside the app when a provider allows it.
 
@@ -69,13 +69,13 @@ linkstr is built around private sessions, not one-off direct messages. A session
 
 ### Identity and account lifecycle
 
-- Users can create a new account or import an existing secret key (`nsec`).
+- Users can create a new account, import an existing secret key (`nsec`), or restore a linkstr backup file.
 - Onboarding presents sign-in and account creation as separate grouped sections rather than a single stacked neon form.
 - New account creation pauses on a backup step that reveals the generated `nsec`, offers copy, and explains that it functions as the account password for future sign-in.
 - New account creation can optionally set a profile name visible to others before leaving onboarding.
 - The active identity is keychain-backed.
 - The You tab exposes a profile card, QR code, current public key (`npub`), and editing for the account's published Nostr profile name.
-- Settings uses always-visible grouped sections for playback, relays, storage, and identity.
+- Settings uses always-visible grouped sections for playback, relays, storage, backup, and identity.
 - Settings storage controls can clear downloaded videos separately from saved link metadata and thumbnails.
 - The `nsec` is hidden by default and only revealed on explicit action. The revealed value is cleared again when the settings identity view disappears or the app moves to the inactive or background state.
 
@@ -209,9 +209,11 @@ linkstr is built around private sessions, not one-off direct messages. A session
 
 ### Read/unread semantics
 
+- When a session has unread incoming posts, **mark all as read** appears immediately left of members. It marks only the currently saved incoming posts in that session, in one local save. Later arrivals remain unread, even with older timestamps; relay replay preserves existing reads. It clears matching delivered notifications through the action time and sends no read receipts.
+
 - Session rows show unread indicators when any inbound root post in that session is unread.
 - Post cards inside a session show unread indicators when that root post is unread inbound.
-- Initial relay history restore into an empty local store treats replayed inbound posts as already read.
+- Initial relay history restore into an empty local store treats replayed inbound posts as already read. After a file restore, missing posts fetched from relays stay unread, even if the file contained no posts.
 - Opening an unread inbound post marks it as read.
 - Reactions do not affect unread counters.
 
@@ -261,7 +263,9 @@ Publication waits for relay `OK` acceptance with a timeout. A send succeeds only
 - `session_members` is accepted only from the stored creator. It can bootstrap a missing session when the snapshot includes sender, receiver, and a non-empty session name.
 - Root posts and reactions are persisted only when sender and receiver are active at the event timestamp. Out-of-order events are staged in memory until the missing dependency arrives.
 - `root_delete` requires the original post's sender; `session_delete` requires the session creator.
-- Late relay connections widen backfill coverage and retry staged events without tearing down the app-level relay lifecycle.
+- Each connected relay has its own history cursor for gift wraps and private preferences. A reconnect restarts that relay's history without restarting healthy relays. Outgoing messages return through their self-addressed gift wrap; no account-author gift-wrap subscription is needed.
+- History counts distinct valid events, includes each page's oldest timestamp, and probes older ranges even after a short response. Saturated timestamp boundaries increase the request limit up to 4,000. A closed, disconnected, timed-out, or invalid response leaves history incomplete; it does not advance the cursor. Relay retention and response limits can still prevent full recovery.
+- Events, completion responses, and history deadlines share an ordered queue. Publication acknowledgments and authentication can proceed while history decrypts. Initial live-subscription replay is treated as history until its completion response.
 - Live relay subscriptions use `since` filters that account for the gift-wrap timestamp obfuscation window so recently published events are not filtered out.
 
 Stored decrypted history does not retain the original signed seals, so it cannot be authenticated again locally. Upgrades preserve that history. Valid messages from earlier app versions use the same format and keys.
@@ -442,6 +446,12 @@ See [contact synchronization](docs/CONTACTS.md) for persistence and relay behavi
 
 ### Backup and migration expectations
 
+Settings' **backup** action exports a `.linkstrbackup` file through Files. It contains the active account's `nsec`, saved sessions and posts, membership history, reactions and deletion records, contacts and profiles, read/archive state, private preferences, and playback/relay settings. Cached videos, thumbnails, previews, drafts, and other accounts are excluded. The file is unencrypted: anyone with it can access the account. The picker prefers the app's iCloud Drive folder when available and also supports other enabled Files providers.
+
+**Restore backup** appears only on onboarding. The app validates the file before showing the account, date, and saved counts for confirmation. Invalid keys or data change nothing. Restore works locally and merges retained data for that account: duplicates stay single, read posts stay read, and newer membership, contact, preference, reaction, and deletion state wins. Other accounts are untouched. Playback and relay settings come from the file, including an explicitly empty relay list.
+
+Restore saves the merged records and an encrypted activation marker in one database transaction. Startup finishes interrupted identity/settings activation before connecting to relays. File imports use the destination device's local encryption key; they do not need the source device's local key. Normal relay catch-up then fills any available gaps without republishing restored messages. A file includes only data this device had received and saved, not a raw archive of signed Nostr events or a guarantee that relays retain missing history.
+
 - Private aliases and session archive choices sync through NIP-78 addressable events (`kind:30078`), encrypted to self with NIP-44. Each choice has a separate `d` tag under `linkstr/preferences/v1/`; its keyed identifier does not expose the contact or session ID. The public author, app namespace, and event timestamps remain visible to relays.
 - The newest record for each choice wins; NIP-01's lowest event-ID tiebreak applies at equal timestamps. Clearing an alias and unarchiving a session are saved explicitly. Independent choices do not overwrite one another.
 - Existing aliases and archived sessions are seeded using their original creation dates when no backup record exists, so initial backups do not outrank newer edits. Pending encrypted records survive offline use and retry after reconnect. Logging out and clearing local data also clears that account's pending records.
@@ -451,8 +461,8 @@ See [contact synchronization](docs/CONTACTS.md) for persistence and relay behavi
 - Push updates include the IDs whose archive choices are known and which of those IDs are archived. Older builds omit that scope and replace the entire list, retaining the risk of clearing notification suppression for sessions that have not restored yet, including choices sent by a newer device. Updating all devices avoids that older-client behavior.
 - Identity continuity across devices depends on keychain and iCloud Keychain backup conditions.
 - SwiftData participates in iOS backup and restore according to the device's backup mode.
-- If encrypted local data restores without matching key material, encrypted fields are unreadable.
-- The `nsec` preserves access to the Nostr identity. Restoring encrypted local data also requires its separate per-account encryption key from Keychain; the `nsec` alone cannot decrypt it.
+- If an iOS system backup restores the encrypted database without matching key material, encrypted fields are unreadable. This differs from importing a linkstr backup file.
+- The `nsec` preserves access to the Nostr identity. Reading an existing encrypted database also requires its separate per-account encryption key from Keychain; the `nsec` alone cannot decrypt it.
 - A Nostr vanish or delete request is relay-side only; the key itself remains usable until you discard it.
 
 ### Known non-goals
@@ -498,7 +508,7 @@ This runs both the iOS unit tests (via `xcodebuild`) and the push-service Go tes
 
 Tests cover observable behavior and distinct failure paths. Reuse coverage when a broader test already checks the same behavior. For asynchronous work, check the state before and after completion; for rejected input, use a valid control so the test cannot pass for an unrelated reason. Generated HTML and native gestures also need UI verification; checking for source strings does not prove they work.
 
-`NostrEventValidationTests` covers relay decoding, outgoing envelopes, recipient and sender copies, invalid signatures and authors, and history pagination. `NostrRelayDeliveryTests` checks history ordering, timely send acknowledgments, cancellation, and account-scoped replay. `AppSessionIngestTests+Authentication` checks that forged membership updates and deletes cannot change stored state while authorized messages still work. Contact tests are described in [contact synchronization](docs/CONTACTS.md#verification).
+`BackupTests` covers restore recovery on disk, overlapping imports, deletion and membership preservation, invalid input, and account isolation. `RelayHistoryPageTests` covers short pages, duplicates, and saturated timestamp boundaries. `NostrEventValidationTests` covers relay decoding, outgoing envelopes, recipient and sender copies, invalid signatures and authors, and history validation. `NostrRelayDeliveryTests` checks history ordering, timely send acknowledgments, cancellation, and account-scoped replay. `AppSessionIngestTests+Authentication` checks that forged membership updates and deletes cannot change stored state while authorized messages still work. Contact tests are described in [contact synchronization](docs/CONTACTS.md#verification).
 
 ### Releases
 

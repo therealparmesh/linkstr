@@ -1,10 +1,10 @@
 # privacy policy
 
-Last updated: September 19, 2026
+Last updated: October 4, 2026
 
 ## Overview
 
-linkstr is a private link-sharing app built on Nostr. Your account keys stay on your device. Encrypted session content moves through the Nostr relays you choose. If you enable notifications, a small amount of routing data is also stored by the developer-operated push service so Apple Push Notification service can reach your device.
+linkstr is a private link-sharing app built on Nostr. Your active account keys are stored in the device keychain. You can also export them in a backup file, and iCloud Keychain may sync them according to your settings. Encrypted session content moves through the Nostr relays you choose. If you enable notifications, a small amount of routing data is also stored by the developer-operated push service so Apple Push Notification service can reach your device.
 
 linkstr does not run ads, analytics, or behavioral tracking.
 
@@ -22,11 +22,17 @@ linkstr stores app data locally for the signed-in account, including:
 - Session deletion tombstones, posts, reactions, delete watermarks, read state, and archive state.
 - Media cache references, downloaded videos, and generated previews.
 - Local per-account encryption keys used to protect sensitive stored fields at rest.
-- Existing encrypted local data requires its original per-account encryption key. If that key is unavailable after a restore, linkstr preserves the encrypted data instead of generating a replacement key. The `nsec` alone cannot decrypt these local fields.
+- Existing encrypted local data requires its original per-account encryption key. If that key is unavailable after an iOS system restore, linkstr preserves the encrypted data instead of generating a replacement key. The `nsec` alone cannot decrypt these local fields.
 
 Sensitive local fields are encrypted at rest with per-account local keys. Public Nostr profile names and follow relationships, operational identifiers, and timestamps may remain plaintext locally.
 
 Downloaded videos and generated previews are device-local. Video cache is treated as disposable cache and may be trimmed automatically with least-recently-used eviction once local video cache reaches about 1 GB. Media saved via the share sheet goes to Photos or a Files location you choose.
+
+### In backup files you save
+
+The Settings backup action exports the active account's secret key, saved app content, contacts, read/archive choices, and playback/relay settings. It excludes downloaded videos, thumbnails, and previews. The file is not encrypted or password-protected by linkstr. Anyone who obtains it can read the saved content and use the account.
+
+Files lets you save to iCloud Drive, local storage, or another enabled provider. Your chosen provider's privacy and retention policies apply. linkstr does not send these files to the developer or automatically upload them to Nostr relays. Restoring a file validates it, asks for confirmation, then encrypts imported content for local storage on the destination device.
 
 ### In temporary runtime memory
 
@@ -101,7 +107,7 @@ Archived sessions do not notify.
 
 Your active account keys are stored in the device keychain with iOS-managed protection. If you enable iCloud Keychain, Apple may sync that keychain data across your devices according to your iCloud settings and Apple's policies.
 
-If encrypted local app data is restored without the matching local key material, some encrypted fields may be unreadable until the correct keys are available again.
+If an iOS system backup restores encrypted local app data without the matching local key material, some encrypted fields may be unreadable until the correct keys are available again.
 
 ## Third-party content and providers
 
@@ -112,6 +118,7 @@ Downloaded media from those providers is stored locally on your device only, unl
 ## Data retention
 
 - Local app data remains on your device until you delete it, log out and clear local data, or remove the app.
+- Exported backup files remain wherever you saved them until you delete them there. Logging out or deleting the account does not delete those files.
 - Media cache may also be removed automatically by cache eviction or iOS storage pressure.
 - Relay-side data retention depends on each relay operator.
 - APNs device tokens remain until you unregister, log out, switch the device to another account, or Apple permanently rejects the token. Archived conversation IDs are removed with the last registered token for a pubkey. Push-dedupe records older than 30 days are removed at the next service startup or push request.
@@ -128,6 +135,7 @@ You can:
 - Log out and clear local data for the signed-in account.
 - Delete your account in-app.
 - Export your `nsec` and use it in other Nostr apps.
+- Save or restore a linkstr backup through Files.
 
 ## Children's privacy
 
