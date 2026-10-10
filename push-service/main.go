@@ -42,6 +42,7 @@ type config struct {
 type apiServer struct {
 	store  *store
 	sender pushSender
+	wake   chan struct{}
 }
 
 type registerDeviceRequest struct {
@@ -90,9 +91,10 @@ func run(cfg config) error {
 		return fmt.Errorf("initialize APNs sender: %w", err)
 	}
 
+	server := &apiServer{store: store, sender: sender, wake: make(chan struct{}, 1)}
 	httpServer := &http.Server{
 		Addr:              cfg.listenAddr,
-		Handler:           newHTTPHandler(&apiServer{store: store, sender: sender}),
+		Handler:           newHTTPHandler(server),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      30 * time.Second,
@@ -102,6 +104,16 @@ func run(cfg config) error {
 
 	shutdownSignal, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	workerContext, cancelWorker := context.WithCancel(shutdownSignal)
+	workerDone := make(chan struct{})
+	go func() {
+		defer close(workerDone)
+		server.runPushWorker(workerContext)
+	}()
+	defer func() {
+		cancelWorker()
+		<-workerDone
+	}()
 
 	listenResult := make(chan error, 1)
 	go func() {
@@ -257,71 +269,14 @@ func (s *apiServer) handlePush(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	recipientCount := 0
-	deviceCount := 0
-	for _, recipientPubkey := range push.RecipientPubkeys {
-		if recipientPubkey == senderPubkey {
-			continue
-		}
-
-		archived, err := s.store.isConversationArchived(r.Context(), recipientPubkey, push.ConversationID)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "failed to inspect archive state")
-			return
-		}
-		if archived {
-			continue
-		}
-
-		devices, err := s.store.listDevices(r.Context(), recipientPubkey)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "failed to load devices")
-			return
-		}
-		if len(devices) == 0 {
-			continue
-		}
-
-		inserted, err := s.store.insertPushDedupe(
-			r.Context(),
-			push.EventID,
-			push.NotificationType,
-			recipientPubkey,
-		)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "failed to apply push dedupe")
-			return
-		}
-		if !inserted {
-			continue
-		}
-
-		recipientCount++
-		deviceCount += len(devices)
-
-		for _, device := range devices {
-			if err := s.sender.send(r.Context(), device, push); err != nil {
-				var permanentErr permanentDeviceError
-				if errors.As(err, &permanentErr) {
-					if deleteErr := s.store.deleteDevice(
-						r.Context(),
-						recipientPubkey,
-						device.DeviceToken,
-					); deleteErr != nil {
-						log.Printf("delete invalid device failed for %s: %v", recipientPubkey, deleteErr)
-					}
-					continue
-				}
-				log.Printf(
-					"push send failed type=%s event=%s recipient=%s token=%s err=%v",
-					push.NotificationType,
-					push.EventID,
-					recipientPubkey,
-					device.DeviceToken,
-					err,
-				)
-			}
-		}
+	recipientCount, deviceCount, err := s.store.enqueuePush(r.Context(), senderPubkey, push)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to queue push")
+		return
+	}
+	select {
+	case s.wake <- struct{}{}:
+	default:
 	}
 
 	writeJSON(
@@ -491,7 +446,7 @@ func openDatabase(databasePath string) (*sql.DB, error) {
 	db.SetMaxOpenConns(1)
 	if _, err := db.Exec(`
 		PRAGMA journal_mode = WAL;
-		PRAGMA synchronous = NORMAL;
+		PRAGMA synchronous = FULL;
 	`); err != nil {
 		_ = db.Close()
 		return nil, err

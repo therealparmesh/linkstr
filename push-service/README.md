@@ -7,11 +7,16 @@ Minimal linkstr push backend for iOS APNs delivery.
 - Stores APNs device tokens per Nostr pubkey.
 - Stores archived conversation IDs per Nostr pubkey.
 - Accepts signed push enqueue requests from the app.
+- Saves pending deliveries in SQLite and retries temporary APNs failures.
 - Sends generic APNs alerts for:
   - `new_post`
   - `new_emoji_reaction`
 
 It does not decrypt linkstr content, watch relays directly, or keep a notification inbox.
+
+`POST /v1/push` saves the dedupe record and each device's delivery job in one transaction before returning `202 Accepted`. A single worker sends those jobs independently of the HTTP request and resumes pending work on startup. Successful deliveries are removed; temporary failures retry with exponential backoff and jitter until the original 15-minute expiry. Retries keep the same expiry and event ID, and do not requeue devices whose delivery completed. Unregistering or moving a device token to another account cancels its pending jobs. Archiving a session cancels its pending jobs for that account.
+
+Delivery is at least once. If APNs accepts a notification but its response is lost, or the service stops before recording success, a retry may reach APNs again. The event ID remains its collapse ID. An accepted request means the work is saved, not that a phone has displayed an alert.
 
 Reaction requests can include an optional `post_id` identifying the reacted-to root post. The service passes it through to APNs for `new_emoji_reaction` only; `event_id` remains the reaction event ID used for deduplication. Requests from older clients without `post_id` remain supported, and their notifications open the session rather than a specific post.
 
@@ -29,9 +34,9 @@ Every mutating request is authorized with a signed Nostr HTTP auth event.
 
 That keeps a captured request from being replayed over and over during the normal auth TTL.
 
-## What you need to do manually
+## Setup requirements
 
-To make this real, you need to do four things:
+For a new deployment, you need to do four things:
 
 1. Create an APNs auth key in Apple Developer.
 2. Enable push in the iOS app target.
@@ -188,7 +193,7 @@ The health endpoint should answer:
 { "status": "ok" }
 ```
 
-The checked-in Fly configuration sizes the service as `shared-cpu-1x` with 256 MB of memory. It stops the Machine when idle, starts it for incoming requests, and keeps the 1 GB SQLite volume attached. The first request after an idle period may take longer while Fly starts the Machine.
+The checked-in Fly configuration sizes the service as `shared-cpu-1x` with 256 MB of memory and keeps the 1 GB SQLite volume attached. Autostop is disabled so the delivery worker can retry without waiting for another incoming request. Run one service process against this volume; the queue has one consumer.
 
 Pushing `master` deploys this service through the Fly.io GitHub integration. The `fly deploy --config fly.toml` command above is the manual fallback; no duplicate GitHub Actions deployment workflow is checked in.
 
@@ -196,6 +201,7 @@ Pushing `master` deploys this service through the Fly.io GitHub integration. The
 
 - Authentication nonces expire after five minutes.
 - Push-dedupe records older than 30 days are pruned on service startup and during push requests.
+- Pending delivery metadata is removed after delivery, cancellation, or its 15-minute expiry.
 - APNs tokens are deleted when Apple permanently rejects them.
 - A device unregister request deletes its token immediately.
 - Archived conversation IDs are stored only while their pubkey has a registered device and are removed with its last token.
@@ -253,6 +259,9 @@ Backend:
 - Push dedupe.
 - Dedupe expiration and archive-state cleanup.
 - Permanent APNs rejection cleanup.
+- Concurrent enqueue deduplication, per-device retries, and recovery after restart.
+- Pending-delivery cancellation for archives, device removal, account changes, and expiry.
+- Transaction rollback when queue insertion fails and preservation of interrupted deliveries on shutdown.
 - Self-send suppression.
 - Device unregistration.
 

@@ -20,6 +20,7 @@ type outboundPush struct {
 	RecipientPubkeys []string
 	Emoji            string
 	PostID           string
+	ExpiresAt        time.Time
 }
 
 type pushSender interface {
@@ -89,7 +90,7 @@ func (s *apnsSender) send(ctx context.Context, device registeredDevice, push out
 		DeviceToken: device.DeviceToken,
 		Topic:       s.topic,
 		CollapseID:  push.EventID,
-		Expiration:  time.Now().Add(15 * time.Minute),
+		Expiration:  push.ExpiresAt,
 		Priority:    apns2.PriorityHigh,
 		PushType:    apns2.PushTypeAlert,
 		Payload:     buildPayload(push),

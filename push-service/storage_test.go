@@ -8,20 +8,21 @@ import (
 	"time"
 )
 
-func TestInsertPushDedupePrunesExpiredRows(t *testing.T) {
+func TestEnqueuePushPrunesExpiredDedupeRows(t *testing.T) {
 	store, db := newTestStore(t)
 	insertExpiredDedupe(t, db)
 
-	inserted, err := store.insertPushDedupe(
-		context.Background(),
-		"current-event",
-		notificationTypeNewPost,
-		"recipient",
-	)
+	if err := store.upsertDevice(context.Background(), "recipient", "token", "production"); err != nil {
+		t.Fatal(err)
+	}
+	recipients, _, err := store.enqueuePush(context.Background(), "sender", outboundPush{
+		EventID: "current-event", NotificationType: notificationTypeNewPost,
+		ConversationID: "conversation", RecipientPubkeys: []string{"recipient"},
+	})
 	if err != nil {
 		t.Fatalf("insert current dedupe row: %v", err)
 	}
-	if !inserted {
+	if recipients != 1 {
 		t.Fatal("expected current dedupe row to be inserted")
 	}
 
@@ -123,19 +124,12 @@ func TestDeviceTokenMovesToCurrentPubkey(t *testing.T) {
 		t.Fatalf("register current pubkey: %v", err)
 	}
 
-	oldDevices, err := store.listDevices(ctx, "old-pubkey")
-	if err != nil {
-		t.Fatalf("list old pubkey devices: %v", err)
+	var owner string
+	if err := db.QueryRow(`SELECT pubkey FROM devices WHERE device_token = ?`, "device-token").Scan(&owner); err != nil {
+		t.Fatal(err)
 	}
-	if len(oldDevices) != 0 {
-		t.Fatalf("expected token to leave old pubkey, got %#v", oldDevices)
-	}
-	currentDevices, err := store.listDevices(ctx, "current-pubkey")
-	if err != nil {
-		t.Fatalf("list current pubkey devices: %v", err)
-	}
-	if len(currentDevices) != 1 || currentDevices[0].DeviceToken != "device-token" {
-		t.Fatalf("unexpected current pubkey devices: %#v", currentDevices)
+	if owner != "current-pubkey" {
+		t.Fatalf("token belongs to %s", owner)
 	}
 	assertArchivedConversationCount(t, db, "old-pubkey", 0)
 }

@@ -273,6 +273,7 @@ Stored decrypted history does not retain the original signed seals, so it cannot
 ### Notifications
 
 - Notifications are APNs remote notifications backed by a linkstr-operated push service.
+- The service saves pending deliveries in SQLite and retries temporary APNs failures for up to 15 minutes, including after a service restart. Removing a device token or archiving a session cancels matching pending deliveries.
 - Current notification types: inbound root posts and inbound active emoji reactions.
 - Archived conversations do not notify.
 - Reaction deactivations, self-echoed events, and historical relay restore/backfill do not trigger notifications.

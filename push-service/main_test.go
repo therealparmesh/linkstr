@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	nostr "github.com/nbd-wtf/go-nostr"
 )
@@ -20,13 +21,17 @@ type sentPush struct {
 }
 
 type capturingSender struct {
-	sent    []sentPush
-	sendErr error
+	sent       []sentPush
+	sendErr    error
+	failDevice string
 }
 
 func (s *capturingSender) send(_ context.Context, device registeredDevice, push outboundPush) error {
 	s.sent = append(s.sent, sentPush{device: device, push: push})
-	return s.sendErr
+	if s.failDevice == "" || s.failDevice == device.DeviceToken {
+		return s.sendErr
+	}
+	return nil
 }
 
 func TestRegisteredDevicesReceivePushesOnlyFromOtherAccounts(t *testing.T) {
@@ -328,11 +333,16 @@ func TestNewPushSenderAllowsNoOpWhenDisabled(t *testing.T) {
 	}
 }
 
-func newTestMux(t *testing.T) (*http.ServeMux, *capturingSender) {
+func newTestMux(t *testing.T) (http.Handler, *capturingSender) {
 	t.Helper()
 	store, _ := newTestStore(t)
 	sender := &capturingSender{}
-	return newHTTPHandler(&apiServer{store: store, sender: sender}), sender
+	server := &apiServer{store: store, sender: sender}
+	handler := newHTTPHandler(server)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler.ServeHTTP(w, r)
+		drainTestPushes(t, server, time.Now())
+	}), sender
 }
 
 func testIdentity(t *testing.T) (string, string) {

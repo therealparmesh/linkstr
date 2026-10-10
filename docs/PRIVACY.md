@@ -62,7 +62,7 @@ If you allow notifications, linkstr sends limited routing data to a developer-op
 - Archive updates send session IDs with explicit archive/unarchive choices, including clearing archived filtering for deleted sessions. The service processes these updates but retains only archived IDs for this purpose.
 - Push requests carry the notification type, event and conversation IDs, recipient pubkeys, and reaction emoji when applicable. Reaction notifications may also include the reacted-to post ID so a tap can scroll to that post in the session list. These routing fields are not encrypted session content.
 
-The push service is used for notification routing, not message transport. Encrypted session content still travels through Nostr relays, not through the push service. Push-dedupe records older than 30 days are removed when the service starts or handles a push request, and authentication nonces expire after five minutes.
+The push service is used for notification routing, not message transport. Encrypted session content still travels through Nostr relays, not through the push service. Pending delivery jobs store the routing fields listed above until delivery, cancellation, or their 15-minute expiry. Push-dedupe records older than 30 days are removed when the service starts or handles a push request, and authentication nonces expire after five minutes.
 
 The push service does not store decrypted post text, reaction text, or session payload plaintext. Push banners use generic notification text. Historical relay restore does not replay old push notifications.
 
@@ -121,7 +121,7 @@ Downloaded media from those providers is stored locally on your device only, unl
 - Exported backup files remain wherever you saved them until you delete them there. Logging out or deleting the account does not delete those files.
 - Media cache may also be removed automatically by cache eviction or iOS storage pressure.
 - Relay-side data retention depends on each relay operator.
-- APNs device tokens remain until you unregister, log out, switch the device to another account, or Apple permanently rejects the token. Archived conversation IDs are removed with the last registered token for a pubkey. Push-dedupe records older than 30 days are removed at the next service startup or push request.
+- APNs device tokens remain until you unregister, log out, switch the device to another account, or Apple permanently rejects the token. Removing a token cancels its pending deliveries; archiving a session cancels its pending deliveries for that account. Pending delivery jobs expire after 15 minutes. Archived conversation IDs are removed with the last registered token for a pubkey. Push-dedupe records older than 30 days are removed at the next service startup or push request.
 - If you delete your account in linkstr and relays are available, the app can publish an empty follow list and a Nostr vanish request to enabled relays, but your `nsec` remains valid unless you discard it yourself.
 
 ## Your choices
