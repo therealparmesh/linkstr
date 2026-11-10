@@ -6,21 +6,22 @@ struct AddedYouView: View {
   @EnvironmentObject private var session: AppSession
   @ObservedObject var discovery: ContactDiscovery
   let ownerPubkey: String
-  let contacts: [ContactEntity]
+  @Query private var contacts: [ContactEntity]
   let addContact: () -> Void
-  @Binding var query: String
+  @State private var query = ""
   @State private var pendingContactAddition: ContactPresentation?
   @Query private var relationships: [FollowRelationshipEntity]
 
   init(
-    ownerPubkey: String, contacts: [ContactEntity], query: Binding<String>,
-    discovery: ContactDiscovery, addContact: @escaping () -> Void
+    ownerPubkey: String, discovery: ContactDiscovery, addContact: @escaping () -> Void
   ) {
     self.ownerPubkey = ownerPubkey
-    self.contacts = contacts
-    self._query = query
     self.discovery = discovery
     self.addContact = addContact
+    _contacts = Query(
+      filter: #Predicate<ContactEntity> { $0.ownerPubkey == ownerPubkey },
+      sort: [SortDescriptor(\ContactEntity.createdAt)]
+    )
     _relationships = Query(
       filter: #Predicate<FollowRelationshipEntity> {
         $0.ownerPubkey == ownerPubkey && $0.followsOwner

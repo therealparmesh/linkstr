@@ -390,7 +390,7 @@ Embedded web playback allows provider-element fullscreen when supported.
 
 **Contact management:**
 
-- The top-left toolbar button switches between **contacts** and **added you**, matching the archived-session control. The heading and search reflect the selected list. The top-right button adds a contact manually.
+- Open **added you** from the shortcut below contact search. It has its own search and returns to contacts with the standard back button. Both screens have an **add contact** button in the header.
 - The **added you** list shows public follows found on configured relays. Tap the add-contact button beside someone to add them; saved contacts show a checkmark. Long-press a row to **copy public key**. Results are cached per account and can be refreshed or paged with **load more**. Discovery checks authors' latest lists for unfollows. Results are ordered by follow-list timestamp, newest first.
 - Public keys wrap in full in contact and member rows, the add-contact preview, and contact detail. Row menus copy the complete key; preview and detail text also support native selection and copying.
 - Tap a contact row to edit it. Session-member rows show an add-contact button only for people outside your contacts. Contact additions require confirmation and preserve existing aliases, session membership, and unsaved session edits.
@@ -412,7 +412,7 @@ See [contact synchronization](docs/CONTACTS.md) for persistence and relay behavi
 - Share composer format: `linkstr://share?url=…&note=…`
 - Media save format: `linkstr://save?url=…`
 - Valid deep links open a full-screen shared-link detail, share composer, or media-save surface.
-- Post detail can share the current post as a deep link through the native iOS share sheet.
+- Post detail can share the current post as a deep link through the native iOS share sheet. Opening the sheet pauses playback; dismissing it resumes a video that was playing.
 - The iOS share extension accepts web URLs, webpages, shared linkstr post links, or text containing either kind of link, then offers **share to a session** or **save media**.
 - Sharing a linkstr post link back into the app or pasting it into either composer uses the original web URL, including its query and fragment. Invalid or nested deep links are rejected.
 - **share to a session** opens a full-screen share composer with the link prefilled, any surrounding text as the optional note, and a separate searchable active-session picker.

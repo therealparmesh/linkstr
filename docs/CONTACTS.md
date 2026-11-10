@@ -24,7 +24,7 @@ Removing a contact records a cleared private alias for backup. Shared sessions a
 
 ## Added you
 
-Open **added you** from the contacts list. Both screens have their own search and an **add contact** button in the header. Incoming follows are ordered by follow-list timestamp, newest first, with public keys breaking ties. Nostr follow lists do not include a separate timestamp for adding each person; unrelated follow-list updates can also move someone up the list. The list has no status caption or inline loading indicator. Use the add-contact button beside a person to add them, or long-press their row to **copy public key**. Leaving the tab returns it to Contacts. Contact detail has its own back and save controls.
+Open **added you** from the contacts list. Both screens have their own search and an **add contact** button in the header. Incoming follows are ordered by follow-list timestamp, newest first, with public keys breaking ties. Nostr follow lists do not include a separate timestamp for adding each person; unrelated follow-list updates can also move someone up the list. The list has no status caption or inline loading indicator. Use the add-contact button beside a person to add them, or long-press their row to **copy public key**. The standard back button returns to contacts. Contact detail has its own back and save controls.
 
 `ContactDiscovery` shares the app's relay connections. It finds kind-3 events containing the owner's public key, then requests those authors' latest lists without requiring that tag. This second request can find unfollows. Visible rows receive live author updates, and a separate subscription finds new follows while historical pages load.
 

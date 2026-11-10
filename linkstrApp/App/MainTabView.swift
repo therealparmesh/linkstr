@@ -32,7 +32,6 @@ struct MainTabView: View {
   @State private var isPresentingNewSession = false
   @State private var isPresentingAddContact = false
   @State private var isShowingArchivedSessions = false
-  @State private var isShowingAddedYou = false
   @State private var navigationPath: [AppRoute] = []
   @State private var watchPositions: [String: String] = [:]
   @State private var navigationID = UUID()
@@ -105,6 +104,11 @@ struct MainTabView: View {
         ) { postID in
           watchPositions[sessionID] = postID
         }
+      case .addedYou:
+        AddedYouView(ownerPubkey: ownerPubkey, discovery: session.contactDiscovery) {
+          isPresentingAddContact = true
+        }
+        .background(LinkstrBackgroundView())
       case .settings(let section):
         SettingsView(initialSection: section)
           .toolbarVisibility(.hidden, for: .tabBar)
@@ -114,9 +118,6 @@ struct MainTabView: View {
     .onChange(of: selectedTab) { oldValue, newValue in
       if oldValue == .sessions, newValue != .sessions {
         isShowingArchivedSessions = false
-      }
-      if oldValue == .contacts, newValue != .contacts {
-        isShowingAddedYou = false
       }
     }
     .onChange(of: archivedSessionCount) { _, count in
@@ -145,7 +146,7 @@ struct MainTabView: View {
     case .contacts:
       ContactsView(
         ownerPubkey: ownerPubkey,
-        isShowingAddedYou: $isShowingAddedYou,
+        openAddedYou: { navigationPath.append(.addedYou) },
         nostrService: session.nostrService,
         addContact: { isPresentingAddContact = true }
       )

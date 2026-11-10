@@ -9,6 +9,7 @@ private enum RootViewTimingDefaults {
 
 @MainActor
 struct RootView: View {
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @EnvironmentObject private var session: AppSession
   @EnvironmentObject private var deepLinkHandler: DeepLinkHandler
   @ObservedObject private var pushNotifications: PushNotificationService
@@ -99,11 +100,11 @@ struct RootView: View {
         }
       }
       .animation(
-        .easeInOut(duration: RootViewTimingDefaults.contentTransitionDuration),
+        reduceMotion ? nil : .easeInOut(duration: RootViewTimingDefaults.contentTransitionDuration),
         value: session.didFinishBoot
       )
       .animation(
-        .easeInOut(duration: RootViewTimingDefaults.contentTransitionDuration),
+        reduceMotion ? nil : .easeInOut(duration: RootViewTimingDefaults.contentTransitionDuration),
         value: session.shouldShowOnboarding
       )
     }
@@ -115,7 +116,7 @@ struct RootView: View {
         .buttonStyle(.plain)
         .padding(.top, LinkstrTheme.toastTopPadding)
         .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-        .transition(.move(edge: .top).combined(with: .opacity))
+        .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
         .accessibilityElement(children: .combine)
         .accessibilityHint(
           toastOpensRelaySettings ? "opens relay settings" : "dismisses notification"
@@ -208,7 +209,7 @@ struct RootView: View {
     isSuccess: Bool,
     opensRelaySettings: Bool = false
   ) {
-    withAnimation(.easeIn(duration: RootViewTimingDefaults.toastAnimationDuration)) {
+    withAnimation(reduceMotion ? nil : .easeIn(duration: RootViewTimingDefaults.toastAnimationDuration)) {
       toastIsSuccess = isSuccess
       toastMessage = message
       toastOpensRelaySettings = opensRelaySettings
@@ -218,7 +219,7 @@ struct RootView: View {
   }
 
   private func dismissToast() {
-    withAnimation(.easeOut(duration: RootViewTimingDefaults.toastAnimationDuration)) {
+    withAnimation(reduceMotion ? nil : .easeOut(duration: RootViewTimingDefaults.toastAnimationDuration)) {
       toastMessage = nil
     }
     toastOpensRelaySettings = false

@@ -3,6 +3,7 @@ import Foundation
 enum AppRoute: Hashable {
   case session(String, scrollToPostID: String? = nil)
   case watch(String, startingPostID: String? = nil)
+  case addedYou
   case settings(SettingsSection? = nil)
 }
 

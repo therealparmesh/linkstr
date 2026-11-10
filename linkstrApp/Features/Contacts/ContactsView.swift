@@ -7,23 +7,22 @@ struct ContactsView: View {
   @ObservedObject private var nostrService: NostrDMService
   let addContact: () -> Void
   let ownerPubkey: String
-  @Binding var isShowingAddedYou: Bool
+  let openAddedYou: () -> Void
 
   @Query
   private var contacts: [ContactEntity]
 
   @State private var selectedContact: ContactEntity?
   @State private var pendingContactRemoval: ContactEntity?
-  @State private var addedYouQuery = ""
   @State private var query = ""
 
   init(
-    ownerPubkey: String, isShowingAddedYou: Binding<Bool>, nostrService: NostrDMService,
+    ownerPubkey: String, openAddedYou: @escaping () -> Void, nostrService: NostrDMService,
     addContact: @escaping () -> Void
   ) {
     self.nostrService = nostrService
     self.ownerPubkey = ownerPubkey
-    self._isShowingAddedYou = isShowingAddedYou
+    self.openAddedYou = openAddedYou
     self.addContact = addContact
     _contacts = Query(
       filter: #Predicate<ContactEntity> { contact in
@@ -56,14 +55,6 @@ struct ContactsView: View {
     }
     .task(id: profileLookupPubkeys.stableTaskID) {
       session.requestRemoteProfilesIfNeeded(pubkeyHexes: profileLookupPubkeys)
-    }
-    .navigationDestination(isPresented: $isShowingAddedYou) {
-      AddedYouView(
-        ownerPubkey: ownerPubkey, contacts: contacts, query: $addedYouQuery,
-        discovery: session.contactDiscovery, addContact: addContact
-      )
-      .background(LinkstrBackgroundView())
-      .toolbarVisibility(.hidden, for: .tabBar)
     }
     .navigationDestination(item: $selectedContact) { contact in
       EditContactView(contact: contact)
@@ -163,7 +154,7 @@ struct ContactsView: View {
 
   private var addedYouShortcut: some View {
     Button {
-      isShowingAddedYou = true
+      openAddedYou()
     } label: {
       HStack(spacing: 10) {
         Image(systemName: "person.crop.circle.badge.plus")

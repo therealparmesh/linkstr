@@ -364,8 +364,8 @@ extension PostDetailView {
         }
         Button("refresh preview", systemImage: "arrow.clockwise") { refreshPostMetadata(post) }
           .disabled(isRefreshingMetadata)
-        if let shareDeepLinkURL {
-          ShareLink(item: shareDeepLinkURL) { Label("share link", systemImage: "square.and.arrow.up") }
+        if shareDeepLinkURL != nil {
+          Button("share link", systemImage: "square.and.arrow.up") { activeSheet = .share }
         }
         if let saveAction {
           Button("save video", systemImage: "square.and.arrow.down", action: saveAction)

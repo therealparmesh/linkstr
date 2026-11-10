@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import UIKit
 
 struct PostDetailView: View {
   @EnvironmentObject var session: AppSession
@@ -18,6 +19,7 @@ struct PostDetailView: View {
     case reactions
     case details
     case editNote
+    case share
 
     var id: Self { self }
   }
@@ -99,6 +101,8 @@ struct PostDetailView: View {
     }
     .sheet(item: $activeSheet) { sheet in
       switch sheet {
+      case .share:
+        if let shareDeepLinkURL { PostShareSheet(url: shareDeepLinkURL) }
       case .editNote:
         if let post { EditPostNoteSheet(post: post) }
       case .details, .reactions:
@@ -228,4 +232,17 @@ struct WatchActionLabel: View {
     .frame(minWidth: 46, minHeight: 44)
     .contentShape(Rectangle())
   }
+}
+
+private struct PostShareSheet: UIViewControllerRepresentable {
+  @Environment(\.dismiss) private var dismiss
+  let url: URL
+
+  func makeUIViewController(context: Context) -> UIActivityViewController {
+    let controller = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+    controller.completionWithItemsHandler = { _, _, _, _ in dismiss() }
+    return controller
+  }
+
+  func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }

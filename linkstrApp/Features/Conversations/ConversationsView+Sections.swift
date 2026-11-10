@@ -2,6 +2,7 @@ import SwiftData
 import SwiftUI
 import UIKit
 struct SessionPostsView: View {
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.dismiss) var dismiss
   @EnvironmentObject var session: AppSession
 
@@ -131,11 +132,13 @@ struct SessionPostsView: View {
 
   var body: some View {
     let sessionEntity = sessionEntity
-    Group {
+    ZStack {
       if let sessionEntity, showsWatch, !rootPosts.isEmpty {
         watchView(for: sessionEntity)
+          .transition(.opacity)
       } else if let sessionEntity {
         timelineView(for: sessionEntity)
+          .transition(.opacity)
       } else {
         ContentUnavailableView(
           "session unavailable",
@@ -144,6 +147,7 @@ struct SessionPostsView: View {
         )
       }
     }
+    .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: showsWatch)
     .scrollContentBackground(.hidden)
     .background(LinkstrBackgroundView())
 
