@@ -103,8 +103,11 @@ struct EmbeddedWebView: UIViewRepresentable {
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-      guard source?.usesManagedHTMLDocument == true else { return }
-      scheduleMetricPolling(for: webView)
+      if source?.usesManagedHTMLDocument == true {
+        scheduleMetricPolling(for: webView)
+      } else {
+        onContentReadyChange?(true)
+      }
     }
 
     func webView(

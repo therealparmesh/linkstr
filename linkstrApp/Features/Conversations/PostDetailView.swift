@@ -23,6 +23,7 @@ struct PostDetailView: View {
   }
 
   @State var activeSheet: Sheet?
+  @State var selectedReactionEmoji: String?
 
   @State var isPresentingEmojiPicker = false
   @State var contacts: [ContactEntity] = []
@@ -112,7 +113,16 @@ struct PostDetailView: View {
         VStack(alignment: .leading, spacing: 16) {
           if showsReactions {
             postCardReadOnlyNotice
-            postCardReactionRow
+            if canReactToPost {
+              VStack(alignment: .leading, spacing: 6) {
+                Text("your reactions")
+                  .font(LinkstrTheme.font(.subheadline, weight: .semibold))
+                Text("tap an emoji to add or remove your reaction.")
+                  .font(LinkstrTheme.font(.caption))
+                  .foregroundStyle(LinkstrTheme.textSecondary)
+                postCardReactionRow
+              }
+            }
             postCardReactionBreakdown
             if reactionBreakdown.isEmpty {
               Text("no reactions yet")

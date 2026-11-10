@@ -63,7 +63,11 @@ Profile name changes can be submitted with either the keyboard return key or the
 
 ### Watch posts in a session
 
-Open a session and swipe up for the next post or down for the previous one. Supported videos fill the watch view. Use **source** to open the original link, or **session posts** to browse the timeline.
+Open a session and swipe up for the next post or down for the previous one. Supported videos fill the watch view. Use **open** to open the original link, or the **all session posts** list button to browse the timeline.
+
+Playback options switch between the available players. The **more** menu contains post details, sharing, refreshing, and saving a cached video. You can also edit the note or delete the post if you authored it. Regular links show a readable preview card; use **open** to visit the original.
+
+Tap **react** or the emoji summary on a post to see its reactions. Under **who reacted**, choose **all** or an emoji to see the people who used it. These filters do not change your reactions. Use the separate **your reactions** controls to add or remove yours.
 
 ### Share a link
 
@@ -178,7 +182,7 @@ linkstr uses an APNs push service for iOS notifications. That service stores you
 
 Push alerts use generic text. Tapping a new-post or reaction alert opens the session's posts list without starting a video. Reaction alerts scroll to the reacted-to post once it arrives; older alerts without a target post ID simply open the list. If you start scrolling yourself, linkstr cancels any pending jump. This replaces the current screen even if you already have a post open. Missing or deleted target posts leave you in the list. Old push notifications are not replayed during historical restore.
 
-Opening a post clears its delivered new-post and reaction alerts from Notification Center, including when you open it manually. Alerts for other posts and older reactions without a target post ID stay there. Opening just the app or session list does not clear them. **mark all as read**, available from **session posts** while watching or from the timeline toolbar, marks the session’s saved incoming posts and clears their matching delivered alerts. It works offline, does not open or play posts, and leaves later arrivals unread.
+Opening a post clears its delivered new-post and reaction alerts from Notification Center, including when you open it manually. Alerts for other posts and older reactions without a target post ID stay there. Opening just the app or session list does not clear them. **mark all as read**, available by holding the **all session posts** list button while watching or from the timeline toolbar, marks the session’s saved incoming posts and clears their matching delivered alerts. It works offline, does not open or play posts, and leaves later arrivals unread.
 
 Archive updates send each saved archive/unarchive choice and clear filtering for deleted sessions. Restoring a session without its preference does not send an assumed unarchive. Sessions omitted from an update stay unchanged on the server, which retains only archived IDs for notification filtering.
 
@@ -262,7 +266,7 @@ Yes. Long-press the contact row and choose **remove contact**, or tap **remove c
 
 ### Can I save videos?
 
-Yes, for content you have the right to save. Save and export are available only when linkstr can extract and cache a local media file. Embed-only playback is provider-dependent and may not offer save or export even if the post plays in-app.
+Yes, for content you have the right to save. In a session, open **more** → **save video**, then choose Photos or Files. On a shared-link screen, use **save video**. Save and export are available only when linkstr can extract and cache a local media file. Embed-only playback is provider-dependent and may not offer save or export even if the post plays in-app.
 
 ---
 
@@ -339,7 +343,7 @@ Historical replay depends on relay retention. linkstr can retry out-of-order pos
 2. In a session, open **playback options** and try the other player when available.
 3. If a cached copy was auto-trimmed, try local playback again to re-cache it.
 4. Choose **refresh preview** from **more** if the preview seems stale or missing.
-5. Tap **source** in a session or **open in browser** on a shared link if the provider blocks playback.
+5. Tap **open** in a session or **open in browser** on a shared link if the provider blocks playback.
 
 ### A preview looks stale or wrong
 

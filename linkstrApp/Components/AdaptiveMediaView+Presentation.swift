@@ -1,6 +1,6 @@
 import Foundation
 
-extension AdaptiveVideoPlaybackView {
+extension AdaptiveMediaView {
   struct ResolvedPresentation {
     let taskID: String
     let canonicalSourceURL: URL

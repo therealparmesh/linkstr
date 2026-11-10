@@ -99,7 +99,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 - Users create sessions from the compose action in the top-right corner of the sessions tab.
 - Search covers session names and recent post text. A session row shows the sender's note or linked title when available, plus the source, timestamp, and unread count.
 - Group rows show up to three member initials. A session with one other member shows their initials, and a solo session shows a bookmark.
-- Opening a session starts the watch view. Swipe vertically between posts or open **session posts** for the timeline, previous and next controls, and **mark all as read**. The app remembers the last viewed post while it is running.
+- Opening a session starts the watch view. Swipe vertically between posts or tap the **all session posts** list button for the timeline. Hold that button for previous and next controls and **mark all as read**. The app remembers the last viewed post while it is running.
 - Tap the session name to view members and session settings. Notifications still open the timeline without playing a post.
 
 **Session creation:**
@@ -168,7 +168,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 
 **Watching posts:**
 
-- Portrait video fills the watch view. Wider videos keep their proportions. Regular links show a preview with a **source** button.
+- Portrait video fills the watch view. Wider videos keep their proportions. Regular links show a readable card with a title, thumbnail, source URL, and available social post text. Use **open** to visit the original.
 - **react** opens emoji choices and the reaction breakdown. Tap the caption or choose **post details** from **more** to read the full note and copy the URL.
 - **more** also offers **share link** and **refresh preview**. On your own posts, use **edit note** to change or clear the note, or **delete post** to remove the post.
 - Note edits sync after relay acceptance to active members who were eligible for the original post. They keep the original link, timestamp, read state, and reactions. Older versions of linkstr still show the original note.
@@ -195,9 +195,9 @@ linkstr is built around private sessions, not one-off direct messages. A session
 
 - Reactions are emoji-only toggles tied to a post.
 - Reaction send is blocked when the sender is not an active member of the target session.
-- Default quick options: 👍, 👎, 👀. A `…` button opens the full emoji picker sheet.
+- Default quick options: 👍, 👎, 👀. The **+** button opens the full emoji picker sheet.
 - Session post lists show compact read-only reaction summaries with no interactive controls; single reactions show emoji-only, and higher counts use bottom-right badges. Read-only count badges cap visually at `10+`.
-- The watch view shows a short reaction summary. Its reaction sheet highlights your selections and lists each participant's reactions.
+- The watch view shows a short reaction summary. Its reaction sheet separates **your reactions** from **who reacted**. The **all** and emoji filters only filter the participant list; the controls under **your reactions** add or remove your reaction. If the selected emoji no longer has any reactions, the filter returns to **all**.
 
 **State and ordering:**
 
@@ -331,18 +331,19 @@ Non-video provider URLs (channel pages, profiles, etc.) fall back to open-in-bro
 - Confirmed photo-only Instagram posts skip slow local video probing and use Instagram's swipeable mobile web view.
 - Provider embeds decide which post audio is available; linkstr does not separately extract audio-only media.
 - If a local playback stream fails, caching for that stream stops and the next available stream is tried automatically before falling back to embed mode.
-- If extraction fails, embed mode remains available with try-local and open-in-browser actions.
-- Use **source** in a session or **open in browser** on a shared link to open the provider's page.
+- If extraction fails, embed mode remains available with **try extracted video** and browser access.
+- Use **open** in a session or **open in browser** on a shared link to open the provider's page.
 - Switching playback modes, refreshing or changing the source, and leaving the screen cancel superseded playback preparation and caching work.
-- The watch view puts **use embedded player**, **try in-app playback**, **open system player**, and **save video** in **playback options** when available.
+- The watch view puts **use official embed**, **try extracted video**, and **open system player** in **playback options** when available. **more** contains post details, sharing, refresh, saving a cached video, and author-only note editing and deletion.
+- Embed loading has a browser exit. Failed or stalled embeds offer retry and browser access; embed-only providers never show an extraction switch.
 - Audio plays even when the iPhone silent switch is enabled.
 - Local video playback loops without a repeat limit by default, inline and fullscreen. **you** → **playback** → **loop local videos** turns looping off or on. The preference is saved on this device and applies across accounts; turning it off lets the current video finish without restarting.
-- When a local file is cached, use **save video** in a session or **save…** on a shared link to export to Photos or Files.
+- When a local file is cached, use **more** → **save video** in a session or **save video** on a shared link to export to Photos or Files.
 
 **Twitter/X statuses** are resolved at runtime:
 
 - Video statuses use extraction-preferred playback.
-- Non-video statuses use official tweet embeds when available, falling back to open-in-browser.
+- Non-video statuses use official tweet embeds when available, falling back to a readable link card with available post text and browser access.
 
 #### Embed URLs
 

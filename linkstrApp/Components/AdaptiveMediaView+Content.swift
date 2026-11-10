@@ -4,23 +4,19 @@ import SwiftUI
   import UIKit
 #endif
 
-// MARK: - AdaptiveVideoPlaybackView Controls & Helpers
+// MARK: - AdaptiveMediaView Controls & Helpers
 
-extension AdaptiveVideoPlaybackView {
+extension AdaptiveMediaView {
   @ViewBuilder
   var content: some View {
     if isResolvingPresentation, immersive {
-      immersiveStatus("loading post", icon: nil)
+      watchContentArea { _ in
+        mediaStatus("loading post", message: "", isLoading: true)
+      }
     } else if isResolvingPresentation {
       VStack(alignment: .leading, spacing: 8) {
         mediaSurface {
-          VStack(spacing: 8) {
-            ProgressView()
-            Text("loading post...")
-              .font(LinkstrTheme.font(.caption))
-              .foregroundStyle(LinkstrTheme.textSecondary)
-          }
-          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+          loadingIndicator("loading post")
         }
         openInBrowserButton(action: openSourceAction)
       }
@@ -38,7 +34,7 @@ extension AdaptiveVideoPlaybackView {
           embedSource: resolvedOrFallbackEmbedSource(embedURL), allowsTryLocalPlayback: false)
       case .link:
         if immersive {
-          Color.clear
+          watchContentArea { _ in linkContent }
         } else {
           openInBrowserButton(action: openSourceAction)
         }
@@ -72,7 +68,7 @@ extension AdaptiveVideoPlaybackView {
           },
           immersive: immersive,
           aspectRatio: effectiveMediaAspectRatio,
-          isCovered: isCovered,
+          isCovered: isCovered || exportTarget != nil || fileExportItem != nil || exportFeedbackMessage != nil,
           watchBottomInset: watchInsets.bottom,
           systemPlayerRequest: immersive ? $isPresentingSystemPlayer : nil
         )
@@ -87,12 +83,15 @@ extension AdaptiveVideoPlaybackView {
     case nil:
       if immersive {
         ZStack(alignment: .topTrailing) {
-          immersiveStatus("getting video ready", icon: nil)
+          watchContentArea { _ in
+            mediaStatus("getting video ready", message: "you can switch to the official embed while this loads.",
+                        isLoading: true, offersEmbed: true)
+          }
           immersivePlaybackMenu(local: true)
         }
       } else {
         VStack(alignment: .leading, spacing: 8) {
-          mediaSurface { immersiveStatus("getting video ready", icon: nil) }
+          mediaSurface { loadingIndicator("getting video ready") }
           localPlaybackActions(exportFileURL: nil)
         }
       }
@@ -103,7 +102,7 @@ extension AdaptiveVideoPlaybackView {
   private func localPlayerBlock(_ player: InlineVideoPlayer, exportFileURL: URL?) -> some View {
     if immersive {
       player.overlay(alignment: .topTrailing) {
-        immersivePlaybackMenu(local: true, exportFileURL: exportFileURL, showsSystemPlayer: true)
+        immersivePlaybackMenu(local: true, showsSystemPlayer: true)
       }
     } else {
       VStack(alignment: .leading, spacing: 8) {
@@ -119,27 +118,17 @@ extension AdaptiveVideoPlaybackView {
     allowsTryLocalPlayback: Bool
   ) -> some View {
     if immersive {
-      GeometryReader { proxy in
-        let availableHeight = max(1, proxy.size.height - 155 - watchInsets.top - watchInsets.bottom)
-        let embedWidth = min(proxy.size.width, availableHeight * effectiveMediaAspectRatio)
-        let usesIntrinsicHeight = embedSurfaceHeight(for: embedSource) != nil
-        let width = usesIntrinsicHeight ? proxy.size.width : embedWidth
-        let height = min(availableHeight, embedSurfaceHeight(for: embedSource) ?? width / effectiveMediaAspectRatio)
-        VStack(spacing: 0) {
-          if isRenderableEmbedSource(embedSource), !embeddedLoadFailed {
-            embeddedPlayerSurface(
-              embedSource, explicitHeight: height,
-              allowsVerticalScroll: (embedSurfaceHeight(for: embedSource) ?? 0) > height
-            )
-              .frame(width: width)
-          } else {
-            immersiveStatus("can't play this here", icon: "play.slash")
-              .frame(height: min(availableHeight, 240))
-          }
+      watchContentArea { size in
+        if isRenderableEmbedSource(embedSource), !embeddedLoadFailed {
+          let isDocument = embedSource.usesManagedHTMLDocument
+          let width = isDocument ? size.width : min(size.width, size.height * effectiveMediaAspectRatio)
+          let height = min(size.height, embedSurfaceHeight(for: embedSource) ?? width / effectiveMediaAspectRatio)
+          embeddedPlayerSurface(embedSource, explicitHeight: height, allowsVerticalScroll: isDocument)
+            .frame(width: width)
+        } else {
+          mediaStatus("can't load this post", message: "try again or open the original in your browser.",
+                      isLoading: false, offersEmbed: false, offersRetry: isRenderableEmbedSource(embedSource))
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.top, watchInsets.top)
-        .padding(.bottom, 86 + watchInsets.bottom)
       }
       .overlay(alignment: .topTrailing) {
         if allowsTryLocalPlayback {
@@ -164,12 +153,15 @@ extension AdaptiveVideoPlaybackView {
           .frame(maxWidth: .infinity, alignment: .leading)
       }
 
-      if let extractionFallbackReason {
-        Text("local playback unavailable: \(extractionFallbackReason)")
+      if extractionFallbackReason != nil {
+        Text("in-app video unavailable. try the official embed or open the original post.")
           .font(LinkstrTheme.font(.caption))
           .foregroundStyle(LinkstrTheme.textSecondary)
       }
 
+      if embeddedLoadFailed, isRenderableEmbedSource(embedSource) {
+        secondaryActionButton("retry embed", action: retryEmbeddedPlayback)
+      }
       if allowsTryLocalPlayback {
         playbackModeActions {
           tryLocalPlaybackButton
@@ -193,26 +185,27 @@ extension AdaptiveVideoPlaybackView {
             embeddedContentHeight = normalizedEmbedHeight(height)
           },
           onContentReadyChange: { isReady in
-            guard embedSource.usesManagedHTMLDocument else { return }
             isEmbeddedContentReady = isReady
           },
           onLoadFailure: {
             embeddedLoadFailed = true
           },
-          isPlaybackSuspended: immersive && (isCovered || scenePhase != .active),
+          isPlaybackSuspended: immersive && (isCovered || scenePhase != .active || exportTarget != nil
+            || fileExportItem != nil || exportFeedbackMessage != nil),
           allowsVerticalScroll: allowsVerticalScroll
         )
         .scopedPlaybackAudioSession()
-        .opacity(shouldDeferEmbedReveal(for: embedSource) && !isEmbeddedContentReady ? 0 : 1)
+        .opacity(isEmbeddedContentReady ? 1 : 0)
+        .task(id: embedSource) {
+          do { try await Task.sleep(for: .seconds(20)) } catch { return }
+          guard !Task.isCancelled, !isEmbeddedContentReady else { return }
+          embeddedLoadFailed = true
+        }
 
-        if shouldDeferEmbedReveal(for: embedSource) && !isEmbeddedContentReady {
-          VStack(spacing: 8) {
-            ProgressView()
-            Text("loading post...")
-              .font(LinkstrTheme.font(.caption))
-              .foregroundStyle(LinkstrTheme.textSecondary)
-          }
-          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        if !isEmbeddedContentReady, immersive {
+          mediaStatus("loading embed", message: "", isLoading: true)
+        } else if !isEmbeddedContentReady {
+          loadingIndicator("loading embed")
         }
       }
     }
@@ -239,14 +232,14 @@ extension AdaptiveVideoPlaybackView {
   }
 
   var useEmbeddedButton: some View {
-    secondaryActionButton("use embedded") {
+    secondaryActionButton("use official embed") {
       cancelLocalCaching()
       localPlaybackMode = .embedPreferred
     }
   }
 
   var tryLocalPlaybackButton: some View {
-    secondaryActionButton("try local playback") {
+    secondaryActionButton("try extracted video") {
       tryLocalPlayback()
     }
   }
@@ -258,7 +251,7 @@ extension AdaptiveVideoPlaybackView {
   }
 
   func saveButton(for fileURL: URL) -> some View {
-    secondaryActionButton("save...") {
+    secondaryActionButton("save video") {
       exportTarget = LocalMediaExportTarget(
         fileURL: fileURL,
         allowsPhotoSave: supportsPhotoSave(fileURL: fileURL)
@@ -344,10 +337,6 @@ extension AdaptiveVideoPlaybackView {
     }
     .background(LinkstrTheme.panelMuted)
     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-  }
-
-  func shouldDeferEmbedReveal(for embedSource: EmbeddedWebSource) -> Bool {
-    embedSource.usesManagedHTMLDocument
   }
 
   func isRenderableEmbedSource(_ embedSource: EmbeddedWebSource) -> Bool {

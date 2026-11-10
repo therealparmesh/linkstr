@@ -20,7 +20,7 @@ enum LinkstrPostPreview {
     let provider = URLClassifier.classify(url)
     let name = provider == .generic
       ? (host.hasPrefix("www.") ? String(host.dropFirst(4)) : host)
-      : provider.rawValue
+      : (provider == .twitter ? "x" : provider.rawValue)
     return kind(for: urlString).map { "\(name) \($0)" } ?? name
   }
 

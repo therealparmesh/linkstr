@@ -25,9 +25,9 @@ struct LocalFileExportItem: Identifiable {
   let fileURL: URL
 }
 
-// MARK: - AdaptiveVideoPlaybackView Export & Overlay Helpers
+// MARK: - AdaptiveMediaView Export & Overlay Helpers
 
-extension AdaptiveVideoPlaybackView {
+extension AdaptiveMediaView {
   func saveToPhotos(_ fileURL: URL) {
     Task { @MainActor in
       let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
@@ -77,47 +77,99 @@ extension AdaptiveVideoPlaybackView {
   }
 }
 
-extension AdaptiveVideoPlaybackView {
-  func immersiveStatus(_ title: String, icon: String?) -> some View {
-    VStack(spacing: 9) {
-      if let icon {
-        Image(systemName: icon).font(.title2)
-      } else {
-        ProgressView().tint(LinkstrTheme.accent)
-      }
-      Text(title)
-        .font(LinkstrTheme.font(.subheadline, weight: .medium))
+extension AdaptiveMediaView {
+  var isShowingNativePlayer: Bool {
+    !isResolvingPresentation && localPlaybackMode == .localPreferred && readyPlaybackMedia != nil
+  }
+
+  var saveVideoAction: (() -> Void)? {
+    guard let media = cachedLocalMedia ?? readyPlaybackMedia,
+      let fileURL = exportableLocalMediaURL(for: media) else { return nil }
+    return {
+      exportTarget = LocalMediaExportTarget(fileURL: fileURL, allowsPhotoSave: supportsPhotoSave(fileURL: fileURL))
     }
+  }
+
+  private var readyPlaybackMedia: PlayableMedia? {
+    guard case .ready(let candidates) = extractionState else { return nil }
+    return currentPlaybackCandidate(from: candidates)
+  }
+
+  func watchContentArea<Content: View>(@ViewBuilder content: @escaping (CGSize) -> Content) -> some View {
+    GeometryReader { proxy in
+      let top = watchInsets.top + 112
+      let height = max(1, proxy.size.height - top - overlayHeight - 16)
+      let size = CGSize(width: max(1, proxy.size.width - 32), height: height)
+      content(size)
+        .frame(width: size.width, height: size.height)
+        .frame(maxWidth: .infinity)
+        .padding(.top, top)
+    }
+  }
+
+  func retryEmbeddedPlayback() {
+    embeddedLoadFailed = false
+    isEmbeddedContentReady = false
+    embeddedContentHeight = nil
+  }
+
+  func mediaStatus(
+    _ title: String, message: String, isLoading: Bool,
+    offersEmbed: Bool = false, offersRetry: Bool = false
+  ) -> some View {
+    ScrollView {
+      VStack(spacing: 16) {
+        if isLoading {
+          ProgressView().tint(LinkstrTheme.accent)
+        } else {
+          Image(systemName: "exclamationmark.triangle").font(.title2)
+        }
+        Text(title).font(LinkstrTheme.font(.headline))
+        if !message.isEmpty {
+          Text(message)
+            .font(LinkstrTheme.font(.subheadline))
+            .foregroundStyle(LinkstrTheme.textSecondary)
+        }
+        if offersRetry {
+          secondaryActionButton("retry embed", action: retryEmbeddedPlayback)
+        }
+        if offersEmbed { useEmbeddedButton }
+        openInBrowserButton(action: openSourceAction)
+      }
+      .multilineTextAlignment(.center)
+      .padding(20)
+      .background(LinkstrTheme.panel, in: .rect(cornerRadius: 20))
+    }
+    .scrollBounceBehavior(.basedOnSize)
+    .defaultScrollAnchor(.center, for: .alignment)
     .foregroundStyle(LinkstrTheme.textPrimary)
-    .padding(.horizontal, 18)
-    .padding(.vertical, 14)
-    .background(LinkstrTheme.background.opacity(0.9), in: .rect(cornerRadius: 16))
+  }
+
+  func loadingIndicator(_ title: String) -> some View {
+    VStack(spacing: 8) {
+      ProgressView().tint(LinkstrTheme.accent)
+      Text(title)
+        .font(LinkstrTheme.font(.caption))
+        .foregroundStyle(LinkstrTheme.textSecondary)
+    }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 
   func immersivePlaybackMenu(
-    local: Bool, exportFileURL: URL? = nil, showsSystemPlayer: Bool = false
+    local: Bool, showsSystemPlayer: Bool = false
   ) -> some View {
     Menu {
       if local {
-        Button("use embedded player", systemImage: "rectangle.inset.filled") {
+        Button("use official embed", systemImage: "rectangle.inset.filled") {
           cancelLocalCaching()
           localPlaybackMode = .embedPreferred
         }
       } else {
-        Button("try in-app playback", systemImage: "play.rectangle", action: tryLocalPlayback)
+        Button("try extracted video", systemImage: "play.rectangle", action: tryLocalPlayback)
       }
       if showsSystemPlayer {
         Button("open system player", systemImage: "arrow.up.left.and.arrow.down.right") {
           isPresentingSystemPlayer = true
-        }
-      }
-      if let exportFileURL {
-        Button("save video", systemImage: "square.and.arrow.down") {
-          exportTarget = LocalMediaExportTarget(
-            fileURL: exportFileURL,
-            allowsPhotoSave: supportsPhotoSave(fileURL: exportFileURL)
-          )
         }
       }
     } label: {

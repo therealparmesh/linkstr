@@ -28,7 +28,7 @@ struct DeepLinkDetailView: View {
       if let sourceURL {
         VStack(alignment: .leading, spacing: 18) {
           if mediaStrategy != .link {
-            AdaptiveVideoPlaybackView(sourceURL: sourceURL, openSourceAction: { openURL(sourceURL) })
+            AdaptiveMediaView(sourceURL: sourceURL, openSourceAction: { openURL(sourceURL) })
           } else if let thumbnailImage {
             Image(uiImage: thumbnailImage)
               .resizable()

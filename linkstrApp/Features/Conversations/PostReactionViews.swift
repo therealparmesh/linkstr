@@ -306,3 +306,75 @@ struct LinkstrEmojiPickerSheet: View {
     }
   }
 }
+
+extension PostDetailView {
+  @ViewBuilder
+  var postCardReactionBreakdown: some View {
+    if !reactionBreakdown.isEmpty {
+      VStack(alignment: .leading, spacing: 10) {
+        LinkstrListRowDivider(leadingInset: 0)
+        Text("who reacted")
+          .font(LinkstrTheme.font(.subheadline, weight: .semibold))
+        reactionFilters
+        LazyVStack(alignment: .leading, spacing: 14) {
+          ForEach(filteredReactionParticipants) { entry in
+            HStack(alignment: .center, spacing: 8) {
+              LinkstrContactAvatar(name: entry.displayName, size: 32, seed: entry.id)
+
+              Text(entry.displayName)
+                .font(LinkstrTheme.font(.footnote, weight: .medium))
+                .foregroundStyle(LinkstrTheme.textSecondary)
+
+              Spacer(minLength: 0)
+
+              Text(selectedReactionEmoji ?? entry.emojis.joined(separator: " "))
+                .font(LinkstrTheme.font(.body))
+                .foregroundStyle(LinkstrTheme.textPrimary)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  private var reactionFilters: some View {
+    ScrollView(.horizontal, showsIndicators: false) {
+      HStack(spacing: 8) {
+        reactionFilter("all", emoji: nil)
+        ForEach(reactionSummaries) { summary in
+          reactionFilter("\(summary.emoji) \(summary.count)", emoji: summary.emoji)
+        }
+      }
+    }
+    .onChange(of: reactionSummaries.map(\.emoji), initial: true) { _, emojis in
+      if let selectedReactionEmoji, !emojis.contains(selectedReactionEmoji) {
+        self.selectedReactionEmoji = nil
+      }
+    }
+  }
+
+  private func reactionFilter(_ title: String, emoji: String?) -> some View {
+    let isSelected = selectedReactionEmoji == emoji
+    return Button {
+      selectedReactionEmoji = emoji
+    } label: {
+      Text(title)
+        .font(LinkstrTheme.font(.subheadline, weight: .medium))
+        .foregroundStyle(isSelected ? LinkstrTheme.textPrimary : LinkstrTheme.textSecondary)
+        .padding(.horizontal, 14)
+        .frame(minHeight: 44)
+        .background(isSelected ? LinkstrTheme.panelElevated : LinkstrTheme.panel, in: Capsule())
+        .overlay {
+          Capsule().stroke(isSelected ? LinkstrTheme.accent : LinkstrTheme.separator, lineWidth: 1)
+        }
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel(emoji.map { "show people who reacted \($0)" } ?? "show all reactions")
+    .accessibilityAddTraits(isSelected ? .isSelected : [])
+  }
+
+  private var filteredReactionParticipants: [ReactionParticipantBreakdown] {
+    guard let selectedReactionEmoji else { return reactionBreakdown }
+    return reactionBreakdown.filter { $0.emojis.contains(selectedReactionEmoji) }
+  }
+}

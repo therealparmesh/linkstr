@@ -107,35 +107,9 @@ extension PostDetailView {
   }
 
   @ViewBuilder
-  var postCardReactionBreakdown: some View {
-    if !reactionBreakdown.isEmpty {
-      VStack(alignment: .leading, spacing: 10) {
-        LinkstrListRowDivider(leadingInset: 0)
-        VStack(alignment: .leading, spacing: 10) {
-          ForEach(reactionBreakdown) { entry in
-            HStack(alignment: .center, spacing: 8) {
-              LinkstrContactAvatar(name: entry.displayName, size: 32, seed: entry.id)
-
-              Text(entry.displayName)
-                .font(LinkstrTheme.font(.footnote, weight: .medium))
-                .foregroundStyle(LinkstrTheme.textSecondary)
-
-              Spacer(minLength: 0)
-
-              Text(entry.emojis.joined(separator: " "))
-                .font(LinkstrTheme.font(.body))
-                .foregroundStyle(LinkstrTheme.textPrimary)
-            }
-          }
-        }
-      }
-    }
-  }
-
-  @ViewBuilder
   func mediaBlock(_ post: SessionMessageEntity, isCovered: Bool) -> some View {
     if let urlString = post.url, let url = URL(string: urlString) {
-      AdaptiveVideoPlaybackView(
+      AdaptiveMediaView(
         sourceURL: url,
         openSourceAction: { openURL(url) },
         resolveCachedLocalMedia: { sourceURL in
@@ -172,10 +146,28 @@ extension PostDetailView {
         reloadID: mediaReloadID,
         immersive: true,
         isCovered: isCovered,
-        watchInsets: watchInsets
+        watchInsets: watchInsets,
+        linkContent: { WatchLinkPreview(post: post) },
+        overlayContent: { saveAction, hasNativePlayer in
+          watchPostOverlay(post, saveAction: saveAction, hasNativePlayer: hasNativePlayer)
+        }
       )
+    } else {
+      missingLinkPost(post)
     }
   }
+  private func missingLinkPost(_ post: SessionMessageEntity) -> some View {
+    VStack(spacing: 0) {
+      ContentUnavailableView(
+        "link unavailable", systemImage: "link",
+        description: Text("the original link is missing. you can still view the note and reactions.")
+      )
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      watchPostOverlay(post, saveAction: nil, hasNativePlayer: false)
+    }
+    .padding(.top, watchInsets.top + 64)
+  }
+
   func toggleReaction(_ emoji: String) {
     UIImpactFeedbackGenerator(style: .light).impactOccurred()
     Task { @MainActor in
@@ -268,16 +260,21 @@ extension PostDetailView {
   }
 
   func watchPost(_ post: SessionMessageEntity) -> some View {
-    ZStack(alignment: .bottom) {
-      WatchPostBackdrop(post: post)
-      mediaBlock(post, isCovered: isCovered || activeSheet != nil)
+    mediaBlock(post, isCovered: isCovered || activeSheet != nil)
+      .background(LinkstrTheme.background)
+      .clipped()
+  }
 
-      HStack(alignment: .bottom, spacing: 14) {
-        watchCaption(post)
-        watchActions(post)
-      }
-      .padding(.horizontal, 16)
-      .background(alignment: .bottom) {
+  private func watchPostOverlay(
+    _ post: SessionMessageEntity, saveAction: (() -> Void)?, hasNativePlayer: Bool
+  ) -> some View {
+    HStack(alignment: .bottom, spacing: 14) {
+      watchCaption(post)
+      watchActions(post, saveAction: saveAction)
+    }
+    .padding(.horizontal, 16)
+    .background(alignment: .bottom) {
+      if hasNativePlayer {
         LinearGradient(
           stops: [.init(color: .clear, location: 0), .init(color: .black.opacity(0.76), location: 0.76),
                   .init(color: .clear, location: 1)],
@@ -288,12 +285,11 @@ extension PostDetailView {
         .allowsHitTesting(false)
         .accessibilityHidden(true)
       }
-      .padding(.bottom, 65 + watchInsets.bottom)
-      .foregroundStyle(LinkstrTheme.textPrimary)
-      .buttonStyle(.plain)
-      .zIndex(1)
     }
-    .clipped()
+    .padding(.bottom, (hasNativePlayer ? 65 : 20) + watchInsets.bottom)
+    .foregroundStyle(LinkstrTheme.textPrimary)
+    .buttonStyle(.plain)
+    .zIndex(1)
   }
 
   private func watchCaption(_ post: SessionMessageEntity) -> some View {
@@ -335,7 +331,8 @@ extension PostDetailView {
             }
           }
           .font(LinkstrTheme.font(.caption, weight: .medium))
-          .frame(minHeight: 28)
+          .frame(minHeight: 44)
+          .contentShape(Rectangle())
         }
         .accessibilityLabel("view reactions")
       }
@@ -343,7 +340,7 @@ extension PostDetailView {
     .frame(maxWidth: .infinity, alignment: .leading)
   }
 
-  private func watchActions(_ post: SessionMessageEntity) -> some View {
+  private func watchActions(_ post: SessionMessageEntity, saveAction: (() -> Void)?) -> some View {
     VStack(spacing: 9) {
       Button {
         activeSheet = .reactions
@@ -354,9 +351,9 @@ extension PostDetailView {
         Button {
           openURL(url)
         } label: {
-          WatchActionLabel(title: "source", icon: "arrow.up.right.square")
+          WatchActionLabel(title: "open", icon: "arrow.up.right.square")
         }
-        .accessibilityLabel("open original link")
+        .accessibilityLabel("open in browser")
       }
       Menu {
         Button("post details", systemImage: "info.circle") { activeSheet = .details }
@@ -369,6 +366,9 @@ extension PostDetailView {
           .disabled(isRefreshingMetadata)
         if let shareDeepLinkURL {
           ShareLink(item: shareDeepLinkURL) { Label("share link", systemImage: "square.and.arrow.up") }
+        }
+        if let saveAction {
+          Button("save video", systemImage: "square.and.arrow.down", action: saveAction)
         }
         if canDelete {
           Button("delete post", systemImage: "trash", role: .destructive, action: delete)

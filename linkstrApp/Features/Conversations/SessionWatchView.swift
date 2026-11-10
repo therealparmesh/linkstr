@@ -109,7 +109,7 @@ extension SessionPostsView {
 
       Spacer(minLength: 0)
 
-      watchNavigationMenu
+      watchPostsButton
 
       if canShareLinks {
         Button {
@@ -151,9 +151,15 @@ extension SessionPostsView {
     .accessibilityLabel(returnsToTimelineFromWatch ? "back to posts" : "back to sessions")
   }
 
-  private var watchNavigationMenu: some View {
-    Menu {
-      Button("browse posts", systemImage: "list.bullet", action: browsePosts)
+  private var watchPostsButton: some View {
+    Button(action: browsePosts) {
+      Image(systemName: "list.bullet")
+        .frame(width: 44, height: 44)
+        .contentShape(Rectangle())
+    }
+    .accessibilityLabel("all session posts")
+    .accessibilityHint("show the message list")
+    .contextMenu {
       if canMoveWatch(by: -1) {
         Button("previous post", systemImage: "chevron.up") { advanceWatch(by: -1) }
       }
@@ -165,12 +171,7 @@ extension SessionPostsView {
           session.markSessionRead(sessionID: sessionID, ownerPubkey: ownerPubkey)
         }
       }
-    } label: {
-      Image(systemName: "rectangle.stack")
-        .frame(width: 44, height: 44)
-        .contentShape(Rectangle())
     }
-    .accessibilityLabel("session posts")
   }
 
   private func activateWatchPost(_ postID: String) {
