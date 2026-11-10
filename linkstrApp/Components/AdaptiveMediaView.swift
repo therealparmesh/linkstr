@@ -1,7 +1,12 @@
 import SwiftUI
 
+extension EnvironmentValues {
+  @Entry var isUnderlyingMediaCovered = false
+}
+
 struct AdaptiveMediaView<LinkContent: View, OverlayContent: View>: View {
   @Environment(\.scenePhase) var scenePhase
+  @Environment(\.isUnderlyingMediaCovered) var isUnderlyingMediaCovered
   enum LocalPlaybackMode {
     case localPreferred
     case embedPreferred

@@ -412,7 +412,7 @@ See [contact synchronization](docs/CONTACTS.md) for persistence and relay behavi
 - Share composer format: `linkstr://share?url=…&note=…`
 - Media save format: `linkstr://save?url=…`
 - Valid deep links open a full-screen shared-link detail, share composer, or media-save surface.
-- Post detail can share the current post as a deep link through the native iOS share sheet. Opening the sheet pauses playback; dismissing it resumes a video that was playing.
+- Post detail can share the current post as a deep link through the native iOS share sheet. Opening the sheet pauses playback; dismissing it resumes a video that was playing. Background session media also pauses while a shared-link, share-composer, or media-save screen is open.
 - The iOS share extension accepts web URLs, webpages, shared linkstr post links, or text containing either kind of link, then offers **share to a session** or **save media**.
 - Sharing a linkstr post link back into the app or pasting it into either composer uses the original web URL, including its query and fragment. Invalid or nested deep links are rejected.
 - **share to a session** opens a full-screen share composer with the link prefilled, any surrounding text as the optional note, and a separate searchable active-session picker.

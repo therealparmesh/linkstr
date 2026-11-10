@@ -41,7 +41,7 @@ struct WatchLinkPreview: View {
         .clipShape(.rect(cornerRadius: 20))
       }
       .scrollBounceBehavior(.basedOnSize)
-      .defaultScrollAnchor(.center, for: .alignment)
+      .defaultScrollAnchor(.top)
     }
     .task(id: post.url) {
       remoteText = nil

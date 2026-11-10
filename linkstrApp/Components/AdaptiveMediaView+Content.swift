@@ -7,6 +7,11 @@ import SwiftUI
 // MARK: - AdaptiveMediaView Controls & Helpers
 
 extension AdaptiveMediaView {
+  var isMediaCovered: Bool {
+    isCovered || isUnderlyingMediaCovered || exportTarget != nil
+      || fileExportItem != nil || exportFeedbackMessage != nil
+  }
+
   @ViewBuilder
   var content: some View {
     if isResolvingPresentation, immersive {
@@ -68,7 +73,7 @@ extension AdaptiveMediaView {
           },
           immersive: immersive,
           aspectRatio: effectiveMediaAspectRatio,
-          isCovered: isCovered || exportTarget != nil || fileExportItem != nil || exportFeedbackMessage != nil,
+          isCovered: isMediaCovered,
           watchBottomInset: watchInsets.bottom,
           systemPlayerRequest: immersive ? $isPresentingSystemPlayer : nil
         )
@@ -190,8 +195,7 @@ extension AdaptiveMediaView {
           onLoadFailure: {
             embeddedLoadFailed = true
           },
-          isPlaybackSuspended: immersive && (isCovered || scenePhase != .active || exportTarget != nil
-            || fileExportItem != nil || exportFeedbackMessage != nil),
+          isPlaybackSuspended: immersive && (isMediaCovered || scenePhase != .active),
           allowsVerticalScroll: allowsVerticalScroll
         )
         .scopedPlaybackAudioSession()

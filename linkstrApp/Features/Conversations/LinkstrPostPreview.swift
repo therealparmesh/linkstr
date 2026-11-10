@@ -44,6 +44,14 @@ struct LinkstrPostThumbnail: View {
   let height: CGFloat
   @State private var image: UIImage?
 
+  private var placeholderIcon: String {
+    switch LinkstrPostPreview.kind(for: post.url) {
+    case "video", "reel": "play.fill"
+    case "photo post": "photo"
+    default: "link"
+    }
+  }
+
   var body: some View {
     Rectangle()
       .fill(LinkstrTheme.panelElevated)
@@ -51,7 +59,7 @@ struct LinkstrPostThumbnail: View {
         if let image {
           Image(uiImage: image).resizable().scaledToFill()
         } else {
-          Image(systemName: URLClassifier.mediaStrategy(for: post.url) == .link ? "link" : "play.fill")
+          Image(systemName: placeholderIcon)
             .font(LinkstrTheme.font(.footnote, weight: .medium))
             .foregroundStyle(LinkstrTheme.textSecondary)
         }

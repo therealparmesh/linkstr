@@ -96,6 +96,11 @@ struct RootView: View {
             selectedTab: $selectedTab,
             relaySettingsRequest: relaySettingsRequest
           )
+          .environment(
+            \.isUnderlyingMediaCovered,
+            sharedLinkDetailBinding.wrappedValue || shareDraftBinding.wrappedValue != nil
+              || mediaSaveDraftBinding.wrappedValue != nil
+          )
           .transition(.opacity)
         }
       }
