@@ -134,7 +134,7 @@ extension AppSession {
           updatedAt: incoming.createdAt,
           eventID: incoming.eventID
         ))
-      discardPendingIncomingReactions(sessionID: sessionID, rootID: rootID)
+      discardPendingPostUpdates(sessionID: sessionID, rootID: rootID)
       return .applied
     }
 
@@ -162,7 +162,7 @@ extension AppSession {
         updatedAt: incoming.createdAt,
         eventID: incoming.eventID
       ))
-    discardPendingIncomingReactions(sessionID: sessionID, rootID: rootID)
+    discardPendingPostUpdates(sessionID: sessionID, rootID: rootID)
     return .applied
   }
 }
@@ -238,7 +238,7 @@ extension AppSession {
         rootID: incoming.eventID,
         deletedByPubkey: incoming.senderPubkey
       ) {
-        discardPendingIncomingReactions(sessionID: sessionID, rootID: incoming.eventID)
+        discardPendingPostUpdates(sessionID: sessionID, rootID: incoming.eventID)
         return .ignored
       }
 

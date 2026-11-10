@@ -209,6 +209,7 @@ final class AppSession: ObservableObject {
   @Published var restoreRecoveryError: String?
   @Published var didRestoreBackup = false
   let contactMutations = ContactMutationQueue()
+  var pendingNoteEdits = Set<String>()
   let contactDiscovery: ContactDiscovery
   let contactStore: ContactStore
   let relayStore: RelayStore

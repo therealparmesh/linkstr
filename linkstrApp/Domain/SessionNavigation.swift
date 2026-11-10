@@ -1,8 +1,9 @@
 import Foundation
 
-enum SessionRoute: Hashable {
+enum AppRoute: Hashable {
   case session(String, scrollToPostID: String? = nil)
-  case post(sessionID: String, postID: String)
+  case watch(String, startingPostID: String? = nil)
+  case settings(SettingsSection? = nil)
 }
 
 struct SessionNavigationRequest: Identifiable, Equatable {
@@ -10,7 +11,7 @@ struct SessionNavigationRequest: Identifiable, Equatable {
   let sessionID: String
   let postID: String?
 
-  var path: [SessionRoute] {
+  var path: [AppRoute] {
     [.session(sessionID, scrollToPostID: postID)]
   }
 

@@ -17,9 +17,18 @@ extension LinkstrBackup {
     }
     result.posts = try merge(posts, incoming.posts, key: \.id) { local, remote in
       guard local.sessionID == remote.sessionID, local.sender == remote.sender,
-        local.receiver == remote.receiver, local.url == remote.url, local.note == remote.note,
+        local.receiver == remote.receiver, local.url == remote.url,
         local.timestamp == remote.timestamp else { throw BackupError.conflict }
       var post = local
+      if let editedAt = remote.noteEditedAt,
+        Self.newerState(editedAt, remote.noteEditEventID, than: local.noteEditedAt, local.noteEditEventID) {
+        post.note = remote.note
+        post.noteEditedAt = editedAt
+        post.noteEditEventID = remote.noteEditEventID
+      } else if local.noteEditedAt == remote.noteEditedAt,
+        local.noteEditEventID == remote.noteEditEventID, local.note != remote.note {
+        throw BackupError.conflict
+      }
       post.readAt = local.readAt ?? remote.readAt
       post.transportIDs = Array(Set(local.transportIDs + remote.transportIDs)).sorted()
       return post

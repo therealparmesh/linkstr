@@ -4,16 +4,63 @@ import UIKit
 // MARK: - SessionPostsView Helpers
 
 extension SessionPostsView {
-  var contentState: SessionPostsContentState {
+  func timelineView(for sessionEntity: SessionEntity) -> some View {
+    let contentState = contentState
+    return ScrollViewReader { proxy in
+      ScrollView {
+        VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
+          LinkstrScreenTitle(title: sessionEntity.name)
+
+          if contentState.postCount > 0 {
+            Text(contentState.postCountLabel)
+              .font(LinkstrTheme.font(.caption, weight: .medium))
+              .foregroundStyle(LinkstrTheme.textTertiary)
+          }
+
+          if !contentState.canCreatePosts {
+            LinkstrReadOnlyBanner()
+          }
+
+          if contentState.timelineRows.isEmpty {
+            LinkstrCenteredEmptyStateView(
+              title: "no posts yet",
+              systemImage: "link.badge.plus",
+              description: contentState.canCreatePosts
+                ? "send a link to this session." : "you're no longer a member of this session.",
+              actionTitle: contentState.canCreatePosts ? "share a link" : nil,
+              actionSystemImage: "plus",
+              action: contentState.canCreatePosts ? { isPresentingNewPost = true } : nil
+            )
+            .frame(maxWidth: .infinity, minHeight: 260)
+          } else {
+            LazyVStack(alignment: .leading, spacing: 0) {
+              ForEach(contentState.timelineRows) { row in
+                timelineRow(row)
+                  .id(row.id)
+              }
+            }
+          }
+        }
+        .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+        .padding(.top, LinkstrTheme.screenTopPadding)
+        .padding(.bottom, LinkstrTheme.screenBottomPadding)
+        .linkstrReadableContent()
+      }
+      .onChange(of: pendingScrollPostID.map { target in rootPosts.contains { $0.rootID == target } } == true,
+                initial: true) { _, isAvailable in
+        guard isAvailable, let postID = pendingScrollPostID else { return }
+        proxy.scrollTo(postID, anchor: .center)
+        pendingScrollPostID = nil
+      }
+      .onScrollPhaseChange { _, phase in
+        if phase == .tracking || phase == .interacting { pendingScrollPostID = nil }
+      }
+    }
+  }
+
+  private var contentState: SessionPostsContentState {
     let myPubkey = session.identityService.pubkeyHex
     let contactIndex = contactsByPubkey
-    let canCreatePosts =
-      myPubkey.map { pubkey in
-        let pubkeyHash = LocalDataCrypto.shared.digestHex(pubkey)
-        return members.contains { member in
-          member.memberMatchesHash(pubkeyHash)
-        }
-      } ?? false
     let reactionSummariesByPostID = makeReactionSummariesByPostID(
       reactions: reactions,
       myPubkey: myPubkey
@@ -72,16 +119,17 @@ extension SessionPostsView {
       }
     }
 
-    var profileLookupPubkeys = members.map(\.memberPubkey)
-    profileLookupPubkeys.append(contentsOf: memberIntervals.map(\.memberPubkey))
-    profileLookupPubkeys.append(contentsOf: rootPosts.map(\.senderPubkey))
-    profileLookupPubkeys.append(contentsOf: reactions.map(\.senderPubkey))
-
     return SessionPostsContentState(
-      canCreatePosts: canCreatePosts,
+      canCreatePosts: canShareLinks,
       postCount: rootPosts.count,
-      timelineRows: timelineRows,
-      profileLookupPubkeys: NostrValueNormalizer.dedupedNormalizedPubkeyHexes(profileLookupPubkeys)
+      timelineRows: timelineRows
+    )
+  }
+
+  var profileLookupPubkeys: [String] {
+    NostrValueNormalizer.dedupedNormalizedPubkeyHexes(
+      members.map(\.memberPubkey) + memberIntervals.map(\.memberPubkey)
+        + rootPosts.map(\.senderPubkey) + reactions.map(\.senderPubkey)
     )
   }
 
@@ -97,9 +145,9 @@ extension SessionPostsView {
 
   @ViewBuilder
   func postRow(_ row: PostListRow) -> some View {
-    let postLink = NavigationLink(
-      value: SessionRoute.post(sessionID: sessionID, postID: row.post.rootID)
-    ) {
+    let postLink = Button {
+      showPost(row.post.rootID)
+    } label: {
       PostListRowView(
         post: row.post,
         senderLabel: row.senderLabel,
@@ -257,11 +305,9 @@ struct PostCardView: View {
   let hasUnreadPost: Bool
   let reactionSummaries: [ReactionSummary]
 
-  @State private var thumbnailImage: UIImage?
-
   var body: some View {
     HStack(alignment: .top, spacing: LinkstrTheme.rowSpacing) {
-      thumbnailView
+      LinkstrPostThumbnail(post: post, width: 58, height: 58)
 
       VStack(alignment: .leading, spacing: LinkstrTheme.compactSpacing) {
         Text(primaryText)
@@ -313,15 +359,6 @@ struct PostCardView: View {
         .stroke(
           isOutgoing ? LinkstrTheme.accent.opacity(0.22) : LinkstrTheme.separator, lineWidth: 1)
     }
-    .task(id: post.encryptedThumbnailURL) {
-      guard
-        let path = ManagedLocalFileScope.shared.managedFileURL(fromPath: post.thumbnailURL)?.path
-      else {
-        thumbnailImage = nil
-        return
-      }
-      thumbnailImage = await ThumbnailImageCache.shared.loadImageAsync(at: path)
-    }
   }
 
   private var primaryText: String {
@@ -338,29 +375,5 @@ struct PostCardView: View {
     guard let note = post.note else { return nil }
     let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
     return trimmed.isEmpty ? nil : trimmed
-  }
-
-  @ViewBuilder
-  private var thumbnailView: some View {
-    if let thumbnailImage {
-      Image(uiImage: thumbnailImage)
-        .resizable()
-        .scaledToFill()
-        .frame(width: 58, height: 58)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-    } else {
-      thumbnailPlaceholder
-    }
-  }
-
-  private var thumbnailPlaceholder: some View {
-    RoundedRectangle(cornerRadius: 12, style: .continuous)
-      .fill(LinkstrTheme.panelMuted)
-      .frame(width: 58, height: 58)
-      .overlay {
-        Image(systemName: "link")
-          .font(LinkstrTheme.font(.body))
-          .foregroundStyle(LinkstrTheme.textSecondary)
-      }
   }
 }

@@ -23,6 +23,16 @@ extension LinkstrBackup {
     try validateRelationships(keypair: keypair)
   }
 
+  private func validateNoteRevision(_ post: Post) throws {
+    if let editedAt = post.noteEditedAt {
+      guard editedAt >= post.timestamp,
+        NostrValueNormalizer.normalizedEventID(post.noteEditEventID) != nil
+      else { throw BackupError.invalidFile }
+    } else if post.noteEditEventID != nil {
+      throw BackupError.invalidFile
+    }
+  }
+
   private func validateContent() throws {
     let sessionIDs = Set(sessions.map(\.id))
     let postsByID = Dictionary(uniqueKeysWithValues: posts.map { ($0.id, $0) })
@@ -38,6 +48,7 @@ extension LinkstrBackup {
       guard sessionIDs.contains(post.sessionID), LinkstrURLValidator.normalizedWebURL(from: post.url) == post.url
       else { throw BackupError.invalidFile }
       try unique(post.transportIDs)
+      try validateNoteRevision(post)
     }
     for member in members {
       try publicKey(member.pubkey)

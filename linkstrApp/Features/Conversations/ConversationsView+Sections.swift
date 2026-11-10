@@ -7,6 +7,7 @@ struct SessionPostsView: View {
 
   let ownerPubkey: String
   let sessionID: String
+  let onWatchPositionChange: (String) -> Void
 
   @Query var sessionEntities: [SessionEntity]
   @Query var rootPosts: [SessionMessageEntity]
@@ -21,12 +22,25 @@ struct SessionPostsView: View {
   @State var isPresentingDeleteConfirmation = false
   @State var isDeletingPost = false
   @State var hadResolvedSession = false
-  @State private var pendingScrollPostID: String?
+  @State var pendingScrollPostID: String?
 
-  init(ownerPubkey: String, sessionID: String, scrollToPostID: String? = nil) {
+  @State var showsWatch: Bool
+  @State var returnsToTimelineFromWatch = false
+  @State var watchPostID: String?
+  @State var activeWatchPostID: String?
+  @State var isPaging = false
+
+  init(
+    ownerPubkey: String, sessionID: String, scrollToPostID: String? = nil,
+    startingWatchPostID: String? = nil, opensInWatch: Bool = false,
+    onWatchPositionChange: @escaping (String) -> Void
+  ) {
     self.ownerPubkey = ownerPubkey
     self.sessionID = sessionID
+    self.onWatchPositionChange = onWatchPositionChange
     _pendingScrollPostID = State(initialValue: scrollToPostID)
+    _showsWatch = State(initialValue: opensInWatch)
+    _watchPostID = State(initialValue: startingWatchPostID)
 
     let rootKindRaw = SessionMessageKind.root.rawValue
     _sessionEntities = Query(
@@ -41,7 +55,7 @@ struct SessionPostsView: View {
           && message.conversationID == sessionID
           && message.kindRaw == rootKindRaw
       },
-      sort: [SortDescriptor(\SessionMessageEntity.timestamp, order: .reverse)]
+      sort: [SortDescriptor(\.timestamp, order: .reverse), SortDescriptor(\.rootID, order: .reverse)]
     )
     _contacts = Query(
       filter: #Predicate<ContactEntity> { contact in
@@ -77,7 +91,7 @@ struct SessionPostsView: View {
     sessionEntities.first
   }
 
-  private var canManageSession: Bool {
+  var canManageSession: Bool {
     guard let sessionEntity else { return false }
     return session.canManageSession(for: sessionEntity)
   }
@@ -93,63 +107,35 @@ struct SessionPostsView: View {
     return contactsByPubkey
   }
 
+  var canShareLinks: Bool {
+    let ownerHash = LocalDataCrypto.shared.digestHex(ownerPubkey)
+    return members.contains { $0.memberMatchesHash(ownerHash) }
+  }
+
+  var hasUnreadLinks: Bool {
+    let ownerHash = LocalDataCrypto.shared.digestHex(ownerPubkey)
+    return rootPosts.contains { $0.readAt == nil && !$0.senderMatchesHash(ownerHash) }
+  }
+
+  func browsePosts() {
+    pendingScrollPostID = watchPostID
+    showsWatch = false
+  }
+
+  func showPost(_ postID: String) {
+    pendingScrollPostID = nil
+    watchPostID = postID
+    returnsToTimelineFromWatch = true
+    showsWatch = true
+  }
+
   var body: some View {
     let sessionEntity = sessionEntity
-    let contentState = contentState
-    let ownerHash = LocalDataCrypto.shared.digestHex(ownerPubkey)
-
     Group {
-      if let sessionEntity {
-        ScrollViewReader { proxy in
-          ScrollView {
-            VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
-              LinkstrScreenTitle(title: sessionEntity.name)
-
-              if contentState.postCount > 0 {
-                Text(contentState.postCountLabel)
-                  .font(LinkstrTheme.font(.caption, weight: .medium))
-                  .foregroundStyle(LinkstrTheme.textTertiary)
-              }
-
-              if !contentState.canCreatePosts {
-                LinkstrReadOnlyBanner()
-              }
-
-              if contentState.timelineRows.isEmpty {
-                LinkstrCenteredEmptyStateView(
-                  title: "no posts yet",
-                  systemImage: "link.badge.plus",
-                  description: contentState.canCreatePosts
-                    ? "send a link to this session." : "you're no longer a member of this session.",
-                  actionTitle: contentState.canCreatePosts ? "new post" : nil,
-                  actionSystemImage: "square.and.pencil",
-                  action: contentState.canCreatePosts ? { isPresentingNewPost = true } : nil
-                )
-                .frame(maxWidth: .infinity, minHeight: 260)
-              } else {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                  ForEach(contentState.timelineRows) { row in
-                    timelineRow(row)
-                      .id(row.id)
-                  }
-                }
-              }
-            }
-            .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-            .padding(.top, LinkstrTheme.screenTopPadding)
-            .padding(.bottom, LinkstrTheme.screenBottomPadding)
-            .linkstrReadableContent()
-          }
-          .onChange(of: pendingScrollPostID.map { target in rootPosts.contains { $0.rootID == target } } == true,
-                    initial: true) { _, isAvailable in
-            guard isAvailable, let postID = pendingScrollPostID else { return }
-            proxy.scrollTo(postID, anchor: .center)
-            pendingScrollPostID = nil
-          }
-          .onScrollPhaseChange { _, phase in
-            if phase == .tracking || phase == .interacting { pendingScrollPostID = nil }
-          }
-        }
+      if let sessionEntity, showsWatch, !rootPosts.isEmpty {
+        watchView(for: sessionEntity)
+      } else if let sessionEntity {
+        timelineView(for: sessionEntity)
       } else {
         ContentUnavailableView(
           "session unavailable",
@@ -162,12 +148,22 @@ struct SessionPostsView: View {
     .background(LinkstrBackgroundView())
 
     .linkstrBarChrome()
+    .toolbarVisibility(showsWatch && !rootPosts.isEmpty ? .hidden : .visible, for: .navigationBar)
+    .toolbarVisibility(.hidden, for: .tabBar)
     .toolbar {
-      if sessionEntity != nil {
+      if sessionEntity != nil, !showsWatch || rootPosts.isEmpty {
         ToolbarItemGroup(placement: .topBarTrailing) {
-          if rootPosts.contains(where: {
-            $0.readAt == nil && !$0.senderMatchesHash(ownerHash)
-          }) {
+          if !rootPosts.isEmpty {
+            Button {
+              if let postID = watchPostID ?? rootPosts.first?.rootID { showPost(postID) }
+            } label: {
+              Image(systemName: "play.rectangle")
+                .linkstrToolbarIconLabel()
+            }
+            .accessibilityLabel("watch posts")
+            .tint(LinkstrTheme.accent)
+          }
+          if hasUnreadLinks {
             Button {
               session.markSessionRead(sessionID: sessionID, ownerPubkey: ownerPubkey)
             } label: {
@@ -186,14 +182,14 @@ struct SessionPostsView: View {
           .accessibilityLabel(canManageSession ? "manage session" : "members")
           .tint(LinkstrTheme.accent)
 
-          if contentState.canCreatePosts {
+          if canShareLinks {
             Button {
               isPresentingNewPost = true
             } label: {
-              Image(systemName: "square.and.pencil")
+              Image(systemName: "plus")
                 .linkstrToolbarIconLabel()
             }
-            .accessibilityLabel("new post")
+            .accessibilityLabel("share a link")
             .tint(LinkstrTheme.accent)
           }
         }
@@ -232,8 +228,8 @@ struct SessionPostsView: View {
         "this permanently removes the post from your session feed and sends a nostr deletion request."
       )
     }
-    .task(id: contentState.profileLookupPubkeys.stableTaskID) {
-      session.requestRemoteProfilesIfNeeded(pubkeyHexes: contentState.profileLookupPubkeys)
+    .task(id: profileLookupPubkeys.stableTaskID) {
+      session.requestRemoteProfilesIfNeeded(pubkeyHexes: profileLookupPubkeys)
     }
     .onAppear {
       dismissIfSessionWasDeleted()

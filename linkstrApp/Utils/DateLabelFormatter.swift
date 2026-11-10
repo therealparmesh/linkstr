@@ -93,6 +93,16 @@ extension Date {
     DateLabelFormatter.listTimestamp(for: self)
   }
 
+  var linkstrActivityTimestampLabel: String {
+    let age = Date.now.timeIntervalSince(self)
+    if age >= 0 && Calendar.current.isDateInToday(self) {
+      if age < 60 { return "now" }
+      if age < 3_600 { return "\(Int(age / 60))m" }
+      return "\(Int(age / 3_600))h"
+    }
+    return linkstrListTimestampLabel
+  }
+
   var linkstrMessageTimestampLabel: String {
     DateLabelFormatter.messageTimestamp(for: self)
   }

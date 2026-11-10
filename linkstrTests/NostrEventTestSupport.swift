@@ -5,7 +5,7 @@ import XCTest
 
 struct NostrEventTestSupport: EventVerifying {
   static let payloadKinds: [LinkstrPayloadKind] = [
-    .root, .rootDelete, .sessionCreate, .sessionMembers, .sessionDelete, .reaction
+    .root, .rootDelete, .sessionCreate, .sessionMembers, .sessionDelete, .reaction, .noteEdit
   ]
 
   static func payload(
@@ -14,7 +14,8 @@ struct NostrEventTestSupport: EventVerifying {
   ) -> LinkstrPayload {
     LinkstrPayload(
       conversationID: sessionID, rootID: kind == .root ? "" : rootID, kind: kind,
-      url: kind == .root ? "https://example.com" : nil, note: nil, timestamp: timestamp,
+      url: kind == .root ? "https://example.com" : nil, note: kind == .noteEdit ? "updated note" : nil,
+      timestamp: timestamp,
       sessionName: kind == .sessionCreate || kind == .sessionMembers ? "Friends" : nil,
       memberPubkeys: kind == .sessionCreate || kind == .sessionMembers ? members : nil,
       emoji: kind == .reaction ? "👍" : nil, reactionActive: kind == .reaction ? true : nil

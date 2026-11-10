@@ -31,7 +31,7 @@ final class NotificationNavigationTests: AppSessionTestCase {
   }
 
   func testNotificationDestinationsValidateIDsAndPreserveLegacyFallback() {
-    let cases: [([AnyHashable: Any], [SessionRoute]?)] = [
+    let cases: [([AnyHashable: Any], [AppRoute]?)] = [
       ([:], nil),
       (["conversation_id": 42], nil),
       (["conversation_id": " \n"], nil),
@@ -120,6 +120,51 @@ final class NotificationNavigationTests: AppSessionTestCase {
     await waitUntil { notifications.pendingNavigation == nil && session.pendingSessionNavigationRequest == nil }
     XCTAssertNil(session.pendingSessionNavigationRequest)
     XCTAssertNil(notifications.pendingNavigation)
+  }
+
+  func testWatchStartsAtRequestedPostAndLeavesEarlierPostsUnread() async throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let owner = try XCTUnwrap(session.identityService.pubkeyHex)
+    defer { try? LocalDataCrypto.shared.clearKey(ownerPubkey: owner) }
+    let author = try TestKeyMaterialFactory.makePubkeyHex()
+    let context = container.mainContext
+    _ = try insertSessionFixture(
+      in: context, ownerPubkey: owner, createdByPubkey: owner, memberPubkeys: [owner, author],
+      sessionID: "session"
+    )
+    let posts = try (0..<4).map { index in
+      try SessionMessageEntity(
+        eventID: "post-\(index)", ownerPubkey: owner, conversationID: "session", rootID: "post-\(index)",
+        kind: .root, senderPubkey: author, url: nil, note: nil,
+        timestamp: .now.addingTimeInterval(Double(-index)), linkType: .generic
+      )
+    }
+    posts.forEach { context.insert($0) }
+    try context.save()
+
+    let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let previousKeyWindow = scene.windows.first(where: \.isKeyWindow)
+    let window = UIWindow(windowScene: scene)
+    let host = UIHostingController(
+      rootView: NavigationStack {
+        SessionPostsView(
+          ownerPubkey: owner, sessionID: "session", startingWatchPostID: "post-3", opensInWatch: true
+        ) { _ in }
+      }
+      .environmentObject(session)
+      .modelContainer(container)
+    )
+    window.rootViewController = host
+    window.makeKeyAndVisible()
+    defer {
+      window.isHidden = true
+      window.rootViewController = nil
+      previousKeyWindow?.makeKeyAndVisible()
+    }
+
+    await waitUntil { posts[3].readAt != nil && self.hasScrolledList(in: host.view) }
+    XCTAssertTrue(posts.prefix(3).allSatisfy { $0.readAt == nil })
   }
 
   private func verifyLatePostScrollsWithoutOpening(

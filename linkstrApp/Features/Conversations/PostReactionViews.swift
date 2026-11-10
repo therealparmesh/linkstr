@@ -97,17 +97,13 @@ struct LinkstrReactionRow: View {
               .foregroundStyle(LinkstrTheme.textSecondary)
           }
         } else {
-          ForEach(extraSummaries) { summary in
-            summaryChip(summary)
-          }
-
           ForEach(quickEmojis, id: \.self) { emoji in
             quickEmojiButton(emoji)
           }
 
           if let onAddReaction {
             Button(action: onAddReaction) {
-              Image(systemName: "ellipsis")
+              Image(systemName: "plus")
                 .font(LinkstrTheme.font(.footnote, weight: .semibold))
                 .foregroundStyle(LinkstrTheme.textPrimary.opacity(0.9))
                 .padding(.horizontal, 10)
@@ -125,6 +121,10 @@ struct LinkstrReactionRow: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("more reactions")
+          }
+
+          ForEach(extraSummaries) { summary in
+            summaryChip(summary)
           }
         }
       }

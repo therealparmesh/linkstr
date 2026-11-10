@@ -77,6 +77,8 @@ extension LinkstrBackup {
         url: post.url, note: post.note, timestamp: post.timestamp,
         isArchived: archives[post.sessionID] ?? post.archived, readAt: post.readAt,
         linkType: URLClassifier.classify(post.url), publishedTransportEventIDs: post.transportIDs)
+      row.noteEditedAt = post.noteEditedAt
+      row.noteEditEventID = post.noteEditEventID
       if let cached {
         row.encryptedThumbnailURL = cached.thumbnail
         row.encryptedMetadataTitle = cached.title

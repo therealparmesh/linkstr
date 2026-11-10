@@ -67,7 +67,7 @@ struct ShareComposerView: View {
   private var footerStatus: LinkstrSheetFooterStatus? {
     mutationFeedback.footerStatus(
       isRunning: isSending,
-      progressMessage: "waiting for relay reconnect before sending...",
+      progressMessage: "waiting for a relay connection",
       validationMessage: validationMessage,
       validationColor: LinkstrTheme.destructive.opacity(0.9)
     )
@@ -80,7 +80,16 @@ struct ShareComposerView: View {
 
         ScrollView {
           VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
-            LinkstrScreenTitle(title: "share link")
+            LinkstrInsetSection(title: "to") {
+              Button {
+                focusedField = nil
+                isPresentingSessionPicker = true
+              } label: {
+                selectedSessionRow
+              }
+              .buttonStyle(.plain)
+              .disabled(isSending || activeSessions.isEmpty)
+            }
 
             LinkstrInsetSection(title: "link") {
               TextField("example.com", text: $link)
@@ -97,29 +106,15 @@ struct ShareComposerView: View {
                 }
                 .linkstrInputField()
 
-              Text(linkFieldHint ?? " ")
-                .font(LinkstrTheme.font(.caption))
-                .foregroundStyle(linkFieldHintColor)
-                .frame(maxWidth: .infinity, minHeight: 14, alignment: .leading)
-                .opacity(linkFieldHint == nil ? 0 : 1)
-                .accessibilityHidden(linkFieldHint == nil)
-            }
-
-            LinkstrInsetSection(title: "session") {
-              Button {
-                focusedField = nil
-                isPresentingSessionPicker = true
-              } label: {
-                selectedSessionRow
+              if let normalizedURL {
+                LinkstrDraftPreview(url: normalizedURL, loadsRichPreview: focusedField != .link)
               }
-              .buttonStyle(.plain)
-              .disabled(isSending || activeSessions.isEmpty)
             }
 
-            LinkstrInsetSection(title: "note", accessory: "optional") {
+            LinkstrInsetSection(title: "add a note", accessory: "optional") {
               ZStack(alignment: .topLeading) {
                 if note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                  Text("note")
+                  Text("say something about this link")
                     .font(LinkstrTheme.font(.footnote))
                     .foregroundStyle(LinkstrTheme.textSecondary)
                     .padding(.top, LinkstrTheme.fieldVerticalPadding)
@@ -134,6 +129,7 @@ struct ShareComposerView: View {
                   .frame(minHeight: 112, maxHeight: 180)
                   .padding(4)
                   .focused($focusedField, equals: .note)
+                  .accessibilityLabel("note")
                   .disabled(isSending)
               }
               .linkstrFieldChrome()
@@ -147,43 +143,16 @@ struct ShareComposerView: View {
         .linkstrKeyboardDismissal()
       }
       .linkstrBarChrome()
+      .navigationTitle("share a link")
+      .navigationBarTitleDisplayMode(.inline)
       .toolbar {
-        ToolbarItem(placement: .topBarLeading) {
-          Button {
-            deepLinkHandler.clearShareDraft()
-          } label: {
-            Image(systemName: "xmark")
-              .linkstrToolbarIconLabel()
-          }
-          .accessibilityLabel("cancel")
-          .tint(LinkstrTheme.textSecondary)
-          .disabled(isSending)
-        }
-
-        ToolbarItem(placement: .topBarTrailing) {
-          Button {
-            sendSharedLink()
-          } label: {
-            if isSending {
-              ProgressView()
-                .frame(width: 30, height: 30, alignment: .center)
-            } else {
-              Image(systemName: "paperplane.fill")
-                .linkstrToolbarIconLabel()
-            }
-          }
-          .accessibilityLabel("send shared link")
-          .tint(LinkstrTheme.accent)
-          .disabled(!canSend)
+        ToolbarItem(placement: .cancellationAction) {
+          Button("cancel") { deepLinkHandler.clearShareDraft() }
+            .disabled(isSending)
         }
       }
       .safeAreaInset(edge: .bottom, spacing: 0) {
-        if let footerStatus {
-          LinkstrSheetStatusFooter(
-            message: footerStatus.message,
-            messageColor: footerStatus.color
-          )
-        }
+        LinkstrShareFooter(status: footerStatus, canSend: canSend, isSending: isSending, send: sendSharedLink)
       }
     }
     .preferredColorScheme(.dark)

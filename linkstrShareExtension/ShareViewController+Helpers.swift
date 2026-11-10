@@ -26,7 +26,6 @@ extension ShareViewController {
     activityIndicator.startAnimating()
     linkSectionLabel.isHidden = true
     linkFieldView.isHidden = true
-    actionSectionLabel.isHidden = true
     actionListView.isHidden = true
   }
 
@@ -48,10 +47,9 @@ extension ShareViewController {
     extractedShare = share
     activityIndicator.stopAnimating()
     loadingStack.isHidden = true
-    titleLabel.text = "choose action"
+    titleLabel.text = "share with linkstr"
     linkSectionLabel.isHidden = false
     linkFieldView.isHidden = false
-    actionSectionLabel.isHidden = false
     actionListView.isHidden = false
     linkLabel.text = share.url
   }

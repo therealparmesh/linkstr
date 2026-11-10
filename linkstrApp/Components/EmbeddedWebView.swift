@@ -47,11 +47,14 @@ struct EmbeddedWebView: UIViewRepresentable {
   var onIntrinsicHeightChange: ((CGFloat) -> Void)?
   var onContentReadyChange: ((Bool) -> Void)?
   var onLoadFailure: (() -> Void)?
+  var isPlaybackSuspended = false
+  var allowsVerticalScroll = false
 
   final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler, WKUIDelegate {
     static let metricsHandlerName = "linkstrEmbedMetrics"
 
     var source: EmbeddedWebSource?
+    var isPlaybackSuspended = false
     var onIntrinsicHeightChange: ((CGFloat) -> Void)?
     var onContentReadyChange: ((Bool) -> Void)?
     var onLoadFailure: (() -> Void)?
@@ -263,6 +266,12 @@ struct EmbeddedWebView: UIViewRepresentable {
     context.coordinator.onIntrinsicHeightChange = onIntrinsicHeightChange
     context.coordinator.onContentReadyChange = onContentReadyChange
     context.coordinator.onLoadFailure = onLoadFailure
+    uiView.scrollView.isScrollEnabled = allowsVerticalScroll
+    uiView.scrollView.showsVerticalScrollIndicator = allowsVerticalScroll
+    if context.coordinator.isPlaybackSuspended != isPlaybackSuspended {
+      context.coordinator.isPlaybackSuspended = isPlaybackSuspended
+      uiView.setAllMediaPlaybackSuspended(isPlaybackSuspended, completionHandler: nil)
+    }
 
     guard sourceChanged else { return }
     context.coordinator.prepareForNewLoad()
@@ -292,6 +301,8 @@ extension EmbeddedWebView {
   static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
     uiView.navigationDelegate = nil
     uiView.uiDelegate = nil
+    uiView.stopLoading()
+    uiView.pauseAllMediaPlayback(completionHandler: nil)
     uiView.configuration.userContentController.removeScriptMessageHandler(
       forName: Coordinator.metricsHandlerName
     )

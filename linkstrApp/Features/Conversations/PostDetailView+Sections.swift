@@ -60,44 +60,6 @@ extension PostDetailView {
     guard let post else { return nil }
     return LinkstrDeepLinkCodec.makeAppDeepLink(url: post.url)
   }
-  func postCardContent(_ post: SessionMessageEntity) -> some View {
-    VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
-      HStack(spacing: 12) {
-        Spacer(minLength: 0)
-
-        Text(post.timestamp.linkstrMessageTimestampLabel)
-          .font(LinkstrTheme.font(.caption, weight: .medium))
-          .foregroundStyle(LinkstrTheme.textTertiary)
-      }
-
-      if let title = post.metadataTitle, !title.isEmpty {
-        Text(title)
-          .font(LinkstrTheme.font(.headline, weight: .semibold))
-          .foregroundStyle(LinkstrTheme.textPrimary)
-          .fixedSize(horizontal: false, vertical: true)
-      }
-
-      if let url = post.url {
-        Text(url)
-          .font(LinkstrTheme.font(.footnote))
-          .foregroundStyle(LinkstrTheme.textSecondary)
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .multilineTextAlignment(.leading)
-          .textSelection(.enabled)
-      }
-
-      postCardNoteBlock
-      mediaBlock(post)
-      postCardReadOnlyNotice
-      postCardReactionRow
-      postCardReactionBreakdown
-    }
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .padding(.horizontal, LinkstrTheme.fieldHorizontalPadding)
-    .padding(.vertical, 14)
-    .contentShape(Rectangle())
-  }
-
   @ViewBuilder
   var postCardNoteBlock: some View {
     if noteText != nil || remotePostText != nil {
@@ -152,15 +114,17 @@ extension PostDetailView {
         VStack(alignment: .leading, spacing: 10) {
           ForEach(reactionBreakdown) { entry in
             HStack(alignment: .center, spacing: 8) {
+              LinkstrContactAvatar(name: entry.displayName, size: 32, seed: entry.id)
+
               Text(entry.displayName)
                 .font(LinkstrTheme.font(.footnote, weight: .medium))
                 .foregroundStyle(LinkstrTheme.textSecondary)
 
+              Spacer(minLength: 0)
+
               Text(entry.emojis.joined(separator: " "))
                 .font(LinkstrTheme.font(.body))
                 .foregroundStyle(LinkstrTheme.textPrimary)
-
-              Spacer(minLength: 0)
             }
           }
         }
@@ -169,7 +133,7 @@ extension PostDetailView {
   }
 
   @ViewBuilder
-  func mediaBlock(_ post: SessionMessageEntity) -> some View {
+  func mediaBlock(_ post: SessionMessageEntity, isCovered: Bool) -> some View {
     if let urlString = post.url, let url = URL(string: urlString) {
       AdaptiveVideoPlaybackView(
         sourceURL: url,
@@ -205,7 +169,10 @@ extension PostDetailView {
         clearPersistedLocalMedia: {
           clearPersistedLocalMedia(for: post)
         },
-        reloadID: mediaReloadID
+        reloadID: mediaReloadID,
+        immersive: true,
+        isCovered: isCovered,
+        watchInsets: watchInsets
       )
     }
   }
@@ -229,34 +196,6 @@ extension PostDetailView {
       _ = await session.refreshPostMetadata(post)
     }
   }
-  func metadataRefreshButton(for post: SessionMessageEntity) -> some View {
-    Button {
-      refreshPostMetadata(post)
-    } label: {
-      Group {
-        if isRefreshingMetadata {
-          ProgressView()
-            .controlSize(.small)
-            .frame(width: 18, height: 18)
-        } else {
-          Image(systemName: "arrow.clockwise")
-            .linkstrToolbarIconLabel()
-        }
-      }
-    }
-    .accessibilityLabel("refresh post metadata")
-    .disabled(isRefreshingMetadata)
-    .tint(LinkstrTheme.accent)
-  }
-  func shareDeepLinkButton(for url: URL) -> some View {
-    ShareLink(item: url) {
-      Image(systemName: "square.and.arrow.up")
-        .linkstrToolbarIconLabel()
-    }
-    .accessibilityLabel("share deep link")
-    .tint(LinkstrTheme.accent)
-  }
-
   var noteText: String? {
     guard let post else { return nil }
     guard let note = post.note else { return nil }
@@ -326,5 +265,118 @@ extension PostDetailView {
       sortBy: [SortDescriptor(\.createdAt)]
     )
     return try modelContext.fetch(descriptor)
+  }
+
+  func watchPost(_ post: SessionMessageEntity) -> some View {
+    ZStack(alignment: .bottom) {
+      WatchPostBackdrop(post: post)
+      mediaBlock(post, isCovered: isCovered || activeSheet != nil)
+
+      HStack(alignment: .bottom, spacing: 14) {
+        watchCaption(post)
+        watchActions(post)
+      }
+      .padding(.horizontal, 16)
+      .background(alignment: .bottom) {
+        LinearGradient(
+          stops: [.init(color: .clear, location: 0), .init(color: .black.opacity(0.76), location: 0.76),
+                  .init(color: .clear, location: 1)],
+          startPoint: .top, endPoint: .bottom
+        )
+        .padding(.top, -32)
+        .padding(.bottom, -12)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+      }
+      .padding(.bottom, 65 + watchInsets.bottom)
+      .foregroundStyle(LinkstrTheme.textPrimary)
+      .buttonStyle(.plain)
+      .zIndex(1)
+    }
+    .clipped()
+  }
+
+  private func watchCaption(_ post: SessionMessageEntity) -> some View {
+    VStack(alignment: .leading, spacing: 7) {
+      HStack(spacing: 8) {
+        LinkstrContactAvatar(name: sender, size: 29, seed: post.senderPubkeyHash)
+        Text(sender)
+          .font(LinkstrTheme.font(.subheadline, weight: .semibold))
+          .lineLimit(1)
+        Text(post.timestamp.linkstrActivityTimestampLabel)
+          .font(LinkstrTheme.font(.caption))
+          .foregroundStyle(LinkstrTheme.textSecondary)
+          .lineLimit(1)
+      }
+      if let caption = noteText ?? LinkstrPostPreview.title(for: post) {
+        Button {
+          activeSheet = .details
+        } label: {
+          Text(caption)
+            .font(LinkstrTheme.font(.subheadline))
+            .multilineTextAlignment(.leading)
+            .lineLimit(3)
+        }
+        .accessibilityHint("open post details")
+      }
+      if let source = LinkstrPostPreview.source(for: post.url) {
+        Text(source)
+          .font(LinkstrTheme.font(.caption))
+          .foregroundStyle(LinkstrTheme.textSecondary)
+          .lineLimit(1)
+      }
+      if !reactionSummaries.isEmpty {
+        Button {
+          activeSheet = .reactions
+        } label: {
+          HStack(spacing: 9) {
+            ForEach(reactionSummaries.prefix(3)) { reaction in
+              Text("\(reaction.emoji) \(reaction.count)")
+            }
+          }
+          .font(LinkstrTheme.font(.caption, weight: .medium))
+          .frame(minHeight: 28)
+        }
+        .accessibilityLabel("view reactions")
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  private func watchActions(_ post: SessionMessageEntity) -> some View {
+    VStack(spacing: 9) {
+      Button {
+        activeSheet = .reactions
+      } label: {
+        WatchActionLabel(title: canReactToPost ? "react" : "reactions", icon: "face.smiling")
+      }
+      if let url = post.url.flatMap(URL.init(string:)) {
+        Button {
+          openURL(url)
+        } label: {
+          WatchActionLabel(title: "source", icon: "arrow.up.right.square")
+        }
+        .accessibilityLabel("open original link")
+      }
+      Menu {
+        Button("post details", systemImage: "info.circle") { activeSheet = .details }
+        if canDelete && canReactToPost {
+          Button(noteText == nil ? "add a note" : "edit note", systemImage: "pencil") {
+            activeSheet = .editNote
+          }
+        }
+        Button("refresh preview", systemImage: "arrow.clockwise") { refreshPostMetadata(post) }
+          .disabled(isRefreshingMetadata)
+        if let shareDeepLinkURL {
+          ShareLink(item: shareDeepLinkURL) { Label("share link", systemImage: "square.and.arrow.up") }
+        }
+        if canDelete {
+          Button("delete post", systemImage: "trash", role: .destructive, action: delete)
+        }
+      } label: {
+        WatchActionLabel(title: "more", icon: "ellipsis")
+      }
+      .accessibilityLabel("more post actions")
+    }
   }
 }

@@ -64,6 +64,8 @@ struct LinkstrBackup: Codable, Sendable {
     var archived: Bool
     var readAt: Date?
     var transportIDs: [String]
+    var noteEditedAt: Date?
+    var noteEditEventID: String?
   }
 
   struct Member: Codable, Sendable {

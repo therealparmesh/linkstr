@@ -17,6 +17,7 @@ struct RootView: View {
   @State private var toastOpensRelaySettings = false
   @State private var toastDisplayID = UUID()
   @State private var selectedTab: AppTab = .sessions
+  @State private var relaySettingsRequest: UUID?
 
   init(pushNotifications: PushNotificationService? = nil) {
     self.pushNotifications = pushNotifications ?? .shared
@@ -91,7 +92,8 @@ struct RootView: View {
         } else {
           MainTabView(
             ownerPubkey: session.identityService.pubkeyHex ?? "",
-            selectedTab: $selectedTab
+            selectedTab: $selectedTab,
+            relaySettingsRequest: relaySettingsRequest
           )
           .transition(.opacity)
         }
@@ -197,7 +199,7 @@ struct RootView: View {
     let shouldOpenRelaySettings = toastOpensRelaySettings
     dismissToast()
     if shouldOpenRelaySettings {
-      selectedTab = .settings
+      relaySettingsRequest = UUID()
     }
   }
 

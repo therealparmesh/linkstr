@@ -38,6 +38,9 @@ final class NostrEventValidationTests: XCTestCase {
             XCTAssertEqual(received.first?.payload, payload)
             XCTAssertEqual(received.first?.senderPubkey, sender.publicKey.hex)
             XCTAssertEqual(received.first?.eventID, events.rumorEvent.id)
+            if kind == .noteEdit {
+              XCTAssertEqual(received.first?.createdAt, Date(timeIntervalSince1970: TimeInterval(payload.timestamp)))
+            }
             XCTAssertEqual(received.first?.source, subscriptionID == "live" ? .live : .historical)
           }
         }

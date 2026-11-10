@@ -42,11 +42,20 @@ struct OnboardingView: View {
   }
 
   private var header: some View {
-    VStack(alignment: .leading, spacing: 0) {
-      Text("welcome to linkstr.")
-        .font(LinkstrTheme.font(.largeTitle, weight: .bold))
-        .foregroundStyle(LinkstrTheme.textPrimary)
+    VStack(alignment: .leading, spacing: 10) {
+      LinkstrAppIconBadge(size: 62)
+        .accessibilityHidden(true)
+        .padding(.bottom, 6)
+
+      LinkstrScreenTitle(title: session.pendingCreatedAccountNsec == nil ? "welcome to linkstr" : "save your key")
+
+      Text(session.pendingCreatedAccountNsec == nil
+        ? "share and watch links with people you trust."
+        : "keep a copy so you can sign in on another device.")
+        .font(LinkstrTheme.font(.subheadline))
+        .foregroundStyle(LinkstrTheme.textSecondary)
     }
+    .padding(.vertical, 12)
   }
 
   private var signInAndCreateStep: some View {
@@ -119,7 +128,7 @@ struct OnboardingView: View {
       }
       .padding(.horizontal, 2)
 
-      LinkstrInsetSection(title: "create account") {
+      LinkstrInsetSection {
         Button {
           session.createAccount()
         } label: {

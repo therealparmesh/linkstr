@@ -327,40 +327,45 @@ struct LinkstrStorageRecoveryView: View {
     ZStack {
       LinkstrBackgroundView()
 
-      VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
-        HStack(spacing: LinkstrTheme.rowSpacing) {
+      ScrollView {
+        VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
           Image(systemName: "externaldrive.badge.exclamationmark")
             .font(LinkstrTheme.font(.title2, weight: .semibold))
             .foregroundStyle(LinkstrTheme.amber)
+            .frame(width: 52, height: 52)
+            .background(LinkstrTheme.panelElevated, in: .rect(cornerRadius: 14))
+            .accessibilityHidden(true)
 
-          Text(title)
-            .font(LinkstrTheme.font(.title, weight: .semibold))
-            .foregroundStyle(LinkstrTheme.textPrimary)
-        }
+          LinkstrScreenTitle(title: title)
 
-        Text(message)
-          .font(LinkstrTheme.font(.footnote))
-          .foregroundStyle(LinkstrTheme.textSecondary)
-          .fixedSize(horizontal: false, vertical: true)
+          Text(message)
+            .font(LinkstrTheme.font(.subheadline))
+            .foregroundStyle(LinkstrTheme.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .textSelection(.enabled)
 
-        VStack(spacing: LinkstrTheme.buttonRowSpacing) {
-          Button(action: onPrimaryAction) {
-            LinkstrActionButtonLabel(title: primaryActionTitle)
-          }
-          .linkstrPrimaryButton()
-
-          if let secondaryActionTitle, let onSecondaryAction {
-            Button(action: onSecondaryAction) {
-              LinkstrActionButtonLabel(title: secondaryActionTitle)
+          VStack(spacing: LinkstrTheme.buttonRowSpacing) {
+            Button(action: onPrimaryAction) {
+              LinkstrActionButtonLabel(title: primaryActionTitle)
             }
-            .linkstrSecondaryButton()
+            .linkstrPrimaryButton()
+
+            if let secondaryActionTitle, let onSecondaryAction {
+              Button(action: onSecondaryAction) {
+                LinkstrActionButtonLabel(title: secondaryActionTitle)
+              }
+              .linkstrSecondaryButton()
+            }
           }
         }
+        .padding(LinkstrTheme.panelPadding)
+        .frame(maxWidth: 520, alignment: .leading)
+        .background(LinkstrTheme.panelMuted, in: .rect(cornerRadius: 22))
+        .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+        .padding(.vertical, LinkstrTheme.screenTopPadding)
+        .frame(maxWidth: .infinity)
       }
-      .padding(LinkstrTheme.panelPadding)
-      .frame(maxWidth: 520, alignment: .leading)
-      .linkstrSurfaceCard()
-      .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+      .defaultScrollAnchor(.center, for: .alignment)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }

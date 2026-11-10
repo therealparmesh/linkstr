@@ -7,18 +7,20 @@ struct AddedYouView: View {
   @ObservedObject var discovery: ContactDiscovery
   let ownerPubkey: String
   let contacts: [ContactEntity]
+  let addContact: () -> Void
   @Binding var query: String
   @State private var pendingContactAddition: ContactPresentation?
   @Query private var relationships: [FollowRelationshipEntity]
 
   init(
     ownerPubkey: String, contacts: [ContactEntity], query: Binding<String>,
-    discovery: ContactDiscovery
+    discovery: ContactDiscovery, addContact: @escaping () -> Void
   ) {
     self.ownerPubkey = ownerPubkey
     self.contacts = contacts
     self._query = query
     self.discovery = discovery
+    self.addContact = addContact
     _relationships = Query(
       filter: #Predicate<FollowRelationshipEntity> {
         $0.ownerPubkey == ownerPubkey && $0.followsOwner
@@ -47,7 +49,9 @@ struct AddedYouView: View {
     let hasSearch = !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     ScrollView {
       VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
-        LinkstrScreenTitle(title: "added you")
+        LinkstrTabHeader(title: "added you") {
+          LinkstrHeaderButton(title: "add contact", icon: "person.badge.plus", action: addContact)
+        }
         LinkstrSearchField(prompt: "search people", text: $query)
         if visibleRows.isEmpty, discovery.loadState == .unavailable {
           LinkstrCenteredEmptyStateView(

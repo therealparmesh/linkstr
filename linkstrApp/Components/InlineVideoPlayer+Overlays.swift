@@ -1,4 +1,5 @@
 import Photos
+import SwiftUI
 
 #if canImport(UIKit)
   import UIKit
@@ -75,3 +76,111 @@ extension AdaptiveVideoPlaybackView {
     exportFeedbackMessage = message
   }
 }
+
+extension AdaptiveVideoPlaybackView {
+  func immersiveStatus(_ title: String, icon: String?) -> some View {
+    VStack(spacing: 9) {
+      if let icon {
+        Image(systemName: icon).font(.title2)
+      } else {
+        ProgressView().tint(LinkstrTheme.accent)
+      }
+      Text(title)
+        .font(LinkstrTheme.font(.subheadline, weight: .medium))
+    }
+    .foregroundStyle(LinkstrTheme.textPrimary)
+    .padding(.horizontal, 18)
+    .padding(.vertical, 14)
+    .background(LinkstrTheme.background.opacity(0.9), in: .rect(cornerRadius: 16))
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+  }
+
+  func immersivePlaybackMenu(
+    local: Bool, exportFileURL: URL? = nil, showsSystemPlayer: Bool = false
+  ) -> some View {
+    Menu {
+      if local {
+        Button("use embedded player", systemImage: "rectangle.inset.filled") {
+          cancelLocalCaching()
+          localPlaybackMode = .embedPreferred
+        }
+      } else {
+        Button("try in-app playback", systemImage: "play.rectangle", action: tryLocalPlayback)
+      }
+      if showsSystemPlayer {
+        Button("open system player", systemImage: "arrow.up.left.and.arrow.down.right") {
+          isPresentingSystemPlayer = true
+        }
+      }
+      if let exportFileURL {
+        Button("save video", systemImage: "square.and.arrow.down") {
+          exportTarget = LocalMediaExportTarget(
+            fileURL: exportFileURL,
+            allowsPhotoSave: supportsPhotoSave(fileURL: exportFileURL)
+          )
+        }
+      }
+    } label: {
+      Image(systemName: "slider.horizontal.3")
+        .font(LinkstrTheme.font(.subheadline, weight: .semibold))
+        .foregroundStyle(LinkstrTheme.textPrimary)
+        .frame(width: 44, height: 44)
+        .background(.black.opacity(0.58), in: Circle())
+    }
+    .accessibilityLabel("playback options")
+    .padding(.top, 62 + watchInsets.top)
+    .padding(.trailing, 12)
+  }
+}
+
+enum LocalFileExportResult {
+  case exported
+  case cancelled
+  case failed(String)
+}
+
+#if canImport(UIKit)
+  struct LocalFileExportSheet: UIViewControllerRepresentable {
+    let url: URL
+    let onComplete: (LocalFileExportResult) -> Void
+
+    final class Coordinator: NSObject, UIDocumentPickerDelegate {
+      private let onComplete: (LocalFileExportResult) -> Void
+      private var didComplete = false
+
+      init(onComplete: @escaping (LocalFileExportResult) -> Void) {
+        self.onComplete = onComplete
+      }
+
+      func documentPicker(
+        _ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]
+      ) {
+        guard !didComplete else { return }
+        didComplete = true
+        onComplete(.exported)
+      }
+
+      func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+        guard !didComplete else { return }
+        didComplete = true
+        onComplete(.cancelled)
+      }
+    }
+
+    func makeCoordinator() -> Coordinator {
+      Coordinator(onComplete: onComplete)
+    }
+
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+      let picker = UIDocumentPickerViewController(forExporting: [url], asCopy: true)
+      picker.delegate = context.coordinator
+      picker.allowsMultipleSelection = false
+      return picker
+    }
+
+    func updateUIViewController(
+      _ uiViewController: UIDocumentPickerViewController,
+      context: Context
+    ) {}
+  }
+#endif

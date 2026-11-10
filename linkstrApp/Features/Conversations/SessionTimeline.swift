@@ -4,7 +4,6 @@ struct SessionPostsContentState {
   let canCreatePosts: Bool
   let postCount: Int
   let timelineRows: [SessionTimelineRow]
-  let profileLookupPubkeys: [String]
 
   var postCountLabel: String {
     postCount == 1 ? "1 post" : "\(postCount) posts"

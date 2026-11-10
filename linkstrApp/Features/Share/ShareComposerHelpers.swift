@@ -3,21 +3,6 @@ import SwiftUI
 // MARK: - ShareComposerView Helpers
 
 extension ShareComposerView {
-  var linkFieldHint: String? {
-    let trimmed = link.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else { return nil }
-    guard let normalizedURL else { return "enter a valid link." }
-    return NewPostSheet.composerAvailabilityHint(
-      for: URLClassifier.mediaStrategy(for: normalizedURL)
-    )
-  }
-
-  var linkFieldHintColor: Color {
-    normalizedURL == nil
-      ? LinkstrTheme.destructive.opacity(0.92)
-      : LinkstrTheme.accent.opacity(0.92)
-  }
-
   func selectDefaultSessionIfNeeded() {
     guard selectedSessionID == nil else { return }
     selectedSessionID = activeSessions.first?.sessionID

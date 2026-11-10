@@ -32,7 +32,7 @@ extension AppSession {
     case .root:
       let rootID = incoming.eventID
       drainPendingMessages { pending in
-        pending.incoming.payload.kind == .reaction
+        (pending.incoming.payload.kind == .reaction || pending.incoming.payload.kind == .noteEdit)
           && pending.incoming.payload.conversationID.trimmingCharacters(
             in: .whitespacesAndNewlines) == sessionID
           && pending.incoming.payload.rootID.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -44,6 +44,7 @@ extension AppSession {
         guard
           kind == .root
             || kind == .reaction
+            || kind == .noteEdit
             || kind == .rootDelete
             || kind == .sessionDelete
         else { return false }
@@ -103,6 +104,8 @@ extension AppSession {
       return persistIncomingSessionMembers(pending.incoming)
     case .reaction:
       return persistIncomingReaction(pending.incoming)
+    case .noteEdit:
+      return persistIncomingNoteEdit(pending.incoming)
     case .root:
       return persistIncomingRootPost(
         pending.incoming,
@@ -125,9 +128,9 @@ extension AppSession {
     pendingIncomingMessages.removeAll { $0.eventID == eventID }
   }
 
-  func discardPendingIncomingReactions(sessionID: String, rootID: String) {
+  func discardPendingPostUpdates(sessionID: String, rootID: String) {
     pendingIncomingMessages.removeAll { pending in
-      pending.incoming.payload.kind == .reaction
+      (pending.incoming.payload.kind == .reaction || pending.incoming.payload.kind == .noteEdit)
         && pending.incoming.payload.conversationID.trimmingCharacters(in: .whitespacesAndNewlines)
           == sessionID
         && pending.incoming.payload.rootID.trimmingCharacters(in: .whitespacesAndNewlines) == rootID

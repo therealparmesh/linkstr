@@ -34,7 +34,7 @@ The bottom footer shows validation and relay status only. The keyboard return ke
 ### See who added you
 
 1. Open the Contacts tab.
-2. Tap the person with a checkmark in the top-left toolbar to open **added you**.
+2. Tap **added you** below search.
 3. Tap the add-contact button beside someone, then confirm. People already in your contacts show a checkmark.
 
 Long-press a row to **copy public key**. Tap the toolbar button again to return to contacts. The top-right add-contact button is available in both lists.
@@ -57,46 +57,51 @@ The bottom footer shows validation and relay status only. The keyboard return ke
 
 ### Use the You tab
 
-The You tab shows your current public key (`npub`), QR code, and published profile name. You can copy the public key or update the profile name that other Nostr apps can see.
+The **you** tab shows your public key (`npub`), QR code, and published profile name. You can copy or share your public key. Tap **edit profile** to change the name other Nostr apps see. Open settings with the gear or **all settings**.
 
 Profile name changes can be submitted with either the keyboard return key or the save button.
 
-### Send a post
+### Watch posts in a session
+
+Open a session and swipe up for the next post or down for the previous one. Supported videos fill the watch view. Use **source** to open the original link, or **session posts** to browse the timeline.
+
+### Share a link
 
 1. Open a session.
-2. Tap the compose button in the top-right corner.
+2. Tap **share a link** at the top.
 3. Paste a link.
-4. Optionally add a note.
-5. Tap the top-right send icon.
+4. Add a note if you like.
+5. Tap **share to session**.
 
 Generic web URLs are valid posts too. In-app playback, local caching, and save/export options depend on the provider and the specific URL. The composer indicates when an in-app view is available.
 
 You can also paste a shared linkstr post link into the link field, or share it back into linkstr through the iOS share sheet. The new post uses the original web URL.
 
-The bottom footer shows validation and relay status only. The keyboard return key on the link field advances into the note field.
+The footer shows relay status or errors next to the share button. The keyboard return key on the link field advances into the note field.
 
 ### React, delete, rename, archive, and manage members
 
 | Action                         | How                                                                                                                                                                                             |
 | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| React to a post                | Open a post and tap 👍, 👎, 👀, or **…** for the emoji picker.                                                                                                                                  |
+| React to a post                | Tap **react** on the post. Choose 👍, 👎, 👀, or open the emoji picker.                                                                                                                                  |
 | Remove a reaction              | Tap the same emoji again.                                                                                                                                                                       |
-| Share into linkstr             | Use the iOS share sheet from another app, choose linkstr, then choose share link. linkstr opens with the link prefilled, an optional note, and a separate searchable picker of active sessions. |
+| Share into linkstr             | Use the iOS share sheet from another app, choose linkstr, then **share to a session**. linkstr opens with the link prefilled, an optional note, and a separate searchable picker of active sessions. |
 | Save shared media              | Use the iOS share sheet from another app, choose linkstr, then choose save media. linkstr prepares supported media and lets you choose Photos or Files.                                         |
-| Share a deep link              | Open post detail and tap the share button in the top-right corner. The shared link carries only the normalized URL; linkstr fetches preview metadata again when the recipient opens it.         |
-| Delete your own post           | Long-press the post row in the session view.                                                                                                                                                    |
-| Archive or unarchive a session | Open a session, tap the members button, and use **archive session** or **unarchive session**.                                                                                                   |
-| View archived sessions         | Tap the archive icon in the top-left Sessions toolbar.                                                                                                                                          |
-| Rename a session               | Open a session, tap the members button, and edit the session name.                                                                                                                              |
-| Delete a session               | Open a session, tap the members button, and use **delete session** in the manage sheet.                                                                                                         |
+| Share a deep link              | Open **more** on the post and choose **share link**. The recipient opens the original link in linkstr.         |
+| Edit your own note             | Open **more** on a link you shared, then choose **edit note** or **add a note**. Clear the text and save to remove the note. |
+| Delete your own post           | Choose **delete post** from **more**, or long-press the post in the timeline.                                                                                                                                                    |
+| Archive or unarchive a session | Open a session, tap the session name or members button, and use **archive session** or **unarchive session**.                                                                                                   |
+| View archived sessions         | Tap the archive button beside **new session**.                                                                                                                                          |
+| Rename a session               | Open a session, tap the session name or members button, and edit the session name.                                                                                                                              |
+| Delete a session               | Open a session, tap the session name or members button, and use **delete session** in the manage sheet.                                                                                                         |
 | Add or remove members          | Open session members. Expand **choose from contacts** to add someone, or long-press their row to **remove from session**. Confirm the change, then save.                                        |
-| Copy a member's public key     | Open a session, tap the members button, then long-press a member's row and choose **copy public key**.                                                                                          |
+| Copy a member's public key     | Open a session, tap the session name or members button, then long-press a member's row and choose **copy public key**.                                                                                          |
 
-Only the session creator can rename sessions, delete them, or change session membership.
+Only the session creator can rename sessions, delete them, or change session membership. You can edit your own notes while you’re an active member. Edits keep the original post and its reactions in place.
 
 ### Relay settings
 
-Open Settings to manage relays.
+Open **you**, tap the gear, and find **relays**.
 
 - If you have not changed relays, linkstr uses the current default relay set.
 - You can add your own relay URLs.
@@ -128,7 +133,7 @@ linkstr accepts normal web URLs, but in-app playback is provider-dependent.
 
 **Browser fallback** covers everything else, plus any provider URL that blocks extraction or embed playback at runtime.
 
-Local video playback loops without a repeat limit by default, inline and fullscreen. Turn off **loop local videos** in Settings → Playback to stop at the end of each video. Your choice is saved on this device and applies across accounts. Embedded playback behavior is controlled by the provider.
+Local video playback loops without a repeat limit by default, inline and fullscreen. Turn off **loop local videos** under **you** → **playback** to stop at the end of each video. Your choice is saved on this device and applies across accounts. Embedded playback behavior is controlled by the provider.
 
 When local extraction succeeds, linkstr can cache the media on-device and offer **save to photos** or **save to files**. Embed-only playback stays network-backed and does not offer local export controls.
 
@@ -173,7 +178,7 @@ linkstr uses an APNs push service for iOS notifications. That service stores you
 
 Push alerts use generic text. Tapping a new-post or reaction alert opens the session's posts list without starting a video. Reaction alerts scroll to the reacted-to post once it arrives; older alerts without a target post ID simply open the list. If you start scrolling yourself, linkstr cancels any pending jump. This replaces the current screen even if you already have a post open. Missing or deleted target posts leave you in the list. Old push notifications are not replayed during historical restore.
 
-Opening a post clears its delivered new-post and reaction alerts from Notification Center, including when you open it manually. Alerts for other posts and older reactions without a target post ID stay there. Opening just the app or session list does not clear them. **Mark all as read**, beside the members button when unread posts exist, marks the session’s saved incoming posts and clears their matching delivered alerts. It works offline, does not open or play posts, and leaves later arrivals unread.
+Opening a post clears its delivered new-post and reaction alerts from Notification Center, including when you open it manually. Alerts for other posts and older reactions without a target post ID stay there. Opening just the app or session list does not clear them. **mark all as read**, available from **session posts** while watching or from the timeline toolbar, marks the session’s saved incoming posts and clears their matching delivered alerts. It works offline, does not open or play posts, and leaves later arrivals unread.
 
 Archive updates send each saved archive/unarchive choice and clear filtering for deleted sessions. Restoring a session without its preference does not send an assumed unarchive. Sessions omitted from an update stay unchanged on the server, which retains only archived IDs for notification filtering.
 
@@ -198,11 +203,11 @@ Deleting the account does not invalidate the `nsec` itself. If you still have th
 
 ### Can I rename a session?
 
-Yes. Open the session and tap the members button. That sheet shows the session name and current members for everyone. If you are the session creator, you can edit the name there and save to publish the updated name to all current members.
+Yes. Open the session and tap the session name or members button. That sheet shows the session name and current members for everyone. If you are the session creator, you can edit the name there and save to publish the updated name to all current members.
 
 ### Can I archive a session?
 
-Yes. Open the session, tap the members button, and use **archive session** or **unarchive session**.
+Yes. Open the session, tap the session name or members button, and use **archive session** or **unarchive session**.
 
 Archive changes whether the session appears in the active or archived list. This private choice syncs across linkstr devices using the same account. It does not delete the session or its posts.
 
@@ -245,7 +250,7 @@ If you delete and reinstall the app without restoring its local data, linkstr re
 
 ### Can I delete a session?
 
-Yes. Open the session, tap the members button, and use **delete session** in the manage sheet.
+Yes. Open the session, tap the session name or members button, and use **delete session** in the manage sheet.
 
 Delete is creator-only and requires confirmation. When it succeeds, linkstr removes the session from active and archived lists on this device, sends an encrypted delete notice to known members, and tries a best-effort relay-side delete for older transport copies when possible.
 
@@ -315,7 +320,7 @@ Archived sessions do not send notifications.
 ### The app won't connect to relays
 
 1. Confirm your internet connection works.
-2. Open Settings and check that at least one relay is enabled.
+2. Open **you**, tap the gear, and check that at least one relay is enabled.
 3. If needed, use **restore defaults** in the relays section to go back to the current default relay set.
 4. Bring the app back to the foreground and leave it open for a few seconds. linkstr reconnects from a disconnected baseline after backgrounding, while retaining message deduplication for the same account. Brief interruptions such as opening Control Center do not restart the relay runtime.
 5. If it still does not recover, force-quit and reopen the app.
@@ -331,15 +336,15 @@ Historical replay depends on relay retention. linkstr can retry out-of-order pos
 ### Videos won't play
 
 1. Check your network connection.
-2. Switch between **try local playback** and **use embedded**.
+2. In a session, open **playback options** and try the other player when available.
 3. If a cached copy was auto-trimmed, try local playback again to re-cache it.
-4. Use the refresh button in post detail if that post's metadata seems stale or missing.
-5. Use **open in browser** if the provider blocks embedded playback.
+4. Choose **refresh preview** from **more** if the preview seems stale or missing.
+5. Tap **source** in a session or **open in browser** on a shared link if the provider blocks playback.
 
 ### A preview looks stale or wrong
 
-1. Use the refresh button in post detail to re-fetch metadata for that post.
-2. Open the session, the post detail, or the shared-link screen and let linkstr rebuild the preview if metadata is still missing.
+1. Open **more** on the post and choose **refresh preview**.
+2. Open the post or the shared link to let linkstr rebuild a missing preview.
 3. Settings can clear saved preview metadata if you want linkstr to rebuild it.
 4. If the provider itself is serving bad metadata, use **open in browser**.
 

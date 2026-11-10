@@ -27,12 +27,14 @@ struct NewPostSheet: View {
         LinkstrBackgroundView()
         ScrollView {
           VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
-            LinkstrScreenTitle(title: "new post")
-            LinkstrInsetSection(title: "session") {
-              Text(sessionEntity.name)
-                .font(LinkstrTheme.font(.subheadline, weight: .medium))
-                .foregroundStyle(LinkstrTheme.textPrimary)
-                .linkstrInputField()
+            LinkstrInsetSection(title: "to") {
+              HStack(spacing: 10) {
+                LinkstrSessionAvatar(seed: sessionEntity.sessionID, size: 29)
+                Text(sessionEntity.name)
+                  .font(LinkstrTheme.font(.subheadline, weight: .semibold))
+                  .foregroundStyle(LinkstrTheme.textPrimary)
+              }
+              .linkstrInputField()
             }
 
             if !canCreatePostInSession {
@@ -62,18 +64,15 @@ struct NewPostSheet: View {
                 onClear: { url = "" }
               )
 
-              Text(urlFieldHint ?? " ")
-                .font(LinkstrTheme.font(.caption))
-                .foregroundStyle(urlFieldHintColor)
-                .frame(maxWidth: .infinity, minHeight: 14, alignment: .leading)
-                .opacity(urlFieldHint == nil ? 0 : 1)
-                .accessibilityHidden(urlFieldHint == nil)
+              if let normalizedURL {
+                LinkstrDraftPreview(url: normalizedURL, loadsRichPreview: focusedField != .url)
+              }
             }
 
-            LinkstrInsetSection(title: "note") {
+            LinkstrInsetSection(title: "add a note", accessory: "optional") {
               ZStack(alignment: .topLeading) {
                 if note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                  Text("note")
+                  Text("say something about this link")
                     .font(LinkstrTheme.font(.footnote))
                     .foregroundStyle(LinkstrTheme.textSecondary)
                     .padding(.top, LinkstrTheme.fieldVerticalPadding)
@@ -88,6 +87,7 @@ struct NewPostSheet: View {
                   .frame(minHeight: 112, maxHeight: 180)
                   .padding(4)
                   .focused($focusedField, equals: .note)
+                  .accessibilityLabel("note")
                   .disabled(isSending)
               }
               .linkstrFieldChrome()
@@ -102,43 +102,17 @@ struct NewPostSheet: View {
       }
 
       .linkstrBarChrome()
+      .navigationTitle("share a link")
+      .navigationBarTitleDisplayMode(.inline)
       .toolbar {
-        ToolbarItem(placement: .topBarLeading) {
-          Button {
-            dismiss()
-          } label: {
-            Image(systemName: "xmark")
-              .linkstrToolbarIconLabel()
-          }
-          .accessibilityLabel("cancel")
-          .tint(LinkstrTheme.textSecondary)
-          .disabled(isSending)
-        }
-
-        ToolbarItem(placement: .topBarTrailing) {
-          Button {
-            sendPost()
-          } label: {
-            if isSending {
-              ProgressView()
-                .frame(width: 30, height: 30, alignment: .center)
-            } else {
-              Image(systemName: "paperplane.fill")
-                .linkstrToolbarIconLabel()
-            }
-          }
-          .accessibilityLabel("send post")
-          .tint(LinkstrTheme.accent)
-          .disabled(!canSend)
+        ToolbarItem(placement: .cancellationAction) {
+          Button("cancel") { dismiss() }
+            .disabled(isSending)
         }
       }
+      .interactiveDismissDisabled(isSending)
       .safeAreaInset(edge: .bottom, spacing: 0) {
-        if let footerStatus {
-          LinkstrSheetStatusFooter(
-            message: footerStatus.message,
-            messageColor: footerStatus.color
-          )
-        }
+        LinkstrShareFooter(status: footerStatus, canSend: canSend, isSending: isSending, send: sendPost)
       }
       .onChange(of: focusedField) { previousField, focusedField in
         guard previousField == .url, focusedField != .url else { return }
@@ -172,22 +146,6 @@ struct NewPostSheet: View {
     return normalizedURL == nil ? "enter a valid link." : nil
   }
 
-  private var urlFieldHint: String? {
-    if let urlValidationHint {
-      return urlValidationHint
-    }
-
-    guard let normalizedURL else { return nil }
-    return Self.composerAvailabilityHint(for: URLClassifier.mediaStrategy(for: normalizedURL))
-  }
-
-  private var urlFieldHintColor: Color {
-    if urlValidationHint != nil {
-      return LinkstrTheme.destructive.opacity(0.92)
-    }
-    return LinkstrTheme.accent.opacity(0.92)
-  }
-
   private var validationMessage: String? {
     if !canCreatePostInSession {
       return "you're no longer a member of this session."
@@ -198,20 +156,10 @@ struct NewPostSheet: View {
   private var footerStatus: LinkstrSheetFooterStatus? {
     mutationFeedback.footerStatus(
       isRunning: isSending,
-      progressMessage: "waiting for relay reconnect before sending...",
+      progressMessage: "waiting for a relay connection",
       validationMessage: validationMessage,
       validationColor: LinkstrTheme.destructive.opacity(0.9)
     )
-  }
-
-  static func composerAvailabilityHint(for strategy: URLClassifier.MediaStrategy) -> String? {
-    if strategy.allowsLocalPlaybackToggle {
-      return "viewable in-app. may be saveable."
-    }
-    if case .embedOnly = strategy {
-      return "viewable in-app."
-    }
-    return nil
   }
 
   private func sendPost() {

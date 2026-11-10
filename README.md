@@ -1,6 +1,6 @@
 # linkstr
 
-_Last updated: October 4, 2026_
+_Last updated: November 9, 2026_
 
 linkstr is an iOS app for private link sharing on [Nostr](https://nostr.com). You create private sessions, share links with people you trust, react with emojis, and play supported video directly inside the app when a provider allows it.
 
@@ -21,7 +21,7 @@ This repo contains the iOS app and the small Go push service used for APNs routi
 
 ## How linkstr syncs
 
-linkstr is built around private sessions, not one-off direct messages. A session has a creator, a name, a current member list, and a feed of link posts. Reactions and deletes hang off those root posts.
+linkstr is built around private sessions, not one-off direct messages. A session has a creator, a name, a current member list, and a feed of link posts. Reactions, note edits, and deletes refer to the original post.
 
 **Membership is snapshot-based.** When the session creator adds or removes people, linkstr publishes the full member list as it exists at that moment — not a delta. The latest valid snapshot is the source of truth for who can see future posts and reactions. Adding someone later does not retroactively share older posts with them. Removing someone stops future delivery but cannot claw back content they already received while they were a valid member.
 
@@ -63,9 +63,9 @@ linkstr is built around private sessions, not one-off direct messages. A session
 **Visual design:**
 
 - The app uses a Tokyo Night color scheme across all surfaces.
-- The main app shell uses native iOS tab and navigation bars with visible frosted chrome over the Tokyo Night background.
-- Primary screens use inset-grouped surfaces, full-width list rows, and messenger-style spacing inspired by Telegram.
-- Text sizing is controlled by centralized theme tokens with a slightly larger baseline for chat readability.
+- The main tabs are **sessions**, **contacts**, and **you**. Settings opens from the gear or the **all settings** row on **you**.
+- Session lists use member initials, link thumbnails, readable previews, and separate unread counts. The watch view gives each post a screen and keeps playback and sharing controls within reach.
+- Interface labels use lowercase. Session names, contact names, and shared text keep their original capitalization.
 
 ### Identity and account lifecycle
 
@@ -75,7 +75,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 - New account creation can optionally set a profile name visible to others before leaving onboarding.
 - The active identity is keychain-backed.
 - The You tab exposes a profile card, QR code, current public key (`npub`), and editing for the account's published Nostr profile name.
-- Settings uses always-visible grouped sections for playback, relays, storage, backup, and identity.
+- Settings has sections for playback, relays, storage, backup, and identity. The **you** tab also links directly to playback, storage, and backup.
 - Settings storage controls can clear downloaded videos separately from saved link metadata and thumbnails.
 - The `nsec` is hidden by default and only revealed on explicit action. The revealed value is cleared again when the settings identity view disappears or the app moves to the inactive or background state.
 
@@ -97,7 +97,10 @@ linkstr is built around private sessions, not one-off direct messages. A session
 - The session list is the top-level surface.
 - Sessions are local, account-scoped entities with a session ID, name, creator pubkey, updated timestamp, and archive flag.
 - Users create sessions from the compose action in the top-right corner of the sessions tab.
-- The session list includes inline search and uses full-width chat-list rows with solid-color avatars, timestamps, and unread markers.
+- Search covers session names and recent post text. A session row shows the sender's note or linked title when available, plus the source, timestamp, and unread count.
+- Group rows show up to three member initials. A session with one other member shows their initials, and a solo session shows a bookmark.
+- Opening a session starts the watch view. Swipe vertically between posts or open **session posts** for the timeline, previous and next controls, and **mark all as read**. The app remembers the last viewed post while it is running.
+- Tap the session name to view members and session settings. Notifications still open the timeline without playing a post.
 
 **Session creation:**
 
@@ -121,7 +124,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 **Archive:**
 
 - Sessions can be archived or unarchived from the session members/manage sheet.
-- The session list shows active sessions by default. When archived sessions exist, an archive toggle appears in the top-left toolbar.
+- The session list shows active sessions by default. When archived sessions exist, an archive button appears beside **new session**.
 - Tapping the archive icon switches between active and archived list mode; the filled icon state indicates archive mode.
 - Switching away from the sessions tab resets the list mode back to active. Archive is non-destructive.
 
@@ -154,9 +157,8 @@ linkstr is built around private sessions, not one-off direct messages. A session
 
 **Composer:**
 
-- Uses grouped sections for session, link, and note.
-- Exposes a top-right send icon while the sheet is open.
-- The bottom footer is used only for status and validation messaging — it does not duplicate the action button.
+- Shows the destination, link, and optional note. A preview displays the source and, when available, a title and thumbnail.
+- **share to session** sits at the bottom with any validation, relay, or error message.
 - The keyboard return key advances from the link field into the note field.
 - Fields: session name (read-only), link (required), note (optional).
 - The link field supports paste and clear helpers rendered directly below the field in a compact control row. Paste replaces the entire field value.
@@ -164,12 +166,12 @@ linkstr is built around private sessions, not one-off direct messages. A session
 - Recognized media links surface an inline hint when in-app playback is available.
 - Note text is trimmed and persisted only when non-empty.
 
-**Post detail:**
+**Watching posts:**
 
-- The raw link text supports the standard iOS copy menu via text selection.
-- The top-right share action exports a `linkstr://open?url=…` deep link for the current post URL.
-- Note text is rendered as an accented note callout for visual separation. Media and metadata sit inside grouped detail surfaces.
-- Browser handoff uses the "open in browser" action.
+- Portrait video fills the watch view. Wider videos keep their proportions. Regular links show a preview with a **source** button.
+- **react** opens emoji choices and the reaction breakdown. Tap the caption or choose **post details** from **more** to read the full note and copy the URL.
+- **more** also offers **share link** and **refresh preview**. On your own posts, use **edit note** to change or clear the note, or **delete post** to remove the post.
+- Note edits sync after relay acceptance to active members who were eligible for the original post. They keep the original link, timestamp, read state, and reactions. Older versions of linkstr still show the original note.
 
 **Send behavior:**
 
@@ -184,7 +186,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 - Root post identity is the Nostr event ID. Inbound root payloads with a non-empty `root_id` that does not match the event ID are ignored.
 - Outgoing root posts persist the relay-visible gift-wrap event IDs that carried the payload.
 - Session post lists show sender headers above post cards and collapse repeated headers for consecutive posts from the same sender.
-- Post delete is available via long-press on posts sent by the signed-in user.
+- Delete your own post from the watch view's **more** menu or by long-pressing its row in the timeline.
 - Delete publishes a Nostr deletion request (`kind:5`) against the stored gift-wrap event IDs when available, and also sends a linkstr delete notice to known members so encrypted session feeds converge on the removal.
 - Older locally stored root posts without recorded gift-wrap IDs skip relay-side `kind:5` publication and still use the linkstr delete notice plus local tombstoning.
 - Validated post deletes persist a local deletion watermark so historical backfill cannot resurrect a previously deleted root post.
@@ -195,7 +197,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 - Reaction send is blocked when the sender is not an active member of the target session.
 - Default quick options: 👍, 👎, 👀. A `…` button opens the full emoji picker sheet.
 - Session post lists show compact read-only reaction summaries with no interactive controls; single reactions show emoji-only, and higher counts use bottom-right badges. Read-only count badges cap visually at `10+`.
-- Post detail uses interactive reaction chips with the current user's selections highlighted and shows per-participant breakdown rows below a divider.
+- The watch view shows a short reaction summary. Its reaction sheet highlights your selections and lists each participant's reactions.
 
 **State and ordering:**
 
@@ -252,6 +254,7 @@ Publication waits for relay `OK` acceptance with a timeout. A send succeeds only
 - `root`
 - `root_delete`
 - `reaction`
+- `note_edit`
 
 **Ingest rules:**
 
@@ -261,7 +264,7 @@ Publication waits for relay `OK` acceptance with a timeout. A send succeeds only
 - Duplicate gift-wraps for the same root merge transport IDs into the existing stored post instead of creating duplicates.
 - `session_create` requires both sender and receiver in the member set. For an existing session it is accepted only from the stored creator.
 - `session_members` is accepted only from the stored creator. It can bootstrap a missing session when the snapshot includes sender, receiver, and a non-empty session name.
-- Root posts and reactions are persisted only when sender and receiver are active at the event timestamp. Out-of-order events are staged in memory until the missing dependency arrives.
+- Root posts, reactions, and note edits are applied only when sender and receiver are active at the event timestamp. Out-of-order events are staged in memory until the missing dependency arrives.
 - `root_delete` requires the original post's sender; `session_delete` requires the session creator.
 - Each connected relay has its own history cursor for gift wraps and private preferences. A reconnect restarts that relay's history without restarting healthy relays. Outgoing messages return through their self-addressed gift wrap; no account-author gift-wrap subscription is needed.
 - History counts distinct valid events, includes each page's oldest timestamp, and probes older ranges even after a short response. Saturated timestamp boundaries increase the request limit up to 4,000. A closed, disconnected, timed-out, or invalid response leaves history incomplete; it does not advance the cursor. Relay retention and response limits can still prevent full recovery.
@@ -292,7 +295,7 @@ URL classification drives playback mode: extraction, embed, or link fallback. Mo
 
 **Extraction** resolves direct video media for native playback and local caching:
 
-- System video player with full controls.
+- The watch view has play, pause, seek, and mute controls. Shared links opened outside a session use the system video player.
 - Extracted media can be saved to Photos or Files.
 - Works offline once cached.
 - Video cache auto-trims at approximately 1 GB with least-recently-used eviction.
@@ -329,12 +332,12 @@ Non-video provider URLs (channel pages, profiles, etc.) fall back to open-in-bro
 - Provider embeds decide which post audio is available; linkstr does not separately extract audio-only media.
 - If a local playback stream fails, caching for that stream stops and the next available stream is tried automatically before falling back to embed mode.
 - If extraction fails, embed mode remains available with try-local and open-in-browser actions.
-- Link taps inside provider embeds are ignored; use **open in browser** to leave linkstr intentionally.
+- Use **source** in a session or **open in browser** on a shared link to open the provider's page.
 - Switching playback modes, refreshing or changing the source, and leaving the screen cancel superseded playback preparation and caching work.
-- Action rows are normalized across post detail and shared-link detail surfaces.
+- The watch view puts **use embedded player**, **try in-app playback**, **open system player**, and **save video** in **playback options** when available.
 - Audio plays even when the iPhone silent switch is enabled.
-- Local video playback loops without a repeat limit by default, inline and fullscreen. Settings → Playback → **loop local videos** turns looping off or on. The preference is saved on this device and applies across accounts; turning it off lets the current video finish without restarting.
-- In local playback mode with a cached file, users can export via **Save…** to Photos or Files.
+- Local video playback loops without a repeat limit by default, inline and fullscreen. **you** → **playback** → **loop local videos** turns looping off or on. The preference is saved on this device and applies across accounts; turning it off lets the current video finish without restarting.
+- When a local file is cached, use **save video** in a session or **save…** on a shared link to export to Photos or Files.
 
 **Twitter/X statuses** are resolved at runtime:
 
@@ -358,8 +361,8 @@ Embedded web playback allows provider-element fullscreen when supported.
 
 - Title and thumbnail are fetched asynchronously for root posts.
 - Twitter/X, Instagram, TikTok, Facebook, and Rumble use provider-specific metadata paths before falling back to generic `LinkPresentation`.
-- Missing metadata is retried lazily when posts scroll into view or when post detail is opened.
-- Post detail also exposes a refresh action that forces metadata to re-fetch for that post.
+- Missing metadata is retried when timeline rows come into view or a post becomes active in the watch view.
+- The watch view's **refresh preview** action fetches new metadata for that post.
 - Missing local thumbnail files are treated as stale and re-fetched.
 - Settings → Storage can clear downloaded videos separately from hydrated metadata and thumbnails.
 
@@ -398,9 +401,9 @@ See [contact synchronization](docs/CONTACTS.md) for persistence and relay behavi
 ### You tab
 
 - Exposes the current account `npub`.
-- Lets the user publish, update, or clear an optional Nostr profile name. Submitting with the keyboard return key or the save button applies the change and dismisses the keyboard.
+- **edit profile** lets you publish, update, or clear your Nostr profile name. Use the keyboard return key or the save button to submit.
 - Sequential profile edits use increasing timestamps. A newer profile received while a save is pending remains authoritative, and a failed local save is reported instead of shown as successful.
-- Provides a QR code with the current profile name above it (when set), a short scan hint below it, raw key text, and a copy action.
+- Shows a QR code and the public key, with **copy** and **share** actions. Playback, storage, backup, and all settings are available below it.
 
 ### Deep links
 
@@ -409,12 +412,12 @@ See [contact synchronization](docs/CONTACTS.md) for persistence and relay behavi
 - Media save format: `linkstr://save?url=…`
 - Valid deep links open a full-screen shared-link detail, share composer, or media-save surface.
 - Post detail can share the current post as a deep link through the native iOS share sheet.
-- The iOS share extension accepts web URLs, webpages, shared linkstr post links, or text containing either kind of link, then offers `share link` or `save media`.
+- The iOS share extension accepts web URLs, webpages, shared linkstr post links, or text containing either kind of link, then offers **share to a session** or **save media**.
 - Sharing a linkstr post link back into the app or pasting it into either composer uses the original web URL, including its query and fragment. Invalid or nested deep links are rejected.
-- `share link` opens a full-screen share composer with the link prefilled, any surrounding text as the optional note, and a separate searchable active-session picker.
+- **share to a session** opens a full-screen share composer with the link prefilled, any surrounding text as the optional note, and a separate searchable active-session picker.
 - `save media` opens linkstr to cache supported media and offer Photos or Files as the destination. Shares without a valid web link close without an error.
 - Shared deep links carry only the normalized web URL; title, thumbnail, and provider-specific preview text are fetched when the recipient opens the link.
-- Shared-link detail reuses the same adaptive local/embed controls as post detail when the URL supports in-app playback.
+- Shared-link detail uses the same playback resolver and fallback behavior as the watch view, with inline controls.
 - Dismissing shared-link detail, the share composer, or the media-save surface clears pending deep-link state.
 
 ### Local data and security

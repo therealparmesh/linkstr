@@ -8,6 +8,21 @@ struct PostDetailView: View {
 
   let ownerPubkey: String
   let sessionID: String
+  let sender: String
+  let canDelete: Bool
+  let watchInsets: EdgeInsets
+  let isCovered: Bool
+  let delete: () -> Void
+
+  enum Sheet: String, Identifiable {
+    case reactions
+    case details
+    case editNote
+
+    var id: Self { self }
+  }
+
+  @State var activeSheet: Sheet?
 
   @State var isPresentingEmojiPicker = false
   @State var contacts: [ContactEntity] = []
@@ -21,10 +36,20 @@ struct PostDetailView: View {
   init(
     ownerPubkey: String,
     sessionID: String,
-    postID: String
+    postID: String,
+    sender: String,
+    canDelete: Bool,
+    watchInsets: EdgeInsets,
+    isCovered: Bool,
+    delete: @escaping () -> Void
   ) {
     self.ownerPubkey = ownerPubkey
     self.sessionID = sessionID
+    self.sender = sender
+    self.canDelete = canDelete
+    self.watchInsets = watchInsets
+    self.isCovered = isCovered
+    self.delete = delete
     let storageID = SessionMessageEntity.storageID(ownerPubkey: ownerPubkey, eventID: postID)
     let rootKind = SessionMessageKind.root.rawValue
     _posts = Query(filter: #Predicate<SessionMessageEntity> {
@@ -52,15 +77,7 @@ struct PostDetailView: View {
   var body: some View {
     Group {
       if let post {
-        ScrollView {
-          VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
-            postCardContent(post)
-          }
-          .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-          .padding(.top, LinkstrTheme.screenTopPadding)
-          .padding(.bottom, LinkstrTheme.screenBottomPadding)
-          .linkstrReadableContent()
-        }
+        watchPost(post)
       } else {
         ContentUnavailableView(
           "post unavailable",
@@ -73,36 +90,132 @@ struct PostDetailView: View {
       contacts = (try? fetchContacts(senderPubkeys: Set(reactions.map(\.senderPubkey)))) ?? []
       session.requestRemoteProfilesIfNeeded(pubkeyHexes: profileLookupPubkeys)
     }
-    .background(LinkstrBackgroundView())
-    .linkstrBarChrome()
-    .toolbar {
-      if let post {
-        ToolbarItemGroup(placement: .topBarTrailing) {
-          metadataRefreshButton(for: post)
-          if let shareDeepLinkURL {
-            shareDeepLinkButton(for: shareDeepLinkURL)
-          }
-        }
-      } else if let shareDeepLinkURL {
-        ToolbarItem(placement: .topBarTrailing) {
-          shareDeepLinkButton(for: shareDeepLinkURL)
-        }
-      }
-    }
     .task(id: post?.storageID) {
       guard let post else { return }
       session.markRootPostRead(postID: post.rootID)
       session.refreshMetadataForVisiblePostIfNeeded(post)
       await PushNotificationService.shared.clearDeliveredNotifications(sessionID: sessionID, postID: post.rootID)
     }
-    .task(id: remotePostTextRequestID) {
-      remotePostText = await resolvedRemotePostText()
-    }
-    .sheet(isPresented: $isPresentingEmojiPicker) {
-      LinkstrEmojiPickerSheet { emoji in
-        toggleReaction(emoji)
+    .sheet(item: $activeSheet) { sheet in
+      switch sheet {
+      case .editNote:
+        if let post { EditPostNoteSheet(post: post) }
+      case .details, .reactions:
+        postSheet(showsReactions: sheet == .reactions)
       }
-      .presentationDetents([.fraction(0.92)])
     }
+  }
+
+  private func postSheet(showsReactions: Bool) -> some View {
+    NavigationStack {
+      ScrollView {
+        VStack(alignment: .leading, spacing: 16) {
+          if showsReactions {
+            postCardReadOnlyNotice
+            postCardReactionRow
+            postCardReactionBreakdown
+            if reactionBreakdown.isEmpty {
+              Text("no reactions yet")
+                .font(LinkstrTheme.font(.subheadline))
+                .foregroundStyle(LinkstrTheme.textSecondary)
+            }
+          } else if let post {
+            postDetails(post)
+          }
+        }
+        .padding(LinkstrTheme.screenHorizontalPadding)
+        .linkstrReadableContent()
+      }
+      .background(LinkstrBackgroundView())
+      .navigationTitle(showsReactions ? "reactions" : "post details")
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .confirmationAction) {
+          Button("done") { activeSheet = nil }
+        }
+      }
+      .sheet(isPresented: $isPresentingEmojiPicker) {
+        LinkstrEmojiPickerSheet { emoji in toggleReaction(emoji) }
+          .presentationDetents([.large])
+      }
+    }
+    .presentationDetents(showsReactions ? [.medium, .large] : [.large])
+    .presentationDragIndicator(.visible)
+  }
+
+  private func postDetails(_ post: SessionMessageEntity) -> some View {
+    VStack(alignment: .leading, spacing: 12) {
+      Text("\(sender), \(post.timestamp.linkstrMessageTimestampLabel)")
+        .font(LinkstrTheme.font(.caption))
+        .foregroundStyle(LinkstrTheme.textSecondary)
+
+      if let title = LinkstrPostPreview.title(for: post) {
+        Text(title)
+          .font(LinkstrTheme.font(.title3, weight: .semibold))
+      }
+
+      postCardNoteBlock
+
+      if let editedAt = post.noteEditedAt {
+        Text("note edited \(editedAt.linkstrMessageTimestampLabel)")
+          .font(LinkstrTheme.font(.caption))
+          .foregroundStyle(LinkstrTheme.textSecondary)
+      }
+
+      if let url = post.url, let destination = URL(string: url) {
+        Text(url)
+          .font(LinkstrTheme.font(.footnote))
+          .foregroundStyle(LinkstrTheme.textSecondary)
+          .textSelection(.enabled)
+        Link(destination: destination) {
+          LinkstrActionButtonLabel(title: "open original link", systemImage: "arrow.up.right")
+        }
+        .linkstrPrimaryButton()
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .task(id: remotePostTextRequestID) { remotePostText = await resolvedRemotePostText() }
+  }
+}
+
+struct WatchPostBackdrop: View {
+  let post: SessionMessageEntity
+
+  var body: some View {
+    GeometryReader { proxy in
+      let width = min(max(1, proxy.size.width - 36), 520)
+      VStack(spacing: 12) {
+        LinkstrPostThumbnail(post: post, width: width, height: max(1, min(width * 0.62, proxy.size.height * 0.43)))
+        if let title = LinkstrPostPreview.title(for: post) ?? LinkstrPostPreview.source(for: post.url) {
+          Text(title)
+            .font(LinkstrTheme.font(.title3, weight: .semibold))
+            .foregroundStyle(LinkstrTheme.textPrimary)
+            .multilineTextAlignment(.center)
+            .lineLimit(2)
+        }
+      }
+      .frame(width: width)
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .padding(.bottom, min(proxy.size.height * 0.12, 78))
+    }
+    .background(LinkstrTheme.background)
+    .accessibilityHidden(true)
+  }
+}
+
+struct WatchActionLabel: View {
+  let title: String
+  let icon: String
+
+  var body: some View {
+    VStack(spacing: 4) {
+      Image(systemName: icon)
+        .font(.system(size: 21, weight: .medium))
+      Text(title)
+        .font(LinkstrTheme.font(.caption2, weight: .semibold))
+        .lineLimit(1)
+    }
+    .frame(minWidth: 46, minHeight: 44)
+    .contentShape(Rectangle())
   }
 }

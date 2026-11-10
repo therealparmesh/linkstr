@@ -23,6 +23,8 @@ final class SessionMessageEntity {
   var encryptedReceiverPubkey: String
   var encryptedURL: String?
   var encryptedNote: String?
+  var noteEditedAt: Date?
+  var noteEditEventID: String?
   var timestamp: Date
   var isArchived: Bool
   var readAt: Date?
@@ -54,9 +56,10 @@ final class SessionMessageEntity {
 
   @Transient private var _note: String??
   var note: String? {
+    let ciphertext = encryptedNote
     if let cached = _note { return cached }
-    let value = LocalDataCrypto.shared.decryptString(encryptedNote, ownerPubkey: ownerPubkey)
-    if value != nil || encryptedNote == nil {
+    let value = LocalDataCrypto.shared.decryptString(ciphertext, ownerPubkey: ownerPubkey)
+    if value != nil || ciphertext == nil {
       _note = .some(value)
     }
     return value
@@ -155,6 +158,13 @@ final class SessionMessageEntity {
 
   static func storageID(ownerPubkey: String, eventID: String) -> String {
     "\(ownerPubkey):\(eventID)"
+  }
+
+  func applyNoteRevision(ciphertext: String?, editedAt: Date?, eventID: String?) {
+    encryptedNote = ciphertext
+    noteEditedAt = editedAt
+    noteEditEventID = eventID
+    _note = nil
   }
 
   func setMetadata(title: String?, thumbnailURL: String?) throws {

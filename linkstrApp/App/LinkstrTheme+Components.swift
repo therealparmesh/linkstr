@@ -26,8 +26,8 @@ struct LinkstrInsetSection<Content: View>: View {
       if let title {
         HStack(alignment: .center, spacing: LinkstrTheme.compactSpacing) {
           Text(title)
-            .font(LinkstrTheme.font(.caption, weight: .medium))
-            .foregroundStyle(LinkstrTheme.textSecondary)
+            .font(LinkstrTheme.font(.subheadline, weight: .semibold))
+            .foregroundStyle(LinkstrTheme.textPrimary)
 
           Spacer(minLength: 0)
 
@@ -43,8 +43,6 @@ struct LinkstrInsetSection<Content: View>: View {
       VStack(alignment: .leading, spacing: contentSpacing) {
         content
       }
-      .padding(.horizontal, LinkstrTheme.fieldHorizontalPadding)
-      .padding(.vertical, LinkstrTheme.fieldVerticalPadding)
       .frame(maxWidth: .infinity, alignment: .leading)
 
       if let footer, !footer.isEmpty {
@@ -70,7 +68,7 @@ struct LinkstrSearchField: View {
         .foregroundStyle(LinkstrTheme.textTertiary)
         .accessibilityHidden(true)
 
-      TextField(prompt, text: $text)
+      TextField(prompt, text: $text, prompt: Text(prompt).foregroundStyle(LinkstrTheme.textSecondary.opacity(0.85)))
         .font(LinkstrTheme.font(.footnote))
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled(true)
@@ -289,6 +287,7 @@ struct LinkstrScreenTitle: View {
       .font(LinkstrTheme.font(.largeTitle, weight: .bold))
       .foregroundStyle(LinkstrTheme.textPrimary)
       .frame(maxWidth: .infinity, alignment: .leading)
+      .accessibilityAddTraits(.isHeader)
   }
 }
 
@@ -375,26 +374,23 @@ enum LinkstrAvatarStyleResolver {
 struct LinkstrContactAvatar: View {
   let name: String
   var size: CGFloat = 42
+  var seed: String?
 
   var body: some View {
     Circle()
-      .fill(
-        LinearGradient(
-          colors: [LinkstrTheme.accent, LinkstrTheme.accentSoft],
-          startPoint: .topLeading,
-          endPoint: .bottomTrailing
-        )
-      )
+      .fill(avatarColor)
       .frame(width: size, height: size)
       .overlay {
-        Text(LinkstrAvatarStyleResolver.contactInitials(for: name))
-          .font(LinkstrTheme.font(.subheadline, weight: .semibold))
-          .foregroundStyle(Color.white)
-      }
-      .overlay {
-        Circle()
-          .stroke(Color.white.opacity(0.1), lineWidth: 1)
+        Text(String(LinkstrAvatarStyleResolver.contactInitials(for: name).prefix(size < 32 ? 1 : 2)))
+          .font(.system(size: size * 0.32, weight: .semibold))
+          .foregroundStyle(LinkstrTheme.background)
+          .lineLimit(1)
       }
       .accessibilityHidden(true)
+  }
+
+  private var avatarColor: Color {
+    let colors = [LinkstrTheme.accent, LinkstrTheme.accentPink, LinkstrTheme.textSecondary]
+    return colors[LinkstrAvatarStyleResolver.sessionColorIndex(for: seed ?? name) % colors.count]
   }
 }

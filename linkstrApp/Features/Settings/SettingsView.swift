@@ -18,7 +18,24 @@ struct LinkstrAdaptiveButtonRow<Content: View>: View {
   }
 }
 
+enum SettingsSection: String, Hashable {
+  case playback
+  case storage
+  case backup
+  case relays
+
+  var icon: String {
+    switch self {
+    case .playback: "play.circle"
+    case .storage: "internaldrive"
+    case .backup: "externaldrive.badge.timemachine"
+    case .relays: "antenna.radiowaves.left.and.right"
+    }
+  }
+}
+
 struct SettingsView: View {
+  let initialSection: SettingsSection?
   @Environment(\.scenePhase) private var scenePhase
   @EnvironmentObject var session: AppSession
 
@@ -56,20 +73,25 @@ struct SettingsView: View {
   }
 
   private var content: some View {
-    ScrollView {
-      VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
-        LinkstrScreenTitle(title: "settings")
-        playbackSection
-        relaysSection
-        storageSection
-        BackupSection()
-        identitySection
+    ScrollViewReader { proxy in
+      ScrollView {
+        VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
+          LinkstrScreenTitle(title: "settings")
+          playbackSection.id(SettingsSection.playback)
+          relaysSection.id(SettingsSection.relays)
+          storageSection.id(SettingsSection.storage)
+          BackupSection().id(SettingsSection.backup)
+          identitySection
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+        .padding(.top, LinkstrTheme.screenTopPadding)
+        .padding(.bottom, LinkstrTheme.screenBottomPadding)
+        .linkstrReadableContent()
       }
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-      .padding(.top, LinkstrTheme.screenTopPadding)
-      .padding(.bottom, LinkstrTheme.screenBottomPadding)
-      .linkstrReadableContent()
+      .onAppear {
+        if let initialSection { proxy.scrollTo(initialSection, anchor: .top) }
+      }
     }
     .linkstrKeyboardDismissal()
     .alert("log out", isPresented: $isPresentingLogoutOptions) {

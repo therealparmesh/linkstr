@@ -37,7 +37,8 @@ struct BackupSnapshot: Sendable {
       .init(id: $0.eventID, sessionID: $0.conversationID, sender: $0.encryptedSenderPubkey,
             receiver: $0.encryptedReceiverPubkey, url: $0.encryptedURL ?? "", note: $0.encryptedNote,
             timestamp: $0.timestamp, archived: $0.isArchived, readAt: $0.readAt,
-            transportIDs: $0.publishedTransportEventIDs)
+            transportIDs: $0.publishedTransportEventIDs,
+            noteEditedAt: $0.noteEditedAt, noteEditEventID: $0.noteEditEventID)
     }
     backup.members = try context.fetch(FetchDescriptor<SessionMemberEntity>(predicate: #Predicate {
       $0.ownerPubkey == owner

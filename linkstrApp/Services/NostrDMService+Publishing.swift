@@ -116,7 +116,10 @@ extension NostrDMService {
     let builder = NostrEvent.Builder<NostrEvent>(kind: linkstrRumorKind)
       .content(content)
 
-    if payload.kind == .reaction || payload.kind == .rootDelete {
+    if payload.kind == .noteEdit {
+      builder.createdAt(payload.timestamp)
+    }
+    if payload.kind == .reaction || payload.kind == .rootDelete || payload.kind == .noteEdit {
       let rootTag = try EventTag(eventId: payload.rootID, marker: .root)
       builder.appendTags(rootTag.tag)
     }

@@ -9,7 +9,9 @@ import SwiftUI
 extension AdaptiveVideoPlaybackView {
   @ViewBuilder
   var content: some View {
-    if isResolvingPresentation {
+    if isResolvingPresentation, immersive {
+      immersiveStatus("loading post", icon: nil)
+    } else if isResolvingPresentation {
       VStack(alignment: .leading, spacing: 8) {
         mediaSurface {
           VStack(spacing: 8) {
@@ -35,7 +37,11 @@ extension AdaptiveVideoPlaybackView {
         embedPlaybackBlock(
           embedSource: resolvedOrFallbackEmbedSource(embedURL), allowsTryLocalPlayback: false)
       case .link:
-        openInBrowserButton(action: openSourceAction)
+        if immersive {
+          Color.clear
+        } else {
+          openInBrowserButton(action: openSourceAction)
+        }
       }
     }
   }
@@ -47,30 +53,30 @@ extension AdaptiveVideoPlaybackView {
       if let media = currentPlaybackCandidate(from: candidates) {
         let playbackTaskID = localPreparationTaskID
         let exportFileURL = exportableLocalMediaURL(for: cachedLocalMedia ?? media)
-        VStack(alignment: .leading, spacing: 8) {
-          mediaSurface {
-            InlineVideoPlayer(
-              media: media,
-              onPlaybackReady: {
-                guard !media.isLocalFile,
-                  isCurrentPlaybackCallback(for: media, taskID: playbackTaskID) else { return }
-                scheduleLocalCachingIfNeeded(sourceURL: effectiveSourceURL, media: media)
-              },
-              onPlaybackFailed: {
-                guard isCurrentPlaybackCallback(for: media, taskID: playbackTaskID) else { return }
-                handlePlaybackFailure(currentMedia: media, candidates: candidates)
-              },
-              onAspectRatioChange: { aspectRatio in
-                guard isCurrentPlaybackCallback(for: media, taskID: playbackTaskID) else { return }
-                if abs((detectedMediaAspectRatio ?? 0) - aspectRatio) > 0.001 {
-                  detectedMediaAspectRatio = aspectRatio
-                }
-              }
-            )
-          }
-          localPlaybackActions(exportFileURL: exportFileURL)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        let player = InlineVideoPlayer(
+          media: media,
+          onPlaybackReady: {
+            guard !media.isLocalFile,
+              isCurrentPlaybackCallback(for: media, taskID: playbackTaskID) else { return }
+            scheduleLocalCachingIfNeeded(sourceURL: effectiveSourceURL, media: media)
+          },
+          onPlaybackFailed: {
+            guard isCurrentPlaybackCallback(for: media, taskID: playbackTaskID) else { return }
+            handlePlaybackFailure(currentMedia: media, candidates: candidates)
+          },
+          onAspectRatioChange: { aspectRatio in
+            guard isCurrentPlaybackCallback(for: media, taskID: playbackTaskID) else { return }
+            if abs((detectedMediaAspectRatio ?? 0) - aspectRatio) > 0.001 {
+              detectedMediaAspectRatio = aspectRatio
+            }
+          },
+          immersive: immersive,
+          aspectRatio: effectiveMediaAspectRatio,
+          isCovered: isCovered,
+          watchBottomInset: watchInsets.bottom,
+          systemPlayerRequest: immersive ? $isPresentingSystemPlayer : nil
+        )
+        localPlayerBlock(player, exportFileURL: exportFileURL)
       } else {
         embedPlaybackBlock(embedSource: embedSource, allowsTryLocalPlayback: true)
       }
@@ -79,24 +85,74 @@ extension AdaptiveVideoPlaybackView {
       embedPlaybackBlock(embedSource: embedSource, allowsTryLocalPlayback: true)
 
     case nil:
-      VStack(alignment: .leading, spacing: 8) {
-        mediaSurface {
-          VStack(spacing: 8) {
-            ProgressView()
-            Text("preparing local playback...")
-              .font(LinkstrTheme.font(.caption))
-              .foregroundStyle(LinkstrTheme.textSecondary)
-          }
-          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+      if immersive {
+        ZStack(alignment: .topTrailing) {
+          immersiveStatus("getting video ready", icon: nil)
+          immersivePlaybackMenu(local: true)
         }
-        localPlaybackActions(exportFileURL: nil)
+      } else {
+        VStack(alignment: .leading, spacing: 8) {
+          mediaSurface { immersiveStatus("getting video ready", icon: nil) }
+          localPlaybackActions(exportFileURL: nil)
+        }
       }
     }
   }
 
+  @ViewBuilder
+  private func localPlayerBlock(_ player: InlineVideoPlayer, exportFileURL: URL?) -> some View {
+    if immersive {
+      player.overlay(alignment: .topTrailing) {
+        immersivePlaybackMenu(local: true, exportFileURL: exportFileURL, showsSystemPlayer: true)
+      }
+    } else {
+      VStack(alignment: .leading, spacing: 8) {
+        mediaSurface { player }
+        localPlaybackActions(exportFileURL: exportFileURL)
+      }
+    }
+  }
+
+  @ViewBuilder
   func embedPlaybackBlock(
     embedSource: EmbeddedWebSource,
     allowsTryLocalPlayback: Bool
+  ) -> some View {
+    if immersive {
+      GeometryReader { proxy in
+        let availableHeight = max(1, proxy.size.height - 155 - watchInsets.top - watchInsets.bottom)
+        let embedWidth = min(proxy.size.width, availableHeight * effectiveMediaAspectRatio)
+        let usesIntrinsicHeight = embedSurfaceHeight(for: embedSource) != nil
+        let width = usesIntrinsicHeight ? proxy.size.width : embedWidth
+        let height = min(availableHeight, embedSurfaceHeight(for: embedSource) ?? width / effectiveMediaAspectRatio)
+        VStack(spacing: 0) {
+          if isRenderableEmbedSource(embedSource), !embeddedLoadFailed {
+            embeddedPlayerSurface(
+              embedSource, explicitHeight: height,
+              allowsVerticalScroll: (embedSurfaceHeight(for: embedSource) ?? 0) > height
+            )
+              .frame(width: width)
+          } else {
+            immersiveStatus("can't play this here", icon: "play.slash")
+              .frame(height: min(availableHeight, 240))
+          }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.top, watchInsets.top)
+        .padding(.bottom, 86 + watchInsets.bottom)
+      }
+      .overlay(alignment: .topTrailing) {
+        if allowsTryLocalPlayback {
+          immersivePlaybackMenu(local: false)
+        }
+      }
+    } else {
+      standardEmbedPlaybackBlock(embedSource: embedSource, allowsTryLocalPlayback: allowsTryLocalPlayback)
+    }
+  }
+
+  private func standardEmbedPlaybackBlock(
+    embedSource: EmbeddedWebSource, allowsTryLocalPlayback: Bool
   ) -> some View {
     VStack(alignment: .leading, spacing: 8) {
       if isRenderableEmbedSource(embedSource), !embeddedLoadFailed {
@@ -125,8 +181,10 @@ extension AdaptiveVideoPlaybackView {
     .frame(maxWidth: .infinity, alignment: .leading)
   }
 
-  func embeddedPlayerSurface(_ embedSource: EmbeddedWebSource) -> some View {
-    mediaSurface(explicitHeight: embedSurfaceHeight(for: embedSource)) {
+  func embeddedPlayerSurface(
+    _ embedSource: EmbeddedWebSource, explicitHeight: CGFloat? = nil, allowsVerticalScroll: Bool = false
+  ) -> some View {
+    mediaSurface(explicitHeight: explicitHeight ?? embedSurfaceHeight(for: embedSource)) {
       ZStack {
         EmbeddedWebView(
           source: embedSource,
@@ -140,7 +198,9 @@ extension AdaptiveVideoPlaybackView {
           },
           onLoadFailure: {
             embeddedLoadFailed = true
-          }
+          },
+          isPlaybackSuspended: immersive && (isCovered || scenePhase != .active),
+          allowsVerticalScroll: allowsVerticalScroll
         )
         .scopedPlaybackAudioSession()
         .opacity(shouldDeferEmbedReveal(for: embedSource) && !isEmbeddedContentReady ? 0 : 1)

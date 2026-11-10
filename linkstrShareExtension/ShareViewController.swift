@@ -20,8 +20,8 @@ final class ShareViewController: UIViewController {
     static let fieldHorizontalPadding: CGFloat = 14
     static let fieldVerticalPadding: CGFloat = 12
     static let rowSpacing: CGFloat = 12
-    static let rowHeight: CGFloat = 58
-    static let fieldCornerRadius: CGFloat = 12
+    static let rowHeight: CGFloat = 62
+    static let fieldCornerRadius: CGFloat = 14
   }
 
   static let separatorColor = UIColor.white.withAlphaComponent(0.06)
@@ -33,7 +33,6 @@ final class ShareViewController: UIViewController {
   let linkSectionLabel = UILabel()
   let linkLabel = UILabel()
   let linkFieldView = UIView()
-  let actionSectionLabel = UILabel()
   let actionListView = UIStackView()
   let shareButton = UIButton(type: .system)
   let saveButton = UIButton(type: .system)
@@ -76,7 +75,10 @@ final class ShareViewController: UIViewController {
   private func configureTitleLabel() {
     titleLabel.text = "share"
     titleLabel.textColor = Style.textPrimary
-    titleLabel.font = .systemFont(ofSize: 28, weight: .bold)
+    titleLabel.font = .preferredFont(forTextStyle: .title1)
+    titleLabel.adjustsFontForContentSizeCategory = true
+    titleLabel.numberOfLines = 0
+    titleLabel.accessibilityTraits.insert(.header)
     titleLabel.translatesAutoresizingMaskIntoConstraints = false
   }
 
@@ -105,7 +107,8 @@ final class ShareViewController: UIViewController {
     configureSectionLabel(linkSectionLabel)
 
     linkLabel.textColor = Style.textPrimary
-    linkLabel.font = .systemFont(ofSize: 14, weight: .regular)
+    linkLabel.font = .preferredFont(forTextStyle: .subheadline)
+    linkLabel.adjustsFontForContentSizeCategory = true
     linkLabel.numberOfLines = 3
     linkLabel.textAlignment = .left
     linkLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -120,21 +123,18 @@ final class ShareViewController: UIViewController {
   }
 
   private func configureActionList() {
-    actionSectionLabel.text = "action"
-    configureSectionLabel(actionSectionLabel)
-
     configureActionRow(
       shareButton,
-      title: "share link",
-      subtitle: "choose a session and add an optional note",
-      systemImage: "paperplane.fill",
+      title: "share to a session",
+      subtitle: "choose who sees this link",
+      systemImage: "paperplane",
       action: #selector(performShareLink)
     )
     configureActionRow(
       saveButton,
       title: "save media",
-      subtitle: "save supported media to photos or files",
-      systemImage: "arrow.down.circle.fill",
+      subtitle: "save to photos or files",
+      systemImage: "arrow.down.circle",
       action: #selector(performSaveMedia)
     )
 
@@ -160,7 +160,6 @@ final class ShareViewController: UIViewController {
         loadingStack,
         linkSectionLabel,
         linkFieldView,
-        actionSectionLabel,
         actionListView
       ])
     stack.axis = .vertical
@@ -172,19 +171,29 @@ final class ShareViewController: UIViewController {
     stack.setCustomSpacing(Style.sectionSpacing, after: linkFieldView)
 
     view.addSubview(closeButton)
-    view.addSubview(stack)
+    let scrollView = UIScrollView()
+    scrollView.translatesAutoresizingMaskIntoConstraints = false
+    scrollView.addSubview(stack)
+    view.addSubview(scrollView)
     NSLayoutConstraint.activate([
       closeButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
       closeButton.leadingAnchor.constraint(
         equalTo: view.leadingAnchor, constant: Style.screenHorizontalPadding),
-      closeButton.widthAnchor.constraint(equalToConstant: 30),
-      closeButton.heightAnchor.constraint(equalToConstant: 30),
+      closeButton.widthAnchor.constraint(equalToConstant: 44),
+      closeButton.heightAnchor.constraint(equalToConstant: 44),
 
-      stack.topAnchor.constraint(equalTo: closeButton.bottomAnchor, constant: 18),
+      scrollView.topAnchor.constraint(equalTo: closeButton.bottomAnchor, constant: 8),
+      scrollView.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
+      scrollView.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
+      scrollView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
+      stack.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor),
+      stack.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor, constant: -18),
       stack.leadingAnchor.constraint(
-        equalTo: view.leadingAnchor, constant: Style.screenHorizontalPadding),
+        equalTo: scrollView.contentLayoutGuide.leadingAnchor, constant: Style.screenHorizontalPadding),
       stack.trailingAnchor.constraint(
-        equalTo: view.trailingAnchor, constant: -Style.screenHorizontalPadding),
+        equalTo: scrollView.contentLayoutGuide.trailingAnchor, constant: -Style.screenHorizontalPadding),
+      stack.widthAnchor.constraint(
+        equalTo: scrollView.frameLayoutGuide.widthAnchor, constant: -2 * Style.screenHorizontalPadding),
 
       linkLabel.topAnchor.constraint(
         equalTo: linkFieldView.topAnchor, constant: Style.fieldVerticalPadding),
@@ -195,14 +204,15 @@ final class ShareViewController: UIViewController {
       linkLabel.bottomAnchor.constraint(
         equalTo: linkFieldView.bottomAnchor, constant: -Style.fieldVerticalPadding),
 
-      shareButton.heightAnchor.constraint(equalToConstant: Style.rowHeight),
-      saveButton.heightAnchor.constraint(equalToConstant: Style.rowHeight)
+      shareButton.heightAnchor.constraint(greaterThanOrEqualToConstant: Style.rowHeight),
+      saveButton.heightAnchor.constraint(greaterThanOrEqualToConstant: Style.rowHeight)
     ])
   }
 
   private func configureSectionLabel(_ label: UILabel) {
     label.textColor = Style.textSecondary
-    label.font = .systemFont(ofSize: 11, weight: .medium)
+    label.font = .preferredFont(forTextStyle: .footnote)
+    label.adjustsFontForContentSizeCategory = true
     label.translatesAutoresizingMaskIntoConstraints = false
   }
 

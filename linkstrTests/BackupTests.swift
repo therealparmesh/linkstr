@@ -154,6 +154,27 @@ final class BackupTests: AppSessionTestCase {
     XCTAssertEqual(Set(saved.posts[0].transportIDs), ["wrap", "other-wrap"])
   }
 
+  func testNoteRevisionSurvivesRestoreAndOlderBackup() async throws {
+    let original = try populatedBackup()
+    var edited = original
+    edited.posts[0].note = nil
+    edited.posts[0].noteEditedAt = Date(timeIntervalSince1970: 300)
+    edited.posts[0].noteEditEventID = "latest-edit"
+
+    let (_, container) = try makeSession()
+    let worker = BackupWorker()
+    _ = try await worker.restore(original, in: container)
+    _ = try await worker.restore(edited, in: container)
+    _ = try await worker.restore(original, in: container)
+    let snapshot = try BackupSnapshot(
+      context: ModelContext(container), nsec: edited.nsec, owner: edited.owner, settings: edited.settings
+    ).decrypted()
+    XCTAssertNil(snapshot.posts.first?.note)
+    XCTAssertEqual(snapshot.posts.first?.noteEditEventID, "latest-edit")
+    XCTAssertEqual(snapshot.posts.first?.readAt, original.posts.first?.readAt)
+    XCTAssertEqual(snapshot.reactions.count, original.reactions.count)
+  }
+
   private func populatedBackup() throws -> LinkstrBackup {
     let keypair = try XCTUnwrap(Keypair())
     let owner = keypair.publicKey.hex

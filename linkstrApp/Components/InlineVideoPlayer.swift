@@ -8,22 +8,42 @@ import SwiftUI
 
 struct InlineVideoPlayer: View {
   @AppStorage("loopLocalVideos") private var loopLocalVideos = true
+  @AppStorage("watchMuted") private var watchMuted = false
+  @Environment(\.scenePhase) private var scenePhase
 
   let media: PlayableMedia
   var onPlaybackReady: (() -> Void)?
   var onPlaybackFailed: (() -> Void)?
   var onAspectRatioChange: ((CGFloat) -> Void)?
+  var immersive = false
+  var aspectRatio: CGFloat = 16.0 / 9.0
+  var isCovered = false
+  var watchBottomInset: CGFloat = 0
+  var systemPlayerRequest: Binding<Bool>?
   @State private var player: AVPlayer?
   @State private var isShowingFullscreenPlayer = false
   @State private var statusObservation: NSKeyValueObservation?
   @State private var presentationSizeObservation: NSKeyValueObservation?
+  @State private var resumeAfterCover = false
+
+  private var fullscreen: Binding<Bool> { systemPlayerRequest ?? $isShowingFullscreenPlayer }
+
+  private var shouldSuspend: Bool { immersive && (isCovered || scenePhase != .active) }
 
   var body: some View {
     ZStack(alignment: .topTrailing) {
       Group {
         if let player {
-          VideoPlayer(player: player)
-            .scopedPlaybackAudioSession()
+          Group {
+            if immersive {
+              WatchVideoSurface(
+                player: player, aspectRatio: aspectRatio, bottomInset: watchBottomInset, isMuted: $watchMuted
+              )
+            } else {
+              VideoPlayer(player: player)
+            }
+          }
+          .scopedPlaybackAudioSession()
         } else {
           ProgressView()
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
@@ -31,7 +51,7 @@ struct InlineVideoPlayer: View {
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
 
-      if player != nil {
+      if player != nil, !immersive {
         Button {
           isShowingFullscreenPlayer = true
         } label: {
@@ -47,7 +67,7 @@ struct InlineVideoPlayer: View {
         .padding(8)
       }
     }
-    .fullScreenCover(isPresented: $isShowingFullscreenPlayer) {
+    .fullScreenCover(isPresented: fullscreen) {
       if let player {
         FullScreenAVPlayerView(player: player)
           .scopedPlaybackAudioSession()
@@ -58,7 +78,7 @@ struct InlineVideoPlayer: View {
     .onReceive(
       NotificationCenter.default.publisher(for: AVPlayerItem.didPlayToEndTimeNotification)
     ) { notification in
-      guard loopLocalVideos,
+      guard loopLocalVideos, !shouldSuspend,
         let endedItem = notification.object as? AVPlayerItem,
         let player,
         player.currentItem === endedItem
@@ -99,11 +119,26 @@ struct InlineVideoPlayer: View {
         Task { @MainActor in onAspectRatioChange?(aspectRatio) }
       }
       let newPlayer = AVPlayer(playerItem: item)
+      newPlayer.isMuted = immersive && watchMuted
       player = newPlayer
-      newPlayer.play()
+      resumeAfterCover = shouldSuspend
+      if !shouldSuspend { newPlayer.play() }
+    }
+    .onChange(of: shouldSuspend) { _, shouldSuspend in
+      guard let player else { return }
+      if shouldSuspend {
+        resumeAfterCover = player.timeControlStatus != .paused
+        player.pause()
+      } else if resumeAfterCover {
+        resumeAfterCover = false
+        player.play()
+      }
+    }
+    .onChange(of: watchMuted) { _, isMuted in
+      if immersive { player?.isMuted = isMuted }
     }
     .onDisappear {
-      guard !isShowingFullscreenPlayer else { return }
+      guard !fullscreen.wrappedValue else { return }
       player?.pause()
       player = nil
       statusObservation?.invalidate()
@@ -156,6 +191,7 @@ extension View {
 }
 
 struct AdaptiveVideoPlaybackView: View {
+  @Environment(\.scenePhase) var scenePhase
   enum LocalPlaybackMode {
     case localPreferred
     case embedPreferred
@@ -167,6 +203,9 @@ struct AdaptiveVideoPlaybackView: View {
   let persistLocalMedia: ((URL, PlayableMedia) -> Void)?
   let clearPersistedLocalMedia: (() -> Void)?
   let reloadID: Int
+  let immersive: Bool
+  let isCovered: Bool
+  let watchInsets: EdgeInsets
 
   @State var resolvedPresentation: ResolvedPresentation?
   @State var extractionState: ExtractionState?
@@ -184,6 +223,7 @@ struct AdaptiveVideoPlaybackView: View {
   @State var isEmbeddedContentReady = false
   @State var detectedMediaAspectRatio: CGFloat?
   @State var embeddedLoadFailed = false
+  @State var isPresentingSystemPlayer = false
 
   init(
     sourceURL: URL,
@@ -191,7 +231,10 @@ struct AdaptiveVideoPlaybackView: View {
     resolveCachedLocalMedia: ((URL) -> PlayableMedia?)? = nil,
     persistLocalMedia: ((URL, PlayableMedia) -> Void)? = nil,
     clearPersistedLocalMedia: (() -> Void)? = nil,
-    reloadID: Int = 0
+    reloadID: Int = 0,
+    immersive: Bool = false,
+    isCovered: Bool = false,
+    watchInsets: EdgeInsets = EdgeInsets()
   ) {
     self.sourceURL = sourceURL
     self.openSourceAction = openSourceAction
@@ -199,6 +242,9 @@ struct AdaptiveVideoPlaybackView: View {
     self.persistLocalMedia = persistLocalMedia
     self.clearPersistedLocalMedia = clearPersistedLocalMedia
     self.reloadID = reloadID
+    self.immersive = immersive
+    self.isCovered = isCovered
+    self.watchInsets = watchInsets
   }
 
   var body: some View {
@@ -316,55 +362,3 @@ extension AdaptiveVideoPlaybackView {
     clearPersistedLocalMedia?()
   }
 }
-
-enum LocalFileExportResult {
-  case exported
-  case cancelled
-  case failed(String)
-}
-
-#if canImport(UIKit)
-  struct LocalFileExportSheet: UIViewControllerRepresentable {
-    let url: URL
-    let onComplete: (LocalFileExportResult) -> Void
-
-    final class Coordinator: NSObject, UIDocumentPickerDelegate {
-      private let onComplete: (LocalFileExportResult) -> Void
-      private var didComplete = false
-
-      init(onComplete: @escaping (LocalFileExportResult) -> Void) {
-        self.onComplete = onComplete
-      }
-
-      func documentPicker(
-        _ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]
-      ) {
-        guard !didComplete else { return }
-        didComplete = true
-        onComplete(.exported)
-      }
-
-      func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
-        guard !didComplete else { return }
-        didComplete = true
-        onComplete(.cancelled)
-      }
-    }
-
-    func makeCoordinator() -> Coordinator {
-      Coordinator(onComplete: onComplete)
-    }
-
-    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
-      let picker = UIDocumentPickerViewController(forExporting: [url], asCopy: true)
-      picker.delegate = context.coordinator
-      picker.allowsMultipleSelection = false
-      return picker
-    }
-
-    func updateUIViewController(
-      _ uiViewController: UIDocumentPickerViewController,
-      context: Context
-    ) {}
-  }
-#endif

@@ -18,7 +18,7 @@ enum LinkstrTheme {
   static let textSecondary = Color(red: 0.66, green: 0.71, blue: 0.84)
   static let textTertiary = Color(red: 0.48, green: 0.53, blue: 0.67)
 
-  static let sectionStackSpacing: CGFloat = 18
+  static let sectionStackSpacing: CGFloat = 22
   static let listBlockSpacing: CGFloat = 14
   static let compactSpacing: CGFloat = 8
   static let metaSpacing: CGFloat = 4
@@ -26,7 +26,7 @@ enum LinkstrTheme {
   static let buttonRowSpacing: CGFloat = 10
   static let listRowVerticalPadding: CGFloat = 10
   static let inputControlMinHeight: CGFloat = 44
-  static let screenHorizontalPadding: CGFloat = 16
+  static let screenHorizontalPadding: CGFloat = 18
   static let screenTopPadding: CGFloat = 16
   static let screenBottomPadding: CGFloat = 24
   static let panelPadding: CGFloat = 18
@@ -36,7 +36,7 @@ enum LinkstrTheme {
   static let inputAssistButtonSpacing: CGFloat = 14
   static let inputAssistIconSpacing: CGFloat = 6
   static let inputAssistBottomSpacing: CGFloat = 6
-  static let fieldCornerRadius: CGFloat = 12
+  static let fieldCornerRadius: CGFloat = 14
   static let minimumInteractiveDimension: CGFloat = 44
   static let searchClearButtonTextInset = minimumInteractiveDimension - fieldHorizontalPadding
   static let readableContentMaxWidth: CGFloat = 680
@@ -55,22 +55,6 @@ struct LinkstrBackgroundView: View {
   }
 }
 
-private struct LinkstrSurfaceCard: ViewModifier {
-  func body(content: Content) -> some View {
-    content
-      .overlay(alignment: .top) {
-        Rectangle()
-          .fill(LinkstrTheme.separator)
-          .frame(height: 1)
-      }
-      .overlay(alignment: .bottom) {
-        Rectangle()
-          .fill(LinkstrTheme.separator)
-          .frame(height: 1)
-      }
-  }
-}
-
 private struct LinkstrFieldChrome: ViewModifier {
   func body(content: Content) -> some View {
     content
@@ -79,7 +63,7 @@ private struct LinkstrFieldChrome: ViewModifier {
           cornerRadius: LinkstrTheme.fieldCornerRadius,
           style: .continuous
         )
-        .fill(LinkstrTheme.panelMuted)
+        .fill(LinkstrTheme.panel)
       )
       .overlay {
         RoundedRectangle(
@@ -185,10 +169,6 @@ private struct LinkstrActionButtonChrome: ViewModifier {
 }
 
 extension View {
-  func linkstrSurfaceCard() -> some View {
-    modifier(LinkstrSurfaceCard())
-  }
-
   func linkstrFieldChrome() -> some View {
     modifier(LinkstrFieldChrome())
   }

@@ -3,6 +3,7 @@ import Foundation
 enum LinkstrPayloadKind: String, Codable {
   case root
   case rootDelete = "root_delete"
+  case noteEdit = "note_edit"
   case sessionCreate = "session_create"
   case sessionDelete = "session_delete"
   case sessionMembers = "session_members"
@@ -85,6 +86,9 @@ struct LinkstrPayload: Codable, Hashable {
       try validateRoot()
     case .rootDelete, .sessionDelete:
       try validateRequiresRootID()
+    case .noteEdit:
+      try validateRequiresRootID()
+      guard url == nil, timestamp > 0 else { throw LinkstrPayloadError.invalidNoteEdit }
     case .sessionCreate:
       try validateSessionCreate()
     case .sessionMembers:
@@ -149,6 +153,7 @@ enum LinkstrPayloadError: Error, LocalizedError {
   case invalidSessionName
   case invalidMembers
   case invalidRootID
+  case invalidNoteEdit
   case invalidReactionEmoji
   case invalidReactionState
 
@@ -164,6 +169,8 @@ enum LinkstrPayloadError: Error, LocalizedError {
       return "session requires valid members."
     case .invalidRootID:
       return "payload requires a root identifier."
+    case .invalidNoteEdit:
+      return "a note edit can only change the note."
     case .invalidReactionEmoji:
       return "reaction requires an emoji."
     case .invalidReactionState:

@@ -44,13 +44,7 @@ struct ContactsView: View {
 
     ZStack {
       LinkstrBackgroundView()
-      if isShowingAddedYou {
-        AddedYouView(
-          ownerPubkey: ownerPubkey, contacts: contacts, query: $addedYouQuery, discovery: session.contactDiscovery
-        )
-      } else {
-        content
-      }
+      content
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     .contactRemoval(pending: $pendingContactRemoval)
@@ -62,6 +56,14 @@ struct ContactsView: View {
     }
     .task(id: profileLookupPubkeys.stableTaskID) {
       session.requestRemoteProfilesIfNeeded(pubkeyHexes: profileLookupPubkeys)
+    }
+    .navigationDestination(isPresented: $isShowingAddedYou) {
+      AddedYouView(
+        ownerPubkey: ownerPubkey, contacts: contacts, query: $addedYouQuery,
+        discovery: session.contactDiscovery, addContact: addContact
+      )
+      .background(LinkstrBackgroundView())
+      .toolbarVisibility(.hidden, for: .tabBar)
     }
     .navigationDestination(item: $selectedContact) { contact in
       EditContactView(contact: contact)
@@ -75,16 +77,20 @@ struct ContactsView: View {
 
     if orderedContacts.isEmpty {
       VStack(spacing: 0) {
-        LinkstrScreenTitle(title: "contacts")
-          .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-          .padding(.top, LinkstrTheme.screenTopPadding)
+        VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
+          heading
+          addedYouShortcut
+        }
+        .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+        .padding(.top, LinkstrTheme.screenTopPadding)
+
         if nostrService.contactListLoadState == .unavailable {
           retryState
         } else if nostrService.contactListLoadState == .ready {
           LinkstrCenteredEmptyStateView(
             title: "no contacts",
             systemImage: "person.2.slash",
-            description: "add a contact. invite them when you start a session.",
+            description: "add people you want to share links with.",
             actionTitle: "add contact",
             actionSystemImage: "person.badge.plus",
             action: addContact
@@ -97,9 +103,10 @@ struct ContactsView: View {
     } else {
       ScrollView {
         VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
-          LinkstrScreenTitle(title: "contacts")
+          heading
 
           LinkstrSearchField(prompt: "search contacts", text: $query)
+          addedYouShortcut
 
           if visibleContacts.isEmpty, nostrService.contactListLoadState == .unavailable {
             retryState
@@ -146,6 +153,37 @@ struct ContactsView: View {
       }
       .linkstrKeyboardDismissal()
     }
+  }
+
+  private var heading: some View {
+    LinkstrTabHeader(title: "contacts") {
+      LinkstrHeaderButton(title: "add contact", icon: "person.badge.plus", action: addContact)
+    }
+  }
+
+  private var addedYouShortcut: some View {
+    Button {
+      isShowingAddedYou = true
+    } label: {
+      HStack(spacing: 10) {
+        Image(systemName: "person.crop.circle.badge.plus")
+          .foregroundStyle(LinkstrTheme.accent)
+        Text("added you")
+          .frame(maxWidth: .infinity, alignment: .leading)
+        Image(systemName: "chevron.right")
+          .font(LinkstrTheme.font(.caption, weight: .semibold))
+          .foregroundStyle(LinkstrTheme.textSecondary)
+      }
+      .font(LinkstrTheme.font(.subheadline, weight: .semibold))
+      .foregroundStyle(LinkstrTheme.textPrimary)
+      .padding(.horizontal, 12)
+      .padding(.vertical, 8)
+      .frame(minHeight: 44)
+      .background(LinkstrTheme.panel, in: .rect(cornerRadius: 12))
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .accessibilityHint("view people who added you")
   }
 
   private var retryState: some View {

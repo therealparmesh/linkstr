@@ -5,14 +5,12 @@ enum AppTab: String, Hashable {
   case sessions
   case contacts
   case you
-  case settings
 
   var title: String {
     switch self {
     case .sessions: return "sessions"
     case .contacts: return "contacts"
     case .you: return "you"
-    case .settings: return "settings"
     }
   }
 
@@ -20,8 +18,7 @@ enum AppTab: String, Hashable {
     switch self {
     case .sessions: return "bubble.left.and.bubble.right.fill"
     case .contacts: return "person.2.fill"
-    case .you: return "qrcode.viewfinder"
-    case .settings: return "gearshape.fill"
+    case .you: return "person.crop.circle"
     }
   }
 }
@@ -30,19 +27,22 @@ struct MainTabView: View {
   @EnvironmentObject private var session: AppSession
   private let ownerPubkey: String
   @Binding private var selectedTab: AppTab
+  let relaySettingsRequest: UUID?
 
   @State private var isPresentingNewSession = false
   @State private var isPresentingAddContact = false
   @State private var isShowingArchivedSessions = false
   @State private var isShowingAddedYou = false
-  @State private var navigationPath: [SessionRoute] = []
+  @State private var navigationPath: [AppRoute] = []
+  @State private var watchPositions: [String: String] = [:]
   @State private var navigationID = UUID()
 
   @Query private var sessions: [SessionEntity]
 
-  init(ownerPubkey: String, selectedTab: Binding<AppTab>) {
+  init(ownerPubkey: String, selectedTab: Binding<AppTab>, relaySettingsRequest: UUID?) {
     self.ownerPubkey = ownerPubkey
     _selectedTab = selectedTab
+    self.relaySettingsRequest = relaySettingsRequest
     _sessions = Query(
       filter: #Predicate<SessionEntity> { session in
         session.ownerPubkey == ownerPubkey
@@ -62,6 +62,11 @@ struct MainTabView: View {
     .id(navigationID)
     .onChange(of: session.pendingSessionNavigationRequest?.id, initial: true) { _, _ in
       navigateToPendingSessionIfNeeded()
+    }
+    .onChange(of: relaySettingsRequest) { _, request in
+      guard request != nil else { return }
+      selectedTab = .you
+      navigationPath = [.settings(.relays)]
     }
   }
 
@@ -85,28 +90,24 @@ struct MainTabView: View {
           Label(AppTab.you.title, systemImage: AppTab.you.systemImage)
         }
 
-      tabContent(.settings)
-        .tag(AppTab.settings)
-        .tabItem {
-          Label(AppTab.settings.title, systemImage: AppTab.settings.systemImage)
-        }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
-    .navigationDestination(for: SessionRoute.self) { route in
+    .navigationDestination(for: AppRoute.self) { route in
       switch route {
       case .session(let sessionID, let postID):
-        SessionPostsView(ownerPubkey: ownerPubkey, sessionID: sessionID, scrollToPostID: postID)
-      case .post(let sessionID, let postID):
-        PostDetailView(ownerPubkey: ownerPubkey, sessionID: sessionID, postID: postID)
-      }
-    }
-    .toolbar {
-      ToolbarItem(placement: .topBarLeading) {
-        leadingToolbarAccessory
-      }
-      ToolbarItemGroup(placement: .topBarTrailing) {
-        trailingToolbarAccessories
+        SessionPostsView(ownerPubkey: ownerPubkey, sessionID: sessionID, scrollToPostID: postID) { postID in
+          watchPositions[sessionID] = postID
+        }
+      case .watch(let sessionID, let postID):
+        SessionPostsView(
+          ownerPubkey: ownerPubkey, sessionID: sessionID, startingWatchPostID: postID, opensInWatch: true
+        ) { postID in
+          watchPositions[sessionID] = postID
+        }
+      case .settings(let section):
+        SettingsView(initialSection: section)
+          .toolbarVisibility(.hidden, for: .tabBar)
       }
     }
     .linkstrBarChrome()
@@ -116,9 +117,6 @@ struct MainTabView: View {
       }
       if oldValue == .contacts, newValue != .contacts {
         isShowingAddedYou = false
-      }
-      if newValue != .sessions {
-        navigationPath = []
       }
     }
     .onChange(of: archivedSessionCount) { _, count in
@@ -131,67 +129,6 @@ struct MainTabView: View {
     }
     .sheet(isPresented: $isPresentingAddContact) {
       AddContactSheet()
-    }
-  }
-
-  @ViewBuilder
-  private var leadingToolbarAccessory: some View {
-    switch selectedTab {
-    case .sessions:
-      if archivedSessionCount > 0 {
-        Button {
-          isShowingArchivedSessions.toggle()
-        } label: {
-          Image(systemName: isShowingArchivedSessions ? "archivebox.fill" : "archivebox")
-            .linkstrToolbarIconLabel()
-        }
-        .accessibilityLabel(
-          isShowingArchivedSessions ? "show active sessions" : "show archived sessions"
-        )
-        .tint(LinkstrTheme.accent)
-      } else {
-        EmptyView()
-      }
-    case .contacts:
-      Button { isShowingAddedYou.toggle() } label: {
-        Image(
-          systemName: isShowingAddedYou
-            ? "person.crop.circle.fill.badge.checkmark" : "person.crop.circle.badge.checkmark"
-        )
-        .linkstrToolbarIconLabel()
-      }
-      .accessibilityLabel(isShowingAddedYou ? "show contacts" : "show people who added you")
-      .tint(LinkstrTheme.accent)
-    case .you, .settings:
-      EmptyView()
-    }
-  }
-
-  @ViewBuilder
-  private var trailingToolbarAccessories: some View {
-    switch selectedTab {
-    case .sessions:
-      Button {
-        isPresentingNewSession = true
-      } label: {
-        Image(systemName: "square.and.pencil")
-          .linkstrToolbarIconLabel()
-      }
-      .accessibilityLabel("new session")
-      .tint(LinkstrTheme.accent)
-
-    case .contacts:
-      Button {
-        isPresentingAddContact = true
-      } label: {
-        Image(systemName: "person.badge.plus")
-          .linkstrToolbarIconLabel()
-      }
-      .accessibilityLabel("add contact")
-      .tint(LinkstrTheme.accent)
-
-    case .you, .settings:
-      EmptyView()
     }
   }
 
@@ -213,15 +150,13 @@ struct MainTabView: View {
         addContact: { isPresentingAddContact = true }
       )
     case .you:
-      YouView(openSettings: { selectedTab = .settings })
-    case .settings:
-      SettingsView()
+      YouView { section in navigationPath.append(.settings(section)) }
     }
   }
 
   private func openSession(_ sessionID: String) {
     selectedTab = .sessions
-    navigationPath = [.session(sessionID)]
+    navigationPath = [.watch(sessionID, startingPostID: watchPositions[sessionID])]
   }
 
   private func navigateToPendingSessionIfNeeded() {

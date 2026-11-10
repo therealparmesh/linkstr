@@ -24,16 +24,7 @@ struct ShareMediaSaveView: View {
           VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
             LinkstrScreenTitle(title: "save media")
 
-            LinkstrInsetSection(title: "link") {
-              Text(draft.url)
-                .font(LinkstrTheme.font(.footnote))
-                .foregroundStyle(LinkstrTheme.textPrimary)
-                .lineLimit(4)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            LinkstrInsetSection(title: "status") {
+            LinkstrInsetSection {
               HStack(alignment: .top, spacing: LinkstrTheme.rowSpacing) {
                 statusIndicator
 
@@ -50,6 +41,21 @@ struct ShareMediaSaveView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
               }
               .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if cachedFileURL != nil, !status.showsProgress {
+              Button { showingSaveDialog = true } label: {
+                LinkstrActionButtonLabel(title: "choose where to save", systemImage: "square.and.arrow.down")
+              }
+              .linkstrPrimaryButton()
+            }
+
+            LinkstrInsetSection(title: "link") {
+              Text(draft.url)
+                .font(LinkstrTheme.font(.footnote))
+                .foregroundStyle(LinkstrTheme.textPrimary)
+                .lineLimit(4)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
           }
           .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
@@ -146,7 +152,7 @@ struct ShareMediaSaveView: View {
     switch extraction {
     case .ready(let candidates):
       guard !candidates.isEmpty else {
-        status = .unavailable("could not find saveable media for this link")
+        status = .unavailable("this link doesn’t have a video linkstr can save")
         return
       }
 
@@ -158,10 +164,10 @@ struct ShareMediaSaveView: View {
         showingSaveDialog = true
       } else {
         guard !Task.isCancelled else { return }
-        status = .unavailable("could not prepare media for saving")
+        status = .unavailable("couldn’t download this video")
       }
     case .noVideo:
-      status = .unavailable("this post does not include a playable video")
+      status = .unavailable("this post doesn’t include a playable video")
     case .cannotExtract(let reason):
       status = .unavailable(reason)
     }
@@ -192,7 +198,7 @@ struct ShareMediaSaveView: View {
     let authStatus = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
     guard authStatus == .authorized || authStatus == .limited else {
       status = .unavailable(
-        "photos access needed — allow add-only photos access in settings.")
+        "allow photos access in ios settings to save this video.")
       return
     }
 

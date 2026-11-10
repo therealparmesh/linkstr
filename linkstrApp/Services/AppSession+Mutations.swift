@@ -286,7 +286,7 @@ extension AppSession {
         updatedAt: Date(timeIntervalSince1970: TimeInterval(draft.payload.timestamp)),
         eventID: eventID
       ))
-    discardPendingIncomingReactions(
+    discardPendingPostUpdates(
       sessionID: draft.payload.conversationID,
       rootID: draft.rootID
     )
