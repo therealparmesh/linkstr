@@ -104,10 +104,7 @@ struct ShareComposerView: View {
               isSending: isSending, focusedField: $focusedField
             )
           }
-          .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-          .padding(.top, LinkstrTheme.screenTopPadding)
-          .padding(.bottom, LinkstrTheme.screenBottomPadding)
-          .linkstrReadableContent()
+          .linkstrPageContentLayout()
         }
         .linkstrKeyboardDismissal()
         .modifier(LinkstrFocusedFieldScrolling(focusedField: focusedField))

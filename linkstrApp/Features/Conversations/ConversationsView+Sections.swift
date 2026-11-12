@@ -149,15 +149,10 @@ struct SessionPostsView: View {
         if let postID = (resumePost ?? rootPosts.first)?.rootID { showPost(postID) }
       }
     }
-    if hasUnreadLinks {
-      LinkstrHeaderButton(title: "mark all as read", icon: "checkmark.circle") {
-        session.markSessionRead(sessionID: sessionID, ownerPubkey: ownerPubkey)
-      }
-    }
     LinkstrHeaderButton(title: canManageSession ? "manage session" : "view members", icon: "person.2") {
       isPresentingMembers = true
     }
-    if canShareLinks {
+    if canShareLinks, !rootPosts.isEmpty {
       LinkstrHeaderButton(title: "share a link", icon: "plus") { isPresentingNewPost = true }
     }
   }

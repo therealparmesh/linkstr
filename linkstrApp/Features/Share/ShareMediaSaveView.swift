@@ -83,15 +83,12 @@ struct ShareMediaSaveView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
           }
-          .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-          .padding(.top, LinkstrTheme.screenTopPadding)
-          .padding(.bottom, LinkstrTheme.screenBottomPadding)
-          .linkstrReadableContent()
+          .linkstrPageContentLayout()
         }
       }
       .linkstrBarChrome()
       .toolbar {
-        ToolbarItem(placement: .topBarLeading) {
+        ToolbarItem(placement: .cancellationAction) {
           LinkstrHeaderButton(title: "close video save", icon: "xmark") {
             deepLinkHandler.clearMediaSaveDraft(matching: draft)
           }

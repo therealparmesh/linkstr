@@ -86,10 +86,7 @@ struct AddContactSheet: View {
                 .linkstrInputField()
             }
           }
-          .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-          .padding(.top, LinkstrTheme.screenTopPadding)
-          .padding(.bottom, LinkstrTheme.screenBottomPadding)
-          .linkstrReadableContent()
+          .linkstrPageContentLayout()
         }
         .linkstrKeyboardDismissal()
       }
@@ -99,13 +96,13 @@ struct AddContactSheet: View {
       }
       .linkstrBarChrome()
       .toolbar {
-        ToolbarItem(placement: .topBarLeading) {
+        ToolbarItem(placement: .cancellationAction) {
           LinkstrHeaderButton(title: "cancel", icon: "xmark") { dismiss() }
             .disabled(isSubmitting)
         }
         .linkstrFlatToolbarItem()
 
-        ToolbarItem(placement: .topBarTrailing) {
+        ToolbarItem(placement: .confirmationAction) {
           if isSubmitting {
             ProgressView()
               .tint(LinkstrTheme.accent)

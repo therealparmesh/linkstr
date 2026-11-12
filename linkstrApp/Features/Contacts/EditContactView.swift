@@ -65,10 +65,7 @@ struct EditContactView: View {
           }
           .linkstrDestructiveButton()
         }
-        .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-        .padding(.top, LinkstrTheme.pinnedPageContentTopPadding)
-        .padding(.bottom, LinkstrTheme.screenBottomPadding)
-        .linkstrReadableContent()
+        .linkstrPageContentLayout(topPadding: LinkstrTheme.pinnedPageContentTopPadding)
       }
       .linkstrKeyboardDismissal()
     }

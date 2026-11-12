@@ -106,10 +106,7 @@ private struct ShareExtensionScreen: View {
             statusCard(title: "link unavailable", message: message)
           }
         }
-        .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-        .padding(.top, LinkstrTheme.screenTopPadding)
-        .padding(.bottom, LinkstrTheme.screenBottomPadding)
-        .linkstrReadableContent()
+        .linkstrPageContentLayout()
       }
       .background(LinkstrBackgroundView())
       .linkstrNavigationBarChrome()

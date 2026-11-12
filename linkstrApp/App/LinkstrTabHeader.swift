@@ -133,8 +133,8 @@ struct LinkstrSheetHeader: View {
 
   var body: some View {
     HStack(spacing: LinkstrTheme.compactSpacing) {
-      LinkstrSheetTitle(title: title)
       LinkstrHeaderButton(title: closeLabel, icon: "xmark", action: close)
+      LinkstrSheetTitle(title: title)
     }
     .linkstrPageHeaderLayout()
     .background(LinkstrTheme.chrome)

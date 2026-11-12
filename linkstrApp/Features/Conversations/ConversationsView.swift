@@ -205,7 +205,9 @@ private struct ConversationsContentView: View {
         }
       }
 
-      LinkstrHeaderButton(title: "new session", icon: "square.and.pencil", action: createSession)
+      if hasSessions {
+        LinkstrHeaderButton(title: "new session", icon: "square.and.pencil", action: createSession)
+      }
     }
   }
 
@@ -273,10 +275,7 @@ private struct ConversationsContentView: View {
             }
           }
         }
-        .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-        .padding(.top, LinkstrTheme.pageHeaderTopPadding)
-        .padding(.bottom, LinkstrTheme.screenBottomPadding)
-        .linkstrReadableContent()
+        .linkstrPageContentLayout(topPadding: LinkstrTheme.pageHeaderTopPadding)
       }
       .linkstrKeyboardDismissal()
     }

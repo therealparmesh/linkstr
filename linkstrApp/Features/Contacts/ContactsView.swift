@@ -69,7 +69,7 @@ struct ContactsView: View {
     if orderedContacts.isEmpty {
       VStack(spacing: 0) {
         VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
-          heading
+          heading(showsAddContact: nostrService.contactListLoadState != .ready)
           addedYouShortcut
         }
         .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
@@ -95,7 +95,7 @@ struct ContactsView: View {
     } else {
       ScrollView {
         VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
-          heading
+          heading()
 
           LinkstrSearchField(prompt: "search contacts", text: $query)
           addedYouShortcut
@@ -140,18 +140,17 @@ struct ContactsView: View {
             }
           }
         }
-        .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-        .padding(.top, LinkstrTheme.pageHeaderTopPadding)
-        .padding(.bottom, LinkstrTheme.screenBottomPadding)
-        .linkstrReadableContent()
+        .linkstrPageContentLayout(topPadding: LinkstrTheme.pageHeaderTopPadding)
       }
       .linkstrKeyboardDismissal()
     }
   }
 
-  private var heading: some View {
+  private func heading(showsAddContact: Bool = true) -> some View {
     LinkstrPageHeader(title: "contacts") {
-      LinkstrHeaderButton(title: "add contact", icon: "person.badge.plus", action: addContact)
+      if showsAddContact {
+        LinkstrHeaderButton(title: "add contact", icon: "person.badge.plus", action: addContact)
+      }
     }
   }
 

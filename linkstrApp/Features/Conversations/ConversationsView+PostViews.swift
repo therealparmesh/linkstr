@@ -9,9 +9,7 @@ extension SessionPostsView {
       ScrollView {
         VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
           if contentState.postCount > 0 {
-            Text(contentState.postCountLabel)
-              .font(LinkstrTheme.font(.caption, weight: .medium))
-              .foregroundStyle(LinkstrTheme.textTertiary)
+            timelineSummary(contentState.postCountLabel)
           }
 
           if !contentState.canCreatePosts, contentState.postCount > 0 {
@@ -40,10 +38,7 @@ extension SessionPostsView {
             }
           }
         }
-        .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-        .padding(.top, LinkstrTheme.pinnedPageContentTopPadding)
-        .padding(.bottom, LinkstrTheme.screenBottomPadding)
-        .linkstrReadableContent()
+        .linkstrPageContentLayout(topPadding: LinkstrTheme.pinnedPageContentTopPadding)
       }
       .onChange(of: pendingScrollPostID.map { target in rootPosts.contains { $0.rootID == target } } == true,
                 initial: true) { _, isAvailable in
@@ -53,6 +48,30 @@ extension SessionPostsView {
       }
       .onScrollPhaseChange { _, phase in
         if phase == .tracking || phase == .interacting { pendingScrollPostID = nil }
+      }
+    }
+  }
+
+  private func timelineSummary(_ postCountLabel: String) -> some View {
+    let layout = dynamicTypeSize.isAccessibilitySize
+      ? AnyLayout(VStackLayout(alignment: .leading, spacing: 0))
+      : AnyLayout(HStackLayout(spacing: LinkstrTheme.rowSpacing))
+    return layout {
+      Text(postCountLabel)
+        .font(LinkstrTheme.font(.caption, weight: .medium))
+        .foregroundStyle(LinkstrTheme.textSecondary)
+        .frame(maxWidth: .infinity, alignment: .leading)
+      if hasUnreadLinks {
+        Button {
+          session.markSessionRead(sessionID: sessionID, ownerPubkey: ownerPubkey)
+        } label: {
+          Label("mark all as read", systemImage: "checkmark.circle")
+            .font(LinkstrTheme.font(.footnote, weight: .semibold))
+            .foregroundStyle(LinkstrTheme.accent)
+            .frame(minHeight: LinkstrTheme.minimumInteractiveDimension)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
       }
     }
   }

@@ -44,10 +44,7 @@ struct YouView: View {
             LinkstrPageShortcut(title: "settings", icon: "gearshape", action: openSettings)
           }
         }
-        .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-        .padding(.top, LinkstrTheme.pageHeaderTopPadding)
-        .padding(.bottom, LinkstrTheme.screenBottomPadding)
-        .linkstrReadableContent()
+        .linkstrPageContentLayout(topPadding: LinkstrTheme.pageHeaderTopPadding)
       }
       .task(id: npub) {
         qrImage = QRCodeGenerator.image(for: npub)
@@ -59,10 +56,7 @@ struct YouView: View {
               LinkstrSheetTitle(title: "edit profile")
               profileNameSection
             }
-            .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-            .padding(.top, LinkstrTheme.screenTopPadding)
-            .padding(.bottom, LinkstrTheme.screenBottomPadding)
-            .linkstrReadableContent()
+            .linkstrPageContentLayout()
           }
           .background(LinkstrBackgroundView())
           .navigationBarTitleDisplayMode(.inline)

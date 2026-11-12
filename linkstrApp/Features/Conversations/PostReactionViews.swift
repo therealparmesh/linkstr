@@ -238,11 +238,11 @@ struct LinkstrEmojiPickerSheet: View {
               LinkstrReactionRow(summaries: summaries, onToggleEmoji: pickEmoji)
             }
             HStack(spacing: LinkstrTheme.compactSpacing) {
-              LinkstrSearchField(prompt: "search emoji", text: $query) { isSearchFocused = false }
-                .focused($isSearchFocused)
               if compactSearch {
                 LinkstrHeaderButton(title: "close emoji picker", icon: "xmark") { dismiss() }
               }
+              LinkstrSearchField(prompt: "search emoji", text: $query) { isSearchFocused = false }
+                .focused($isSearchFocused)
             }
           }
           .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)

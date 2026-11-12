@@ -81,6 +81,13 @@ struct LinkstrURLText: View {
 }
 
 extension View {
+  func linkstrPageContentLayout(topPadding: CGFloat = LinkstrTheme.screenTopPadding) -> some View {
+    padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+      .padding(.top, topPadding)
+      .padding(.bottom, LinkstrTheme.screenBottomPadding)
+      .linkstrReadableContent()
+  }
+
   func linkstrReadableContent() -> some View {
     frame(maxWidth: LinkstrTheme.readableContentMaxWidth, alignment: .leading)
       .frame(maxWidth: .infinity, alignment: .center)

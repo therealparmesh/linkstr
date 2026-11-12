@@ -138,10 +138,7 @@ struct AddedYouView: View {
           .disabled(discovery.isLoading)
         }
       }
-      .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-      .padding(.top, LinkstrTheme.pinnedPageContentTopPadding)
-      .padding(.bottom, LinkstrTheme.screenBottomPadding)
-      .linkstrReadableContent()
+      .linkstrPageContentLayout(topPadding: LinkstrTheme.pinnedPageContentTopPadding)
     }
     .contactAddition(pending: $pendingContactAddition)
     .linkstrPinnedPageHeader {

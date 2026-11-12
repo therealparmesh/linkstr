@@ -155,16 +155,13 @@ struct SessionManagementSheet: View {
               readOnlySections
             }
           }
-          .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-          .padding(.top, LinkstrTheme.screenTopPadding)
-          .padding(.bottom, LinkstrTheme.screenBottomPadding)
-          .linkstrReadableContent()
+          .linkstrPageContentLayout()
         }
         .linkstrKeyboardDismissal()
       }
       .linkstrBarChrome()
       .toolbar {
-        ToolbarItem(placement: .topBarLeading) {
+        ToolbarItem(placement: .cancellationAction) {
           LinkstrHeaderButton(
             title: canManageSession ? "cancel" : "close", icon: "xmark"
           ) {

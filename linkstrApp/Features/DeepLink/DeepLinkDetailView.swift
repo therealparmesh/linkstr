@@ -42,10 +42,7 @@ struct DeepLinkDetailView: View {
           )
         }
       }
-      .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-      .padding(.top, LinkstrTheme.screenTopPadding)
-      .padding(.bottom, LinkstrTheme.screenBottomPadding)
-      .linkstrReadableContent()
+      .linkstrPageContentLayout()
     }
     .background(LinkstrBackgroundView())
     .navigationTitle("shared link")

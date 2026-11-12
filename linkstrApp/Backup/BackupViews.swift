@@ -160,10 +160,7 @@ private struct RestoreBackupSheet: View {
             .linkstrPrimaryButton()
             .disabled(session.isRestoringBackup)
           }
-          .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-          .padding(.top, LinkstrTheme.screenTopPadding)
-          .padding(.bottom, LinkstrTheme.screenBottomPadding)
-          .linkstrReadableContent()
+          .linkstrPageContentLayout()
         }
       }
       .linkstrBarChrome()

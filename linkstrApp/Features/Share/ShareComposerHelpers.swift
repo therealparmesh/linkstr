@@ -93,16 +93,13 @@ struct ShareSessionPickerSheet: View {
               sessionPicker(filteredSessions)
             }
           }
-          .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-          .padding(.top, LinkstrTheme.screenTopPadding)
-          .padding(.bottom, LinkstrTheme.screenBottomPadding)
-          .linkstrReadableContent()
+          .linkstrPageContentLayout()
         }
         .linkstrKeyboardDismissal()
       }
       .linkstrBarChrome()
       .toolbar {
-        ToolbarItem(placement: .topBarLeading) {
+        ToolbarItem(placement: .cancellationAction) {
           LinkstrHeaderButton(title: "close session picker", icon: "xmark") { dismiss() }
         }
         .linkstrFlatToolbarItem()

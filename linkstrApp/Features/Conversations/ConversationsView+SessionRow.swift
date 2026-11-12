@@ -128,17 +128,14 @@ struct NewSessionSheet: View {
               }
             }
           }
-          .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-          .padding(.top, LinkstrTheme.screenTopPadding)
-          .padding(.bottom, LinkstrTheme.screenBottomPadding)
-          .linkstrReadableContent()
+          .linkstrPageContentLayout()
         }
         .linkstrKeyboardDismissal()
       }
 
       .linkstrBarChrome()
       .toolbar {
-        ToolbarItem(placement: .topBarLeading) {
+        ToolbarItem(placement: .cancellationAction) {
           LinkstrHeaderButton(title: "cancel", icon: "xmark") {
             dismiss()
           }
@@ -146,7 +143,7 @@ struct NewSessionSheet: View {
         }
         .linkstrFlatToolbarItem()
 
-        ToolbarItem(placement: .topBarTrailing) {
+        ToolbarItem(placement: .confirmationAction) {
           LinkstrHeaderButton(title: "create session", icon: "checkmark", action: createSession)
             .disabled(isCreating || !canCreateSession)
         }

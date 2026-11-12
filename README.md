@@ -220,7 +220,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 
 ### Read/unread semantics
 
-- When a session has unread incoming posts, **mark all as read** appears immediately left of members. It marks only the currently saved incoming posts in that session, in one local save. Later arrivals remain unread, even with older timestamps; relay replay preserves existing reads. It clears matching delivered notifications through the action time and sends no read receipts.
+- When a session has unread incoming posts, **mark all as read** appears beside the post count. It marks only the currently saved incoming posts in that session, in one local save. Later arrivals remain unread, even with older timestamps; relay replay preserves existing reads. It clears matching delivered notifications through the action time and sends no read receipts.
 
 - Session rows show unread indicators when any inbound root post in that session is unread.
 - Post cards inside a session show unread indicators when that root post is unread inbound.

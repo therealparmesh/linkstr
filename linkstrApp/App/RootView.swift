@@ -174,7 +174,7 @@ struct RootView: View {
           DeepLinkDetailView(sourceURL: sourceURL)
             .linkstrBarChrome()
             .toolbar {
-              ToolbarItem(placement: .topBarLeading) {
+              ToolbarItem(placement: .cancellationAction) {
                 LinkstrHeaderButton(title: "close shared link", icon: "xmark") {
                   deepLinkHandler.clearSharedLinkDetail()
                 }

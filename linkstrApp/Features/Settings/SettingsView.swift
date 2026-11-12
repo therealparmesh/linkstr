@@ -80,10 +80,7 @@ struct SettingsView: View {
           identitySection
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-        .padding(.top, LinkstrTheme.pinnedPageContentTopPadding)
-        .padding(.bottom, LinkstrTheme.screenBottomPadding)
-        .linkstrReadableContent()
+        .linkstrPageContentLayout(topPadding: LinkstrTheme.pinnedPageContentTopPadding)
       }
       .onAppear {
         guard let initialSection else { return }
