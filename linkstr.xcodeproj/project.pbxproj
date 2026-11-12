@@ -945,7 +945,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				9EFDE66BE13AB84DAA3BF97F /* XCRemoteSwiftPackageReference "EmojiKit" */,
-				6A3835F79985E1062726CDBC /* XCRemoteSwiftPackageReference "nostr-sdk-ios" */,
+				46BEDC58043FCC13BF1061DB /* XCRemoteSwiftPackageReference "nostr-sdk-ios" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 99985767ED62A6A79229D318 /* Products */;
@@ -1499,12 +1499,12 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		6A3835F79985E1062726CDBC /* XCRemoteSwiftPackageReference "nostr-sdk-ios" */ = {
+		46BEDC58043FCC13BF1061DB /* XCRemoteSwiftPackageReference "nostr-sdk-ios" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/nostr-sdk/nostr-sdk-ios.git";
+			repositoryURL = "https://github.com/therealparmesh/nostr-sdk-ios.git";
 			requirement = {
-				branch = main;
-				kind = branch;
+				kind = revision;
+				revision = 4bbfcd895738997174fc35325743c4076151659f;
 			};
 		};
 		9EFDE66BE13AB84DAA3BF97F /* XCRemoteSwiftPackageReference "EmojiKit" */ = {
@@ -1520,7 +1520,7 @@
 /* Begin XCSwiftPackageProductDependency section */
 		A73B5D00E0403A54A02BD1C7 /* NostrSDK */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 6A3835F79985E1062726CDBC /* XCRemoteSwiftPackageReference "nostr-sdk-ios" */;
+			package = 46BEDC58043FCC13BF1061DB /* XCRemoteSwiftPackageReference "nostr-sdk-ios" */;
 			productName = NostrSDK;
 		};
 		E622661FD0CFD2491CCEF99E /* EmojiKit */ = {

@@ -1,5 +1,5 @@
 {
-  "originHash" : "ca9662fd6e95b9db7232a4a91d796671d6d71d5c688c5522d14b1b49b53711ec",
+  "originHash" : "b931490558bdd6a19640e3ff324f43016adc847ce04227321c4c3f9a0d1720f6",
   "pins" : [
     {
       "identity" : "cryptoswift",
@@ -22,10 +22,9 @@
     {
       "identity" : "nostr-sdk-ios",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/nostr-sdk/nostr-sdk-ios.git",
+      "location" : "https://github.com/therealparmesh/nostr-sdk-ios.git",
       "state" : {
-        "branch" : "main",
-        "revision" : "e5855cbd3bdabf44075fd2abdf76f63bac4cbd5f"
+        "revision" : "4bbfcd895738997174fc35325743c4076151659f"
       }
     },
     {
