@@ -34,8 +34,7 @@ extension NewSessionSheet {
   var footerStatus: LinkstrSheetFooterStatus? {
     mutationFeedback.footerStatus(
       isRunning: isCreating,
-      progressMessage: "creating session…",
-      validationMessage: canCreateSession ? nil : "session name required."
+      progressMessage: "creating session…"
     )
   }
 

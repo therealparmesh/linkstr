@@ -18,15 +18,8 @@ struct LinkstrAdaptiveButtonRow<Content: View>: View {
   }
 }
 
-enum SettingsSection: Hashable {
-  case playback
-  case storage
-  case backup
-  case relays
-}
-
 struct SettingsView: View {
-  let initialSection: SettingsSection?
+  let showRelays: Bool
   @Environment(\.scenePhase) private var scenePhase
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   @EnvironmentObject var session: AppSession
@@ -70,22 +63,23 @@ struct SettingsView: View {
   }
 
   private var content: some View {
-    ScrollViewReader { proxy in
+    let relaysAnchor = "relays"
+    return ScrollViewReader { proxy in
       ScrollView {
         VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
-          playbackSection.id(SettingsSection.playback)
-          relaysSection.id(SettingsSection.relays)
-          storageSection.id(SettingsSection.storage)
-          BackupSection().id(SettingsSection.backup)
+          playbackSection
+          relaysSection.id(relaysAnchor)
+          storageSection
+          BackupSection()
           identitySection
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .linkstrPageContentLayout(topPadding: LinkstrTheme.pinnedPageContentTopPadding)
       }
       .onAppear {
-        guard let initialSection else { return }
+        guard showRelays else { return }
         // Resolve section frames after the first layout pass.
-        DispatchQueue.main.async { proxy.scrollTo(initialSection, anchor: .top) }
+        DispatchQueue.main.async { proxy.scrollTo(relaysAnchor, anchor: .top) }
       }
     }
     .linkstrPinnedPageHeader {

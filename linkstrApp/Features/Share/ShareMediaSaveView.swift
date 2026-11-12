@@ -17,7 +17,7 @@ struct ShareMediaSaveView: View {
   @State private var fileExportItem: LocalFileExportItem?
 
   private var sourceURL: URL? {
-    LinkstrURLValidator.normalizedWebURL(from: draft.url).flatMap(URL.init(string:))
+    LinkstrURLValidator.validatedWebURL(from: draft.url)
   }
 
   var body: some View {

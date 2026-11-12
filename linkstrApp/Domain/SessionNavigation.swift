@@ -3,7 +3,7 @@ import Foundation
 enum AppRoute: Hashable {
   case session(String, scrollToPostID: String? = nil)
   case addedYou
-  case settings(SettingsSection? = nil)
+  case settings(showRelays: Bool = false)
 }
 
 struct SessionNavigationRequest: Identifiable, Equatable {

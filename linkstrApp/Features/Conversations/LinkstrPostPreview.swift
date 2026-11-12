@@ -5,10 +5,7 @@ enum LinkstrPostPreview {
   static let maximumArtworkHeight: CGFloat = 220
 
   static func webURL(for rawURL: String?) -> URL? {
-    guard let rawURL, let normalizedURL = LinkstrURLValidator.normalizedWebURL(from: rawURL) else {
-      return nil
-    }
-    return URL(string: normalizedURL)
+    rawURL.flatMap(LinkstrURLValidator.validatedWebURL(from:))
   }
 
   static func text(_ value: String?) -> String? {
@@ -21,8 +18,9 @@ enum LinkstrPostPreview {
   }
 
   static func displayTitle(_ value: String?, for urlString: String?) -> String? {
-    let provider = webURL(for: urlString).map(URLClassifier.classify)
     guard var title = text(value) else { return nil }
+    let url = webURL(for: urlString)
+    let provider = url.map(URLClassifier.classify)
     if provider == .tiktok, let prefix = title.range(of: "TikTok · ", options: [.anchored, .caseInsensitive]) {
       guard let remainingTitle = text(String(title[prefix.upperBound...])) else { return nil }
       title = remainingTitle
@@ -35,7 +33,7 @@ enum LinkstrPostPreview {
 
     let separators = CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "-–—|·"))
     let comparableTitle = title.trimmingCharacters(in: separators).lowercased()
-    guard !comparableTitle.isEmpty, comparableTitle != source(for: urlString)?.lowercased() else { return nil }
+    guard !comparableTitle.isEmpty, comparableTitle != url.flatMap(source(for:))?.lowercased() else { return nil }
     if let provider {
       if provider != .generic, comparableTitle == provider.rawValue.lowercased() { return nil }
       if provider == .twitter, comparableTitle == "x" { return nil }
@@ -44,7 +42,11 @@ enum LinkstrPostPreview {
   }
 
   static func source(for urlString: String?) -> String? {
-    guard let url = webURL(for: urlString), let host = url.host else { return nil }
+    webURL(for: urlString).flatMap(source(for:))
+  }
+
+  private static func source(for url: URL) -> String? {
+    guard let host = url.host else { return nil }
     let provider = URLClassifier.classify(url)
     let name = provider == .generic
       ? (host.hasPrefix("www.") ? String(host.dropFirst(4)) : host)

@@ -65,7 +65,7 @@ struct MainTabView: View {
     .onChange(of: relaySettingsRequest) { _, request in
       guard request != nil else { return }
       selectedTab = .you
-      navigationPath = [.settings(.relays)]
+      navigationPath = [.settings(showRelays: true)]
     }
   }
 
@@ -108,8 +108,8 @@ struct MainTabView: View {
         }
         .background(LinkstrBackgroundView())
         .toolbarVisibility(.hidden, for: .navigationBar)
-      case .settings(let section):
-        SettingsView(initialSection: section)
+      case .settings(let showRelays):
+        SettingsView(showRelays: showRelays)
           .toolbarVisibility(.hidden, for: .navigationBar, .tabBar)
       }
     }
