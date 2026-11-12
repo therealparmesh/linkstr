@@ -68,8 +68,8 @@ targets:
         LinkstrPushServiceBaseURL: $(LINKSTR_PUSH_SERVICE_BASE_URL)
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
-        NSCameraUsageDescription: Camera access is used to scan Contact Key (npub) QR codes.
-        NSPhotoLibraryAddUsageDescription: Photo access is used only to save locally downloaded videos to your gallery.
+        NSCameraUsageDescription: use the camera to scan a contact’s public key.
+        NSPhotoLibraryAddUsageDescription: allow linkstr to save videos to photos.
         UILaunchStoryboardName: LaunchScreen
         NSAppTransportSecurity:
           NSAllowsArbitraryLoadsInWebContent: true
@@ -89,6 +89,9 @@ targets:
               public.filename-extension:
                 - linkstrbackup
         UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+        UISupportedInterfaceOrientations~ipad:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
           - UIInterfaceOrientationPortrait

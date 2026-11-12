@@ -41,9 +41,9 @@
 		<true/>
 	</dict>
 	<key>NSCameraUsageDescription</key>
-	<string>Camera access is used to scan Contact Key (npub) QR codes.</string>
+	<string>use the camera to scan a contact’s public key.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Photo access is used only to save locally downloaded videos to your gallery.</string>
+	<string>allow linkstr to save videos to photos.</string>
 	<key>NSUbiquitousContainers</key>
 	<dict>
 		<key>iCloud.com.parmscript.linkstr</key>
@@ -64,6 +64,11 @@
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
