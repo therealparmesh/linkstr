@@ -208,8 +208,6 @@ extension EmbeddedWebView {
       lastReportedHeight = 0
       lastReportedReadyState = false
       lastReportedRenderedPost = false
-      onContentReadyChange?(false)
-      onRenderedPostChange?(false)
     }
 
     func clearHandlers() {

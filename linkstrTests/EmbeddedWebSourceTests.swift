@@ -130,10 +130,11 @@ final class EmbeddedWebSourceTests: XCTestCase {
     let webView = WKWebView()
 
     coordinator.prepareForNewLoad()
+    XCTAssertTrue(readiness.isEmpty)
     (coordinator as WKNavigationDelegate).webView?(webView, didCommit: nil)
     coordinator.webView(webView, didFinish: nil)
 
-    XCTAssertEqual(readiness, [false, true])
+    XCTAssertEqual(readiness, [true])
   }
 
   func testFacebookVideoUsesOfficialOEmbedWithoutReplacingReels() throws {
