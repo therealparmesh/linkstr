@@ -95,21 +95,21 @@ If the selected session becomes unavailable while sharing from another app, link
 
 ### React, delete, rename, archive, and manage members
 
-| Action                         | How                                                                                                                                                                                             |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| React to a post                | Tap 👍, 👎, or 👀 directly on the post, or tap the smiley with a plus to choose another emoji.                                                                                                                                  |
-| Remove a reaction              | Tap a selected quick emoji again. For another emoji, open the picker and tap your selected reaction in its top row. |
-| Share into linkstr             | Use the iOS share sheet from another app, choose linkstr, then **share to session**. linkstr opens with the link prefilled, an optional note, and a separate searchable picker of active sessions. |
+| Action                         | How                                                                                                                                                                                                                         |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| React to a post                | Tap 👍, 👎, or 👀 directly on the post, or tap the smiley with a plus to choose another emoji.                                                                                                                              |
+| Remove a reaction              | Tap a selected quick emoji again. For another emoji, open the picker and tap your selected reaction in its top row.                                                                                                         |
+| Share into linkstr             | Use the iOS share sheet from another app, choose linkstr, then **share to session**. linkstr opens with the link prefilled, an optional note, and a separate searchable picker of active sessions.                          |
 | Save shared video              | Use the iOS share sheet from another app, choose linkstr, then choose **save video**. linkstr prepares supported video and lets you choose Photos or Files. If preparation fails, use **try again** or **open in browser**. |
-| Share a deep link              | Tap the share button beside the quick reactions on the post. The recipient opens the original link in linkstr.         |
-| Edit your own note             | Open **more** on a link you shared, then choose **edit note** or **add a note**. Clear the text, then confirm with **remove note** to remove it. |
-| Delete your own post           | Choose **delete post** from **more**, or long-press the post in the timeline.                                                                                                                                                    |
-| Archive or unarchive a session | Open **manage session** or **view members** from the post list, or tap the session name in the viewer. Use **archive session** or **unarchive session**. |
-| View archived sessions         | Tap the archive button beside **new session**.                                                                                                                                          |
-| Rename a session               | Open **manage session**, edit the name, and save. |
-| Delete a session               | Open **manage session** and choose **delete session**. |
-| Add or remove members          | Open **manage session**. Expand **choose from contacts** to add someone, or use the remove button beside a member. Confirm the change, then save. |
-| Copy a member's public key     | Open **manage session** or **view members**, then long-press the member's row and choose **copy public key**. |
+| Share a deep link              | Tap the share button beside the quick reactions on the post. The recipient opens the original link in linkstr.                                                                                                              |
+| Edit your own note             | Open **more** on a link you shared, then choose **edit note** or **add a note**. Clear the text, then confirm with **remove note** to remove it.                                                                            |
+| Delete your own post           | Choose **delete post** from **more**, or long-press the post in the timeline.                                                                                                                                               |
+| Archive or unarchive a session | Open **manage session** or **view members** from the post list, or tap the session name in the viewer. Use **archive session** or **unarchive session**.                                                                    |
+| View archived sessions         | Tap the archive button beside **new session**.                                                                                                                                                                              |
+| Rename a session               | Open **manage session**, edit the name, and save.                                                                                                                                                                           |
+| Delete a session               | Open **manage session** and choose **delete session**.                                                                                                                                                                      |
+| Add or remove members          | Open **manage session**. Expand **choose from contacts** to add someone, or use the remove button beside a member. Confirm the change, then save.                                                                           |
+| Copy a member's public key     | Open **manage session** or **view members**, then long-press the member's row and choose **copy public key**.                                                                                                               |
 
 Only the session creator can rename sessions, delete them, or change session membership. You can edit your own notes while you’re an active member. Edits keep the original post and its reactions in place.
 
