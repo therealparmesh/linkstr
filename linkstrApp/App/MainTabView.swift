@@ -150,7 +150,7 @@ struct MainTabView: View {
         addContact: { isPresentingAddContact = true }
       )
     case .you:
-      YouView { section in navigationPath.append(.settings(section)) }
+      YouView { navigationPath.append(.settings()) }
     }
   }
 

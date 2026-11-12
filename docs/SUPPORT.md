@@ -57,7 +57,7 @@ The bottom footer shows validation and relay status only. The keyboard return ke
 
 ### Use the You tab
 
-The **you** tab shows your public key (`npub`), QR code, and published profile name. You can copy or share your public key. Tap **edit profile** to change the name other Nostr apps see. Open settings with the gear or **all settings**.
+The **you** tab shows your public key (`npub`), QR code, and published profile name. You can copy or share your public key. Tap **edit profile** to change the name other Nostr apps see. Tap **settings** below the public key.
 
 Submit profile name changes with the keyboard return key or the top-right **save profile name** control. To remove the name, clear its text and confirm with **clear profile name**. Validation and save progress appear in the bottom footer.
 

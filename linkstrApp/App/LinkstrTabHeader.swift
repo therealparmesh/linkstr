@@ -58,6 +58,34 @@ struct LinkstrHeaderButton: View {
   }
 }
 
+struct LinkstrPageShortcut: View {
+  let title: String
+  let icon: String
+  let action: () -> Void
+
+  var body: some View {
+    Button(action: action) {
+      HStack(spacing: LinkstrTheme.buttonRowSpacing) {
+        Image(systemName: icon)
+          .dynamicTypeSize(...DynamicTypeSize.xLarge)
+          .foregroundStyle(LinkstrTheme.accent)
+          .accessibilityHidden(true)
+        Text(title)
+          .frame(maxWidth: .infinity, alignment: .leading)
+        LinkstrDisclosureIndicator()
+      }
+      .font(LinkstrTheme.font(.subheadline, weight: .semibold))
+      .foregroundStyle(LinkstrTheme.textPrimary)
+      .padding(.horizontal, LinkstrTheme.fieldHorizontalPadding)
+      .padding(.vertical, LinkstrTheme.compactSpacing)
+      .frame(minHeight: LinkstrTheme.minimumInteractiveDimension)
+      .background(LinkstrTheme.panel, in: .rect(cornerRadius: LinkstrTheme.fieldCornerRadius))
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+  }
+}
+
 struct LinkstrDisclosureIndicator: View {
   var body: some View {
     Image(systemName: "chevron.forward")

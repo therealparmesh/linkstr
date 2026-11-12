@@ -156,28 +156,8 @@ struct ContactsView: View {
   }
 
   private var addedYouShortcut: some View {
-    Button {
-      openAddedYou()
-    } label: {
-      HStack(spacing: LinkstrTheme.buttonRowSpacing) {
-        Image(systemName: "person.crop.circle.badge.plus")
-          .dynamicTypeSize(...DynamicTypeSize.xLarge)
-          .foregroundStyle(LinkstrTheme.accent)
-          .accessibilityHidden(true)
-        Text("added you")
-          .frame(maxWidth: .infinity, alignment: .leading)
-        LinkstrDisclosureIndicator()
-      }
-      .font(LinkstrTheme.font(.subheadline, weight: .semibold))
-      .foregroundStyle(LinkstrTheme.textPrimary)
-      .padding(.horizontal, LinkstrTheme.fieldVerticalPadding)
-      .padding(.vertical, LinkstrTheme.compactSpacing)
-      .frame(minHeight: LinkstrTheme.minimumInteractiveDimension)
-      .background(LinkstrTheme.panel, in: .rect(cornerRadius: 12))
-      .contentShape(Rectangle())
-    }
-    .buttonStyle(.plain)
-    .accessibilityHint("view people who added you")
+    LinkstrPageShortcut(title: "added you", icon: "person.crop.circle.badge.plus", action: openAddedYou)
+      .accessibilityHint("view people who added you")
   }
 
   private var retryState: some View {

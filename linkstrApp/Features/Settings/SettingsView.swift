@@ -18,20 +18,11 @@ struct LinkstrAdaptiveButtonRow<Content: View>: View {
   }
 }
 
-enum SettingsSection: String, Hashable {
+enum SettingsSection: Hashable {
   case playback
   case storage
   case backup
   case relays
-
-  var icon: String {
-    switch self {
-    case .playback: "play.circle"
-    case .storage: "internaldrive"
-    case .backup: "externaldrive.badge.timemachine"
-    case .relays: "antenna.radiowaves.left.and.right"
-    }
-  }
 }
 
 struct SettingsView: View {

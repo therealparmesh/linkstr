@@ -3,7 +3,7 @@ import UIKit
 
 struct YouView: View {
   @EnvironmentObject private var session: AppSession
-  let openSettings: (SettingsSection?) -> Void
+  let openSettings: () -> Void
   @State private var qrImage: UIImage?
   @State private var isEditingProfile = false
   @State private var profileNameDraft = ""
@@ -37,10 +37,11 @@ struct YouView: View {
     if let npub = session.identityService.npub {
       ScrollView {
         VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
-          heading
+          LinkstrPageHeader(title: "you") { EmptyView() }
           VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
+            profileHeader(npub: npub)
             identitySection(npub: npub)
-            settingsShortcuts
+            LinkstrPageShortcut(title: "settings", icon: "gearshape", action: openSettings)
           }
         }
         .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
@@ -94,7 +95,7 @@ struct YouView: View {
       }
     } else {
       VStack(spacing: LinkstrTheme.listBlockSpacing) {
-        heading
+        LinkstrPageHeader(title: "you") { EmptyView() }
           .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
           .padding(.top, LinkstrTheme.pageHeaderTopPadding)
         LinkstrCenteredEmptyStateView(
@@ -103,16 +104,10 @@ struct YouView: View {
           description: "sign in or create an account in settings.",
           actionTitle: "open settings",
           actionSystemImage: "gearshape",
-          action: { openSettings(nil) }
+          action: openSettings
         )
       }
       .linkstrReadableContent()
-    }
-  }
-
-  private var heading: some View {
-    LinkstrPageHeader(title: "you") {
-      LinkstrHeaderButton(title: "settings", icon: "gearshape") { openSettings(nil) }
     }
   }
 
@@ -144,22 +139,32 @@ struct YouView: View {
     }
   }
 
-  private func identitySection(npub: String) -> some View {
-    VStack(spacing: LinkstrTheme.listBlockSpacing) {
+  private func profileHeader(npub: String) -> some View {
+    HStack(spacing: LinkstrTheme.rowSpacing) {
       LinkstrContactAvatar(name: session.currentProfileName ?? "you", size: 68, seed: npub)
+        .accessibilityHidden(true)
 
-      Text(session.currentProfileName ?? "your profile")
-        .font(LinkstrTheme.font(.title2, weight: .semibold))
-        .foregroundStyle(LinkstrTheme.textPrimary)
-        .multilineTextAlignment(.center)
+      VStack(alignment: .leading, spacing: 0) {
+        Text(session.currentProfileName ?? "your profile")
+          .font(LinkstrTheme.font(.title2, weight: .semibold))
+          .foregroundStyle(LinkstrTheme.textPrimary)
+          .fixedSize(horizontal: false, vertical: true)
 
-      Button { isEditingProfile = true } label: {
-        Text("edit profile")
-          .font(LinkstrTheme.font(.subheadline, weight: .semibold))
-          .frame(minHeight: LinkstrTheme.minimumInteractiveDimension)
-          .contentShape(Rectangle())
+        Button { isEditingProfile = true } label: {
+          Text("edit profile")
+            .font(LinkstrTheme.font(.subheadline, weight: .semibold))
+            .foregroundStyle(LinkstrTheme.accent)
+            .frame(minHeight: LinkstrTheme.minimumInteractiveDimension, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
       }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
 
+  private func identitySection(npub: String) -> some View {
+    VStack(spacing: LinkstrTheme.compactSpacing) {
       if let qrImage {
         Image(uiImage: qrImage)
           .interpolation(.none)
@@ -199,38 +204,6 @@ struct YouView: View {
       .frame(maxWidth: 300)
     }
     .frame(maxWidth: .infinity)
-    .padding(.vertical, LinkstrTheme.fieldVerticalPadding)
-  }
-
-  private var settingsShortcuts: some View {
-    VStack(spacing: 0) {
-      ForEach([SettingsSection.playback, .storage, .backup], id: \.self) { section in
-        settingsRow(section.rawValue, icon: section.icon) { openSettings(section) }
-      }
-      settingsRow("all settings", icon: "gearshape") { openSettings(nil) }
-    }
-  }
-
-  private func settingsRow(_ title: String, icon: String, action: @escaping () -> Void) -> some View {
-    Button(action: action) {
-      HStack(spacing: LinkstrTheme.rowSpacing) {
-        Image(systemName: icon)
-          .dynamicTypeSize(...DynamicTypeSize.xLarge)
-          .frame(width: 28)
-          .foregroundStyle(LinkstrTheme.accent)
-          .accessibilityHidden(true)
-        Text(title)
-          .frame(maxWidth: .infinity, alignment: .leading)
-        LinkstrDisclosureIndicator()
-      }
-      .font(LinkstrTheme.font(.subheadline, weight: .medium))
-      .foregroundStyle(LinkstrTheme.textPrimary)
-      .padding(.vertical, LinkstrTheme.fieldVerticalPadding)
-      .frame(minHeight: LinkstrTheme.actionButtonMinHeight)
-      .contentShape(Rectangle())
-    }
-    .buttonStyle(.plain)
-    .overlay(alignment: .top) { LinkstrListRowDivider(leadingInset: 0) }
   }
 }
 

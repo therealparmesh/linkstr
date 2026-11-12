@@ -64,7 +64,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 **Visual design:**
 
 - The app and iOS share extension use the Tokyo Night color scheme and shared header and action styles.
-- The main tabs are **sessions**, **contacts**, and **you**. Settings opens from the gear or the **all settings** row on **you**.
+- The main tabs are **sessions**, **contacts**, and **you**. Open **settings** from the **you** tab.
 - Session lists use member initials, link thumbnails, readable previews, and separate unread counts. The watch view gives each post a screen and keeps playback and sharing controls within reach.
 - Interface labels use lowercase. Session names, contact names, and shared text keep their original capitalization.
 
@@ -430,7 +430,7 @@ See [contact synchronization](docs/CONTACTS.md) for persistence and relay behavi
 - Exposes the current account `npub`.
 - **edit profile** lets you publish, update, or clear your Nostr profile name. Use the keyboard return key or the top-right **save profile name** control to submit. Clearing the draft changes that control to **clear profile name**. Save progress and validation use the shared bottom footer.
 - Sequential profile edits use increasing timestamps. A newer profile received while a save is pending remains authoritative, and a failed local save is reported instead of shown as successful. Pending saves ignore results and errors after the account or relay service changes.
-- Shows a QR code and the public key, with **copy** and **share** actions. Playback, storage, backup, and all settings are available below it.
+- Shows a QR code and the public key, with **copy** and **share** actions. Open **settings** below the public key to manage playback, storage, backups, and your account.
 
 ### Deep links
 
