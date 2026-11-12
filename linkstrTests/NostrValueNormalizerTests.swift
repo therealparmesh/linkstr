@@ -21,13 +21,18 @@ final class NostrValueNormalizerTests: XCTestCase {
 
   func testDedupedNormalizedPubkeyHexesNormalizesAndDedupes() throws {
     let keypair = try XCTUnwrap(Keypair())
+    let otherKeypair = try XCTUnwrap(Keypair())
     XCTAssertEqual(
       NostrValueNormalizer.dedupedNormalizedPubkeyHexes([
         keypair.publicKey.hex.uppercased(),
+        keypair.publicKey.hex.uppercased(),
+        otherKeypair.publicKey.hex,
         keypair.publicKey.hex,
+        "  \(otherKeypair.publicKey.hex)\n",
+        "not-a-pubkey",
         "not-a-pubkey"
       ]),
-      [keypair.publicKey.hex]
+      [keypair.publicKey.hex, otherKeypair.publicKey.hex]
     )
   }
 

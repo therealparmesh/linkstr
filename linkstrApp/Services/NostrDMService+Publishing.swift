@@ -81,17 +81,6 @@ extension NostrDMService {
 
   // MARK: - Gift wrap construction
 
-  func parsePublicKeys(_ pubkeyHexes: [String]) throws -> [PublicKey] {
-    guard let normalizedPubkeys = NostrValueNormalizer.validatedNormalizedPubkeyHexes(pubkeyHexes)
-    else {
-      throw NostrServiceError.invalidPubkey
-    }
-    return try normalizedPubkeys.map { hex in
-      guard let key = PublicKey(hex: hex) else { throw NostrServiceError.invalidPubkey }
-      return key
-    }
-  }
-
   struct RumorAndGiftWrapResult {
     let rumorEvent: NostrEvent
     let giftWrapForRecipients: [NostrEvent]
@@ -125,8 +114,9 @@ extension NostrDMService {
     }
 
     let rumorEvent = builder.build(pubkey: keypair.publicKey)
-    let recipientPublicKeys = try parsePublicKeys(recipientPubkeyHexes)
-    guard !recipientPublicKeys.isEmpty else {
+    guard let recipientPublicKeys = NostrValueNormalizer.validatedPublicKeys(recipientPubkeyHexes),
+      !recipientPublicKeys.isEmpty
+    else {
       throw NostrServiceError.invalidPubkey
     }
 

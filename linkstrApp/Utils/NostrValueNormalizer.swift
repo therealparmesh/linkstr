@@ -9,9 +9,11 @@ enum NostrValueNormalizer {
   }
 
   static func normalizedPubkeyHex(_ candidate: String) -> String? {
-    let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    guard let publicKey = PublicKey(hex: trimmed) else { return nil }
-    return publicKey.hex
+    normalizedPublicKey(candidate)?.hex
+  }
+
+  private static func normalizedPublicKey(_ candidate: String) -> PublicKey? {
+    PublicKey(hex: candidate.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
   }
 
   static func normalizedPubkeyHex(fromAnyPublicKeyString candidate: String) -> String? {
@@ -25,8 +27,9 @@ enum NostrValueNormalizer {
   static func dedupedNormalizedPubkeyHexes(_ candidates: [String]) -> [String] {
     var normalized: [String] = []
     var seen = Set<String>()
+    var seenCandidates = Set<String>()
 
-    for candidate in candidates {
+    for candidate in candidates where seenCandidates.insert(candidate).inserted {
       guard let normalizedHex = normalizedPubkeyHex(candidate) else { continue }
       guard seen.insert(normalizedHex).inserted else { continue }
       normalized.append(normalizedHex)
@@ -36,18 +39,20 @@ enum NostrValueNormalizer {
   }
 
   static func validatedNormalizedPubkeyHexes(_ candidates: [String]) -> [String]? {
-    var normalized: [String] = []
+    validatedPublicKeys(candidates)?.map(\.hex)
+  }
+
+  static func validatedPublicKeys(_ candidates: [String]) -> [PublicKey]? {
+    var keys: [PublicKey] = []
     var seen = Set<String>()
 
     for candidate in candidates {
-      guard let normalizedHex = normalizedPubkeyHex(candidate) else {
-        return nil
-      }
-      guard seen.insert(normalizedHex).inserted else { continue }
-      normalized.append(normalizedHex)
+      guard let key = normalizedPublicKey(candidate) else { return nil }
+      guard seen.insert(key.hex).inserted else { continue }
+      keys.append(key)
     }
 
-    return normalized
+    return keys
   }
 
   static func dedupedNormalizedEventIDs(_ candidates: [String]) -> [String] {
