@@ -113,13 +113,13 @@ func (s *apnsSender) send(ctx context.Context, device registeredDevice, push out
 }
 
 func buildPayload(push outboundPush) *payload.Payload {
-	title := "New post in linkstr"
+	title := "new post in linkstr"
 	if push.NotificationType == notificationTypeNewEmojiReaction {
-		title = "New reaction " + push.Emoji + " in linkstr"
+		title = "new reaction " + push.Emoji + " in linkstr"
 	}
 	builder := payload.NewPayload().
 		AlertTitle(title).
-		AlertBody("Open linkstr to view").
+		AlertBody("open linkstr to view").
 		Sound("default").
 		ThreadID(push.ConversationID).
 		Custom("type", push.NotificationType).
