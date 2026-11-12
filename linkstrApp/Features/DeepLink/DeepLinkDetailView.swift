@@ -10,7 +10,6 @@ struct DeepLinkDetailView: View {
   @State private var previewTitle: String?
   @State private var remotePostText: String?
   @State private var thumbnailImage: UIImage?
-  @State private var embeddedPostURL: URL?
   @State private var resolvedShortLink: (original: URL, destination: URL)?
 
   private var mediaStrategy: URLClassifier.MediaStrategy {
@@ -27,9 +26,8 @@ struct DeepLinkDetailView: View {
     let isRegularLink = mediaStrategy == .link
     ScrollView {
       VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
-        LinkstrSheetTitle(title: "shared link")
-
         if isRegularLink {
+          linkDetails(showsArtwork: true)
           LinkstrBrowserButton { openURL(sourceURL) }
         } else {
           AdaptiveMediaView(
@@ -40,10 +38,9 @@ struct DeepLinkDetailView: View {
                 resolvedShortLink = (sourceURL, destination)
               }
             },
-            onEmbeddedPostVisibilityChange: { embeddedPostURL = $0 ? sourceURL : nil }
+            linkContent: { linkDetails(showsArtwork: false) }
           )
         }
-        linkDetails(showsArtwork: isRegularLink)
       }
       .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
       .padding(.top, LinkstrTheme.screenTopPadding)
@@ -51,13 +48,13 @@ struct DeepLinkDetailView: View {
       .linkstrReadableContent()
     }
     .background(LinkstrBackgroundView())
+    .navigationTitle("shared link")
     .navigationBarTitleDisplayMode(.inline)
     .task(id: previewURL) { await loadPreviewIfNeeded() }
     .task(id: previewURL) { await loadRemotePostText() }
   }
 
   private func linkDetails(showsArtwork: Bool) -> some View {
-    let showsPreviewText = embeddedPostURL != sourceURL || dynamicTypeSize.isAccessibilitySize
     return VStack(alignment: .leading, spacing: LinkstrTheme.buttonRowSpacing) {
       if showsArtwork, !dynamicTypeSize.isAccessibilitySize, let thumbnailImage {
         Image(uiImage: thumbnailImage)
@@ -74,7 +71,15 @@ struct DeepLinkDetailView: View {
           .foregroundStyle(LinkstrTheme.accent)
       }
 
-      if showsPreviewText, let remotePostText {
+      if let previewTitle {
+        Text(previewTitle)
+          .font(LinkstrTheme.font(.title2, weight: .semibold))
+          .fixedSize(horizontal: false, vertical: true)
+          .textSelection(.enabled)
+          .accessibilityAddTraits(.isHeader)
+      }
+
+      if let remotePostText, remotePostText != previewTitle {
         Text(remotePostText)
           .font(LinkstrTheme.font(.body))
           .foregroundStyle(LinkstrTheme.textPrimary)
@@ -82,19 +87,12 @@ struct DeepLinkDetailView: View {
           .textSelection(.enabled)
       }
 
-      if showsPreviewText, let previewTitle, previewTitle != remotePostText {
-        Text(previewTitle)
-          .font(LinkstrTheme.font(remotePostText == nil ? .title2 : .caption, weight: .semibold))
-          .foregroundStyle(remotePostText == nil ? LinkstrTheme.textPrimary : LinkstrTheme.textSecondary)
-          .accessibilityAddTraits(remotePostText == nil ? .isHeader : [])
-      }
-
       LinkstrURLText(address: sourceURL.absoluteString)
         .textSelection(.enabled)
     }
     .frame(maxWidth: .infinity, alignment: .leading)
-    .padding(LinkstrTheme.panelPadding)
-    .linkstrCardSurface()
+    .foregroundStyle(LinkstrTheme.textPrimary)
+    .padding(.vertical, LinkstrTheme.compactSpacing)
   }
 
   private func loadPreviewIfNeeded() async {
@@ -104,6 +102,12 @@ struct DeepLinkDetailView: View {
     guard let previewURL else { return }
     let previewAddress = previewURL.absoluteString
 
+    if let title = await URLMetadataService.shared.fetchYouTubeVideoTitle(for: previewURL) {
+      guard !Task.isCancelled else { return }
+      previewTitle = LinkstrPostPreview.displayTitle(title, for: previewAddress)
+      return
+    }
+    guard !Task.isCancelled else { return }
     let resolvedPreview = await URLMetadataService.shared.fetchPreview(for: previewAddress)
     guard !Task.isCancelled else { return }
     previewTitle = LinkstrPostPreview.displayTitle(resolvedPreview?.title, for: previewAddress)
@@ -117,8 +121,13 @@ struct DeepLinkDetailView: View {
 
   private func loadRemotePostText() async {
     remotePostText = nil
-    guard let previewURL, SocialPostResolutionService.supportsRemotePostText(for: previewURL) else { return }
-    let text = await SocialPostResolutionService.resolveRemotePostText(for: previewURL)
+    guard let previewURL, mediaStrategy != .directVideo else { return }
+    let text: String?
+    if SocialPostResolutionService.supportsRemotePostText(for: previewURL) {
+      text = await SocialPostResolutionService.resolveRemotePostText(for: previewURL)
+    } else {
+      text = await URLMetadataService.shared.fetchPageDescription(for: previewURL)
+    }
     guard !Task.isCancelled else { return }
     remotePostText = LinkstrPostPreview.text(text)
   }

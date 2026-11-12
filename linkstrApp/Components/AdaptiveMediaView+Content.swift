@@ -22,10 +22,11 @@ extension AdaptiveMediaView {
       }
     } else if isResolvingPresentation {
       VStack(alignment: .leading, spacing: LinkstrTheme.compactSpacing) {
-        LinkstrBrowserButton(action: openSourceAction)
         mediaSurface(explicitHeight: sharedLinkLoadingHeight) {
           loadingIndicator("loading post")
         }
+        linkContent
+        LinkstrBrowserButton(action: openSourceAction)
       }
     } else {
       switch effectiveMediaStrategy {
@@ -49,7 +50,10 @@ extension AdaptiveMediaView {
         if immersive {
           watchContentArea { _ in linkContent }
         } else {
-          LinkstrBrowserButton(action: openSourceAction)
+          VStack(alignment: .leading, spacing: LinkstrTheme.compactSpacing) {
+            linkContent
+            LinkstrBrowserButton(action: openSourceAction)
+          }
         }
       }
     }
@@ -114,8 +118,9 @@ extension AdaptiveMediaView {
       }
     } else {
       VStack(alignment: .leading, spacing: LinkstrTheme.compactSpacing) {
-        localPlaybackActions(exportFileURL: nil, offersEmbed: offersEmbed)
         mediaSurface(explicitHeight: sharedLinkLoadingHeight) { loadingIndicator("getting video ready") }
+        linkContent
+        localPlaybackActions(exportFileURL: nil, offersEmbed: offersEmbed)
       }
     }
   }
@@ -134,7 +139,10 @@ extension AdaptiveMediaView {
     if immersive {
       watchContentArea { _ in directVideoRecovery }
     } else {
-      directVideoRecovery
+      VStack(alignment: .leading, spacing: LinkstrTheme.compactSpacing) {
+        directVideoRecovery
+        linkContent
+      }
     }
   }
 
@@ -148,8 +156,9 @@ extension AdaptiveMediaView {
       player
     } else {
       VStack(alignment: .leading, spacing: LinkstrTheme.compactSpacing) {
-        localPlaybackActions(exportFileURL: exportFileURL, offersEmbed: offersEmbed)
         mediaSurface { player }
+        linkContent
+        localPlaybackActions(exportFileURL: exportFileURL, offersEmbed: offersEmbed)
       }
     }
   }
@@ -193,12 +202,14 @@ extension AdaptiveMediaView {
     let canRetry = isRenderableEmbedSource(embedSource)
     return VStack(alignment: .leading, spacing: LinkstrTheme.compactSpacing) {
       if canRetry, embeddedLoadFailure == nil {
+        embeddedPlayerSurface(embedSource)
+        linkContent
         secondaryActionButton("retry embed", systemImage: "arrow.clockwise", action: retryEmbeddedPlayback)
         LinkstrBrowserButton(action: openSourceAction)
         if allowsTryLocalPlayback { tryLocalPlaybackButton }
-        embeddedPlayerSurface(embedSource)
       } else {
         embedRecovery(canRetry: canRetry, offersModeSwitch: allowsTryLocalPlayback)
+        linkContent
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)

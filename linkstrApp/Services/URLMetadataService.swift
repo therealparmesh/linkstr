@@ -59,6 +59,50 @@ actor URLMetadataService {
     await requests.invalidate(url.absoluteString)
   }
 
+  func fetchPageDescription(for url: URL) async -> String? {
+    var request = URLRequest(url: url)
+    request.timeoutInterval = URLMetadataTimingDefaults.providerTimeout
+    do {
+      let (bytes, response) = try await URLSession.shared.bytes(for: request)
+      guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
+        response.mimeType == "text/html" || response.mimeType == "application/xhtml+xml"
+      else { return nil }
+
+      // Description tags live in the head. Limit the read for pages with large responses.
+      var prefix = Data()
+      for try await byte in bytes.prefix(96 * 1024) { prefix.append(byte) }
+      guard let html = String(bytes: prefix, encoding: .utf8) else { return nil }
+      let description = SocialPostHTMLParser.extractMetaContent(from: html, property: "og:description")
+        ?? SocialPostHTMLParser.extractMetaContent(from: html, name: "description")
+      if SocialURLHeuristics.isYouTubeHost(url),
+        description?.lowercased().hasPrefix("share your videos with friends, family") == true {
+        return nil
+      }
+      return description
+    } catch {
+      return nil
+    }
+  }
+
+  func fetchYouTubeVideoTitle(for url: URL) async -> String? {
+    guard SocialURLHeuristics.isYouTubeHost(url), let id = SocialURLHeuristics.youtubeVideoID(from: url) else {
+      return nil
+    }
+    var endpoint = URLComponents(string: "https://www.youtube.com/oembed")
+    endpoint?.queryItems = [
+      URLQueryItem(name: "url", value: "https://www.youtube.com/watch?v=\(id)"),
+      URLQueryItem(name: "format", value: "json")
+    ]
+    guard let endpointURL = endpoint?.url else { return nil }
+    var request = URLRequest(url: endpointURL)
+    request.timeoutInterval = URLMetadataTimingDefaults.providerTimeout
+    guard let (data, response) = try? await URLSession.shared.data(for: request),
+      let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
+      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else { return nil }
+    return LinkMetadataRefreshPolicy.normalizedTitle(json["title"] as? String)
+  }
+
   private func fetchUncachedPreview(for url: URL) async -> LinkPreviewData? {
     if let twitterPreview = await twitterPreview(for: url) {
       return twitterPreview

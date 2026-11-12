@@ -29,7 +29,6 @@ struct AdaptiveMediaView<LinkContent: View, OverlayContent: View>: View {
   let watchInsets: EdgeInsets
   let postControlsSummary: WatchPostSummary?
   let onResolvedSource: ((URL) -> Void)?
-  let onEmbeddedPostVisibilityChange: ((Bool) -> Void)?
   let linkContent: LinkContent
   let overlayContent: ((() -> Void)?) -> OverlayContent
   @State var postControlsReservedHeight = LinkstrTheme.minimumInteractiveDimension
@@ -67,7 +66,6 @@ struct AdaptiveMediaView<LinkContent: View, OverlayContent: View>: View {
     watchInsets: EdgeInsets = EdgeInsets(),
     postControlsSummary: WatchPostSummary? = nil,
     onResolvedSource: ((URL) -> Void)? = nil,
-    onEmbeddedPostVisibilityChange: ((Bool) -> Void)? = nil,
     @ViewBuilder linkContent: () -> LinkContent = { EmptyView() },
     @ViewBuilder overlayContent: @escaping ((() -> Void)?) -> OverlayContent = { _ in EmptyView() }
   ) {
@@ -83,7 +81,6 @@ struct AdaptiveMediaView<LinkContent: View, OverlayContent: View>: View {
     self.watchInsets = watchInsets
     self.postControlsSummary = postControlsSummary
     self.onResolvedSource = onResolvedSource
-    self.onEmbeddedPostVisibilityChange = onEmbeddedPostVisibilityChange
     self.linkContent = linkContent()
     self.overlayContent = overlayContent
   }
@@ -117,9 +114,6 @@ struct AdaptiveMediaView<LinkContent: View, OverlayContent: View>: View {
       }
       .task(id: localPreparationTaskID) {
         await prepareMediaIfNeeded()
-      }
-      .onChange(of: showsEmbeddedPost, initial: true) { _, isVisible in
-        onEmbeddedPostVisibilityChange?(isVisible)
       }
       .linkstrVideoSaveDialog(
         isPresented: Binding(
