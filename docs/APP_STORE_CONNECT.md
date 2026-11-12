@@ -4,30 +4,26 @@ copy/paste-ready fields for app store connect.
 
 ## promotional text
 
-save social media videos and links in one place — extract tiktoks, reels, and more for in-app and offline playback.
+collect links in private sessions, swipe through posts, and save supported videos for offline viewing.
 
 ## description
 
-linkstr is a link manager with built-in video extraction for social media.
+linkstr brings the links you share into private sessions. Open a session to see all its posts, then tap one and swipe through the rest. Videos and official embeds play in the viewer when the provider allows it. Other links have a preview and a shortcut to the original page.
 
-save links from tiktok, instagram, facebook, x/twitter, youtube, and rumble into organized sessions. supported videos play inline and can be saved to your photo library — no switching apps, no broken mobile pages, no app-store redirects.
+share and watch
 
-save and extract
-
-- collect social media links into organized sessions
-- share links directly from any browser or app
-- save supported media to your photo library from any browser
-- in-app playback for supported video links
-- save eligible videos directly to your photo library
-- save to photos or files
-- open the original source anytime
+- share links from other apps through the iOS share sheet
+- play supported videos in the app and save eligible videos to Photos or Files
+- switch between extracted video and the official embed when both are available
+- add a note, react with emoji, and see who reacted
+- open the original source in your browser
 
 private by default
 
-- no account, phone number, or email required
+- create or import a Nostr identity without a phone number or email
 - no ads, analytics, or tracking sdks
 - use solo as a personal link collection
-- or create group sessions with friends, family, or collaborators
+- create group sessions with friends, family, or collaborators
 
 built on nostr
 
@@ -38,8 +34,8 @@ built on nostr
 
 supported platforms
 
-- tiktok, instagram, facebook, youtube, x/twitter, rumble
-- plus any web link
+- share links from TikTok, Instagram, Facebook, YouTube, X, Rumble, and other websites
+- playback and saving depend on the provider and the link
 
 use responsibly: only save or share content you have rights to use, and follow source platform terms.
 

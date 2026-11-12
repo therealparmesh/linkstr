@@ -1,6 +1,6 @@
 # linkstr support
 
-_Last updated: October 4, 2026_
+_Last updated: November 12, 2026_
 
 linkstr is a private link-sharing app built on [Nostr](https://nostr.com). You create or join private sessions, share links inside those sessions, and react with emoji. This page explains how to use the app.
 
@@ -19,13 +19,13 @@ Your active account is stored in the device keychain. If you use iCloud Keychain
 
 ### Add contacts
 
-1. Open the Contacts tab.
+1. Open **contacts**.
 2. Tap the add-contact button.
 3. Paste an `npub` or scan a QR code.
 4. Optionally save a private alias.
 5. Tap the top-right add icon, then confirm **add contact**.
 
-Adding the same contact through this form updates the saved alias instead of creating a duplicate. The top-right button changes to **save contact**, and confirmation says whether the alias will be saved or cleared. To edit an alias later, tap the contact row. Public keys wrap in full in contact and member lists, the preview, and contact detail. Long-press a contact or session-member row to copy its public key. In the preview and contact detail, you can also long-press the key text to select and copy it.
+Adding the same contact through this form updates the saved alias instead of creating a duplicate. The top-right button changes to **save contact**, and confirmation says whether the alias will be saved or cleared. To edit an alias later, tap the contact row. Compact identity rows shorten long public keys; contact detail shows the full key in its **public key (npub)** section. Long-press a contact or session-member row to copy its full public key. In the preview and contact detail, you can also long-press the key text to select and copy it.
 
 Contacts keep their last fetched public Nostr name on this device, so names remain available after reopening or offline. Names refresh from relays when available; your private alias always takes priority.
 
@@ -33,11 +33,11 @@ The bottom footer shows validation and relay status only. The keyboard return ke
 
 ### See who added you
 
-1. Open the Contacts tab.
+1. Open **contacts**.
 2. Tap **added you** below search.
 3. Tap the add-contact button beside someone, then confirm. People already in your contacts show a checkmark.
 
-Long-press a row to **copy public key**. Tap the toolbar button again to return to contacts. The top-right add-contact button is available in both lists.
+Long-press a row to **copy public key**. Tap the back arrow to return to contacts. The top-right add-contact button is available in both lists.
 
 The list shows public Nostr follows found on your configured relays, including follows made in other Nostr apps. Pull to refresh or use **load more** when available. Saved results remain visible offline. Empty results appear after loading finishes; if loading fails and there are no matching saved results, tap **try again**. Search covers people loaded so far, so use **load more** to search further back. People appear newest first by their latest public follow-list update. Nostr does not provide an exact date for when each person added you. People may be missing if their follow lists are unavailable on your relays.
 
@@ -45,7 +45,7 @@ You can also tap the add-contact button beside a member who is not in your conta
 
 ### Create a session
 
-1. Open the Sessions tab.
+1. Open **sessions**.
 2. Tap the compose button in the top-right corner.
 3. Enter a session name.
 4. Optionally add contacts now, or start solo and add them later.
@@ -59,15 +59,21 @@ The bottom footer shows validation and relay status only. The keyboard return ke
 
 The **you** tab shows your public key (`npub`), QR code, and published profile name. You can copy or share your public key. Tap **edit profile** to change the name other Nostr apps see. Open settings with the gear or **all settings**.
 
-Profile name changes can be submitted with either the keyboard return key or the save button.
+Submit profile name changes with the keyboard return key or the top-right **save profile name** control. To remove the name, clear its text and confirm with **clear profile name**. Validation and save progress appear in the bottom footer.
 
 ### Watch posts in a session
 
-Open a session and swipe up for the next post or down for the previous one. Supported videos fill the watch view. Use **open** to open the original link, or the **all session posts** list button to browse the timeline.
+Open a session to see all its posts. Tap a post to open the viewer, then swipe up for the next older post or down for the previous newer one. **back to posts** returns to the post you were viewing, and **all session posts** opens the list from the top. The video icon in the post list opens **watch posts**, resuming the last viewed post or starting at the newest. Native portrait video can fill the viewer; expand the caption and choose **fit entire video**, then collapse the details, to see the full frame above the controls. Choose **fill screen** to return to the immersive layout. Tap the expand icon at the right of the playback bar to **open system player** and view the full video without post details. This also gives the video more space at larger text sizes. The app uses portrait on iPhone, with upside-down portrait where the device supports it. iPad also supports landscape. Official video players fit between the session header and the post controls while keeping their aspect ratio. Use **open in browser** to open the original link.
 
-Playback options switch between the available players. The **more** menu contains post details, sharing, refreshing, and saving a cached video. You can also edit the note or delete the post if you authored it. Regular links show a readable preview card; use **open** to visit the original.
+Long-press **all session posts** for **previous post**, **next post**, and **mark all as read** when available. These are also available as named accessibility actions on that button.
 
-Tap **react** or the emoji summary on a post to see its reactions. Under **who reacted**, choose **all** or an emoji to see the people who used it. These filters do not change your reactions. Use the separate **your reactions** controls to add or remove yours.
+In the default local-video layout, the caption and reactions overlap the bottom of the video. Use **fit entire video** with details collapsed, or open the system player, when you need to see subtitles or content at the edges. Official players fit above the collapsed caption and reactions. Expanding details covers part of either type of video until you close them. Providers may also display their own captions and controls inside an embed.
+
+Expand the caption row to switch players when both are available. Linkstr tries local extraction first on supported links. **retry embed** reloads only the official player and remains available in the expanded controls even if a stuck player reports no error. Shared links show the player first, then the available title, description, and source. Scroll below the post information for **retry embed** and **open in browser**. It keeps you in embed mode. If the official player fails, use **try again**, return to extracted or downloaded playback when available, or open the source in your browser.
+
+Tap the caption row for the full description, note, original URL, and post actions. Pull down from the top of the details to close them. **retry embed** and **open in browser** appear together when you’re using an official player. In **more post actions**, choose **refresh post** to clear cached playback, retry the media with local extraction first, and refresh the preview. The menu also contains **save video** when available and author actions. Regular links show their text in the preview card. Expanded details reserve space above the panel for that card. When the remaining area is too short, the card hides while its text and browser action remain available in the details; collapsing the panel restores the preview. Long cards and embedded posts scroll within their own area. Swipe on the viewer background to move between posts.
+
+Tap 👍, 👎, or 👀 to add or remove your reaction. Tap the smiley with a plus for more emoji, or tap the two-person icon to see who reacted. Swipe the emoji row sideways for more counts. The picker, breakdown, and share buttons stay in place. In the emoji picker, search and tap a result to react. The keyboard’s Search key hides the keyboard without clearing your results.
 
 ### Share a link
 
@@ -75,31 +81,35 @@ Tap **react** or the emoji summary on a post to see its reactions. Under **who r
 2. Tap **share a link** at the top.
 3. Paste a link.
 4. Add a note if you like.
-5. Tap **share to session**.
+5. Tap **done** if you are editing, then **share to session**.
 
-Generic web URLs are valid posts too. In-app playback, local caching, and save/export options depend on the provider and the specific URL. The composer indicates when an in-app view is available.
+Regular web links are valid posts. HTTPS links to MP4, MOV, or M4V files can play directly. Playback and saving depend on the provider, link, and video format. The composer indicates when an in-app view is available.
 
-You can also paste a shared linkstr post link into the link field, or share it back into linkstr through the iOS share sheet. The new post uses the original web URL.
+You can also paste a shared linkstr post link into the link field, or share it back into linkstr through the iOS share sheet. The new post uses the original web URL. If the share extension can’t find a web link, it tells you what to share instead.
+
+If you share from another app while signed out, finish signing in with linkstr still open. The composer then opens with the shared link and any note.
 
 The footer shows relay status or errors next to the share button. The keyboard return key on the link field advances into the note field.
+
+If the selected session becomes unavailable while sharing from another app, linkstr keeps your draft and disables sharing. If another active session is available, tap **choose a session** to select it. Otherwise, the recipient section explains that you need to create a session before sharing. Linkstr does not automatically switch to a different session.
 
 ### React, delete, rename, archive, and manage members
 
 | Action                         | How                                                                                                                                                                                             |
 | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| React to a post                | Tap **react** on the post. Choose 👍, 👎, 👀, or open the emoji picker.                                                                                                                                  |
-| Remove a reaction              | Tap the same emoji again.                                                                                                                                                                       |
-| Share into linkstr             | Use the iOS share sheet from another app, choose linkstr, then **share to a session**. linkstr opens with the link prefilled, an optional note, and a separate searchable picker of active sessions. |
-| Save shared media              | Use the iOS share sheet from another app, choose linkstr, then choose save media. linkstr prepares supported media and lets you choose Photos or Files.                                         |
-| Share a deep link              | Open **more** on the post and choose **share link**. The recipient opens the original link in linkstr.         |
-| Edit your own note             | Open **more** on a link you shared, then choose **edit note** or **add a note**. Clear the text and save to remove the note. |
+| React to a post                | Tap 👍, 👎, or 👀 directly on the post, or tap the smiley with a plus to choose another emoji.                                                                                                                                  |
+| Remove a reaction              | Tap a selected quick emoji again. For another emoji, open the picker and tap your selected reaction in its top row. |
+| Share into linkstr             | Use the iOS share sheet from another app, choose linkstr, then **share to session**. linkstr opens with the link prefilled, an optional note, and a separate searchable picker of active sessions. |
+| Save shared video              | Use the iOS share sheet from another app, choose linkstr, then choose **save video**. linkstr prepares supported video and lets you choose Photos or Files. If preparation fails, use **try again** or **open in browser**. |
+| Share a deep link              | Tap the share button beside the quick reactions on the post. The recipient opens the original link in linkstr.         |
+| Edit your own note             | Open **more** on a link you shared, then choose **edit note** or **add a note**. Clear the text, then confirm with **remove note** to remove it. |
 | Delete your own post           | Choose **delete post** from **more**, or long-press the post in the timeline.                                                                                                                                                    |
-| Archive or unarchive a session | Open a session, tap the session name or members button, and use **archive session** or **unarchive session**.                                                                                                   |
+| Archive or unarchive a session | Open **manage session** or **view members** from the post list, or tap the session name in the viewer. Use **archive session** or **unarchive session**. |
 | View archived sessions         | Tap the archive button beside **new session**.                                                                                                                                          |
-| Rename a session               | Open a session, tap the session name or members button, and edit the session name.                                                                                                                              |
-| Delete a session               | Open a session, tap the session name or members button, and use **delete session** in the manage sheet.                                                                                                         |
-| Add or remove members          | Open session members. Expand **choose from contacts** to add someone, or long-press their row to **remove from session**. Confirm the change, then save.                                        |
-| Copy a member's public key     | Open a session, tap the session name or members button, then long-press a member's row and choose **copy public key**.                                                                                          |
+| Rename a session               | Open **manage session**, edit the name, and save. |
+| Delete a session               | Open **manage session** and choose **delete session**. |
+| Add or remove members          | Open **manage session**. Expand **choose from contacts** to add someone, or use the remove button beside a member. Confirm the change, then save. |
+| Copy a member's public key     | Open **manage session** or **view members**, then long-press the member's row and choose **copy public key**. |
 
 Only the session creator can rename sessions, delete them, or change session membership. You can edit your own notes while you’re an active member. Edits keep the original post and its reactions in place.
 
@@ -120,6 +130,8 @@ Open **you**, tap the gear, and find **relays**.
 
 linkstr accepts normal web URLs, but in-app playback is provider-dependent.
 
+**Direct video links** over HTTPS whose path ends in `.mp4`, `.mov`, or `.m4v` open in the native player. Saving is available once the video is cached.
+
 **Extraction-preferred** (local playback attempted first, embed fallback available):
 
 - TikTok videos
@@ -129,7 +141,7 @@ linkstr accepts normal web URLs, but in-app playback is provider-dependent.
 
 **Embed-only** (web player only, no local extraction):
 
-- YouTube
+- YouTube videos and Shorts. Shorts use a portrait player.
 - Rumble
 - TikTok Photo Mode posts
 - Confirmed Instagram photo posts and photo-only carousels
@@ -138,6 +150,8 @@ linkstr accepts normal web URLs, but in-app playback is provider-dependent.
 **Browser fallback** covers everything else, plus any provider URL that blocks extraction or embed playback at runtime.
 
 Local video playback loops without a repeat limit by default, inline and fullscreen. Turn off **loop local videos** under **you** → **playback** to stop at the end of each video. Your choice is saved on this device and applies across accounts. Embedded playback behavior is controlled by the provider.
+
+**mute session videos** under **playback** and the speaker button in the session viewer change the same setting. Official embeds have their own sound controls.
 
 When local extraction succeeds, linkstr can cache the media on-device and offer **save to photos** or **save to files**. Embed-only playback stays network-backed and does not offer local export controls.
 
@@ -194,7 +208,7 @@ Yes. Your `nsec` is a Nostr secret key, not a linkstr-only credential.
 
 ### What happens if I log out?
 
-- **log out (keep local data)** removes the active identity from memory and keychain state but keeps the signed-in account's local sessions, posts, contacts, and caches on the device.
+- **log out and keep local data** removes the active identity from memory and keychain state but keeps the signed-in account's local sessions, posts, contacts, and caches on the device.
 - **log out and clear local data** removes the active identity and deletes that account's local data. Cached files still used by another saved account are kept.
 
 ### What happens if I delete my account?
@@ -207,11 +221,11 @@ Deleting the account does not invalidate the `nsec` itself. If you still have th
 
 ### Can I rename a session?
 
-Yes. Open the session and tap the session name or members button. That sheet shows the session name and current members for everyone. If you are the session creator, you can edit the name there and save to publish the updated name to all current members.
+Yes. If you created the session, open **manage session** from the post list, edit the name, and save to publish the change to all current members. Members can see the name and current members under **view members**.
 
 ### Can I archive a session?
 
-Yes. Open the session, tap the session name or members button, and use **archive session** or **unarchive session**.
+Yes. Open **manage session** or **view members** from the post list and choose **archive session** or **unarchive session**.
 
 Archive changes whether the session appears in the active or archived list. This private choice syncs across linkstr devices using the same account. It does not delete the session or its posts.
 
@@ -221,7 +235,7 @@ The member list shows your draft changes. Adding or removing someone requires co
 
 Removing someone publishes another full snapshot. They stop receiving future posts and reactions, but anything they already received remains theirs.
 
-If you are removed, linkstr keeps the session as local history. The session becomes read-only — you can still view prior posts and reactions but not send new ones.
+If you are removed, linkstr keeps the session as read-only history. You can still view prior posts and reactions.
 
 ### Why can't I send a post or reaction?
 
@@ -254,7 +268,7 @@ If you delete and reinstall the app without restoring its local data, linkstr re
 
 ### Can I delete a session?
 
-Yes. Open the session, tap the session name or members button, and use **delete session** in the manage sheet.
+Yes. If you created the session, open **manage session** from the post list and choose **delete session**.
 
 Delete is creator-only and requires confirmation. When it succeeds, linkstr removes the session from active and archived lists on this device, sends an encrypted delete notice to known members, and tries a best-effort relay-side delete for older transport copies when possible.
 
@@ -306,6 +320,8 @@ These preferences sync automatically. Once the initial preference history reques
 
 Downloaded media and generated previews are stored in app-owned local storage. Video cache is treated as disposable device cache and trims itself automatically. Media saved via the share sheet goes to Photos or a Files location you choose. Settings can clear cached videos or saved preview metadata if you want to free space or force a preview rebuild.
 
+If a prepared video is removed from the cache while the shared-save screen is open, **choose where to save** prepares it again before showing the destinations.
+
 ### What permissions does linkstr ask for?
 
 | Permission        | Purpose                                        |
@@ -340,17 +356,28 @@ Historical replay depends on relay retention. linkstr can retry out-of-order pos
 ### Videos won't play
 
 1. Check your network connection.
-2. In a session, open **playback options** and try the other player when available.
+2. In a session, expand the caption row and try the other player when available.
 3. If a cached copy was auto-trimmed, try local playback again to re-cache it.
-4. Choose **refresh preview** from **more** if the preview seems stale or missing.
-5. Tap **open** in a session or **open in browser** on a shared link if the provider blocks playback.
+4. Use **try again** on a playback error or **retry embed** to reload the official player. Use **refresh post** in **more post actions** to clear cached playback and retry the whole post.
+5. Tap **open in browser** if the provider blocks playback.
 
 ### A preview looks stale or wrong
 
-1. Open **more** on the post and choose **refresh preview**.
+1. Expand the post details and choose **refresh post** from **more post actions**. This refreshes metadata, removes the cached video, and retries playback.
 2. Open the post or the shared link to let linkstr rebuild a missing preview.
 3. Settings can clear saved preview metadata if you want linkstr to rebuild it.
 4. If the provider itself is serving bad metadata, use **open in browser**.
+
+### Sharing from another app stays on “checking link…”
+
+Linkstr waits for the source app to provide a web link. After 15 seconds, it replaces the spinner with recovery guidance. Close the share sheet and try sharing again from the original app. If the link arrives while the sheet is still open, the normal share and save actions appear automatically.
+
+### A shared video won't save
+
+1. If preparation fails, tap **try again** to check and download the video again.
+2. If Photos access is denied, tap **choose where to save** and choose **save to files**, or allow Photos access in iOS Settings.
+3. If a prepared file was removed from the cache, **choose where to save** downloads it again before offering destinations.
+4. Use **open in browser** when the source does not provide a downloadable video.
 
 ### I can't scan a QR code
 

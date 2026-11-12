@@ -1,6 +1,6 @@
 # linkstr
 
-_Last updated: November 9, 2026_
+_Last updated: November 11, 2026_
 
 linkstr is an iOS app for private link sharing on [Nostr](https://nostr.com). You create private sessions, share links with people you trust, react with emojis, and play supported video directly inside the app when a provider allows it.
 
@@ -57,12 +57,13 @@ linkstr is built around private sessions, not one-off direct messages. A session
 - Boot uses the shipped default relay set when no relay configuration is persisted.
 - Boot starts the relay runtime once identity is available.
 - Foreground re-entry and protected-data availability events retry identity load when no account is currently active in memory.
+- Pending forms keep error handling scoped to their account and relay connection. Obsolete or cancelled completions cannot consume current errors, and an old account’s form does not suppress the new account’s error toasts.
 - If persistent local storage cannot be opened, the app shows a recovery screen instead of crashing. Recovery allows retrying startup or continuing in a temporary in-memory mode for that launch only.
 - If no identity exists, onboarding is shown. If identity exists, the main app shell is shown.
 
 **Visual design:**
 
-- The app uses a Tokyo Night color scheme across all surfaces.
+- The app and iOS share extension use the Tokyo Night color scheme and shared header and action styles.
 - The main tabs are **sessions**, **contacts**, and **you**. Settings opens from the gear or the **all settings** row on **you**.
 - Session lists use member initials, link thumbnails, readable previews, and separate unread counts. The watch view gives each post a screen and keeps playback and sharing controls within reach.
 - Interface labels use lowercase. Session names, contact names, and shared text keep their original capitalization.
@@ -88,7 +89,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 | Delete account               |        ✓        |         ✓         |          ✓          |
 
 - "Log out and clear local data" and "Delete account" both remove account-scoped local data: contacts, incoming follows, sessions, session members, membership intervals, posts, session deletion tombstones, reactions, cached media references, and local encryption key material for that owner scope.
-- "Delete account" includes a two-step destructive confirmation flow. When relays are available, it also publishes an empty follow list (`kind:3`) and a Nostr request-to-vanish (`kind:62`) to enabled relays.
+- **delete account** opens a scrollable confirmation sheet. **continue** shows the final warning before the destructive action. When relays are available, deletion also publishes an empty follow list (`kind:3`) and a Nostr request-to-vanish (`kind:62`) to enabled relays.
 - "Delete account" does not invalidate the `nsec`; the key remains usable for sign-in later.
 - "Delete account" is send-gated like other relay-backed mutations and does not proceed while relay confirmation is unavailable.
 
@@ -99,8 +100,8 @@ linkstr is built around private sessions, not one-off direct messages. A session
 - Users create sessions from the compose action in the top-right corner of the sessions tab.
 - Search covers session names and recent post text. A session row shows the sender's note or linked title when available, plus the source, timestamp, and unread count.
 - Group rows show up to three member initials. A session with one other member shows their initials, and a solo session shows a bookmark.
-- Opening a session starts the watch view. Swipe vertically between posts or tap the **all session posts** list button for the timeline. Hold that button for previous and next controls and **mark all as read**. The app remembers the last viewed post while it is running.
-- Tap the session name to view members and session settings. Notifications still open the timeline without playing a post.
+- Opening a session shows the post list. Tap a row to view that post, or use **watch posts** to resume the last viewed post while the app is running. In the viewer, hold **all session posts** for previous and next controls and **mark all as read**. If the final post disappears, the viewer returns to the empty list. Later arrivals stay in the list until you open them.
+- Open **manage session** or **view members** in the post list, or tap the session name in the viewer. Notifications open the post list without playing a post.
 
 **Session creation:**
 
@@ -120,6 +121,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 - Update fanout targets both prior-active and next-active members so removed members receive the removal snapshot.
 - Outbound snapshots include the session name so newly added members can materialize the session from the snapshot alone and existing members can apply renames.
 - Snapshot application is monotonic by `created_at`; older snapshots are ignored. Equal-timestamp conflicts resolve by lexicographic event-ID tiebreak.
+- Locally created sessions and membership changes store the exact timestamp published to relays. Sequential membership edits use increasing timestamps. A local save does not overwrite a newer snapshot received while its publication was pending; its own relay echo is accepted as success.
 
 **Archive:**
 
@@ -131,7 +133,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 **Delete:**
 
 - The session creator can delete a session from the manage session sheet.
-- Delete requires confirmation and dismisses back to the session list when the session disappears.
+- Delete uses a scrollable confirmation sheet with a persistent close control and dismisses back to the session list when the session disappears.
 - Delete removes the session from both active and archived views on this device and prevents later relay backfill from recreating it.
 - Delete sends an encrypted `session_delete` notice to known members.
 - When relay-visible wrapper IDs are available, linkstr also makes a best-effort relay-side delete request. Missing relay-side deletion does not roll back the local delete.
@@ -144,7 +146,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 - Members can be added only from existing contacts. Members can be removed from active membership.
 - Long-press a current member to copy their public key (`npub`).
 - Only the session creator can rename, delete, or change session membership. Non-creator membership and delete mutations are ignored on ingest.
-- The post list inserts centered `in:` / `out:` separators for membership changes observed after the first local membership snapshot.
+- The post list inserts centered joined and left markers for membership changes observed after the first local membership snapshot.
 - If the signed-in user is removed, the session stays visible as local history but becomes read-only for new posts and reactions.
 - Member identity resolves as: local alias → remote Nostr profile name → `npub`.
 - Outbound membership snapshots always include the local sender key.
@@ -158,7 +160,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 **Composer:**
 
 - Shows the destination, link, and optional note. A preview displays the source and, when available, a title and thumbnail.
-- **share to session** sits at the bottom with any validation, relay, or error message.
+- **share to session** sits at the bottom with any validation, relay, or error message. While editing the link or note, the footer hides to leave room for the field and keyboard; **done** dismisses editing and restores it. Both composers and the note editor keep the focused field visible when rotation, the keyboard, or text size changes the available space. Note fields use a compact, scrollable height in landscape.
 - The keyboard return key advances from the link field into the note field.
 - Fields: session name (read-only), link (required), note (optional).
 - The link field supports paste and clear helpers rendered directly below the field in a compact control row. Paste replaces the entire field value.
@@ -168,9 +170,12 @@ linkstr is built around private sessions, not one-off direct messages. A session
 
 **Watching posts:**
 
-- Portrait video fills the watch view. Wider videos keep their proportions. Regular links show a readable card with a title, thumbnail, source URL, and available social post text. Use **open** to visit the original.
-- **react** opens emoji choices and the reaction breakdown. Tap the caption or choose **post details** from **more** to read the full note and copy the URL.
-- **more** also offers **share link** and **refresh preview**. On your own posts, use **edit note** to change or clear the note, or **delete post** to remove the post.
+- In the viewer, swipe up for older posts or down for newer posts. **back to posts** returns to the post you were viewing. **all session posts** opens the list at the newest post.
+- Native portrait video can fill the watch view. Official video players fit between the session header and the post controls while keeping their aspect ratio. HTTPS links to MP4, MOV, or M4V files can play directly. Regular links show a readable card with a title, thumbnail, source, and available social post text. Use **open in browser** to visit the original.
+- Tap the caption row or swipe up on it to show the description, note, original URL, and post actions. Tap the row again or pull down from the top of the details to close them. Swipe on the viewer background to page between posts. Scrollable link cards and embedded posts keep their own scrolling; provider players also retain their controls. The controls overlay does not resize or reload the player. Ordinary link previews reserve space above expanded details. When space is too short for the preview card, the details retain its text and browser action; collapsing details restores the card.
+- Tap a quick emoji to add or remove your reaction, or tap the smiley with a plus for the emoji picker. Swipe the emoji row sideways for more counts. The picker, **view reactions**, and **share link** stay in place. The caption shows the extracted description or saved title when available. When the main card already shows the post text, the caption row shows the note if there is one.
+- In **more post actions**, choose **refresh post** to refresh the preview and retry playback from local extraction. On your own posts, use **add a note** or **edit note**, or choose **delete post**. Clear the note and choose **remove note** to keep the post without its note.
+- Deleting a post opens a confirmation sheet with a scrollable warning and a persistent close control, including at large text sizes.
 - Note edits sync after relay acceptance to active members who were eligible for the original post. They keep the original link, timestamp, read state, and reactions. Older versions of linkstr still show the original note.
 
 **Send behavior:**
@@ -179,7 +184,8 @@ linkstr is built around private sessions, not one-off direct messages. A session
 - Send waits for a usable relay path with a default timeout of 12 seconds.
 - On success, the post persists locally and the composer dismisses. On failure or timeout, the composer stays open and the error is shown.
 - Posting is blocked when the sender is not an active member of the target session.
-- Recipient resolution uses only active session members.
+- Recipients are rechecked after waiting for a relay, using only active session members. A sender removed while waiting cannot publish.
+- Saved posts use the timestamp sent to recipients. A late send confirmation preserves an existing relay echo and its newer note, preview, archive state, and transport IDs. It cannot restore a deleted post or session or enqueue a notification for that deleted item.
 
 **Identity, deduplication, and deletion:**
 
@@ -195,14 +201,17 @@ linkstr is built around private sessions, not one-off direct messages. A session
 
 - Reactions are emoji-only toggles tied to a post.
 - Reaction send is blocked when the sender is not an active member of the target session.
-- Default quick options: 👍, 👎, 👀. The **+** button opens the full emoji picker sheet.
-- Session post lists show compact read-only reaction summaries with no interactive controls; single reactions show emoji-only, and higher counts use bottom-right badges. Read-only count badges cap visually at `10+`.
-- The watch view shows a short reaction summary. Its reaction sheet separates **your reactions** from **who reacted**. The **all** and emoji filters only filter the participant list; the controls under **your reactions** add or remove your reaction. If the selected emoji no longer has any reactions, the filter returns to **all**.
+- Default quick options: 👍, 👎, 👀. The smiley with a plus opens the full emoji picker. In landscape, focusing search places the search field and close button on one row to leave room for results above the keyboard.
+- Session post lists show compact read-only reaction summaries with no interactive controls; single reactions show emoji-only, and higher counts appear beside the emoji. Read-only count badges cap visually at `10+`.
+- The watch view keeps quick emojis and exact counts in one horizontally scrollable row. The people button opens the participant list. Tap a count for an emoji outside the quick set to open its filter directly. If the selected emoji has no remaining reactions, the filter returns to **all**.
+- Tap a selected quick emoji again to remove it. For other emoji, open the picker and tap your selected reaction in its top row. Selecting an emoji in the grid also toggles your reaction.
 
 **State and ordering:**
 
 - Reaction state is keyed by session ID, post/root ID, emoji, and sender pubkey.
 - Transport carries reaction active/inactive state.
+- Rapid taps on the same reaction are sent in order, using the last accepted state. Other posts and emoji can proceed independently. Account changes cancel queued reactions.
+- Local reaction changes use strictly increasing publication timestamps and store the same timestamp that recipients receive, so rapid toggles retain their order across devices.
 - Reactions received before their root post are staged in memory and retried once the root arrives.
 - Reactions targeting a root already tombstoned by a validated delete watermark are discarded.
 - A validated root delete also clears any staged reactions still waiting on that root. Mismatched or unvalidated delete notices do not clear staged reactions.
@@ -237,6 +246,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 - Foreground re-entry reconnects once and keeps bounded message deduplication for the same account. History is still requested in full so delayed gift wraps remain recoverable; changing accounts clears the cache.
 - Send gating blocks immediately when there are no enabled relays or only read-only relays are available; otherwise it waits for a connection until timeout.
 - No offline outbox exists. Failed sends are not queued for automatic retry.
+- Post sends, note edits, session changes, and deletions recheck the account and relay service after asynchronous work. Connection waits also stop when that context changes. Cancelled or superseded completions do not write local changes, enqueue post notifications, or overwrite the current session’s error state.
 
 ### Relay delivery and ingest
 
@@ -282,6 +292,7 @@ Stored decrypted history does not retain the original signed seals, so it cannot
 - Reaction deactivations, self-echoed events, and historical relay restore/backfill do not trigger notifications.
 - Foreground presentation remains enabled (banner, list, sound).
 - New-post and reaction notifications open the session's posts list, without opening a post or starting video playback. Reaction notifications with a target post ID scroll to that post once it is available; older alerts without that ID simply open the list. Manual scrolling cancels a pending jump to a post that has not arrived yet.
+- Opening a notification dismisses incoming-link screens and cancels any link waiting for the native share sheet to close, so an older handoff cannot cover the requested session.
 - Notification taps replace the current navigation stack and dismiss its sheets, including when the same session or post is already open. Cold-launch taps are retained through app startup; the latest tap wins.
 - Opening a post clears its delivered new-post and reaction alerts from Notification Center. Unrelated alerts and older reactions without a target post ID are left alone. Opening only the app or session list does not mark posts as read or clear their alerts.
 - Post details observe account- and post-scoped data so posts and reactions arriving after navigation appear without reopening the screen. Missing or deleted destinations show the existing unavailable state.
@@ -295,18 +306,22 @@ URL classification drives playback mode: extraction, embed, or link fallback. Mo
 
 **Extraction** resolves direct video media for native playback and local caching:
 
-- The watch view has play, pause, seek, and mute controls. Shared links opened outside a session use the system video player.
+- The watch view has play, pause, seek, mute, and fullscreen controls. The expand icon at the right of the playback bar opens the system player in one tap. Shared links opened outside a session use inline system video controls. **open system player** opens a separate fullscreen player when available. Tap the video to reveal its native controls, including close.
 - Extracted media can be saved to Photos or Files.
 - Works offline once cached.
 - Video cache auto-trims at approximately 1 GB with least-recently-used eviction.
+- HLS downloads stay at their system-provided location and are saved only after successful completion. Cancellation removes partial packages. Cached HLS video uses the same native player and playback controls as other local videos.
 
 **Embed** loads the provider's web player in an inline web view:
 
 - Requires network connectivity.
 - Subject to provider playback restrictions.
 - Fullscreen depends on provider iframe support.
+- In the watch view, the full player frame fits above the collapsed description and reactions. Expanded details temporarily cover the lower part of the player. Provider controls and captions remain inside the embed.
 
 #### Provider support
+
+**Direct video links** over HTTPS whose path ends in `.mp4`, `.mov`, or `.m4v` open in the native player. Saving is available once the video is cached.
 
 **Extraction-preferred** (local playback attempted first, embed fallback available):
 
@@ -317,7 +332,7 @@ URL classification drives playback mode: extraction, embed, or link fallback. Mo
 
 **Embed-only** (web player only, no extraction):
 
-- YouTube
+- YouTube videos and Shorts. Shorts use a portrait player.
 - Rumble
 - TikTok Photo Mode posts
 - Confirmed Instagram photo posts and photo-only carousels
@@ -330,20 +345,28 @@ Non-video provider URLs (channel pages, profiles, etc.) fall back to open-in-bro
 - For extraction-preferred providers, local playback is attempted first with controls to use the embed or open the post in a browser while it prepares.
 - Confirmed photo-only Instagram posts skip slow local video probing and use Instagram's swipeable mobile web view.
 - Provider embeds decide which post audio is available; linkstr does not separately extract audio-only media.
-- If a local playback stream fails, caching for that stream stops and the next available stream is tried automatically before falling back to embed mode.
+- If a remote playback stream fails after its download completes, playback tries the downloaded copy. Without a completed copy, it tries the next available stream before falling back to embed mode. A downloaded file that fails playback is discarded even if other posts reference it, so retry can download a fresh copy.
 - If extraction fails, embed mode remains available with **try extracted video** and browser access.
-- Use **open** in a session or **open in browser** on a shared link to open the provider's page.
+- Use **open in browser** to open the provider's page.
 - Switching playback modes, refreshing or changing the source, and leaving the screen cancel superseded playback preparation and caching work.
-- The watch view puts **use official embed**, **try extracted video**, and **open system player** in **playback options** when available. **more** contains post details, sharing, refresh, saving a cached video, and author-only note editing and deletion.
-- Embed loading has a browser exit. Failed or stalled embeds offer retry and browser access; embed-only providers never show an extraction switch.
+- URL-based official players show a loading indicator while connecting, without blocking provider controls.
+- The watch view puts **use official embed**, **try extracted video**, and **fit entire video** below the post details when available. **fit entire video** shows the full local video above the collapsed post and playback controls; **fill screen** restores the immersive view. The panel groups **open in browser** with playback actions. **more post actions** contains **refresh post**, saving a cached video, and author-only note editing and deletion.
+- On iPhone, the app uses portrait, with upside-down portrait where the device supports it. iPad also supports landscape. In landscape, expanded post details scroll together with the author and reactions so playback options remain reachable at larger text sizes. Pull down from the top or tap the chevron to collapse the panel. Expanded details temporarily cover the video, including in **fit entire video** mode.
+- While an embed loads, you can open the original link in your browser. Expand the post controls for **retry embed**, including when the provider is stuck without reporting an error. Detected load failures also offer retry directly on the recovery card. A switch to extracted playback appears when the post supports it.
+- In compact layouts, portrait embeds scale to fit after the provider lays out its controls, keeping the full player visible.
+- TikTok uses its recommended [Embed Player](https://developers.tiktok.com/docs/en/embed-player), with a portrait viewport and provider controls. Local extraction remains first. Player errors 1001, 2001, and 3001 are recorded in playback diagnostics without removing TikTok’s document. **retry embed** remains available in the watch view’s expanded controls and below the post information on shared links, independently of provider error events. Autoplay rejection (3002) leaves tap-to-play available. Empty HTTP 429 responses show the standard recovery card. Retries are manual. TikTok documents temporary usage limits; switching user agents or embed formats does not guarantee playback.
+- Facebook video embeds preserve the SDK player’s aspect ratio when resized. The watch view fits the full managed document into the available height; this can make portrait videos small in landscape. If the oEmbed request or SDK has not produced a player after five seconds, the document shows recovery guidance. A late player replaces that guidance without requiring a reload. Facebook Reels retain their existing URL-based player path.
+- Playback diagnostics use Apple's unified log with subsystem `com.parmscript.linkstr` and category `playback`. They record cache use, extraction results, candidate failures, mode changes, embed failures, retries, and audio session failures. Post URLs and content are not logged; error details are private. Debug-level entries include cache use and candidate counts. Audio session changes run serially off the UI thread and remain active until the last player releases ownership.
 - Audio plays even when the iPhone silent switch is enabled.
 - Local video playback loops without a repeat limit by default, inline and fullscreen. **you** → **playback** → **loop local videos** turns looping off or on. The preference is saved on this device and applies across accounts; turning it off lets the current video finish without restarting.
-- When a local file is cached, use **more** → **save video** in a session or **save video** on a shared link to export to Photos or Files.
+- When a local file is cached, use **more** → **save video** in a session or **save video** on a shared link to export to Photos or Files. The shared download service checks local copies before exposing them to either save flow and retries once if a copy is unreadable.
+- Playback pauses during a Photos save and its feedback. Changing or closing the video prevents the old save result from appearing over another post. Cancelling before Photos authorization completes prevents the library write from starting; a write already submitted to Photos may still finish. Changing or refreshing the source also clears its save chooser, Files picker, and feedback. Files export completion is checked against the current playback presentation because iOS may dismiss the picker before reporting its result.
 
 **Twitter/X statuses** are resolved at runtime:
 
 - Video statuses use extraction-preferred playback.
 - Non-video statuses use official tweet embeds when available, falling back to a readable link card with available post text and browser access.
+- If the widget stalls, the embed shows recovery guidance after three seconds even if the provider inserted an unfinished placeholder. A widget arriving later removes the guidance without discarding the provider’s elements.
 
 #### Embed URLs
 
@@ -363,7 +386,10 @@ Embedded web playback allows provider-element fullscreen when supported.
 - Title and thumbnail are fetched asynchronously for root posts.
 - Twitter/X, Instagram, TikTok, Facebook, and Rumble use provider-specific metadata paths before falling back to generic `LinkPresentation`.
 - Missing metadata is retried when timeline rows come into view or a post becomes active in the watch view.
-- The watch view's **refresh preview** action fetches new metadata for that post.
+- Resetting the account session cancels the active preview worker. Its late response cannot update posts or take over the new preview queue.
+- **refresh post** in the watch view’s **more post actions** menu clears cached playback, reloads the media with local extraction first, and fetches fresh metadata. Refresh invalidates any older in-flight preview request; obsolete thumbnail writes are cancelled. **retry embed** reloads only the current official player.
+- Refresh clears only that post’s saved playback reference. A downloaded file remains available while another stored post references it.
+- Leaving the post cancels its pending manual refresh, so an old response cannot reset playback or show an error on the next screen. A response for a deleted post is also ignored and does not clear the current error.
 - Missing local thumbnail files are treated as stale and re-fetched.
 - Settings → Storage can clear downloaded videos separately from hydrated metadata and thumbnails.
 
@@ -394,7 +420,7 @@ Embedded web playback allows provider-element fullscreen when supported.
 - The **added you** list shows public follows found on configured relays. Tap the add-contact button beside someone to add them; saved contacts show a checkmark. Long-press a row to **copy public key**. Results are cached per account and can be refreshed or paged with **load more**. Discovery checks authors' latest lists for unfollows. Results are ordered by follow-list timestamp, newest first.
 - Public keys wrap in full in contact and member rows, the add-contact preview, and contact detail. Row menus copy the complete key; preview and detail text also support native selection and copying.
 - Tap a contact row to edit it. Session-member rows show an add-contact button only for people outside your contacts. Contact additions require confirmation and preserve existing aliases, session membership, and unsaved session edits.
-- The **add members** section expands to show contacts who are not in the session. Membership changes require confirmation and take effect when the creator saves.
+- The **add members** section expands to show contacts who are not in the session. Membership changes use a scrollable confirmation sheet with a persistent close control and take effect when the creator saves.
 - Long-press a contact row for **copy public key** and **remove contact**, or a session-member row for **copy public key** and creator-only **remove from session**. Both actions also have accessibility actions. Contact detail retains its **remove contact** button. Contact removal requires confirmation and relay acceptance; shared sessions and posts remain available.
 
 See [contact synchronization](docs/CONTACTS.md) for persistence and relay behavior.
@@ -402,8 +428,8 @@ See [contact synchronization](docs/CONTACTS.md) for persistence and relay behavi
 ### You tab
 
 - Exposes the current account `npub`.
-- **edit profile** lets you publish, update, or clear your Nostr profile name. Use the keyboard return key or the save button to submit.
-- Sequential profile edits use increasing timestamps. A newer profile received while a save is pending remains authoritative, and a failed local save is reported instead of shown as successful.
+- **edit profile** lets you publish, update, or clear your Nostr profile name. Use the keyboard return key or the top-right **save profile name** control to submit. Clearing the draft changes that control to **clear profile name**. Save progress and validation use the shared bottom footer.
+- Sequential profile edits use increasing timestamps. A newer profile received while a save is pending remains authoritative, and a failed local save is reported instead of shown as successful. Pending saves ignore results and errors after the account or relay service changes.
 - Shows a QR code and the public key, with **copy** and **share** actions. Playback, storage, backup, and all settings are available below it.
 
 ### Deep links
@@ -413,13 +439,17 @@ See [contact synchronization](docs/CONTACTS.md) for persistence and relay behavi
 - Media save format: `linkstr://save?url=…`
 - Valid deep links open a full-screen shared-link detail, share composer, or media-save surface.
 - Post detail can share the current post as a deep link through the native iOS share sheet. Opening the sheet pauses playback; dismissing it resumes a video that was playing. Background session media also pauses while a shared-link, share-composer, or media-save screen is open.
-- The iOS share extension accepts web URLs, webpages, shared linkstr post links, or text containing either kind of link, then offers **share to a session** or **save media**.
+- The iOS share extension accepts web URLs, webpages, shared linkstr post links, or text containing either kind of link, then offers **share to session** or **save video**.
+- If the source app has not supplied its link after 15 seconds, the extension replaces the loading indicator with recovery guidance. A later link still restores the share actions; closing the extension ignores later results.
+- The share extension waits for iOS to confirm that linkstr opened. If opening fails, the link and actions stay available so you can retry or close the extension.
 - Sharing a linkstr post link back into the app or pasting it into either composer uses the original web URL, including its query and fragment. Invalid or nested deep links are rejected.
-- **share to a session** opens a full-screen share composer with the link prefilled, any surrounding text as the optional note, and a separate searchable active-session picker.
-- `save media` opens linkstr to cache supported media and offer Photos or Files as the destination. Shares without a valid web link close without an error.
+- **share to session** opens a full-screen share composer with the link prefilled, any surrounding text as the optional note, and a separate searchable active-session picker.
+- If another link opens while a share is sending, the original send can finish without dismissing the newer composer or changing its navigation.
+- **save video** opens linkstr to cache supported video and offer Photos or Files as the destination. It checks the downloaded copy before export and retries once if that copy is unreadable. If no web link can be found, the extension explains what to share instead.
 - Shared deep links carry only the normalized web URL; title, thumbnail, and provider-specific preview text are fetched when the recipient opens the link.
 - Shared-link detail uses the same playback resolver and fallback behavior as the watch view, with inline controls.
 - Dismissing shared-link detail, the share composer, or the media-save surface clears pending deep-link state.
+- A Photos save that finishes after its screen closes cannot dismiss or update a newly opened media-save screen, even for the same link.
 
 ### Local data and security
 
@@ -435,8 +465,8 @@ See [contact synchronization](docs/CONTACTS.md) for persistence and relay behavi
 **Storage and caching:**
 
 - SwiftData persistence is local-first and survives app relaunch.
-- Cached video files live under `Library/Caches` and are treated as disposable device cache with LRU eviction at approximately 1 GB.
-- Settings → Storage can purge downloaded videos or clear hydrated metadata and thumbnails across all local accounts retained on the device. File deletion follows a successful database save; shared files remain until no stored message references them.
+- Downloaded MP4 files live under `Library/Caches`. HLS packages remain at AVFoundation’s system-provided locations, with relative references retained for reuse after relaunch. Both participate in LRU eviction at approximately 1 GB. MP4 downloads recreate a missing cache directory; duplicate completed downloads reuse the existing file or package.
+- Settings → Storage can purge downloaded videos or clear hydrated metadata and thumbnails across all local accounts retained on the device. Thumbnail-only previews are cleared even without a title. File deletion follows a successful database save and is limited to managed files; shared files remain until no stored message references them.
 
 **Scoping and encryption:**
 
@@ -445,6 +475,9 @@ See [contact synchronization](docs/CONTACTS.md) for persistence and relay behavi
 - "Log out and clear local data" removes the signed-in account's persisted entities and cache references, and deletes managed files no longer referenced by any retained account.
 - If account-scoped local cleanup cannot fully complete, the app surfaces an error instead of reporting a clean success.
 - Sensitive content fields are encrypted at rest with per-owner local keys (aliases, session and member identity values, URLs, notes, metadata, and creator keys).
+- Cached display values retain SwiftData observation of their encrypted fields, so refreshed previews, renamed sessions, edited notes, and contact aliases update visible views without navigation.
+- Newly fetched thumbnails reload visible artwork even when the image replaces an existing file at the same path. A refresh without new artwork keeps a usable saved thumbnail.
+- A thumbnail-loading failure does not discard a successfully fetched preview title, for regular links or social posts.
 - Operational identifiers and timestamps remain plaintext in local storage for indexing and querying.
 - Identity keys remain in the keychain. Keychain accessibility uses `WhenUnlocked` and prefers synchronizable items when available.
 - Keychain replacements update existing items in place. Missing local encryption keys are not regenerated for accounts with stored encrypted data; failed decryptions remain retryable without rewriting that data.
@@ -490,6 +523,12 @@ Future proposals are tracked as separate docs and are not part of the current sh
 
 ## Development
 
+NostrSDK is pinned to a [fork commit with the event-signing buffer fix](https://github.com/therealparmesh/nostr-sdk-ios/commit/4bbfcd895738997174fc35325743c4076151659f).
+The fork changes one source file from upstream revision `e5855cb`. Address Sanitizer
+reproduced a stack read past a `Data` value during signing. The fix passes the
+32-byte random buffer to the same signer. Keep the fix when updating the pin and
+run the test suite with Address Sanitizer enabled.
+
 ### Generate the Xcode project
 
 The `.xcodeproj` is generated from `project.yml` via [XcodeGen](https://github.com/yonaskolb/XcodeGen). Run this after pulling or changing `project.yml`:
@@ -512,15 +551,19 @@ open linkstr.xcodeproj
 
 This runs both the iOS unit tests (via `xcodebuild`) and the push-service Go tests in one pass.
 
+Set `SIMULATOR_NAME` to select a named simulator, including one you renamed, or
+`SIMULATOR_DESTINATION` to pass an explicit Xcode destination. Without either,
+the script selects an available iPhone simulator on the newest runtime.
+
 Tests cover observable behavior and distinct failure paths. Reuse coverage when a broader test already checks the same behavior. For asynchronous work, check the state before and after completion; for rejected input, use a valid control so the test cannot pass for an unrelated reason. Generated HTML and native gestures also need UI verification; checking for source strings does not prove they work.
 
-`BackupTests` covers restore recovery on disk, overlapping imports, deletion and membership preservation, invalid input, and account isolation. `RelayHistoryPageTests` covers short pages, duplicates, and saturated timestamp boundaries. `NostrEventValidationTests` covers relay decoding, outgoing envelopes, recipient and sender copies, invalid signatures and authors, and history validation. `NostrRelayDeliveryTests` checks history ordering, timely send acknowledgments, cancellation, and account-scoped replay. `AppSessionIngestTests+Authentication` checks that forged membership updates and deletes cannot change stored state while authorized messages still work. Contact tests are described in [contact synchronization](docs/CONTACTS.md#verification).
+`BackupTests` covers file import validation (valid backups, malformed data, newer formats, directories, and the size limit), restore recovery on disk, overlapping imports, deletion and membership preservation, and account isolation. `RelayHistoryPageTests` covers short pages, duplicates, and saturated timestamp boundaries. `NostrEventValidationTests` covers relay decoding, outgoing envelopes, recipient and sender copies, invalid signatures and authors, and history validation. `NostrRelayDeliveryTests` checks history ordering, timely send acknowledgments, cancellation, and account-scoped replay. `AppSessionIngestTests+Authentication` checks that forged membership updates and deletes cannot change stored state while authorized messages still work. Contact tests are described in [contact synchronization](docs/CONTACTS.md#verification).
 
 ### Releases
 
 Create the version-bump commit before the implementation commits, using the existing conventional subjects without bodies. Update the app and share extension versions together. Keep build-number increments for release uploads out of Git: apply them to the archive and export, then restore the committed value.
 
-Archive and export with `xcodebuild`, then validate and upload the IPA with `altool`. Use the Fastlane Spaceship CLI scripts to prepare App Store Connect. Copy all localized metadata, including promotional text, along with screenshots, previews, and review information. Reuse the release notes from 1.3.14 unless new wording is requested. Verify the selected build and TestFlight availability, then confirm before submitting for automatic release after approval.
+Archive and export with `xcodebuild`, then [validate and upload the IPA with `altool`](https://developer.apple.com/help/app-store-connect/manage-builds/upload-builds). Prepare the release in App Store Connect with the current localized metadata, screenshots, previews, review information, and release notes. Verify the selected build and TestFlight availability, then confirm before submitting for automatic release after approval.
 
 ### Lint
 
@@ -528,7 +571,8 @@ Archive and export with `xcodebuild`, then validate and upload the IPA with `alt
 ./scripts/lint.sh
 ```
 
-Runs [SwiftLint](https://github.com/realm/SwiftLint) across all Swift sources.
+Runs [SwiftLint](https://github.com/realm/SwiftLint) across the app, share extension,
+and test sources. Warnings and errors both fail the check. Third-party package sources are excluded.
 
 ### Run push-service tests only
 

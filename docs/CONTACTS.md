@@ -4,13 +4,13 @@ Contacts mirror the signed-in account's public Nostr kind-3 follow list. Incomin
 
 ## Contact actions
 
-Contact additions and removals require confirmation. Tap a contact row to edit it; long-press for **copy public key** followed by **remove contact**. Both actions are available as accessibility actions. Contact detail also has a **remove contact** button.
+Adding or removing a contact opens a scrollable confirmation sheet with a fixed close button. Tap a contact row to edit it; long-press for **copy public key** followed by **remove contact**. Both actions are available as accessibility actions. Contact detail also has a **remove contact** button.
 
 The **added you** list has a compact add-contact button and supports copying public keys from its long-press menu. Saved contacts show a checkmark with a descriptive accessibility label.
 
-Session-member rows show a compact add-contact button only for people outside your contacts, with no **…** menus or contact-status badges. Copying and creator-only removal stay in the long-press menu and accessibility actions. The expandable **add members** list excludes existing members; adding or removing a member changes the draft only after confirmation and takes effect when the creator saves.
+Session-member rows show a compact add-contact button for people outside your contacts. Creators can remove someone with the row button or the long-press menu. Long-press a row or use its accessibility action to copy the public key. **choose from contacts** under **add members** excludes existing members. Adding or removing a member updates the draft after confirmation and takes effect when the creator saves.
 
-`ContactMutationQueue` serializes additions, removals, and account deletion so each action uses the last completed follow list. Quick-add leaves existing contacts and aliases unchanged. The manual add form can update an existing alias.
+The contact instance of `MutationQueue` serializes additions, removals, and account deletion so each action uses the last completed follow list. Quick-add leaves existing contacts and aliases unchanged. The manual add form can update an existing alias.
 
 Publishing preserves non-contact tags and metadata on retained contact tags. A successful update saves the contacts, alias changes, and accepted event timestamp and ID together. Follow lists use NIP-01 ordering: the newer timestamp wins, with the lowest event ID breaking a tie.
 
@@ -24,11 +24,11 @@ Removing a contact records a cleared private alias for backup. Shared sessions a
 
 ## Added you
 
-Open **added you** from the contacts list. Both screens have their own search and an **add contact** button in the header. Incoming follows are ordered by follow-list timestamp, newest first, with public keys breaking ties. Nostr follow lists do not include a separate timestamp for adding each person; unrelated follow-list updates can also move someone up the list. The list has no status caption or inline loading indicator. Use the add-contact button beside a person to add them, or long-press their row to **copy public key**. The standard back button returns to contacts. Contact detail has its own back and save controls.
+Open **added you** from the contacts list. Both screens have their own search and an **add contact** button in the header. Incoming follows are ordered by follow-list timestamp, newest first, with public keys breaking ties. Nostr follow lists do not include a separate timestamp for adding each person; unrelated follow-list updates can also move someone up the list. Use the add-contact button beside a person to add them, or long-press their row to **copy public key**. The standard back button returns to contacts. Contact detail has its own back and save controls.
 
 `ContactDiscovery` shares the app's relay connections. It finds kind-3 events containing the owner's public key, then requests those authors' latest lists without requiring that tag. This second request can find unfollows. Visible rows receive live author updates, and a separate subscription finds new follows while historical pages load.
 
-Both screens keep cached rows visible during loading. Empty and search-empty messages wait for a completed request; failed or incomplete requests show a retry action when no matching rows are available. Contacts syncs the complete follow list without pagination. Added you searches the cached pages and offers **load more** when more results may be available. Neither screen adds a status caption or inline spinner.
+Both screens keep cached rows visible during loading. Empty and search-empty messages wait for a completed request; failed or incomplete requests show a retry action when no matching rows are available. Contacts syncs the complete follow list without pagination. Added you searches the cached pages and offers **load more** when more results may be available. A labeled progress indicator appears when loading has no matching rows to show. Added you also shows progress below cached rows while fetching more people; its load-more button uses the shared action-button style.
 
 Discovery keeps a separate cursor for each relay, with pages starting at 200 events. Author queries use batches of 50, with at most two active batches. Pages include the previous page's oldest timestamp to avoid skipping events with equal timestamps. If that boundary fills a page, the limit grows to at most 1,600 events before stopping pagination. Short responses still allow an older-history request. Completion and timeout are tracked for each query and expected relay; deadlines wait behind already received events. A missing response does not count as an unfollow or a completed empty result. Failed pages do not advance the cursor.
 
