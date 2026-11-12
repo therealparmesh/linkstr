@@ -2,6 +2,14 @@
 
 copy/paste-ready fields for app store connect.
 
+## what’s new in 1.6.0
+
+- a new look for sessions, posts, contacts, settings, and the share extension.
+- open a session to see all its posts, then swipe between posts in the viewer.
+- react from the viewer and tap a reaction count to see who reacted.
+- edit notes you wrote and see post descriptions alongside playback and link previews.
+- switch between a downloaded video and the official player when both are available.
+
 ## promotional text
 
 collect links in private sessions, swipe through posts, and save supported videos for offline viewing.

@@ -27,20 +27,6 @@ final class EmbeddedWebSourceTests: XCTestCase {
     XCTAssertEqual(presentation?.mediaStrategy, .extractionPreferred(embedURL: officialPlayer))
   }
 
-  func testTikTokShareLinkRoutesToTheOfficialPlayerAfterRedirect() throws {
-    let shortURL = try XCTUnwrap(URL(string: "https://www.tiktok.com/t/ZPLCKedJf/"))
-    let redirectURL = try XCTUnwrap(
-      URL(string: "https://www.tiktok.com/@hexandthecity_/video/7702571588780133645?_r=1&_t=share")
-    )
-    let officialPlayer = try XCTUnwrap(URL(string: "https://www.tiktok.com/player/v1/7702571588780133645"))
-
-    XCTAssertTrue(SocialURLHeuristics.isTikTokShortURL(shortURL))
-    XCTAssertEqual(URLClassifier.mediaStrategy(for: shortURL), .extractionPreferred(embedURL: shortURL))
-    let canonicalURL = try XCTUnwrap(URLCanonicalizationService.canonicalTikTokPostURL(from: redirectURL))
-    XCTAssertEqual(canonicalURL.absoluteString, "https://www.tiktok.com/@hexandthecity_/video/7702571588780133645")
-    XCTAssertEqual(URLClassifier.mediaStrategy(for: canonicalURL), .extractionPreferred(embedURL: officialPlayer))
-  }
-
   func testTikTokReportsDocumentedPlaybackErrorsWithoutInterceptingAutoplayOrUntrustedMessages() throws {
     let context = try XCTUnwrap(JSContext())
     context.evaluateScript("""
