@@ -20,9 +20,7 @@ enum EmbeddedWebSource: Equatable {
     """
 
   var usesManagedHTMLDocument: Bool {
-    if case .html = self {
-      return true
-    }
+    if case .html = self { return true }
     return false
   }
 
@@ -107,7 +105,7 @@ extension EmbeddedWebView {
     private var lastReportedReadyState = false
     private var lastReportedRenderedPost = false
 
-    private var isLoadingTikTokPlayer: Bool {
+    var isLoadingTikTokPlayer: Bool {
       guard case .url(let url) = source else { return false }
       return url.scheme == "https" && url.host == "www.tiktok.com" && URLClassifier.isDedicatedEmbedURL(url)
     }
@@ -357,7 +355,9 @@ extension EmbeddedWebView {
     case .url(let url):
       var request = URLRequest(url: url)
       request.cachePolicy = .reloadIgnoringLocalCacheData
-      if let host = url.host?.lowercased(),
+      if context.coordinator.isLoadingTikTokPlayer {
+        request.setValue("https://github.com/therealparmesh/linkstr", forHTTPHeaderField: "Referer")
+      } else if let host = url.host?.lowercased(),
         host == "youtube.com"
           || host.hasSuffix(".youtube.com")
           || host == "youtube-nocookie.com"
