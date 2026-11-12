@@ -21,7 +21,7 @@ extension SettingsView {
         session.clearCachedMetadata()
         refreshStorageUsage()
       } label: {
-        LinkstrActionButtonLabel(title: "clear metadata")
+        LinkstrActionButtonLabel(title: "clear link previews")
       }
       .linkstrDestructiveButton()
     }
@@ -31,7 +31,7 @@ extension SettingsView {
     if isRefreshingStorageUsage
       && clearableStorageBytes == nil
       && clearableMetadataBytes == nil {
-      return "measuring local storage..."
+      return "checking local storage…"
     }
     let segments = [
       storageUsageHintSegment(
@@ -39,7 +39,7 @@ extension SettingsView {
         clearableBytes: clearableStorageBytes
       ),
       storageUsageHintSegment(
-        label: "metadata previews",
+        label: "link previews",
         clearableBytes: clearableMetadataBytes
       )
     ]
@@ -81,9 +81,9 @@ extension SettingsView {
             Button {
               guard !revealedNsec.isEmpty else { return }
               UIPasteboard.general.string = revealedNsec
-              LinkstrToast.showSuccess("copied to clipboard")
+              LinkstrToast.showSuccess("secret key copied")
             } label: {
-              LinkstrActionButtonLabel(title: "copy", systemImage: "doc.on.doc")
+              LinkstrActionButtonLabel(title: "copy secret key", systemImage: "doc.on.doc")
             }
             .linkstrCautionButton()
             .disabled(revealedNsec.isEmpty)
@@ -91,7 +91,7 @@ extension SettingsView {
         }
 
         if isNsecVisible {
-          Text(revealedNsec.isEmpty ? "unable to reveal secret key (nsec)." : revealedNsec)
+          Text(revealedNsec.isEmpty ? "couldn’t reveal the secret key." : revealedNsec)
             .font(LinkstrTheme.font(.footnote))
             .foregroundStyle(LinkstrTheme.textSecondary)
             .textSelection(.enabled)
@@ -99,7 +99,7 @@ extension SettingsView {
             .linkstrInputField()
         }
 
-        Button(role: .destructive) {
+        Button {
           isPresentingLogoutOptions = true
         } label: {
           LinkstrActionButtonLabel(
@@ -113,7 +113,7 @@ extension SettingsView {
           isPresentingDeleteAccountConfirm = true
         } label: {
           LinkstrActionButtonLabel(
-            title: isDeletingAccount ? "deleting account..." : "delete account",
+            title: isDeletingAccount ? "deleting account…" : "delete account",
             systemImage: "person.crop.circle.badge.xmark"
           )
         }
@@ -176,13 +176,17 @@ extension SettingsView {
 
   @MainActor
   func refreshStorageUsage() {
+    storageUsageRefreshID += 1
+  }
+
+  @MainActor
+  func loadStorageUsage() async {
     isRefreshingStorageUsage = true
-    Task { @MainActor in
-      let usage = session.clearableStorageUsage()
-      clearableStorageBytes = usage.cachedMediaBytes
-      clearableMetadataBytes = usage.previewBytes
-      isRefreshingStorageUsage = false
-    }
+    let usage = await session.clearableStorageUsage()
+    guard !Task.isCancelled else { return }
+    clearableStorageBytes = usage.cachedMediaBytes
+    clearableMetadataBytes = usage.previewBytes
+    isRefreshingStorageUsage = false
   }
 
   func hideSensitiveIdentityContent() {

@@ -107,6 +107,8 @@ targets:
     deploymentTarget: 18.0
     sources:
       - path: linkstrShareExtension
+      - path: linkstrApp/App/LinkstrAppearance.swift
+      - path: linkstrApp/App/LinkstrTabHeader.swift
       - path: linkstrApp/Domain/LinkstrURLValidator.swift
       - path: linkstrApp/Domain/LinkstrDeepLinkCodec.swift
     settings:

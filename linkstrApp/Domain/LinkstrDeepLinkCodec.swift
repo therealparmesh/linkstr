@@ -19,7 +19,7 @@ enum LinkstrDeepLinkCodec {
   }
 
   enum Route: Equatable {
-    case openURL(String)
+    case openURL(URL)
     case share(ShareDraft)
     case mediaSave(MediaSaveDraft)
   }
@@ -50,10 +50,10 @@ enum LinkstrDeepLinkCodec {
     }
     guard let deepLink = URL(
       string: input.trimmingCharacters(in: .whitespacesAndNewlines), encodingInvalidCharacters: false
-    ) else {
+    ), case .openURL(let webURL) = parseRoute(fromAppDeepLink: deepLink) else {
       return nil
     }
-    return parseURL(fromAppDeepLink: deepLink)
+    return webURL.absoluteString
   }
 
   static func parseRoute(fromAppDeepLink url: URL) -> Route? {
@@ -69,31 +69,24 @@ enum LinkstrDeepLinkCodec {
       let host = url.host?.lowercased(),
       let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
       let encodedURL = components.queryItems?.first(where: { $0.name == urlQueryKey })?.value,
-      let normalizedURL = LinkstrURLValidator.normalizedWebURL(from: encodedURL)
+      let webURL = LinkstrURLValidator.validatedWebURL(from: encodedURL)
     else {
       return nil
     }
 
     switch host {
     case appDeepLinkHost:
-      return .openURL(normalizedURL)
+      return .openURL(webURL)
     case shareDeepLinkHost:
       let note = normalizedNote(
         components.queryItems?.first(where: { $0.name == noteQueryKey })?.value
       )
-      return .share(ShareDraft(url: normalizedURL, note: note))
+      return .share(ShareDraft(url: webURL.absoluteString, note: note))
     case mediaSaveDeepLinkHost:
-      return .mediaSave(MediaSaveDraft(url: normalizedURL))
+      return .mediaSave(MediaSaveDraft(url: webURL.absoluteString))
     default:
       return nil
     }
-  }
-
-  static func parseURL(fromAppDeepLink url: URL) -> String? {
-    guard case .openURL(let urlString) = parseRoute(fromAppDeepLink: url) else {
-      return nil
-    }
-    return urlString
   }
 
   private static func makeDeepLink(host: String, url: String?, note: String?) -> URL? {
@@ -117,7 +110,7 @@ enum LinkstrDeepLinkCodec {
     return components.url
   }
 
-  private static func normalizedNote(_ note: String?) -> String? {
+  static func normalizedNote(_ note: String?) -> String? {
     let trimmed = note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     guard !trimmed.isEmpty else { return nil }
     return String(trimmed.prefix(maximumNoteLength))

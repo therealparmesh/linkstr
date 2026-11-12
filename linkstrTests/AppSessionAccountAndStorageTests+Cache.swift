@@ -5,6 +5,78 @@ import XCTest
 @testable import linkstr
 
 extension AppSessionAccountAndStorageTests {
+  func testClearingPreviewsRemovesThumbnailOnlyMetadataWithoutDeletingUnmanagedFiles() throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let owner = try XCTUnwrap(session.identityService.pubkeyHex)
+    let unmanaged = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try Data("outside managed storage".utf8).write(to: unmanaged)
+    defer { try? FileManager.default.removeItem(at: unmanaged) }
+    for (index, thumbnail) in ["https://example.com/preview.jpg", unmanaged.path].enumerated() {
+      let post = try makeMessage(
+        eventID: "thumbnail-only-\(index)", conversationID: "session", rootID: "thumbnail-only-\(index)",
+        kind: .root, senderPubkey: owner, receiverPubkey: owner, ownerPubkey: owner)
+      try post.setMetadata(title: nil, thumbnailURL: thumbnail)
+      container.mainContext.insert(post)
+    }
+    try container.mainContext.save()
+    try session.messageStore.clearCachedMetadata()
+    let posts = try fetchMessages(in: container.mainContext)
+    XCTAssertEqual(posts.count, 2)
+    XCTAssertTrue(posts.allSatisfy { $0.thumbnailURL == nil && $0.metadataTitle == nil })
+    XCTAssertTrue(FileManager.default.fileExists(atPath: unmanaged.path))
+  }
+
+  func testClearingOnePostKeepsVideoUntilItsLastStoredReferenceIsRemoved() throws {
+    for usesSystemLocation in [false, true] {
+      try checkSharedMediaRemoval(usesSystemLocation: usesSystemLocation)
+    }
+  }
+
+  private func checkSharedMediaRemoval(usesSystemLocation: Bool) throws {
+    let (session, container) = try makeSession()
+    try session.identityService.createNewIdentity()
+    let owner = try XCTUnwrap(session.identityService.pubkeyHex)
+    let videoURL = usesSystemLocation
+      ? URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        .standardizedFileURL.resolvingSymlinksInPath()
+      : makeManagedVideoURL()
+    if usesSystemLocation {
+      try FileManager.default.createDirectory(at: videoURL, withIntermediateDirectories: true)
+      _ = try ManagedLocalFileScope.shared.hlsRegistry.register(
+        videoURL, for: URL(string: "https://example.com/\(UUID().uuidString).m3u8")!
+      )
+    } else {
+      try Data("shared video".utf8).write(to: videoURL, options: .atomic)
+    }
+    defer { try? FileManager.default.removeItem(at: videoURL) }
+    let posts = try ["first", "second"].map { id in
+      let post = try makeMessage(
+        eventID: id, conversationID: "session-\(id)", rootID: id, kind: .root,
+        senderPubkey: owner, receiverPubkey: owner, ownerPubkey: owner
+      )
+      post.cachedMediaPath = videoURL.path
+      post.cachedMediaSourceURL = "https://example.com/shared.mp4"
+      container.mainContext.insert(post)
+      return post
+    }
+    try container.mainContext.save()
+
+    try session.messageStore.clearCachedMedia(messages: [posts[0]])
+
+    XCTAssertNil(posts[0].cachedMediaPath)
+    XCTAssertNil(posts[0].cachedMediaSourceURL)
+    XCTAssertEqual(posts[1].cachedMediaPath, videoURL.path)
+    XCTAssertEqual(posts[1].cachedMediaSourceURL, "https://example.com/shared.mp4")
+    XCTAssertTrue(FileManager.default.fileExists(atPath: videoURL.path))
+
+    try session.messageStore.clearCachedMedia(messages: [posts[1]])
+
+    XCTAssertNil(posts[1].cachedMediaPath)
+    XCTAssertNil(posts[1].cachedMediaSourceURL)
+    XCTAssertFalse(FileManager.default.fileExists(atPath: videoURL.path))
+  }
+
   func testBootStartsNostrWithoutWaitingForSecondForegroundEvent() async throws {
     var nostrStartCount = 0
     let (session, container) = try makeSession(
@@ -85,7 +157,15 @@ extension AppSessionAccountAndStorageTests {
       cachedMediaURL: secondCachedMediaURL
     )
 
-    let clearableStorageBytes = session.clearableStorageUsage().cachedMediaBytes
+    try insertRetainedAccountStorageFixture(
+      in: container.mainContext,
+      ownerPubkey: secondOwner,
+      label: "shared-video",
+      thumbnailURL: firstThumbnailURL,
+      cachedMediaURL: firstCachedMediaURL
+    )
+
+    let clearableStorageBytes = await session.clearableStorageUsage().cachedMediaBytes
 
     XCTAssertEqual(clearableStorageBytes, Int64(firstVideoData.count + secondVideoData.count))
   }
@@ -125,7 +205,7 @@ extension AppSessionAccountAndStorageTests {
       cachedMediaURL: secondCachedMediaURL
     )
 
-    let clearableMetadataBytes = session.clearableStorageUsage().previewBytes
+    let clearableMetadataBytes = await session.clearableStorageUsage().previewBytes
 
     XCTAssertEqual(
       clearableMetadataBytes,
@@ -164,19 +244,19 @@ extension AppSessionAccountAndStorageTests {
     let result = await session.refreshPostMetadata(message)
 
     let stored = try XCTUnwrap(try fetchMessages(in: container.mainContext).first)
-    XCTAssertTrue(result)
+    XCTAssertEqual(result, .updated)
     XCTAssertEqual(stored.metadataTitle, "Refreshed Title")
     XCTAssertEqual(stored.thumbnailURL, refreshedThumbnailURL.path)
   }
 
-  func testRefreshPostMetadataReturnsFalseWhenPreviewMatchesStoredMetadata() async throws {
+  func testRefreshPostMetadataReportsUnchangedWithoutNewTitleOrThumbnail() async throws {
     let thumbnailURL = makeManagedThumbnailURL()
     try Data("thumbnail".utf8).write(to: thumbnailURL, options: .atomic)
     defer { try? FileManager.default.removeItem(at: thumbnailURL) }
 
     let (session, container) = try makeSession(
       fetchLinkPreview: { _ in
-        LinkPreviewData(title: "Same Title", thumbnailPath: thumbnailURL.path)
+        LinkPreviewData(title: "Same Title", thumbnailPath: nil)
       }
     )
     try session.identityService.createNewIdentity()
@@ -198,7 +278,7 @@ extension AppSessionAccountAndStorageTests {
     let result = await session.refreshPostMetadata(message)
 
     let stored = try XCTUnwrap(try fetchMessages(in: container.mainContext).first)
-    XCTAssertFalse(result)
+    XCTAssertEqual(result, .unchanged)
     XCTAssertEqual(stored.metadataTitle, "Same Title")
     XCTAssertEqual(stored.thumbnailURL, thumbnailURL.path)
   }

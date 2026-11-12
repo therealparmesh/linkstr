@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 // MARK: - SessionPostsView Helpers
 
@@ -9,30 +8,30 @@ extension SessionPostsView {
     return ScrollViewReader { proxy in
       ScrollView {
         VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
-          LinkstrScreenTitle(title: sessionEntity.name)
-
           if contentState.postCount > 0 {
             Text(contentState.postCountLabel)
               .font(LinkstrTheme.font(.caption, weight: .medium))
               .foregroundStyle(LinkstrTheme.textTertiary)
           }
 
-          if !contentState.canCreatePosts {
+          if !contentState.canCreatePosts, contentState.postCount > 0 {
             LinkstrReadOnlyBanner()
           }
 
-          if contentState.timelineRows.isEmpty {
+          if contentState.postCount == 0 {
             LinkstrCenteredEmptyStateView(
               title: "no posts yet",
-              systemImage: "link.badge.plus",
+              systemImage: contentState.canCreatePosts ? "link.badge.plus" : "link",
               description: contentState.canCreatePosts
-                ? "send a link to this session." : "you're no longer a member of this session.",
+                ? "share the first link with this session." : "this session is read-only.",
               actionTitle: contentState.canCreatePosts ? "share a link" : nil,
               actionSystemImage: "plus",
               action: contentState.canCreatePosts ? { isPresentingNewPost = true } : nil
             )
             .frame(maxWidth: .infinity, minHeight: 260)
-          } else {
+          }
+
+          if !contentState.timelineRows.isEmpty {
             LazyVStack(alignment: .leading, spacing: 0) {
               ForEach(contentState.timelineRows) { row in
                 timelineRow(row)
@@ -42,14 +41,14 @@ extension SessionPostsView {
           }
         }
         .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-        .padding(.top, LinkstrTheme.screenTopPadding)
+        .padding(.top, LinkstrTheme.pinnedPageContentTopPadding)
         .padding(.bottom, LinkstrTheme.screenBottomPadding)
         .linkstrReadableContent()
       }
       .onChange(of: pendingScrollPostID.map { target in rootPosts.contains { $0.rootID == target } } == true,
                 initial: true) { _, isAvailable in
         guard isAvailable, let postID = pendingScrollPostID else { return }
-        proxy.scrollTo(postID, anchor: .center)
+        proxy.scrollTo(postID, anchor: .top)
         pendingScrollPostID = nil
       }
       .onScrollPhaseChange { _, phase in
@@ -164,27 +163,7 @@ extension SessionPostsView {
       session.refreshMetadataForVisiblePostIfNeeded(row.post)
     }
 
-    if row.isOutgoing {
-      postLink
-        .contextMenu {
-          Button(role: .destructive) {
-            guard !isDeletingPost else { return }
-            UINotificationFeedbackGenerator().notificationOccurred(.warning)
-            postPendingDelete = row.post
-            isPresentingDeleteConfirmation = true
-          } label: {
-            Label("delete post", systemImage: "trash")
-          }
-        }
-        .accessibilityHint("long press for post actions.")
-        .accessibilityAction(named: "delete post") {
-          guard !isDeletingPost else { return }
-          postPendingDelete = row.post
-          isPresentingDeleteConfirmation = true
-        }
-    } else {
-      postLink
-    }
+    timelinePostActions(postLink, row: row)
   }
 
   func makeReactionSummariesByPostID(
@@ -251,6 +230,7 @@ extension SessionPostsView {
     guard hadResolvedSession else { return }
     isPresentingNewPost = false
     isPresentingMembers = false
+    postPendingNoteEdit = nil
     postPendingDelete = nil
     isPresentingDeleteConfirmation = false
     dismiss()
@@ -273,17 +253,16 @@ struct PostListRowView: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 6) {
+    VStack(alignment: .leading, spacing: LinkstrTheme.tightSpacing) {
       if showsSenderHeader {
-        Text(senderLabel)
-          .font(LinkstrTheme.font(.caption, weight: .semibold))
-          .foregroundStyle(
-            isOutgoing
-              ? LinkstrTheme.accent
-              : LinkstrAvatarStyleResolver.sessionColor(for: post.senderPubkey)
-          )
-          .lineLimit(1)
-          .padding(.horizontal, LinkstrTheme.rowSpacing)
+        HStack(spacing: LinkstrTheme.compactSpacing) {
+          LinkstrContactAvatar(name: senderLabel, size: 24, seed: post.senderPubkeyHash)
+            .accessibilityHidden(true)
+          Text(senderLabel)
+            .font(LinkstrTheme.font(.caption, weight: .semibold))
+            .foregroundStyle(isOutgoing ? LinkstrTheme.accent : LinkstrTheme.textSecondary)
+        }
+        .padding(.leading, LinkstrTheme.fieldHorizontalPadding)
       }
 
       PostCardView(
@@ -300,80 +279,81 @@ struct PostListRowView: View {
 }
 
 struct PostCardView: View {
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
   let post: SessionMessageEntity
   let isOutgoing: Bool
   let hasUnreadPost: Bool
   let reactionSummaries: [ReactionSummary]
 
   var body: some View {
+    let source = LinkstrPostPreview.source(for: post.url)
+    let title = LinkstrPostPreview.title(for: post) ?? source ?? "link unavailable"
     HStack(alignment: .top, spacing: LinkstrTheme.rowSpacing) {
-      LinkstrPostThumbnail(post: post, width: 58, height: 58)
+      if !dynamicTypeSize.isAccessibilitySize {
+        LinkstrPostThumbnail(post: post, width: 58, height: 58, size: .listRow)
+      }
 
       VStack(alignment: .leading, spacing: LinkstrTheme.compactSpacing) {
-        Text(primaryText)
+        Text(title)
           .font(LinkstrTheme.font(.headline, weight: .semibold))
           .foregroundStyle(LinkstrTheme.textPrimary)
-          .lineLimit(2)
+          .lineLimit(dynamicTypeSize.isAccessibilitySize ? 4 : 2)
+          .fixedSize(horizontal: false, vertical: true)
 
-        if let noteText {
+        if let noteText = LinkstrPostPreview.text(post.note) {
           Text(noteText)
             .font(LinkstrTheme.font(.footnote))
             .foregroundStyle(LinkstrTheme.textSecondary)
             .lineLimit(3)
+            .fixedSize(horizontal: false, vertical: true)
         }
 
-        HStack(alignment: .center, spacing: 6) {
-          if hasUnreadPost {
-            Circle()
-              .fill(LinkstrTheme.accent)
-              .frame(width: 7, height: 7)
-              .accessibilityLabel("unread")
-          }
-
-          Text(post.timestamp.linkstrListTimestampLabel)
+        if let source, source != title {
+          Text(source)
             .font(LinkstrTheme.font(.caption, weight: .medium))
-            .foregroundStyle(LinkstrTheme.textTertiary)
-            .lineLimit(1)
+            .foregroundStyle(LinkstrTheme.textSecondary)
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
         }
+
+        timestamp
 
         if !reactionSummaries.isEmpty {
           LinkstrReactionRow(
             summaries: reactionSummaries,
             mode: .readOnly,
-            onToggleEmoji: nil,
-            onAddReaction: nil
+            onToggleEmoji: nil
           )
         }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
+
+      if !dynamicTypeSize.isAccessibilitySize {
+        LinkstrDisclosureIndicator()
+      }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(.horizontal, LinkstrTheme.fieldHorizontalPadding)
     .padding(.vertical, LinkstrTheme.fieldVerticalPadding)
-    .background(
-      RoundedRectangle(cornerRadius: 20, style: .continuous)
-        .fill(isOutgoing ? LinkstrTheme.panelElevated : LinkstrTheme.panel)
+    .linkstrCardSurface(
+      fill: isOutgoing ? LinkstrTheme.panelElevated : LinkstrTheme.panel,
+      border: isOutgoing ? LinkstrTheme.accent.opacity(0.22) : LinkstrTheme.separator
     )
-    .overlay {
-      RoundedRectangle(cornerRadius: 20, style: .continuous)
-        .stroke(
-          isOutgoing ? LinkstrTheme.accent.opacity(0.22) : LinkstrTheme.separator, lineWidth: 1)
-    }
   }
 
-  private var primaryText: String {
-    if let title = post.metadataTitle, !title.isEmpty {
-      return title
-    }
-    if let url = post.url, !url.isEmpty {
-      return url
-    }
-    return "untitled post"
-  }
+  private var timestamp: some View {
+    HStack(spacing: LinkstrTheme.tightSpacing) {
+      if hasUnreadPost {
+        Circle()
+          .fill(LinkstrTheme.accent)
+          .frame(width: 7, height: 7)
+          .accessibilityLabel("unread")
+      }
 
-  private var noteText: String? {
-    guard let note = post.note else { return nil }
-    let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
-    return trimmed.isEmpty ? nil : trimmed
+      Text(post.timestamp.linkstrListTimestampLabel)
+        .font(LinkstrTheme.font(.caption, weight: .medium))
+        .foregroundStyle(LinkstrTheme.textTertiary)
+    }
   }
 }

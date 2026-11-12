@@ -10,8 +10,8 @@ enum QRCodeGenerator {
     qrFilter.correctionLevel = "M"
 
     let colorFilter = CIFilter.falseColor()
-    colorFilter.color0 = CIColor.black
-    colorFilter.color1 = CIColor.white
+    colorFilter.color0 = CIColor(color: UIColor(LinkstrTheme.background))
+    colorFilter.color1 = CIColor(color: UIColor(LinkstrTheme.textPrimary))
     colorFilter.inputImage = qrFilter.outputImage
 
     guard

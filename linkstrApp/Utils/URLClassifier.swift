@@ -4,6 +4,7 @@ enum URLClassifier {
   enum MediaStrategy: Equatable {
     case extractionPreferred(embedURL: URL)
     case embedOnly(embedURL: URL)
+    case directVideo
     case link
 
     var allowsLocalPlaybackToggle: Bool {
@@ -57,8 +58,13 @@ enum URLClassifier {
       guard SocialURLHeuristics.isRumbleVideoURL(url) else { return .link }
       return .embedOnly(embedURL: embedURL(for: url, linkType: linkType) ?? url)
     case .generic:
-      return .link
+      return isDirectVideoURL(url) ? .directVideo : .link
     }
+  }
+
+  static func isDirectVideoURL(_ url: URL) -> Bool {
+    guard url.scheme?.lowercased() == "https", url.host != nil else { return false }
+    return ["mp4", "mov", "m4v"].contains(url.pathExtension.lowercased())
   }
 
   private static func tiktokMediaStrategy(for url: URL, linkType: LinkType) -> MediaStrategy {
@@ -87,31 +93,30 @@ enum URLClassifier {
   }
 
   static func preferredMediaAspectRatio(for sourceURL: URL, strategy: MediaStrategy) -> CGFloat {
+    let portrait: CGFloat = 9.0 / 16.0
+    let landscape: CGFloat = 16.0 / 9.0
     switch strategy {
-    case .extractionPreferred:
-      let linkType = classify(sourceURL)
-      switch linkType {
-      case .tiktok, .instagram:
-        return 9.0 / 16.0
-      case .facebook:
-        return SocialURLHeuristics.isFacebookReelURL(sourceURL) ? 9.0 / 16.0 : 16.0 / 9.0
-      case .twitter, .youtube, .rumble, .generic:
-        return 16.0 / 9.0
-      }
-    case .embedOnly:
-      let linkType = classify(sourceURL)
-      if linkType == .facebook {
-        return SocialURLHeuristics.isFacebookReelURL(sourceURL) ? 9.0 / 16.0 : 16.0 / 9.0
-      }
-      if linkType == .twitter {
-        return 4.0 / 5.0
-      }
-      if isShortFormMediaURL(sourceURL) {
-        return 9.0 / 16.0
-      }
-      return 16.0 / 9.0
-    case .link:
-      return 16.0 / 9.0
+    case .directVideo, .link:
+      return landscape
+    case .extractionPreferred, .embedOnly:
+      break
+    }
+
+    let prefersExtraction = strategy.allowsLocalPlaybackToggle
+    switch classify(sourceURL) {
+    case .facebook:
+      return SocialURLHeuristics.isFacebookReelURL(sourceURL) ? portrait : landscape
+    case .tiktok:
+      return prefersExtraction || SocialURLHeuristics.isTikTokPostURL(sourceURL) ? portrait : landscape
+    case .instagram:
+      return prefersExtraction || SocialURLHeuristics.isInstagramReelURL(sourceURL) ? portrait : landscape
+    case .youtube:
+      let isShort = SocialURLHeuristics.normalizedPathComponents(for: sourceURL).first == "shorts"
+      return !prefersExtraction && isShort ? portrait : landscape
+    case .twitter:
+      return prefersExtraction ? landscape : 4.0 / 5.0
+    case .rumble, .generic:
+      return landscape
     }
   }
 
@@ -227,27 +232,6 @@ enum URLClassifier {
 
   static func twitterEmbedFallbackURL(for sourceURL: URL) -> URL? {
     SocialURLHeuristics.twitterCanonicalStatusURL(from: sourceURL)
-  }
-
-  private static func isShortFormMediaURL(_ sourceURL: URL) -> Bool {
-    let linkType = classify(sourceURL)
-    switch linkType {
-    case .tiktok:
-      return SocialURLHeuristics.isTikTokPostURL(sourceURL)
-    case .instagram:
-      return SocialURLHeuristics.isInstagramReelURL(sourceURL)
-    case .facebook:
-      return SocialURLHeuristics.isFacebookReelURL(sourceURL)
-    case .youtube:
-      let parts = sourceURL.pathComponents
-        .map { $0.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "/")) }
-        .filter { !$0.isEmpty }
-      return parts.first == "shorts"
-    case .twitter:
-      return SocialURLHeuristics.isTwitterVideoURL(sourceURL)
-    case .rumble, .generic:
-      return false
-    }
   }
 
   private static func canonicalFacebookWebURL(_ sourceURL: URL) -> URL {

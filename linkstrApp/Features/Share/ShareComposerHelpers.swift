@@ -4,16 +4,9 @@ import SwiftUI
 
 extension ShareComposerView {
   func selectDefaultSessionIfNeeded() {
+    // Retain an unavailable selection so a different recipient is never substituted.
     guard selectedSessionID == nil else { return }
     selectedSessionID = activeSessions.first?.sessionID
-  }
-
-  func clearMissingSelectionIfNeeded() {
-    guard let selectedSessionID else { return }
-    guard activeSessions.contains(where: { $0.sessionID == selectedSessionID }) else {
-      self.selectedSessionID = nil
-      return
-    }
   }
 
   func sendSharedLink() {
@@ -23,6 +16,7 @@ extension ShareComposerView {
 
     let targetSessionID = selectedSession.sessionID
     let targetSessionName = selectedSession.name
+    let requestID = deepLinkHandler.latestRequestID
 
     link = normalizedURL
     focusedField = nil
@@ -40,6 +34,7 @@ extension ShareComposerView {
         )
       }
       isSending = false
+      guard deepLinkHandler.latestRequestID == requestID, deepLinkHandler.pendingShareDraft == draft else { return }
       if result.didSucceed {
         #if canImport(UIKit)
           let haptic = UINotificationFeedbackGenerator()
@@ -48,7 +43,7 @@ extension ShareComposerView {
         #endif
         appSession.requestSessionNavigation(to: targetSessionID)
         LinkstrToast.showSuccess("shared to \(targetSessionName)")
-        deepLinkHandler.clearShareDraft()
+        deepLinkHandler.clearShareDraft(matching: draft)
       } else {
         mutationFeedback.record(errorMessage: result.errorMessage)
       }
@@ -62,6 +57,7 @@ struct ShareSessionPickerSheet: View {
   @Environment(\.dismiss) private var dismiss
 
   let sessions: [SessionEntity]
+  let avatarsBySessionID: [String: [SessionMemberAvatar]]
   @Binding var selectedSessionID: String?
 
   @State private var query = ""
@@ -85,9 +81,9 @@ struct ShareSessionPickerSheet: View {
 
         ScrollView {
           VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
-            LinkstrScreenTitle(title: "choose session")
+            LinkstrSheetTitle(title: "choose a session")
 
-            LinkstrInsetSection(title: "session") {
+            LinkstrInsetSection(title: "sessions") {
               LinkstrSearchField(
                 prompt: "search sessions",
                 text: $query,
@@ -107,15 +103,9 @@ struct ShareSessionPickerSheet: View {
       .linkstrBarChrome()
       .toolbar {
         ToolbarItem(placement: .topBarLeading) {
-          Button {
-            dismiss()
-          } label: {
-            Image(systemName: "xmark")
-              .linkstrToolbarIconLabel()
-          }
-          .accessibilityLabel("close session picker")
-          .tint(LinkstrTheme.textSecondary)
+          LinkstrHeaderButton(title: "close session picker", icon: "xmark") { dismiss() }
         }
+        .linkstrFlatToolbarItem()
       }
     }
     .preferredColorScheme(.dark)
@@ -126,10 +116,13 @@ struct ShareSessionPickerSheet: View {
     let lastSessionID = visibleSessions.last?.storageID
 
     if visibleSessions.isEmpty {
-      LinkstrShareEmptyPickerState(
-        title: "no sessions found",
-        systemImage: "magnifyingglass",
-        description: "try a different search."
+      LinkstrCenteredEmptyStateView(
+        title: sessions.isEmpty ? "no active sessions" : "no sessions found",
+        systemImage: sessions.isEmpty ? "bubble.left.and.bubble.right" : "magnifyingglass",
+        description: sessions.isEmpty ? "create a session before sharing links." : "try another search.",
+        actionTitle: sessions.isEmpty ? nil : "clear search",
+        actionSystemImage: "xmark.circle",
+        action: { query = "" }
       )
       .frame(maxWidth: .infinity, minHeight: 180)
     } else {
@@ -141,13 +134,14 @@ struct ShareSessionPickerSheet: View {
           } label: {
             ShareSessionPickerRow(
               session: sessionEntity,
+              memberAvatars: avatarsBySessionID[sessionEntity.sessionID, default: []],
               isSelected: selectedSessionID == sessionEntity.sessionID
             )
           }
           .buttonStyle(.plain)
 
           if sessionEntity.storageID != lastSessionID {
-            LinkstrListRowDivider(leadingInset: 54)
+            LinkstrListRowDivider(leadingInset: 50 + LinkstrTheme.rowSpacing)
           }
         }
       }
@@ -157,56 +151,47 @@ struct ShareSessionPickerSheet: View {
 
 struct ShareSelectedSessionRow: View {
   let session: SessionEntity
+  let memberAvatars: [SessionMemberAvatar]
+  var isSelectable = false
 
   var body: some View {
     HStack(spacing: LinkstrTheme.rowSpacing) {
-      LinkstrSessionAvatar(seed: session.sessionID, size: 42)
+      SessionAvatarCluster(members: memberAvatars)
 
-      VStack(alignment: .leading, spacing: LinkstrTheme.metaSpacing) {
-        Text(session.name)
-          .font(LinkstrTheme.font(.headline, weight: .semibold))
-          .foregroundStyle(LinkstrTheme.textPrimary)
-          .lineLimit(1)
+      Text(session.name)
+        .font(LinkstrTheme.font(.subheadline, weight: .semibold))
+        .foregroundStyle(LinkstrTheme.textPrimary)
+        .multilineTextAlignment(.leading)
 
-        Text("tap to change")
-          .font(LinkstrTheme.font(.caption, weight: .medium))
-          .foregroundStyle(LinkstrTheme.textTertiary)
-          .lineLimit(1)
+      if isSelectable {
+        Spacer(minLength: 8)
+        LinkstrDisclosureIndicator()
       }
-
-      Spacer(minLength: 8)
-
-      Image(systemName: "chevron.right")
-        .font(LinkstrTheme.font(.footnote, weight: .semibold))
-        .foregroundStyle(LinkstrTheme.textTertiary)
-        .accessibilityHidden(true)
     }
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .padding(.vertical, LinkstrTheme.listRowVerticalPadding)
+    .linkstrInputField()
     .contentShape(Rectangle())
-    .accessibilityElement(children: .combine)
-    .accessibilityLabel("\(session.name), tap to change")
   }
 }
 
 struct ShareSessionPickerRow: View {
   let session: SessionEntity
+  let memberAvatars: [SessionMemberAvatar]
   let isSelected: Bool
 
   var body: some View {
     HStack(spacing: LinkstrTheme.rowSpacing) {
-      LinkstrSessionAvatar(seed: session.sessionID, size: 42)
+      SessionAvatarCluster(members: memberAvatars)
 
       VStack(alignment: .leading, spacing: LinkstrTheme.metaSpacing) {
         Text(session.name)
           .font(LinkstrTheme.font(.headline, weight: .semibold))
           .foregroundStyle(LinkstrTheme.textPrimary)
-          .lineLimit(1)
+          .fixedSize(horizontal: false, vertical: true)
 
         Text(session.updatedAt.linkstrListTimestampLabel)
           .font(LinkstrTheme.font(.caption, weight: .medium))
-          .foregroundStyle(LinkstrTheme.textTertiary)
-          .lineLimit(1)
+          .foregroundStyle(LinkstrTheme.textSecondary)
+          .fixedSize(horizontal: false, vertical: true)
       }
 
       Spacer(minLength: 8)
@@ -227,31 +212,6 @@ struct ShareSessionPickerRow: View {
     .padding(.vertical, LinkstrTheme.listRowVerticalPadding)
     .contentShape(Rectangle())
     .accessibilityElement(children: .combine)
-    .accessibilityLabel("\(session.name), \(isSelected ? "selected" : "not selected")")
-  }
-}
-
-struct LinkstrShareEmptyPickerState: View {
-  let title: String
-  let systemImage: String
-  let description: String
-
-  var body: some View {
-    VStack(spacing: 10) {
-      Image(systemName: systemImage)
-        .font(LinkstrTheme.font(.title2, weight: .semibold))
-        .foregroundStyle(LinkstrTheme.accent)
-
-      Text(title)
-        .font(LinkstrTheme.font(.headline, weight: .semibold))
-        .foregroundStyle(LinkstrTheme.textPrimary)
-
-      Text(description)
-        .font(LinkstrTheme.font(.footnote))
-        .foregroundStyle(LinkstrTheme.textSecondary)
-        .multilineTextAlignment(.center)
-    }
-    .frame(maxWidth: .infinity, alignment: .center)
-    .padding(.vertical, 20)
+    .accessibilityAddTraits(isSelected ? .isSelected : [])
   }
 }

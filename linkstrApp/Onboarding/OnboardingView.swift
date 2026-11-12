@@ -10,44 +10,54 @@ struct OnboardingView: View {
   @State private var isSecretKeyVisible = false
   @State private var createdProfileName = ""
   @State private var isSavingCreatedProfileName = false
+  @State private var accountFeedback = LinkstrSheetMutationFeedback()
 
   var body: some View {
-    NavigationStack {
-      ZStack {
-        LinkstrBackgroundView()
+    ZStack {
+      LinkstrBackgroundView()
 
-        ScrollView {
-          VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
-            header
+      ScrollView {
+        VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
+          header
 
-            if let pendingCreatedAccountNsec = session.pendingCreatedAccountNsec {
-              createdAccountStep(nsec: pendingCreatedAccountNsec)
-            } else {
-              signInAndCreateStep
-            }
+          if let pendingCreatedAccountNsec = session.pendingCreatedAccountNsec {
+            createdAccountStep(nsec: pendingCreatedAccountNsec)
+          } else {
+            signInAndCreateStep
           }
-          .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-          .padding(.top, LinkstrTheme.screenTopPadding)
-          .padding(.bottom, LinkstrTheme.screenBottomPadding)
-          .linkstrReadableContent()
         }
-        .linkstrKeyboardDismissal()
+        .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+        .padding(.top, LinkstrTheme.screenTopPadding)
+        .padding(.bottom, LinkstrTheme.screenBottomPadding)
+        .linkstrReadableContent()
       }
-      .linkstrBarChrome()
+      .linkstrKeyboardDismissal()
+    }
+    .safeAreaInset(edge: .bottom, spacing: 0) {
+      if session.pendingCreatedAccountNsec != nil,
+        let status = accountFeedback.footerStatus(
+          isRunning: isSavingCreatedProfileName, progressMessage: "saving profile name…"
+        ) {
+        LinkstrSheetStatusFooter(message: status.message, messageColor: status.color)
+      }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     .onChange(of: createdProfileName) { _, _ in
       session.clearProfileNameError()
+      accountFeedback.clear()
     }
   }
 
   private var header: some View {
-    VStack(alignment: .leading, spacing: 10) {
+    VStack(alignment: .leading, spacing: LinkstrTheme.buttonRowSpacing) {
       LinkstrAppIconBadge(size: 62)
         .accessibilityHidden(true)
-        .padding(.bottom, 6)
+        .padding(.bottom, LinkstrTheme.tightSpacing)
 
-      LinkstrScreenTitle(title: session.pendingCreatedAccountNsec == nil ? "welcome to linkstr" : "save your key")
+      LinkstrScreenTitle(
+        title: session.pendingCreatedAccountNsec == nil ? "welcome to linkstr" : "save your key",
+        showsBrand: false
+      )
 
       Text(session.pendingCreatedAccountNsec == nil
         ? "share and watch links with people you trust."
@@ -55,7 +65,7 @@ struct OnboardingView: View {
         .font(LinkstrTheme.font(.subheadline))
         .foregroundStyle(LinkstrTheme.textSecondary)
     }
-    .padding(.vertical, 12)
+    .padding(.vertical, LinkstrTheme.fieldVerticalPadding)
   }
 
   private var signInAndCreateStep: some View {
@@ -92,7 +102,7 @@ struct OnboardingView: View {
         }
         .padding(.leading, LinkstrTheme.fieldHorizontalPadding)
         .padding(.trailing, LinkstrTheme.metaSpacing)
-        .frame(maxWidth: .infinity, minHeight: LinkstrTheme.inputControlMinHeight)
+        .frame(maxWidth: .infinity, minHeight: LinkstrTheme.minimumInteractiveDimension)
         .linkstrFieldChrome()
 
         LinkstrInputAssistRow(
@@ -113,7 +123,7 @@ struct OnboardingView: View {
         RestoreBackupButton()
       }
 
-      HStack(spacing: 12) {
+      HStack(spacing: LinkstrTheme.rowSpacing) {
         Rectangle()
           .fill(LinkstrTheme.separator)
           .frame(height: 1)
@@ -143,7 +153,7 @@ struct OnboardingView: View {
     VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
       LinkstrInsetSection(
         title: "secret key (nsec)",
-        footer: "save this key. it works like your account password."
+        footer: "keep this key private. anyone with it can sign in as you."
       ) {
         Text(nsec)
           .font(LinkstrTheme.font(.footnote))
@@ -154,15 +164,15 @@ struct OnboardingView: View {
 
         Button {
           UIPasteboard.general.string = nsec
-          LinkstrToast.showSuccess("copied to clipboard")
+          LinkstrToast.showSuccess("secret key copied")
         } label: {
-          LinkstrActionButtonLabel(title: "copy key", systemImage: "doc.on.doc")
+          LinkstrActionButtonLabel(title: "copy secret key", systemImage: "doc.on.doc")
         }
         .linkstrCautionButton(prominent: true)
       }
 
       LinkstrInsetSection(
-        title: "name",
+        title: "profile name",
         footer: "optional. others can see this name."
       ) {
         TextField("name others see", text: $createdProfileName)
@@ -172,12 +182,7 @@ struct OnboardingView: View {
           .submitLabel(.done)
           .onSubmit(completePendingAccountCreation)
           .linkstrInputField()
-
-        if let profileNameErrorMessage = session.profileNameErrorMessage {
-          Text(profileNameErrorMessage)
-            .font(LinkstrTheme.font(.caption))
-            .foregroundStyle(LinkstrTheme.destructive.opacity(0.92))
-        }
+          .disabled(isSavingCreatedProfileName)
 
         Button {
           completePendingAccountCreation()
@@ -212,17 +217,18 @@ struct OnboardingView: View {
 
   private var createdAccountContinueButtonTitle: String {
     if isSavingCreatedProfileName {
-      return "saving name..."
+      return "saving profile name…"
     }
     if normalizedCreatedProfileName == nil {
-      return "enter app"
+      return "continue"
     }
-    return "save name and enter app"
+    return "save name and continue"
   }
 
   private func completePendingAccountCreation() {
     guard !isSavingCreatedProfileName else { return }
     session.clearProfileNameError()
+    accountFeedback.clear()
     guard normalizedCreatedProfileName != nil else {
       session.completePendingAccountCreation()
       return
@@ -230,13 +236,15 @@ struct OnboardingView: View {
 
     isSavingCreatedProfileName = true
     Task { @MainActor in
-      let didComplete = await session.completePendingAccountCreation(
-        profileName: createdProfileName
-      )
+      let result = await session.performFormMutation {
+        await session.completePendingAccountCreation(profileName: createdProfileName)
+      }
       isSavingCreatedProfileName = false
-      if didComplete {
+      if result.didSucceed {
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         createdProfileName = ""
+      } else {
+        accountFeedback.record(errorMessage: result.errorMessage)
       }
     }
   }

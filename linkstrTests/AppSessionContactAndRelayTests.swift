@@ -64,9 +64,10 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
 
     let contacts = try fetchContacts(in: container.mainContext)
     XCTAssertEqual(contacts.count, 1)
-    XCTAssertEqual(contacts.first?.localAlias, "Alice 2")
+    let contact = try XCTUnwrap(contacts.first)
+    XCTAssertEqual(contact.localAlias, "Alice 2")
     XCTAssertEqual(publishedFollowLists.count, 1)
-    XCTAssertEqual(publishedFollowLists.first, [contacts[0].targetPubkey])
+    XCTAssertEqual(publishedFollowLists.first, [contact.targetPubkey])
   }
 
   func testUpdateContactAliasCanSetAndClearAlias() async throws {

@@ -3,6 +3,8 @@ import SwiftUI
 import UIKit
 struct SessionPostsView: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.dynamicTypeSize) var dynamicTypeSize
+  @Environment(\.verticalSizeClass) var verticalSizeClass
   @Environment(\.dismiss) var dismiss
   @EnvironmentObject var session: AppSession
 
@@ -19,6 +21,7 @@ struct SessionPostsView: View {
 
   @State var isPresentingNewPost = false
   @State var isPresentingMembers = false
+  @State var postPendingNoteEdit: SessionMessageEntity?
   @State var postPendingDelete: SessionMessageEntity?
   @State var isPresentingDeleteConfirmation = false
   @State var isDeletingPost = false
@@ -26,10 +29,11 @@ struct SessionPostsView: View {
   @State var pendingScrollPostID: String?
 
   @State var showsWatch: Bool
-  @State var returnsToTimelineFromWatch = false
   @State var watchPostID: String?
   @State var activeWatchPostID: String?
+  @State var reactionShortcutPostID: String?
   @State var isPaging = false
+  @State var watchHeaderHeight: CGFloat = 54
 
   init(
     ownerPubkey: String, sessionID: String, scrollToPostID: String? = nil,
@@ -70,7 +74,7 @@ struct SessionPostsView: View {
           && member.sessionID == sessionID
           && member.isActive == true
       },
-      sort: [SortDescriptor(\SessionMemberEntity.createdAt)]
+      sort: [SortDescriptor(\SessionMemberEntity.createdAt), SortDescriptor(\SessionMemberEntity.storageID)]
     )
     _memberIntervals = Query(
       filter: #Predicate<SessionMemberIntervalEntity> { interval in
@@ -118,32 +122,67 @@ struct SessionPostsView: View {
     return rootPosts.contains { $0.readAt == nil && !$0.senderMatchesHash(ownerHash) }
   }
 
-  func browsePosts() {
-    pendingScrollPostID = watchPostID
+  private var composerMemberAvatars: [SessionMemberAvatar] {
+    SessionMemberAvatar.grouped(
+      members, sessionIDs: [sessionID], ownerHash: LocalDataCrypto.shared.digestHex(ownerPubkey),
+      contacts: contactsByPubkey, appSession: session
+    )[sessionID, default: []]
+  }
+
+  func browsePosts(around postID: String?) {
+    pendingScrollPostID = postID
     showsWatch = false
   }
 
-  func showPost(_ postID: String) {
+  func showPost(_ postID: String, showsReactions: Bool = false) {
     pendingScrollPostID = nil
+    reactionShortcutPostID = showsReactions ? postID : nil
     watchPostID = postID
-    returnsToTimelineFromWatch = true
     showsWatch = true
+  }
+
+  @ViewBuilder
+  private var timelineHeaderActions: some View {
+    if !rootPosts.isEmpty {
+      LinkstrHeaderButton(title: "watch posts", icon: "play.rectangle") {
+        let resumePost = rootPosts.first { $0.rootID == watchPostID }
+        if let postID = (resumePost ?? rootPosts.first)?.rootID { showPost(postID) }
+      }
+    }
+    if hasUnreadLinks {
+      LinkstrHeaderButton(title: "mark all as read", icon: "checkmark.circle") {
+        session.markSessionRead(sessionID: sessionID, ownerPubkey: ownerPubkey)
+      }
+    }
+    LinkstrHeaderButton(title: canManageSession ? "manage session" : "view members", icon: "person.2") {
+      isPresentingMembers = true
+    }
+    if canShareLinks {
+      LinkstrHeaderButton(title: "share a link", icon: "plus") { isPresentingNewPost = true }
+    }
   }
 
   var body: some View {
     let sessionEntity = sessionEntity
+    let isShowingWatch = sessionEntity != nil && showsWatch && !rootPosts.isEmpty
     ZStack {
-      if let sessionEntity, showsWatch, !rootPosts.isEmpty {
+      if let sessionEntity, isShowingWatch {
         watchView(for: sessionEntity)
           .transition(.opacity)
       } else if let sessionEntity {
         timelineView(for: sessionEntity)
+          .linkstrPinnedPageHeader {
+            LinkstrPageHeader(title: sessionEntity.name, backLabel: "back to sessions") { timelineHeaderActions }
+          }
           .transition(.opacity)
       } else {
-        ContentUnavailableView(
-          "session unavailable",
+        LinkstrCenteredEmptyStateView(
+          title: "session unavailable",
           systemImage: "exclamationmark.triangle",
-          description: Text("this session is no longer available.")
+          description: "return to sessions to choose another one.",
+          actionTitle: "back to sessions",
+          actionSystemImage: "chevron.backward",
+          action: { dismiss() }
         )
       }
     }
@@ -151,57 +190,10 @@ struct SessionPostsView: View {
     .scrollContentBackground(.hidden)
     .background(LinkstrBackgroundView())
 
-    .linkstrBarChrome()
-    .toolbarVisibility(showsWatch && !rootPosts.isEmpty ? .hidden : .visible, for: .navigationBar)
-    .toolbarVisibility(.hidden, for: .tabBar)
-    .toolbar {
-      if sessionEntity != nil, !showsWatch || rootPosts.isEmpty {
-        ToolbarItemGroup(placement: .topBarTrailing) {
-          if !rootPosts.isEmpty {
-            Button {
-              if let postID = watchPostID ?? rootPosts.first?.rootID { showPost(postID) }
-            } label: {
-              Image(systemName: "play.rectangle")
-                .linkstrToolbarIconLabel()
-            }
-            .accessibilityLabel("watch posts")
-            .tint(LinkstrTheme.accent)
-          }
-          if hasUnreadLinks {
-            Button {
-              session.markSessionRead(sessionID: sessionID, ownerPubkey: ownerPubkey)
-            } label: {
-              Image(systemName: "checkmark.circle")
-                .linkstrToolbarIconLabel()
-            }
-            .accessibilityLabel("mark all as read")
-            .tint(LinkstrTheme.accent)
-          }
-          Button {
-            isPresentingMembers = true
-          } label: {
-            Image(systemName: "person.2")
-              .linkstrToolbarIconLabel()
-          }
-          .accessibilityLabel(canManageSession ? "manage session" : "members")
-          .tint(LinkstrTheme.accent)
-
-          if canShareLinks {
-            Button {
-              isPresentingNewPost = true
-            } label: {
-              Image(systemName: "plus")
-                .linkstrToolbarIconLabel()
-            }
-            .accessibilityLabel("share a link")
-            .tint(LinkstrTheme.accent)
-          }
-        }
-      }
-    }
+    .toolbarVisibility(.hidden, for: .navigationBar, .tabBar)
     .sheet(isPresented: $isPresentingNewPost) {
       if let sessionEntity {
-        NewPostSheet(sessionEntity: sessionEntity)
+        NewPostSheet(sessionEntity: sessionEntity, memberAvatars: composerMemberAvatars)
       }
     }
     .sheet(isPresented: $isPresentingMembers) {
@@ -209,29 +201,26 @@ struct SessionPostsView: View {
         SessionManagementSheet(sessionEntity: sessionEntity)
       }
     }
-    .alert("delete post", isPresented: $isPresentingDeleteConfirmation) {
-      Button("delete post", role: .destructive) {
-        guard let postPendingDelete, !isDeletingPost else { return }
-        UINotificationFeedbackGenerator().notificationOccurred(.warning)
-        isDeletingPost = true
-        Task {
-          let didDelete = await session.deletePostAwaitingRelay(postPendingDelete)
-          await MainActor.run {
-            isDeletingPost = false
-            if didDelete {
-              self.postPendingDelete = nil
+    .sheet(item: $postPendingNoteEdit) { post in
+      EditPostNoteSheet(post: post)
+    }
+    .sheet(isPresented: $isPresentingDeleteConfirmation, onDismiss: { postPendingDelete = nil }, content: {
+      LinkstrConfirmationSheet(
+        title: "delete post",
+        message: "linkstr sends a deletion request and removes this post from the session on this device.",
+        onConfirm: {
+          guard let postPendingDelete, !isDeletingPost else { return }
+          UINotificationFeedbackGenerator().notificationOccurred(.warning)
+          isDeletingPost = true
+          Task {
+            await session.deletePostAwaitingRelay(postPendingDelete)
+            await MainActor.run {
+              isDeletingPost = false
             }
           }
         }
-      }
-      Button("cancel", role: .cancel) {
-        postPendingDelete = nil
-      }
-    } message: {
-      Text(
-        "this permanently removes the post from your session feed and sends a nostr deletion request."
       )
-    }
+    })
     .task(id: profileLookupPubkeys.stableTaskID) {
       session.requestRemoteProfilesIfNeeded(pubkeyHexes: profileLookupPubkeys)
     }
@@ -241,8 +230,67 @@ struct SessionPostsView: View {
     .onChange(of: sessionEntities.map(\.storageID).stableTaskID) { _, _ in
       dismissIfSessionWasDeleted()
     }
+    .onChange(of: rootPosts.isEmpty) { _, isEmpty in
+      guard isEmpty else { return }
+      showsWatch = false
+      watchPostID = nil
+      reactionShortcutPostID = nil
+      pendingScrollPostID = nil
+    }
     .onDisappear {
       session.cancelPendingMetadataRefreshesForHiddenSession()
     }
+  }
+}
+
+extension SessionPostsView {
+  @ViewBuilder
+  func timelinePostActions<Content: View>(_ postLink: Content, row: PostListRow) -> some View {
+    if row.isOutgoing || !row.reactionSummaries.isEmpty {
+      let noteActionTitle = LinkstrPostPreview.text(row.post.note) == nil ? "add a note" : "edit note"
+      postLink
+        .contextMenu {
+          if !row.reactionSummaries.isEmpty {
+            Button("view reactions", systemImage: "face.smiling") {
+              showPost(row.post.rootID, showsReactions: true)
+            }
+          }
+          if row.isOutgoing, canShareLinks {
+            Button(noteActionTitle, systemImage: "pencil") {
+              postPendingNoteEdit = row.post
+            }
+          }
+          if row.isOutgoing {
+            Button(role: .destructive) {
+              confirmTimelinePostDeletion(row.post)
+            } label: {
+              Label("delete post", systemImage: "trash")
+            }
+          }
+        }
+        .accessibilityHint("long press for post actions.")
+        .accessibilityActions {
+          if !row.reactionSummaries.isEmpty {
+            Button("view reactions") { showPost(row.post.rootID, showsReactions: true) }
+          }
+          if row.isOutgoing, canShareLinks {
+            Button(noteActionTitle) {
+              postPendingNoteEdit = row.post
+            }
+          }
+          if row.isOutgoing {
+            Button("delete post") { confirmTimelinePostDeletion(row.post) }
+          }
+        }
+    } else {
+      postLink
+    }
+  }
+
+  private func confirmTimelinePostDeletion(_ post: SessionMessageEntity) {
+    guard !isDeletingPost else { return }
+    UINotificationFeedbackGenerator().notificationOccurred(.warning)
+    postPendingDelete = post
+    isPresentingDeleteConfirmation = true
   }
 }

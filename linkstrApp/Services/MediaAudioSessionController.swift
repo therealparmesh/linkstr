@@ -1,7 +1,7 @@
 import AVFoundation
+import OSLog
 
-@MainActor
-final class MediaAudioSessionController {
+final class MediaAudioSessionController: @unchecked Sendable {
   protocol Backend {
     func setCategory(
       _ category: AVAudioSession.Category,
@@ -14,37 +14,50 @@ final class MediaAudioSessionController {
   static let shared = MediaAudioSessionController()
 
   private let backend: any Backend
-  private(set) var retainCount = 0
+  private let queue: DispatchQueue
+  private let lock = NSLock()
+  private var playbackOwners = 0
+  // Only accessed on queue; ownership is separately protected by lock.
+  private var isActive = false
 
-  init(backend: any Backend = SystemMediaAudioSessionBackend()) {
+  var retainCount: Int { lock.withLock { playbackOwners } }
+
+  init(
+    backend: any Backend = SystemMediaAudioSessionBackend(),
+    queue: DispatchQueue = DispatchQueue(label: "com.parmscript.linkstr.playback-audio", qos: .userInitiated)
+  ) {
     self.backend = backend
+    self.queue = queue
   }
 
   func acquirePlayback() {
-    if retainCount > 0 {
-      retainCount += 1
-      return
-    }
-
-    do {
-      try backend.setCategory(.playback, mode: .moviePlayback, options: [])
-      try backend.setActive(true, options: [])
-      retainCount = 1
-    } catch {
-      retainCount = 0
-    }
+    // Count owners independently of activation success so every release remains balanced.
+    lock.withLock { playbackOwners += 1 }
+    queue.async { self.updateActivation() }
   }
 
   func releasePlayback() {
-    guard retainCount > 0 else { return }
-
-    if retainCount > 1 {
-      retainCount -= 1
-      return
+    let releasedLastOwner = lock.withLock {
+      guard playbackOwners > 0 else { return false }
+      playbackOwners -= 1
+      return playbackOwners == 0
     }
+    if releasedLastOwner { queue.async { self.updateActivation() } }
+  }
 
-    retainCount = 0
-    try? backend.setActive(false, options: [.notifyOthersOnDeactivation])
+  private func updateActivation() {
+    let requested = retainCount > 0
+    guard requested != isActive else { return }
+    if !requested { isActive = false }
+    do {
+      if requested { try backend.setCategory(.playback, mode: .moviePlayback, options: []) }
+      try backend.setActive(requested, options: requested ? [] : [.notifyOthersOnDeactivation])
+      isActive = requested
+    } catch {
+      LinkstrPlaybackDiagnostics.logger.notice(
+        "audio session failed; requested: \(requested); error: \(error.localizedDescription, privacy: .private)"
+      )
+    }
   }
 }
 

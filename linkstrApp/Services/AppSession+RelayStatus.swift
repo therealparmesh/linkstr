@@ -3,6 +3,19 @@ import Foundation
 // MARK: - Relay Status & Connectivity
 
 extension AppSession {
+  func checkMutationContext(ownerPubkey: String, sourceService: NostrDMService) throws {
+    try Task.checkCancellation()
+    guard identityService.pubkeyHex == ownerPubkey, nostrService === sourceService else {
+      throw CancellationError()
+    }
+  }
+
+  func reportMutationError(_ error: Error, ownerPubkey: String, sourceService: NostrDMService) {
+    guard !Task.isCancelled, !(error is CancellationError),
+      identityService.pubkeyHex == ownerPubkey, nostrService === sourceService else { return }
+    report(error: error)
+  }
+
   func nextPublicationTimestamp(after updatedAt: Date?, subject: String, publicationOverridden: Bool)
     async throws -> Int64 {
     let next = Int64(updatedAt?.timeIntervalSince1970 ?? 0) + 1
@@ -238,12 +251,15 @@ extension AppSession {
     timeoutSeconds: TimeInterval,
     pollIntervalSeconds: TimeInterval
   ) async -> Bool {
+    let owner = identityService.pubkeyHex
+    let sourceService = nostrService
     let timeout = max(0, timeoutSeconds)
     let pollInterval = max(0.05, pollIntervalSeconds)
     let deadline = Date.now.addingTimeInterval(timeout)
 
     while true {
-      guard !Task.isCancelled else { return false }
+      guard !Task.isCancelled, identityService.pubkeyHex == owner,
+        nostrService === sourceService else { return false }
       switch relaySendWaitState() {
       case .ready:
         clearRelaySendBlockingErrorIfPresent()

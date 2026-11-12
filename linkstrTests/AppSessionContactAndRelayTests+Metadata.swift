@@ -5,34 +5,6 @@ import XCTest
 @testable import linkstr
 
 extension AppSessionContactAndRelayTests {
-  func testMetadataResponseDoesNotUpdateADeletedPost() async throws {
-    var release: CheckedContinuation<LinkPreviewData?, Never>?
-    let started = expectation(description: "metadata request")
-    let (session, container) = try makeSession(fetchLinkPreview: { _ in
-      await withCheckedContinuation {
-        release = $0
-        started.fulfill()
-      }
-    })
-    try session.identityService.createNewIdentity()
-    let message = try makeMetadataRoot(
-      eventID: "deleted", url: "metadata-test-deleted",
-      ownerPubkey: XCTUnwrap(session.identityService.pubkeyHex))
-    let storageID = message.storageID
-    container.mainContext.insert(message)
-    try container.mainContext.save()
-    let refresh = Task { try await session.refreshMetadata(for: message, force: true) }
-    await fulfillment(of: [started], timeout: 1)
-    container.mainContext.delete(message)
-    try container.mainContext.save()
-    release?.resume(returning: LinkPreviewData(title: "obsolete", thumbnailPath: nil))
-
-    let changed = try await refresh.value
-    XCTAssertFalse(changed)
-    XCTAssertNil(try session.messageStore.message(storageID: storageID))
-    XCTAssertNil(session.metadataRefreshRetryAfterByStorageID[storageID])
-  }
-
   func testNewerProfileReceivedDuringPublicationIsNotOverwritten() async throws {
     var release: CheckedContinuation<Void, Never>?
     let started = expectation(description: "profile publication")

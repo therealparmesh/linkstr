@@ -34,7 +34,7 @@ extension NewSessionSheet {
   var footerStatus: LinkstrSheetFooterStatus? {
     mutationFeedback.footerStatus(
       isRunning: isCreating,
-      progressMessage: "waiting for relay reconnect before creating...",
+      progressMessage: "creating session…",
       validationMessage: canCreateSession ? nil : "session name required."
     )
   }
@@ -63,13 +63,14 @@ extension NewSessionSheet {
     guard canCreateSession else { return }
     dismissKeyboard()
     mutationFeedback.clear()
+    let name = sessionName.trimmingCharacters(in: .whitespacesAndNewlines)
     let selected = Array(selectedNPubs)
     isCreating = true
 
     Task { @MainActor in
       let result = await session.performFormMutation {
         await session.createSessionAwaitingRelay(
-          name: sessionName,
+          name: name,
           memberNPubs: selected
         )
       }
@@ -158,7 +159,7 @@ extension SessionManagementSheet {
       pendingMemberChange = ContactPresentation(pubkey: contact.targetPubkey, identity: identity, contact: contact)
     } label: {
       HStack(spacing: LinkstrTheme.rowSpacing) {
-        LinkstrContactAvatar(name: identity.displayName, size: 38)
+        LinkstrContactAvatar(name: identity.displayName, size: LinkstrTheme.memberAvatarSize)
         LinkstrContactIdentityView(
           identity: identity,
           primaryFont: LinkstrTheme.font(.footnote, weight: .medium)
@@ -195,16 +196,9 @@ extension SessionManagementSheet {
         mutationFeedback.clear()
         isPresentingDeleteConfirmation = true
       } label: {
-        HStack(spacing: LinkstrTheme.rowSpacing) {
-          Label("delete session", systemImage: "trash")
-            .font(LinkstrTheme.font(.footnote, weight: .semibold))
-          Spacer()
-        }
-        .foregroundStyle(LinkstrTheme.destructive)
-        .padding(.vertical, LinkstrTheme.listRowVerticalPadding)
-        .contentShape(Rectangle())
+        LinkstrActionButtonLabel(title: "delete session", systemImage: "trash")
       }
-      .buttonStyle(.plain)
+      .linkstrDestructiveButton()
       .disabled(isSaving || isDeletingSession)
     }
   }
@@ -229,19 +223,12 @@ extension SessionManagementSheet {
       Button {
         toggleArchived()
       } label: {
-        HStack(spacing: LinkstrTheme.rowSpacing) {
-          Label(
-            sessionEntity.isArchived ? "unarchive session" : "archive session",
-            systemImage: sessionEntity.isArchived ? "tray.and.arrow.up" : "archivebox"
-          )
-          .font(LinkstrTheme.font(.footnote, weight: .semibold))
-          Spacer()
-        }
-        .foregroundStyle(LinkstrTheme.textPrimary)
-        .padding(.vertical, LinkstrTheme.listRowVerticalPadding)
-        .contentShape(Rectangle())
+        LinkstrActionButtonLabel(
+          title: sessionEntity.isArchived ? "unarchive session" : "archive session",
+          systemImage: sessionEntity.isArchived ? "tray.and.arrow.up" : "archivebox"
+        )
       }
-      .buttonStyle(.plain)
+      .linkstrSecondaryButton()
       .disabled(isSaving || isDeletingSession)
     }
   }
@@ -264,22 +251,22 @@ extension SessionManagementSheet {
 
   var canSave: Bool {
     !sessionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      && (pendingSessionName != nil || includedMemberHexes != Set(activeMembers.map(\.memberPubkey)))
   }
 
   var footerStatus: LinkstrSheetFooterStatus? {
     mutationFeedback.footerStatus(
       isRunning: isSaving || isDeletingSession,
-      progressMessage: isDeletingSession
-        ? "waiting for relay reconnect before deleting..."
-        : "waiting for relay reconnect before saving...",
-      validationMessage: isDeletingSession || canSave ? nil : "session name required."
+      progressMessage: isDeletingSession ? "deleting session…" : "saving session…",
+      validationMessage: !isDeletingSession && sessionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        ? "session name required." : nil
     )
   }
 
   var archiveFooterText: String {
     sessionEntity.isArchived
       ? "unarchiving returns this session to the main sessions list."
-      : "archiving hides this session from the main sessions list."
+      : "archiving moves this session to your archived list."
   }
 
   var deleteFooterText: String {
@@ -343,8 +330,9 @@ extension SessionManagementSheet {
       isSaving = false
       if result.didSucceed {
         dismiss()
+        LinkstrToast.showSuccess("session changes saved")
       } else {
-        mutationFeedback.record(errorMessage: result.errorMessage)
+        mutationFeedback.record(errorMessage: result.errorMessage ?? "couldn’t save session changes.")
       }
     }
   }
@@ -371,11 +359,13 @@ extension SessionManagementSheet {
     guard !isSaving, !isDeletingSession else { return }
     focusedField = nil
     mutationFeedback.clear()
+    let archived = !sessionEntity.isArchived
+    guard session.setSessionArchived(sessionID: sessionEntity.sessionID, archived: archived) else {
+      mutationFeedback.record(errorMessage: session.takeComposeError() ?? "couldn’t update the session archive.")
+      return
+    }
     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-    session.setSessionArchived(
-      sessionID: sessionEntity.sessionID,
-      archived: !sessionEntity.isArchived
-    )
     dismiss()
+    LinkstrToast.showSuccess(archived ? "session archived" : "session unarchived")
   }
 }

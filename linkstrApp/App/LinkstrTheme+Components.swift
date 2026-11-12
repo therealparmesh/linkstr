@@ -4,14 +4,14 @@ struct LinkstrInsetSection<Content: View>: View {
   let title: String?
   var accessory: String?
   var footer: String?
-  var contentSpacing: CGFloat = 10
+  var contentSpacing: CGFloat = LinkstrTheme.buttonRowSpacing
   @ViewBuilder let content: Content
 
   init(
     title: String? = nil,
     accessory: String? = nil,
     footer: String? = nil,
-    contentSpacing: CGFloat = 10,
+    contentSpacing: CGFloat = LinkstrTheme.buttonRowSpacing,
     @ViewBuilder content: () -> Content
   ) {
     self.title = title
@@ -24,32 +24,41 @@ struct LinkstrInsetSection<Content: View>: View {
   var body: some View {
     VStack(alignment: .leading, spacing: LinkstrTheme.compactSpacing) {
       if let title {
-        HStack(alignment: .center, spacing: LinkstrTheme.compactSpacing) {
-          Text(title)
-            .font(LinkstrTheme.font(.subheadline, weight: .semibold))
-            .foregroundStyle(LinkstrTheme.textPrimary)
-
-          Spacer(minLength: 0)
-
+        let heading = Text(title)
+          .font(LinkstrTheme.font(.subheadline, weight: .semibold))
+          .foregroundStyle(LinkstrTheme.textPrimary)
+          .accessibilityAddTraits(.isHeader)
+        Group {
           if let accessory, !accessory.isEmpty {
-            Text(accessory)
+            let detail = Text(accessory)
               .font(LinkstrTheme.font(.caption, weight: .medium))
-              .foregroundStyle(LinkstrTheme.textTertiary)
+              .foregroundStyle(LinkstrTheme.textSecondary)
+            ViewThatFits(in: .horizontal) {
+              HStack(spacing: LinkstrTheme.compactSpacing) {
+                heading.fixedSize()
+                Spacer(minLength: 0)
+                detail.fixedSize()
+              }
+              VStack(alignment: .leading, spacing: LinkstrTheme.metaSpacing) {
+                heading
+                detail
+              }
+            }
+          } else {
+            heading
           }
         }
-        .padding(.horizontal, 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
       }
 
       VStack(alignment: .leading, spacing: contentSpacing) {
         content
       }
       .frame(maxWidth: .infinity, alignment: .leading)
-
       if let footer, !footer.isEmpty {
         Text(footer)
           .font(LinkstrTheme.font(.caption))
           .foregroundStyle(LinkstrTheme.textSecondary)
-          .padding(.horizontal, 2)
       }
     }
   }
@@ -69,11 +78,11 @@ struct LinkstrSearchField: View {
         .accessibilityHidden(true)
 
       TextField(prompt, text: $text, prompt: Text(prompt).foregroundStyle(LinkstrTheme.textSecondary.opacity(0.85)))
-        .font(LinkstrTheme.font(.footnote))
+        .accessibilityLabel(prompt)
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled(true)
         .submitLabel(submitLabel)
-        .padding(.trailing, LinkstrTheme.searchClearButtonTextInset)
+        .padding(.trailing, text.isEmpty ? 0 : LinkstrTheme.searchClearButtonTextInset)
         .onSubmit {
           onSubmit?()
         }
@@ -110,20 +119,12 @@ struct LinkstrInputAssistRow: View {
   let onClear: () -> Void
 
   var body: some View {
-    HStack(spacing: LinkstrTheme.inputAssistButtonSpacing) {
-      assistButton("paste", systemImage: "doc.on.clipboard", action: onPaste)
-
-      if showScan, let onScan {
-        assistButton("scan", systemImage: "qrcode.viewfinder", action: onScan)
+    ViewThatFits(in: .horizontal) {
+      HStack(spacing: LinkstrTheme.inputAssistButtonSpacing) {
+        actions
       }
-
-      if showClear {
-        assistButton(
-          "clear",
-          systemImage: "xmark.circle",
-          tint: LinkstrTheme.destructive.opacity(0.9),
-          action: onClear
-        )
+      VStack(alignment: .leading, spacing: LinkstrTheme.metaSpacing) {
+        actions
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
@@ -131,6 +132,24 @@ struct LinkstrInputAssistRow: View {
     .disabled(isDisabled)
     .opacity(isDisabled ? 0.65 : 1)
     .controlSize(.small)
+  }
+
+  @ViewBuilder
+  private var actions: some View {
+    assistButton("paste", systemImage: "doc.on.clipboard", action: onPaste)
+
+    if showScan, let onScan {
+      assistButton("scan", systemImage: "qrcode.viewfinder", action: onScan)
+    }
+
+    if showClear {
+      assistButton(
+        "clear",
+        systemImage: "xmark.circle",
+        tint: LinkstrTheme.destructive.opacity(0.9),
+        action: onClear
+      )
+    }
   }
 
   private func assistButton(
@@ -142,9 +161,11 @@ struct LinkstrInputAssistRow: View {
     Button(action: action) {
       HStack(spacing: LinkstrTheme.inputAssistIconSpacing) {
         Image(systemName: systemImage)
+          .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+          .accessibilityHidden(true)
         Text(title)
       }
-      .font(LinkstrTheme.font(.caption))
+      .font(LinkstrTheme.font(.footnote, weight: .medium))
       .foregroundStyle(tint)
       .frame(minWidth: LinkstrTheme.minimumInteractiveDimension)
       .frame(minHeight: LinkstrTheme.minimumInteractiveDimension)
@@ -168,7 +189,7 @@ struct LinkstrSheetStatusFooter: View {
       .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
       .padding(.top, LinkstrTheme.fieldVerticalPadding)
       .padding(.bottom, LinkstrTheme.fieldVerticalPadding)
-      .background(.ultraThinMaterial)
+      .background(LinkstrTheme.chrome)
       .overlay(alignment: .top) {
         Rectangle()
           .fill(LinkstrTheme.separator)
@@ -223,7 +244,7 @@ struct LinkstrSheetMutationFeedback {
 
 struct LinkstrCenteredEmptyStateView: View {
   let title: String
-  let systemImage: String
+  let systemImage: String?
   let description: String
   var actionTitle: String?
   var actionSystemImage: String?
@@ -231,7 +252,7 @@ struct LinkstrCenteredEmptyStateView: View {
 
   init(
     title: String,
-    systemImage: String,
+    systemImage: String?,
     description: String,
     actionTitle: String? = nil,
     actionSystemImage: String? = nil,
@@ -246,19 +267,22 @@ struct LinkstrCenteredEmptyStateView: View {
   }
 
   var body: some View {
-    VStack(spacing: 12) {
-      Circle()
-        .fill(LinkstrTheme.panelElevated)
-        .frame(width: 60, height: 60)
-        .overlay {
-          Image(systemName: systemImage)
-            .font(LinkstrTheme.font(.title2, weight: .semibold))
-            .foregroundStyle(LinkstrTheme.accent)
-        }
-        .accessibilityHidden(true)
+    VStack(spacing: LinkstrTheme.rowSpacing) {
+      if let systemImage {
+        Circle()
+          .fill(LinkstrTheme.panelElevated)
+          .frame(width: 60, height: 60)
+          .overlay {
+            Image(systemName: systemImage)
+              .font(LinkstrTheme.font(.title2, weight: .semibold))
+              .foregroundStyle(LinkstrTheme.accent)
+          }
+          .accessibilityHidden(true)
+      }
       Text(title)
         .font(LinkstrTheme.font(.headline, weight: .semibold))
         .foregroundStyle(LinkstrTheme.textPrimary)
+        .multilineTextAlignment(.center)
 
       Text(description)
         .font(LinkstrTheme.font(.footnote))
@@ -280,23 +304,11 @@ struct LinkstrCenteredEmptyStateView: View {
   }
 }
 
-struct LinkstrScreenTitle: View {
-  let title: String
-
-  var body: some View {
-    Text(title)
-      .font(LinkstrTheme.font(.largeTitle, weight: .bold))
-      .foregroundStyle(LinkstrTheme.textPrimary)
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .accessibilityAddTraits(.isHeader)
-  }
-}
-
 struct LinkstrReadOnlyBanner: View {
   var message: String = "you're no longer a member. this session is read-only."
 
   var body: some View {
-    HStack(alignment: .top, spacing: 10) {
+    HStack(alignment: .top, spacing: LinkstrTheme.buttonRowSpacing) {
       Image(systemName: "person.crop.circle.badge.xmark")
         .font(LinkstrTheme.font(.footnote, weight: .semibold))
         .foregroundStyle(LinkstrTheme.textSecondary)
@@ -308,7 +320,7 @@ struct LinkstrReadOnlyBanner: View {
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(.horizontal, LinkstrTheme.fieldHorizontalPadding)
-    .padding(.vertical, 10)
+    .padding(.vertical, LinkstrTheme.listRowVerticalPadding)
     .background(
       RoundedRectangle(
         cornerRadius: LinkstrTheme.fieldCornerRadius,
@@ -327,15 +339,6 @@ struct LinkstrReadOnlyBanner: View {
 }
 
 enum LinkstrAvatarStyleResolver {
-  private static let sessionPalette: [Color] = [
-    Color(red: 0.47, green: 0.63, blue: 0.98),
-    Color(red: 0.45, green: 0.75, blue: 0.79),
-    Color(red: 0.89, green: 0.70, blue: 0.44),
-    Color(red: 0.74, green: 0.57, blue: 0.91),
-    Color(red: 0.56, green: 0.79, blue: 0.50),
-    Color(red: 0.88, green: 0.52, blue: 0.63)
-  ]
-
   static func contactInitials(for name: String) -> String {
     let parts =
       name
@@ -353,13 +356,8 @@ enum LinkstrAvatarStyleResolver {
     return combined.isEmpty ? "?" : combined.uppercased()
   }
 
-  static func sessionColor(for seed: String) -> Color {
-    sessionPalette[sessionColorIndex(for: seed)]
-  }
-
-  static func sessionColorIndex(for seed: String) -> Int {
-    guard sessionPalette.isEmpty == false else { return 0 }
-    return Int(stableHash(for: seed) % UInt64(sessionPalette.count))
+  static func colorIndex(for seed: String, paletteSize: Int) -> Int {
+    Int(stableHash(for: seed) % UInt64(paletteSize))
   }
 
   private static func stableHash(for seed: String) -> UInt64 {
@@ -392,6 +390,6 @@ struct LinkstrContactAvatar: View {
 
   private var avatarColor: Color {
     let colors = [LinkstrTheme.accent, LinkstrTheme.accentPink, LinkstrTheme.textSecondary]
-    return colors[LinkstrAvatarStyleResolver.sessionColorIndex(for: seed ?? name) % colors.count]
+    return colors[LinkstrAvatarStyleResolver.colorIndex(for: seed ?? name, paletteSize: colors.count)]
   }
 }

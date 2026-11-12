@@ -5,21 +5,17 @@ import SwiftUI
 #endif
 
 struct NewPostSheet: View {
-  private enum Field: Hashable {
-    case url
-    case note
-  }
-
   @Environment(\.dismiss) private var dismiss
   @EnvironmentObject private var session: AppSession
 
   let sessionEntity: SessionEntity
+  let memberAvatars: [SessionMemberAvatar]
 
   @State private var url = ""
   @State private var note = ""
   @State private var isSending = false
   @State private var mutationFeedback = LinkstrSheetMutationFeedback()
-  @FocusState private var focusedField: Field?
+  @FocusState private var focusedField: LinkstrShareDraftFields.Field?
 
   var body: some View {
     NavigationStack {
@@ -27,95 +23,47 @@ struct NewPostSheet: View {
         LinkstrBackgroundView()
         ScrollView {
           VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
+            LinkstrSheetTitle(title: "share a link")
+
             LinkstrInsetSection(title: "to") {
-              HStack(spacing: 10) {
-                LinkstrSessionAvatar(seed: sessionEntity.sessionID, size: 29)
-                Text(sessionEntity.name)
-                  .font(LinkstrTheme.font(.subheadline, weight: .semibold))
-                  .foregroundStyle(LinkstrTheme.textPrimary)
-              }
-              .linkstrInputField()
+              ShareSelectedSessionRow(session: sessionEntity, memberAvatars: memberAvatars)
             }
 
             if !canCreatePostInSession {
               LinkstrReadOnlyBanner()
             }
 
-            LinkstrInsetSection(title: "link") {
-              TextField("example.com", text: $url)
-                .font(LinkstrTheme.font(.footnote))
-                .textInputAutocapitalization(.never)
-                .keyboardType(.URL)
-                .autocorrectionDisabled(true)
-                .disabled(isSending)
-                .focused($focusedField, equals: .url)
-                .lineLimit(1)
-                .submitLabel(.next)
-                .onSubmit {
-                  focusedField = .note
-                }
-                .linkstrInputField()
-
-              LinkstrInputAssistRow(
-                showClear: !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                showScan: false,
-                isDisabled: isSending,
-                onPaste: pasteURLFromClipboard,
-                onClear: { url = "" }
-              )
-
-              if let normalizedURL {
-                LinkstrDraftPreview(url: normalizedURL, loadsRichPreview: focusedField != .url)
-              }
-            }
-
-            LinkstrInsetSection(title: "add a note", accessory: "optional") {
-              ZStack(alignment: .topLeading) {
-                if note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                  Text("say something about this link")
-                    .font(LinkstrTheme.font(.footnote))
-                    .foregroundStyle(LinkstrTheme.textSecondary)
-                    .padding(.top, LinkstrTheme.fieldVerticalPadding)
-                    .padding(.leading, LinkstrTheme.fieldHorizontalPadding)
-                    .allowsHitTesting(false)
-                }
-
-                TextEditor(text: $note)
-                  .font(LinkstrTheme.font(.footnote))
-                  .foregroundStyle(LinkstrTheme.textPrimary)
-                  .scrollContentBackground(.hidden)
-                  .frame(minHeight: 112, maxHeight: 180)
-                  .padding(4)
-                  .focused($focusedField, equals: .note)
-                  .accessibilityLabel("note")
-                  .disabled(isSending)
-              }
-              .linkstrFieldChrome()
-            }
+            LinkstrShareDraftFields(
+              link: $url, note: $note, normalizedURL: normalizedURL,
+              isSending: isSending, focusedField: $focusedField
+            )
           }
+          .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+          .padding(.top, LinkstrTheme.screenTopPadding)
+          .padding(.bottom, LinkstrTheme.screenBottomPadding)
+          .linkstrReadableContent()
         }
-        .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-        .padding(.top, LinkstrTheme.screenTopPadding)
-        .padding(.bottom, LinkstrTheme.screenBottomPadding)
-        .linkstrReadableContent()
         .linkstrKeyboardDismissal()
+        .modifier(LinkstrFocusedFieldScrolling(focusedField: focusedField))
       }
 
       .linkstrBarChrome()
-      .navigationTitle("share a link")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
-          Button("cancel") { dismiss() }
+          LinkstrHeaderButton(title: "cancel", icon: "xmark") { dismiss() }
             .disabled(isSending)
         }
+        .linkstrFlatToolbarItem()
       }
       .interactiveDismissDisabled(isSending)
       .safeAreaInset(edge: .bottom, spacing: 0) {
-        LinkstrShareFooter(status: footerStatus, canSend: canSend, isSending: isSending, send: sendPost)
+        if focusedField == nil {
+          LinkstrShareFooter(status: footerStatus, canSend: canSend, isSending: isSending, send: sendPost)
+        }
       }
       .onChange(of: focusedField) { previousField, focusedField in
-        guard previousField == .url, focusedField != .url else { return }
+        guard previousField == .link, focusedField != .link else { return }
         guard let normalizedURL else { return }
         url = normalizedURL
       }
@@ -156,7 +104,7 @@ struct NewPostSheet: View {
   private var footerStatus: LinkstrSheetFooterStatus? {
     mutationFeedback.footerStatus(
       isRunning: isSending,
-      progressMessage: "waiting for a relay connection",
+      progressMessage: "connecting to share your link",
       validationMessage: validationMessage,
       validationColor: LinkstrTheme.destructive.opacity(0.9)
     )
@@ -189,13 +137,5 @@ struct NewPostSheet: View {
         mutationFeedback.record(errorMessage: result.errorMessage)
       }
     }
-  }
-
-  private func pasteURLFromClipboard() {
-    #if canImport(UIKit)
-      if let clipboardText = UIPasteboard.general.string {
-        url = clipboardText.trimmingCharacters(in: .whitespacesAndNewlines)
-      }
-    #endif
   }
 }

@@ -8,6 +8,7 @@ struct YouView: View {
   @State private var isEditingProfile = false
   @State private var profileNameDraft = ""
   @State private var isSavingProfileName = false
+  @State private var profileFeedback = LinkstrSheetMutationFeedback()
   @FocusState private var isProfileNameFieldFocused: Bool
 
   var body: some View {
@@ -27,6 +28,7 @@ struct YouView: View {
     }
     .onChange(of: profileNameDraft) { _, _ in
       session.clearProfileNameError()
+      profileFeedback.clear()
     }
   }
 
@@ -34,13 +36,15 @@ struct YouView: View {
   private var content: some View {
     if let npub = session.identityService.npub {
       ScrollView {
-        VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
+        VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
           heading
-          identitySection(npub: npub)
-          settingsShortcuts
+          VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
+            identitySection(npub: npub)
+            settingsShortcuts
+          }
         }
         .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-        .padding(.top, LinkstrTheme.screenTopPadding)
+        .padding(.top, LinkstrTheme.pageHeaderTopPadding)
         .padding(.bottom, LinkstrTheme.screenBottomPadding)
         .linkstrReadableContent()
       }
@@ -50,17 +54,37 @@ struct YouView: View {
       .sheet(isPresented: $isEditingProfile, onDismiss: syncProfileNameDraft) {
         NavigationStack {
           ScrollView {
-            profileNameSection
-              .padding(LinkstrTheme.screenHorizontalPadding)
-              .linkstrReadableContent()
+            VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
+              LinkstrSheetTitle(title: "edit profile")
+              profileNameSection
+            }
+            .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+            .padding(.top, LinkstrTheme.screenTopPadding)
+            .padding(.bottom, LinkstrTheme.screenBottomPadding)
+            .linkstrReadableContent()
           }
           .background(LinkstrBackgroundView())
-          .navigationTitle("edit profile")
           .navigationBarTitleDisplayMode(.inline)
           .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-              Button("close") { isEditingProfile = false }
+              LinkstrHeaderButton(title: "cancel", icon: "xmark") { isEditingProfile = false }
                 .disabled(isSavingProfileName)
+            }
+            .linkstrFlatToolbarItem()
+            ToolbarItem(placement: .confirmationAction) {
+              LinkstrHeaderButton(
+                title: profileNameButtonTitle,
+                icon: isClearingProfileName ? "trash" : "checkmark",
+                foreground: isClearingProfileName ? LinkstrTheme.destructive : LinkstrTheme.accent,
+                action: submitProfileName
+              )
+              .disabled(!canSaveProfileName || isSavingProfileName)
+            }
+            .linkstrFlatToolbarItem()
+          }
+          .safeAreaInset(edge: .bottom, spacing: 0) {
+            if let status = profileNameStatus {
+              LinkstrSheetStatusFooter(message: status.message, messageColor: status.color)
             }
           }
           .interactiveDismissDisabled(isSavingProfileName)
@@ -69,10 +93,10 @@ struct YouView: View {
         }
       }
     } else {
-      VStack(spacing: 0) {
+      VStack(spacing: LinkstrTheme.listBlockSpacing) {
         heading
           .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-          .padding(.top, LinkstrTheme.screenTopPadding)
+          .padding(.top, LinkstrTheme.pageHeaderTopPadding)
         LinkstrCenteredEmptyStateView(
           title: "no identity",
           systemImage: "person.crop.circle.badge.exclamationmark",
@@ -87,7 +111,7 @@ struct YouView: View {
   }
 
   private var heading: some View {
-    LinkstrTabHeader(title: "you") {
+    LinkstrPageHeader(title: "you") {
       LinkstrHeaderButton(title: "settings", icon: "gearshape") { openSettings(nil) }
     }
   }
@@ -95,7 +119,8 @@ struct YouView: View {
   private var profileNameSection: some View {
     LinkstrInsetSection(
       title: "profile name",
-      footer: "optional. others can see this name."
+      footer: isClearingProfileName
+        ? "confirm to remove your profile name." : "optional. others can see this name."
     ) {
       TextField("name others see", text: $profileNameDraft)
         .font(LinkstrTheme.font(.subheadline))
@@ -105,19 +130,22 @@ struct YouView: View {
         .focused($isProfileNameFieldFocused)
         .onSubmit(submitProfileName)
         .linkstrInputField()
+        .disabled(isSavingProfileName)
 
-      if let profileNameErrorMessage = session.profileNameErrorMessage {
-        Text(profileNameErrorMessage)
-          .font(LinkstrTheme.font(.caption))
-          .foregroundStyle(LinkstrTheme.destructive.opacity(0.92))
+      if !profileNameDraft.isEmpty {
+        Button {
+          profileNameDraft = ""
+        } label: {
+          LinkstrActionButtonLabel(title: "clear text", systemImage: "xmark.circle")
+        }
+        .linkstrSecondaryButton()
+        .disabled(isSavingProfileName)
       }
-
-      profileNameButton
     }
   }
 
   private func identitySection(npub: String) -> some View {
-    VStack(spacing: 14) {
+    VStack(spacing: LinkstrTheme.listBlockSpacing) {
       LinkstrContactAvatar(name: session.currentProfileName ?? "you", size: 68, seed: npub)
 
       Text(session.currentProfileName ?? "your profile")
@@ -125,9 +153,12 @@ struct YouView: View {
         .foregroundStyle(LinkstrTheme.textPrimary)
         .multilineTextAlignment(.center)
 
-      Button("edit profile") { isEditingProfile = true }
-        .font(LinkstrTheme.font(.subheadline, weight: .semibold))
-        .frame(minHeight: 44)
+      Button { isEditingProfile = true } label: {
+        Text("edit profile")
+          .font(LinkstrTheme.font(.subheadline, weight: .semibold))
+          .frame(minHeight: LinkstrTheme.minimumInteractiveDimension)
+          .contentShape(Rectangle())
+      }
 
       if let qrImage {
         Image(uiImage: qrImage)
@@ -136,7 +167,7 @@ struct YouView: View {
           .scaledToFit()
           .frame(maxWidth: 174)
           .padding(10)
-          .background(.white, in: .rect(cornerRadius: 16))
+          .background(LinkstrTheme.textPrimary, in: .rect(cornerRadius: 16))
           .accessibilityLabel("QR code for your public key")
       }
 
@@ -168,7 +199,7 @@ struct YouView: View {
       .frame(maxWidth: 300)
     }
     .frame(maxWidth: .infinity)
-    .padding(.vertical, 12)
+    .padding(.vertical, LinkstrTheme.fieldVerticalPadding)
   }
 
   private var settingsShortcuts: some View {
@@ -182,51 +213,30 @@ struct YouView: View {
 
   private func settingsRow(_ title: String, icon: String, action: @escaping () -> Void) -> some View {
     Button(action: action) {
-      HStack(spacing: 12) {
+      HStack(spacing: LinkstrTheme.rowSpacing) {
         Image(systemName: icon)
-          .frame(width: 24)
+          .dynamicTypeSize(...DynamicTypeSize.xLarge)
+          .frame(width: 28)
           .foregroundStyle(LinkstrTheme.accent)
+          .accessibilityHidden(true)
         Text(title)
           .frame(maxWidth: .infinity, alignment: .leading)
-        Image(systemName: "chevron.right")
-          .font(LinkstrTheme.font(.caption, weight: .semibold))
-          .foregroundStyle(LinkstrTheme.textSecondary)
+        LinkstrDisclosureIndicator()
       }
       .font(LinkstrTheme.font(.subheadline, weight: .medium))
       .foregroundStyle(LinkstrTheme.textPrimary)
-      .padding(.vertical, 12)
-      .frame(minHeight: 48)
+      .padding(.vertical, LinkstrTheme.fieldVerticalPadding)
+      .frame(minHeight: LinkstrTheme.actionButtonMinHeight)
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
     .overlay(alignment: .top) { LinkstrListRowDivider(leadingInset: 0) }
   }
+}
 
-  @ViewBuilder
-  private var profileNameButton: some View {
-    if isClearingProfileName {
-      Button {
-        submitProfileName()
-      } label: {
-        LinkstrActionButtonLabel(
-          title: profileNameButtonTitle,
-          systemImage: "minus.circle.fill"
-        )
-      }
-      .linkstrSecondaryButton()
-      .disabled(!canSaveProfileName || isSavingProfileName)
-    } else {
-      Button {
-        submitProfileName()
-      } label: {
-        LinkstrActionButtonLabel(
-          title: profileNameButtonTitle,
-          systemImage: "checkmark.circle.fill"
-        )
-      }
-      .linkstrPrimaryButton()
-      .disabled(!canSaveProfileName || isSavingProfileName)
-    }
+private extension YouView {
+  var profileNameStatus: LinkstrSheetFooterStatus? {
+    profileFeedback.footerStatus(isRunning: isSavingProfileName, progressMessage: "saving profile name…")
   }
 
   private var normalizedProfileNameDraft: String? {
@@ -244,7 +254,7 @@ struct YouView: View {
 
   private var profileNameButtonTitle: String {
     if isSavingProfileName {
-      return "saving profile name..."
+      return "saving profile name…"
     }
     if isClearingProfileName {
       return "clear profile name"
@@ -253,16 +263,21 @@ struct YouView: View {
   }
 
   private func saveProfileName() {
-    guard canSaveProfileName else { return }
+    guard canSaveProfileName, !isSavingProfileName else { return }
     isSavingProfileName = true
+    profileFeedback.clear()
 
     Task { @MainActor in
-      let didSave = await session.updateOwnProfileName(profileNameDraft)
+      let result = await session.performFormMutation {
+        await session.updateOwnProfileName(profileNameDraft)
+      }
       isSavingProfileName = false
-      if didSave {
+      if result.didSucceed {
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         syncProfileNameDraft()
         isEditingProfile = false
+      } else {
+        profileFeedback.record(errorMessage: result.errorMessage)
       }
     }
   }

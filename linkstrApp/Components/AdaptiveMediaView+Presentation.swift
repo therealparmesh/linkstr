@@ -25,14 +25,15 @@ extension AdaptiveMediaView {
 
   func resetPlaybackPresentation() {
     cancelLocalCaching()
+    cancelPhotoSave()
+    exportTarget = nil
+    fileExportItem = nil
+    exportFeedback = nil
     cachedLocalMedia = nil
     resolvedPresentation = nil
-    embeddedContentHeight = nil
-    isEmbeddedContentReady = false
+    resetEmbeddedPresentation()
     detectedMediaAspectRatio = nil
-    embeddedLoadFailed = false
     extractionState = nil
-    extractionFallbackReason = nil
     playbackCandidateIndex = 0
     localPlaybackMode = .localPreferred
     localPlaybackRequestID = 0
@@ -42,8 +43,17 @@ extension AdaptiveMediaView {
     sourceURL: URL,
     taskID: String
   ) async -> ResolvedPresentation? {
-    let canonicalURL = await URLCanonicalizationService.shared.canonicalPlaybackURL(for: sourceURL)
+    let canonicalURL: URL
+    if SocialURLHeuristics.isTikTokShortURL(sourceURL),
+      let cachedCanonicalSourceURL,
+      URLCanonicalizationService.canonicalTikTokPostURL(from: cachedCanonicalSourceURL) == cachedCanonicalSourceURL,
+      resolveCachedLocalMedia?(cachedCanonicalSourceURL) != nil {
+      canonicalURL = cachedCanonicalSourceURL
+    } else {
+      canonicalURL = await URLCanonicalizationService.shared.canonicalPlaybackURL(for: sourceURL)
+    }
     guard isCurrentPlaybackTask(taskID) else { return nil }
+    onResolvedSource?(canonicalURL)
 
     var embedSource: EmbeddedWebSource?
     var mediaStrategy = URLClassifier.mediaStrategy(for: canonicalURL)
@@ -88,7 +98,7 @@ extension AdaptiveMediaView {
 
   func prepareMediaIfNeeded() async {
     guard !isResolvingPresentation else { return }
-    guard effectiveMediaStrategy.allowsLocalPlaybackToggle else { return }
+    guard effectiveMediaStrategy == .directVideo || effectiveMediaStrategy.allowsLocalPlaybackToggle else { return }
     guard localPlaybackMode == .localPreferred else { return }
     guard let taskID = activeResolvedPresentation?.taskID else { return }
 
@@ -101,7 +111,6 @@ extension AdaptiveMediaView {
 
     if let cachedLocalMedia {
       extractionState = .ready([cachedLocalMedia])
-      extractionFallbackReason = nil
       return
     }
 
@@ -112,6 +121,7 @@ extension AdaptiveMediaView {
   }
 
   func useCachedMedia(_ media: PlayableMedia) {
+    LinkstrPlaybackDiagnostics.logger.debug("using cached playback")
     if media.isLocalFile {
       Task {
         await VideoCacheService.shared.touchCachedMedia(at: media.playbackURL)
@@ -119,7 +129,6 @@ extension AdaptiveMediaView {
     }
     cachedLocalMedia = media
     extractionState = .ready([media])
-    extractionFallbackReason = nil
   }
 
   func applyExtractionResult(_ result: ExtractionState, sourceURL: URL) {
@@ -128,7 +137,7 @@ extension AdaptiveMediaView {
 
     switch result {
     case .ready(let candidates):
-      extractionFallbackReason = nil
+      LinkstrPlaybackDiagnostics.logger.debug("extraction ready: \(candidates.count) candidates")
       guard let media = candidates.first, media.isLocalFile else { return }
       Task {
         await VideoCacheService.shared.touchCachedMedia(at: media.playbackURL)
@@ -136,11 +145,26 @@ extension AdaptiveMediaView {
       cachedLocalMedia = media
       persistLocalMedia?(sourceURL, media)
     case .noVideo:
-      extractionFallbackReason = nil
+      LinkstrPlaybackDiagnostics.logger.info("no extracted video; using fallback presentation")
       localPlaybackMode = .embedPreferred
     case .cannotExtract(let reason):
-      extractionFallbackReason = reason
+      LinkstrPlaybackDiagnostics.logger.notice(
+        "extraction failed; using fallback presentation: \(reason, privacy: .private)"
+      )
       localPlaybackMode = .embedPreferred
+    }
+  }
+
+  func advancePlaybackCandidate(candidates: [PlayableMedia]) {
+    let nextIndex = playbackCandidateIndex + 1
+    if nextIndex < candidates.count {
+      detectedMediaAspectRatio = nil
+      playbackCandidateIndex = nextIndex
+    } else {
+      applyExtractionResult(
+        .cannotExtract("none of the extracted video streams were playable."),
+        sourceURL: effectiveSourceURL
+      )
     }
   }
 

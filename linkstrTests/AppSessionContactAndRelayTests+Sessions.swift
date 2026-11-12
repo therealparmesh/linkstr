@@ -250,11 +250,11 @@ extension AppSessionContactAndRelayTests {
     container.mainContext.insert(rootInDifferentSession)
     try container.mainContext.save()
 
-    session.setSessionArchived(sessionID: conversationID, archived: true)
+    XCTAssertTrue(session.setSessionArchived(sessionID: conversationID, archived: true))
     XCTAssertTrue(rootInTargetSession.isArchived)
     XCTAssertFalse(rootInDifferentSession.isArchived)
 
-    session.setSessionArchived(sessionID: conversationID, archived: false)
+    XCTAssertTrue(session.setSessionArchived(sessionID: conversationID, archived: false))
     XCTAssertFalse(rootInTargetSession.isArchived)
     XCTAssertFalse(rootInDifferentSession.isArchived)
   }

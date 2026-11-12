@@ -12,33 +12,42 @@ extension AppSession {
     timeoutSeconds: TimeInterval = RelayMutationDefaults.timeoutSeconds,
     pollIntervalSeconds: TimeInterval = RelayMutationDefaults.pollIntervalSeconds
   ) async -> Bool {
+    guard session.ownerPubkey == identityService.pubkeyHex else {
+      composeError = "this session belongs to a different account."
+      return false
+    }
     guard let draft = makeRootPostDraft(url: url, note: note, sessionID: session.sessionID) else {
       return false
     }
+    let sourceService = nostrService
 
     do {
       try await prepareRelayMutationIfNeeded(
         timeoutSeconds: timeoutSeconds,
         pollIntervalSeconds: pollIntervalSeconds
       )
+      try checkMutationContext(ownerPubkey: draft.ownerPubkey, sourceService: sourceService)
     } catch MutationPreparationError.relayBlocked {
       return false
     } catch {
-      report(error: error)
+      reportMutationError(error, ownerPubkey: draft.ownerPubkey, sourceService: sourceService)
       return false
     }
 
+    guard let readyDraft = makeRootPostDraft(
+      url: draft.normalizedURL, note: draft.payload.note, sessionID: draft.payload.conversationID
+    ) else { return false }
     if !isRelayPublicationEnabledForCurrentProcess() {
-      return createPostLocally(draft)
+      return createPostLocally(readyDraft)
     }
-    return await createPostAwaitingRelayDelivery(draft)
+    return await createPostAwaitingRelayDelivery(readyDraft)
   }
 
   @discardableResult
   private func createPostLocally(_ draft: RootPostDraft) -> Bool {
     do {
       let eventID = makeLocalEventID()
-      try persistSentRootPost(draft, receipt: localSendReceipt(withRumorEventID: eventID))
+      guard try persistSentRootPost(draft, receipt: localSendReceipt(withRumorEventID: eventID)) else { return false }
       composeError = nil
       return true
     } catch {
@@ -53,9 +62,11 @@ extension AppSession {
     timeoutSeconds: TimeInterval = RelayMutationDefaults.timeoutSeconds,
     pollIntervalSeconds: TimeInterval = RelayMutationDefaults.pollIntervalSeconds
   ) async -> Bool {
+    guard !Task.isCancelled else { return false }
     guard let draft = makeRootDeletionDraft(post: post) else {
       return false
     }
+    let sourceService = nostrService
 
     if !isRelayPublicationEnabledForCurrentProcess() {
       do {
@@ -73,10 +84,11 @@ extension AppSession {
         timeoutSeconds: timeoutSeconds,
         pollIntervalSeconds: pollIntervalSeconds
       )
+      try checkMutationContext(ownerPubkey: draft.ownerPubkey, sourceService: sourceService)
     } catch MutationPreparationError.relayBlocked {
       return false
     } catch {
-      report(error: error)
+      reportMutationError(error, ownerPubkey: draft.ownerPubkey, sourceService: sourceService)
       return false
     }
 
@@ -89,6 +101,7 @@ extension AppSession {
   }
 
   private func performRelayPostDeletion(draft: RootDeletionDraft, keypair: Keypair) async -> Bool {
+    let sourceService = nostrService
     do {
       let deletionRequestEventID: String?
       if draft.publishedTransportEventIDs.isEmpty {
@@ -102,6 +115,7 @@ extension AppSession {
           )
         )
       }
+      try checkMutationContext(ownerPubkey: draft.ownerPubkey, sourceService: sourceService)
 
       let deletionWatermarkEventID: String
       do {
@@ -110,6 +124,7 @@ extension AppSession {
           recipientPubkeyHexes: draft.recipientPubkeys
         ).rumorEventID
       } catch {
+        try checkMutationContext(ownerPubkey: draft.ownerPubkey, sourceService: sourceService)
         if let deletionRequestEventID {
           try persistRootDeletion(draft, eventID: deletionRequestEventID)
           composeError = "post deleted, but other members may keep seeing it until sync catches up."
@@ -118,6 +133,7 @@ extension AppSession {
         throw error
       }
 
+      try checkMutationContext(ownerPubkey: draft.ownerPubkey, sourceService: sourceService)
       try persistRootDeletion(draft, eventID: deletionWatermarkEventID)
       if deletionRequestEventID == nil {
         composeError =
@@ -127,18 +143,20 @@ extension AppSession {
       }
       return true
     } catch {
-      report(error: error)
+      reportMutationError(error, ownerPubkey: draft.ownerPubkey, sourceService: sourceService)
       return false
     }
   }
 
   private func createPostAwaitingRelayDelivery(_ draft: RootPostDraft) async -> Bool {
+    let sourceService = nostrService
     do {
       let receipt = try await sendPayloadAwaitingRelayAcceptance(
         payload: draft.payload,
         recipientPubkeyHexes: draft.recipientPubkeys
       )
-      try persistSentRootPost(draft, receipt: receipt)
+      try checkMutationContext(ownerPubkey: draft.ownerPubkey, sourceService: sourceService)
+      guard try persistSentRootPost(draft, receipt: receipt) else { return false }
       schedulePushEnqueue(
         PushEnqueueRequest(
           notificationType: "new_post",
@@ -151,7 +169,7 @@ extension AppSession {
       composeError = nil
       return true
     } catch {
-      report(error: error)
+      reportMutationError(error, ownerPubkey: draft.ownerPubkey, sourceService: sourceService)
       return false
     }
   }
@@ -167,6 +185,10 @@ extension AppSession {
     }
     guard let keypair = identityService.keypair, let ownerPubkey = identityService.pubkeyHex else {
       composeError = "you're signed out. sign in to manage this post."
+      return nil
+    }
+    guard post.ownerPubkey == ownerPubkey else {
+      composeError = "this post belongs to a different account."
       return nil
     }
     let senderHash = LocalDataCrypto.shared.digestHex(keypair.publicKey.hex)
@@ -250,15 +272,29 @@ extension AppSession {
     )
   }
 
-  func persistSentRootPost(_ draft: RootPostDraft, receipt: SentPayloadReceipt) throws {
+  private func persistSentRootPost(_ draft: RootPostDraft, receipt: SentPayloadReceipt) throws -> Bool {
     let sessionID = draft.payload.conversationID
-    _ = try messageStore.upsertSession(
-      ownerPubkey: draft.ownerPubkey,
-      sessionID: sessionID,
-      name: existingSessionName(for: sessionID, ownerPubkey: draft.ownerPubkey),
-      createdByPubkey: draft.senderPubkey,
-      updatedAt: .now
-    )
+    guard try !hasDeletedSession(ownerPubkey: draft.ownerPubkey, sessionID: sessionID),
+      let session = try messageStore.session(sessionID: sessionID, ownerPubkey: draft.ownerPubkey) else {
+      composeError = "this session is no longer available."
+      return false
+    }
+    guard try !messageStore.hasRootDeletion(
+      ownerPubkey: draft.ownerPubkey, sessionID: sessionID,
+      rootID: receipt.rumorEventID, deletedByPubkey: draft.senderPubkey
+    ) else {
+      composeError = "this post is no longer available."
+      return false
+    }
+    let timestamp = Date(timeIntervalSince1970: TimeInterval(draft.payload.timestamp))
+    session.updatedAt = max(session.updatedAt, timestamp)
+    if let existing = try messageStore.rootPost(
+      ownerPubkey: draft.ownerPubkey, sessionID: sessionID, rootID: receipt.rumorEventID
+    ) {
+      existing.appendPublishedTransportEventIDs(receipt.publishedEventIDs)
+      try modelContext.save()
+      return true
+    }
     let message = try SessionMessageEntity(
       eventID: receipt.rumorEventID,
       ownerPubkey: draft.ownerPubkey,
@@ -268,12 +304,13 @@ extension AppSession {
       senderPubkey: draft.senderPubkey,
       url: draft.normalizedURL,
       note: draft.payload.note,
-      timestamp: .now,
+      timestamp: timestamp,
       readAt: .now,
       linkType: URLClassifier.classify(draft.normalizedURL),
       publishedTransportEventIDs: receipt.publishedEventIDs
     )
     try messageStore.insert(message)
+    return true
   }
 
   func persistRootDeletion(_ draft: RootDeletionDraft, eventID: String) throws {

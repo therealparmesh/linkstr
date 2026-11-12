@@ -39,7 +39,7 @@ struct NewSessionSheet: View {
         LinkstrBackgroundView()
         ScrollView {
           VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
-            LinkstrScreenTitle(title: "new session")
+            LinkstrSheetTitle(title: "new session")
             LinkstrInsetSection(title: "session details") {
               TextField("session name", text: $sessionName)
                 .font(LinkstrTheme.font(.subheadline))
@@ -52,7 +52,8 @@ struct NewSessionSheet: View {
 
             LinkstrInsetSection(
               title: "members",
-              accessory: "\(selectedNPubs.count + 1)"
+              accessory: "\(selectedNPubs.count + 1)",
+              footer: "you’re included. choose contacts to invite, or start a session for yourself."
             ) {
               if contacts.isEmpty {
                 LinkstrNoContactsPrompt {
@@ -80,7 +81,8 @@ struct NewSessionSheet: View {
                         toggle(contact.npub)
                       } label: {
                         HStack(spacing: LinkstrTheme.rowSpacing) {
-                          LinkstrContactAvatar(name: identity.displayName, size: 38)
+                          LinkstrContactAvatar(name: identity.displayName, size: LinkstrTheme.memberAvatarSize)
+                            .accessibilityHidden(true)
                           LinkstrContactIdentityView(
                             identity: identity,
                             primaryFont: LinkstrTheme.font(.footnote, weight: .medium)
@@ -93,6 +95,7 @@ struct NewSessionSheet: View {
                               ? "checkmark.circle.fill" : "circle"
                           )
                           .font(LinkstrTheme.font(.title3, weight: .semibold))
+                          .dynamicTypeSize(...DynamicTypeSize.xLarge)
                           .foregroundStyle(
                             selectedNPubs.contains(contact.npub)
                               ? LinkstrTheme.accent : LinkstrTheme.textTertiary
@@ -111,7 +114,7 @@ struct NewSessionSheet: View {
                       .accessibilityAction(named: Text("copy public key")) {
                         UIPasteboard.general.string = identity.npub
                       }
-                      .accessibilityValue(selectedNPubs.contains(contact.npub) ? "selected" : "not selected")
+                      .accessibilityAddTraits(selectedNPubs.contains(contact.npub) ? .isSelected : [])
                       .accessibilityHint(
                         selectedNPubs.contains(contact.npub) ? "remove from session" : "add to session"
                       )
@@ -136,33 +139,18 @@ struct NewSessionSheet: View {
       .linkstrBarChrome()
       .toolbar {
         ToolbarItem(placement: .topBarLeading) {
-          Button {
+          LinkstrHeaderButton(title: "cancel", icon: "xmark") {
             dismiss()
-          } label: {
-            Image(systemName: "xmark")
-              .linkstrToolbarIconLabel()
           }
-          .accessibilityLabel("cancel")
-          .tint(LinkstrTheme.textSecondary)
           .disabled(isCreating)
         }
+        .linkstrFlatToolbarItem()
 
         ToolbarItem(placement: .topBarTrailing) {
-          Button {
-            createSession()
-          } label: {
-            if isCreating {
-              ProgressView()
-                .frame(width: 30, height: 30, alignment: .center)
-            } else {
-              Image(systemName: "plus.circle.fill")
-                .linkstrToolbarIconLabel()
-            }
-          }
-          .accessibilityLabel("create session")
-          .tint(LinkstrTheme.accent)
-          .disabled(isCreating || !canCreateSession)
+          LinkstrHeaderButton(title: "create session", icon: "checkmark", action: createSession)
+            .disabled(isCreating || !canCreateSession)
         }
+        .linkstrFlatToolbarItem()
       }
       .safeAreaInset(edge: .bottom, spacing: 0) {
         if let footerStatus {
@@ -179,6 +167,7 @@ struct NewSessionSheet: View {
         mutationFeedback.clear()
       }
     }
+    .interactiveDismissDisabled(isCreating)
     .sheet(isPresented: $isPresentingAddContact) {
       AddContactSheet()
     }

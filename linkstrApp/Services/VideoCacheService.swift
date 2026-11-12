@@ -80,22 +80,26 @@ actor VideoCacheService {
 
   static let defaultMaxVideoCacheBytes: Int64 = 1_000_000_000
   static let shared = VideoCacheService(
-    videoDirectory: ManagedLocalFileScope.shared.videoDirectory
+    videoDirectory: ManagedLocalFileScope.shared.videoDirectory,
+    additionalMediaURLs: { ManagedLocalFileScope.shared.hlsRegistry.registeredURLs }
   )
 
   private let fileManager: FileManager
   private let videoDirectory: URL
   private let maxVideoCacheBytes: Int64
+  private let additionalMediaURLs: () -> [URL]
   private var runningVideoBytes: Int64?
 
   init(
     videoDirectory: URL,
     fileManager: FileManager = .default,
-    maxVideoCacheBytes: Int64 = defaultMaxVideoCacheBytes
+    maxVideoCacheBytes: Int64 = defaultMaxVideoCacheBytes,
+    additionalMediaURLs: @escaping () -> [URL] = { [] }
   ) {
     self.fileManager = fileManager
     self.videoDirectory = Self.normalized(url: videoDirectory)
     self.maxVideoCacheBytes = maxVideoCacheBytes
+    self.additionalMediaURLs = additionalMediaURLs
   }
 
   func registerCachedMedia(at fileURL: URL) {
@@ -111,10 +115,8 @@ actor VideoCacheService {
   }
 
   private func cachedFileURL(for remoteURL: URL, preferredExtension: String) -> URL {
-    ManagedLocalFileScope.shared.cachedVideoFileURL(
-      for: remoteURL,
-      preferredExtension: preferredExtension
-    )
+    videoDirectory.appendingPathComponent(remoteURL.absoluteString.sha256Hex)
+      .appendingPathExtension(preferredExtension)
   }
 
   func downloadMP4(from remoteURL: URL, headers: [String: String]) async throws -> URL {
@@ -135,9 +137,20 @@ actor VideoCacheService {
       throw URLError(.badServerResponse)
     }
 
-    // Another download may have completed while this request was suspended.
+    return try storeDownloadedVideo(at: tmpURL, from: remoteURL)
+  }
+
+  func storeDownloadedVideo(at temporaryURL: URL, from remoteURL: URL) throws -> URL {
+    let destination = cachedFileURL(for: remoteURL, preferredExtension: "mp4")
+    guard Self.normalized(url: temporaryURL) != destination else {
+      registerCachedMedia(at: destination)
+      return destination
+    }
+    defer { try? fileManager.removeItem(at: temporaryURL) }
+    try fileManager.createDirectory(at: videoDirectory, withIntermediateDirectories: true)
+    // Keep the first completed copy: another player may already be using it.
     if !fileManager.fileExists(atPath: destination.path) {
-      try fileManager.moveItem(at: tmpURL, to: destination)
+      try fileManager.moveItem(at: temporaryURL, to: destination)
     }
     registerCachedMedia(at: destination)
     return destination
@@ -176,18 +189,14 @@ actor VideoCacheService {
   }
 
   private func cachedVideoEntriesSortedByLastAccess() -> [CachedVideoEntry] {
-    guard
-      let contents = try? fileManager.contentsOfDirectory(
+    let contents = (try? fileManager.contentsOfDirectory(
         at: videoDirectory,
         includingPropertiesForKeys: [.contentModificationDateKey, .isDirectoryKey],
         options: [.skipsHiddenFiles]
-      )
-    else {
-      return []
-    }
+      )) ?? []
 
     return
-      contents
+      Array(Set(contents + additionalMediaURLs()))
       .map { url in
         CachedVideoEntry(
           url: Self.normalized(url: url),
@@ -207,7 +216,8 @@ actor VideoCacheService {
     let normalizedURL = Self.normalized(url: url)
     let candidatePath = normalizedURL.path
     let rootPath = videoDirectory.path
-    guard candidatePath == rootPath || candidatePath.hasPrefix(rootPath + "/") else {
+    guard candidatePath.hasPrefix(rootPath + "/") || additionalMediaURLs().contains(where: { $0.path == candidatePath })
+    else {
       return nil
     }
     return normalizedURL

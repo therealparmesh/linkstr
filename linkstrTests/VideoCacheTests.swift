@@ -3,6 +3,39 @@ import XCTest
 @testable import linkstr
 
 final class VideoCacheTests: XCTestCase {
+  func testCompletedDownloadsPreserveExistingMediaAndRecoverAfterCacheRemoval() async throws {
+    let root = makeTemporaryCacheDirectory()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let directory = root.appendingPathComponent("videos", isDirectory: true)
+    let service = VideoCacheService(videoDirectory: directory)
+    let source = URL(string: "https://example.com/\(UUID().uuidString).mp4")!
+    let first = try downloadedMedia(in: root, contents: "first")
+    let saved = try await service.storeDownloadedVideo(at: first, from: source)
+
+    XCTAssertEqual(saved.deletingLastPathComponent().standardizedFileURL, directory.standardizedFileURL)
+    XCTAssertFalse(FileManager.default.fileExists(atPath: first.path))
+    let duplicate = try downloadedMedia(in: root, contents: "replacement")
+    let reused = try await service.storeDownloadedVideo(at: duplicate, from: source)
+    XCTAssertEqual(reused, saved)
+    XCTAssertFalse(FileManager.default.fileExists(atPath: duplicate.path))
+    XCTAssertEqual(try String(contentsOf: saved, encoding: .utf8), "first")
+    let cached = try await service.downloadMP4(from: source, headers: [:])
+    XCTAssertEqual(cached, saved)
+
+    try FileManager.default.removeItem(at: directory)
+    let fresh = try downloadedMedia(in: root, contents: "fresh")
+    let restored = try await service.storeDownloadedVideo(at: fresh, from: source)
+    XCTAssertEqual(restored, saved)
+    XCTAssertEqual(try String(contentsOf: saved, encoding: .utf8), "fresh")
+    XCTAssertFalse(FileManager.default.fileExists(atPath: fresh.path))
+  }
+
+  private func downloadedMedia(in directory: URL, contents: String) throws -> URL {
+    let file = directory.appendingPathComponent(UUID().uuidString)
+    try Data(contents.utf8).write(to: file)
+    return file
+  }
+
   func testEvictionKeepsCountingFilesThatCouldNotBeDeleted() async throws {
     let directory = makeTemporaryCacheDirectory()
     defer { try? FileManager.default.removeItem(at: directory) }

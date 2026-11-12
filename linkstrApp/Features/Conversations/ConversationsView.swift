@@ -12,9 +12,30 @@ private struct SessionSummary: Identifiable {
   let unreadCount: Int
 }
 
-private struct SessionMemberAvatar: Identifiable {
+@MainActor
+struct SessionMemberAvatar: Identifiable {
   let id: String
   let name: String
+
+  static func grouped(
+    _ members: [SessionMemberEntity], sessionIDs: Set<String>, ownerHash: String,
+    contacts: [String: ContactEntity], appSession: AppSession
+  ) -> [String: [Self]] {
+    var result: [String: [Self]] = [:]
+    for member in members where sessionIDs.contains(member.sessionID) {
+      guard result[member.sessionID, default: []].count < 3, !member.memberMatchesHash(ownerHash) else { continue }
+      let name = displayName(member.memberPubkey, contacts: contacts, appSession: appSession)
+      result[member.sessionID, default: []].append(.init(id: member.memberPubkeyHash, name: name))
+    }
+    return result
+  }
+
+  static func displayName(_ pubkey: String, contacts: [String: ContactEntity], appSession: AppSession) -> String {
+    guard !pubkey.isEmpty else { return "member" }
+    let identity = contacts[pubkey].map { appSession.resolvedIdentity(for: $0) }
+      ?? appSession.resolvedIdentity(for: pubkey, contacts: [])
+    return identity.showsNPubLine ? identity.displayName : "member"
+  }
 }
 
 struct ConversationsView: View {
@@ -78,9 +99,12 @@ struct ConversationsView: View {
   }
 
   private func makeSummaries() -> [SessionSummary] {
+    let visibleSessions = sessions.filter { $0.isArchived == isShowingArchivedSessions }
+    guard !visibleSessions.isEmpty else { return [] }
+    let visibleSessionIDs = Set(visibleSessions.map(\.sessionID))
     var latestPosts: [String: SessionMessageEntity] = [:]
     var unreadCounts: [String: Int] = [:]
-    for post in rootMessages {
+    for post in rootMessages where visibleSessionIDs.contains(post.conversationID) {
       if latestPosts[post.conversationID] == nil {
         latestPosts[post.conversationID] = post
       }
@@ -89,18 +113,14 @@ struct ConversationsView: View {
       }
     }
 
-    let groupedMembers = Dictionary(
-      grouping: members.filter { !$0.memberMatchesHash(ownerPubkeyHash) },
-      by: \.sessionID
-    )
     let contactIndex = Dictionary(contacts.map { ($0.targetPubkey, $0) }, uniquingKeysWith: { first, _ in first })
-    return sessions.filter { $0.isArchived == isShowingArchivedSessions }
+    let avatars = SessionMemberAvatar.grouped(
+      members, sessionIDs: visibleSessionIDs, ownerHash: ownerPubkeyHash, contacts: contactIndex, appSession: appSession
+    )
+    return visibleSessions
       .map { group in
         let post = latestPosts[group.sessionID]
         let source = post.flatMap { LinkstrPostPreview.source(for: $0.url) }
-        let avatars = groupedMembers[group.sessionID, default: []].prefix(3).map { member in
-          SessionMemberAvatar(id: member.memberPubkeyHash, name: displayName(member.memberPubkey, in: contactIndex))
-        }
         return SessionSummary(
           id: group.sessionID,
           session: group,
@@ -108,7 +128,7 @@ struct ConversationsView: View {
           latestPost: post,
           preview: previewText(post, contacts: contactIndex),
           source: source,
-          memberAvatars: avatars,
+          memberAvatars: avatars[group.sessionID, default: []],
           unreadCount: unreadCounts[group.sessionID, default: 0]
         )
       }
@@ -117,16 +137,10 @@ struct ConversationsView: View {
       }
   }
 
-  private func displayName(_ pubkey: String, in index: [String: ContactEntity]) -> String {
-    guard !pubkey.isEmpty else { return "member" }
-    let identity = index[pubkey].map { appSession.resolvedIdentity(for: $0) }
-      ?? appSession.resolvedIdentity(for: pubkey, contacts: [])
-    return identity.showsNPubLine ? identity.displayName : "member"
-  }
-
   private func previewText(_ post: SessionMessageEntity?, contacts: [String: ContactEntity]) -> String {
-    guard let post else { return "no links yet" }
-    let sender = post.senderMatchesHash(ownerPubkeyHash) ? "you" : displayName(post.senderPubkey, in: contacts)
+    guard let post else { return "no posts yet" }
+    let sender = post.senderMatchesHash(ownerPubkeyHash)
+      ? "you" : SessionMemberAvatar.displayName(post.senderPubkey, contacts: contacts, appSession: appSession)
     if let text = LinkstrPostPreview.text(post.note) ?? LinkstrPostPreview.title(for: post) {
       return "\(sender): \(text)"
     }
@@ -150,7 +164,7 @@ private struct ConversationsContentView: View {
   }
 
   private var isSearching: Bool {
-    !normalizedQuery.isEmpty
+    !summaries.isEmpty && !normalizedQuery.isEmpty
   }
 
   private var visibleSummaries: [SessionSummary] {
@@ -167,7 +181,7 @@ private struct ConversationsContentView: View {
     if isSearching {
       return { query = "" }
     }
-    return isShowingArchivedSessions ? nil : createSession
+    return isShowingArchivedSessions ? nil : { isShowingArchivedSessions = true }
   }
 
   var body: some View {
@@ -177,13 +191,14 @@ private struct ConversationsContentView: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     .scrollContentBackground(.hidden)
+    .onChange(of: isShowingArchivedSessions) { _, _ in query = "" }
   }
 
   private var heading: some View {
-    LinkstrTabHeader(title: isShowingArchivedSessions ? "archived" : "sessions") {
+    LinkstrPageHeader(title: isShowingArchivedSessions ? "archived" : "sessions") {
       if hasArchivedSessions {
         LinkstrHeaderButton(
-          title: isShowingArchivedSessions ? "show active sessions" : "show archived sessions",
+          title: isShowingArchivedSessions ? "view active sessions" : "view archived sessions",
           icon: isShowingArchivedSessions ? "archivebox.fill" : "archivebox"
         ) {
           isShowingArchivedSessions.toggle()
@@ -197,10 +212,10 @@ private struct ConversationsContentView: View {
   @ViewBuilder
   private var content: some View {
     if !hasSessions {
-      VStack(spacing: 0) {
+      VStack(spacing: LinkstrTheme.listBlockSpacing) {
         heading
           .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-          .padding(.top, LinkstrTheme.screenTopPadding)
+          .padding(.top, LinkstrTheme.pageHeaderTopPadding)
         LinkstrCenteredEmptyStateView(
           title: "no sessions",
           systemImage: "rectangle.stack.badge.plus",
@@ -238,8 +253,8 @@ private struct ConversationsContentView: View {
                   : "start a new session or unarchive one.",
               actionTitle: isSearching
                 ? "clear search"
-                : isShowingArchivedSessions ? nil : "new session",
-              actionSystemImage: isSearching ? "xmark.circle" : "square.and.pencil",
+                : isShowingArchivedSessions ? nil : "view archived sessions",
+              actionSystemImage: isSearching ? "xmark.circle" : "archivebox",
               action: emptyStateAction
             )
             .frame(maxWidth: .infinity, minHeight: 220)
@@ -259,7 +274,7 @@ private struct ConversationsContentView: View {
           }
         }
         .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-        .padding(.top, LinkstrTheme.screenTopPadding)
+        .padding(.top, LinkstrTheme.pageHeaderTopPadding)
         .padding(.bottom, LinkstrTheme.screenBottomPadding)
         .linkstrReadableContent()
       }
@@ -273,64 +288,81 @@ private struct SessionRowView: View {
   let summary: SessionSummary
 
   var body: some View {
-    HStack(alignment: .center, spacing: 12) {
-      avatarCluster
+    HStack(alignment: dynamicTypeSize.isAccessibilitySize ? .top : .center, spacing: LinkstrTheme.rowSpacing) {
+      SessionAvatarCluster(members: summary.memberAvatars)
 
-      VStack(alignment: .leading, spacing: 5) {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-          Text(summary.session.name)
-            .font(LinkstrTheme.font(.headline, weight: .semibold))
-            .foregroundStyle(LinkstrTheme.textPrimary)
-            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-          Text(summary.latestTimestamp.linkstrActivityTimestampLabel)
-            .font(LinkstrTheme.font(.caption))
-            .foregroundStyle(LinkstrTheme.textSecondary)
-            .lineLimit(1)
-            .fixedSize()
-          if summary.unreadCount > 0 {
-            Text(summary.unreadCount > 99 ? "99+" : String(summary.unreadCount))
-              .font(LinkstrTheme.font(.caption2, weight: .bold).monospacedDigit())
-              .foregroundStyle(LinkstrTheme.background)
-              .padding(.horizontal, 6)
-              .padding(.vertical, 3)
-              .background(LinkstrTheme.accent, in: Capsule())
-              .accessibilityLabel("\(summary.unreadCount) unread")
+      VStack(alignment: .leading, spacing: LinkstrTheme.metaSpacing) {
+        if dynamicTypeSize.isAccessibilitySize {
+          sessionName
+          HStack(spacing: LinkstrTheme.compactSpacing) { sessionMetadata }
+        } else {
+          HStack(alignment: .firstTextBaseline, spacing: LinkstrTheme.compactSpacing) {
+            sessionName
+            sessionMetadata
           }
         }
 
-        HStack(alignment: .top, spacing: 10) {
-          VStack(alignment: .leading, spacing: 4) {
+        HStack(alignment: .top, spacing: LinkstrTheme.buttonRowSpacing) {
+          VStack(alignment: .leading, spacing: LinkstrTheme.metaSpacing) {
             Text(summary.preview)
               .font(LinkstrTheme.font(.subheadline))
               .foregroundStyle(LinkstrTheme.textSecondary)
               .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
             if let source = summary.source {
               Text(source)
-                .font(LinkstrTheme.font(.caption))
-                .foregroundStyle(LinkstrTheme.textSecondary.opacity(0.83))
-                .lineLimit(1)
+                .font(LinkstrTheme.font(.caption, weight: .medium))
+                .foregroundStyle(LinkstrTheme.textSecondary)
+                .lineLimit(2)
             }
           }
           .frame(maxWidth: .infinity, alignment: .leading)
 
           if let post = summary.latestPost, !dynamicTypeSize.isAccessibilitySize {
-            LinkstrPostThumbnail(post: post, width: 47, height: 47)
+            LinkstrPostThumbnail(post: post, width: 47, height: 47, size: .listRow)
           }
         }
       }
     }
-    .padding(.vertical, 14)
+    .padding(.vertical, LinkstrTheme.listBlockSpacing)
     .frame(minHeight: 86)
     .contentShape(Rectangle())
     .overlay(alignment: .bottom) { LinkstrListRowDivider(leadingInset: 62) }
     .accessibilityElement(children: .combine)
   }
 
-  private var avatarCluster: some View {
+  private var sessionName: some View {
+    Text(summary.session.name)
+      .font(LinkstrTheme.font(.headline, weight: .semibold))
+      .foregroundStyle(LinkstrTheme.textPrimary)
+      .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+      .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  @ViewBuilder
+  private var sessionMetadata: some View {
+    Text(summary.latestTimestamp.linkstrActivityTimestampLabel)
+      .font(LinkstrTheme.font(.caption))
+      .foregroundStyle(LinkstrTheme.textSecondary)
+      .lineLimit(1)
+      .fixedSize()
+    if summary.unreadCount > 0 {
+      Text(summary.unreadCount > 99 ? "99+" : String(summary.unreadCount))
+        .font(LinkstrTheme.font(.caption2, weight: .bold).monospacedDigit())
+        .foregroundStyle(LinkstrTheme.background)
+        .padding(.horizontal, LinkstrTheme.tightSpacing)
+        .padding(.vertical, LinkstrTheme.metaSpacing)
+        .background(LinkstrTheme.accent, in: Capsule())
+        .accessibilityLabel("\(summary.unreadCount) unread")
+    }
+  }
+}
+
+struct SessionAvatarCluster: View {
+  let members: [SessionMemberAvatar]
+
+  var body: some View {
     ZStack {
-      switch summary.memberAvatars.count {
+      switch members.count {
       case 0:
         Image(systemName: "bookmark")
           .font(.system(size: 17, weight: .medium))
@@ -338,14 +370,14 @@ private struct SessionRowView: View {
           .frame(width: 42, height: 42)
           .background(LinkstrTheme.panelElevated, in: Circle())
       case 1:
-        avatar(summary.memberAvatars[0], size: 42)
+        avatar(members[0], size: 42)
       default:
-        ForEach(Array(summary.memberAvatars.enumerated()), id: \.element.id) { index, member in
+        ForEach(Array(members.enumerated()), id: \.element.id) { index, member in
           avatar(member, size: 29)
             .overlay { Circle().strokeBorder(LinkstrTheme.background, lineWidth: 1.5) }
             .offset(
               x: index == 0 ? -9 : index == 1 ? 9 : 3,
-              y: summary.memberAvatars.count == 2 ? 0 : index == 2 ? 9 : -8
+              y: members.count == 2 ? 0 : index == 2 ? 9 : -8
             )
         }
       }

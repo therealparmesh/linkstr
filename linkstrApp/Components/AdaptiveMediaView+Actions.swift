@@ -17,64 +17,111 @@ enum MediaPresentationGeometry {
 
 struct LocalMediaExportTarget {
   let fileURL: URL
-  let allowsPhotoSave: Bool
+  var allowsPhotoSave: Bool {
+    guard fileURL.isFileURL,
+      (try? fileURL.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) != true
+    else { return false }
+    return ["mp4", "mov", "m4v"].contains(fileURL.pathExtension.lowercased())
+  }
+
+  @MainActor
+  func saveToPhotos() async throws {
+    try Task.checkCancellation()
+    let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+    try Task.checkCancellation()
+    switch status {
+    case .authorized, .limited:
+      break
+    case .denied, .restricted:
+      throw PhotoSaveError.permissionRequired
+    case .notDetermined:
+      throw PhotoSaveError.permissionUnavailable
+    @unknown default:
+      throw PhotoSaveError.permissionUnavailable
+    }
+
+    try await PHPhotoLibrary.shared().performChanges {
+      PHAssetCreationRequest.forAsset().addResource(with: .video, fileURL: fileURL, options: nil)
+    }
+  }
+}
+
+enum PhotoSaveError: LocalizedError {
+  case permissionRequired
+  case permissionUnavailable
+
+  var errorDescription: String? {
+    switch self {
+    case .permissionRequired:
+      "allow photos access in settings, or save to files."
+    case .permissionUnavailable:
+      "couldn’t check photos access. try saving to files."
+    }
+  }
+
+  static func message(for error: Error) -> String {
+    (error as? Self)?.errorDescription ?? "couldn’t save this video to photos. try saving to files."
+  }
 }
 
 struct LocalFileExportItem: Identifiable {
   let id = UUID()
   let fileURL: URL
+  let requestID: String
+}
+
+extension View {
+  func linkstrVideoSaveDialog(
+    isPresented: Binding<Bool>,
+    target: LocalMediaExportTarget?,
+    onSaveToPhotos: @escaping (LocalMediaExportTarget) -> Void,
+    onSaveToFiles: @escaping (URL) -> Void
+  ) -> some View {
+    alert("save video", isPresented: isPresented, presenting: target) { target in
+      if target.allowsPhotoSave {
+        Button("save to photos") { onSaveToPhotos(target) }
+      }
+      Button("save to files") { onSaveToFiles(target.fileURL) }
+      Button("cancel", role: .cancel) {}
+    } message: { _ in
+      Text("choose where to save this video.")
+    }
+  }
+}
+
+struct LocalMediaExportFeedback {
+  let message: String
+  var retryFileURL: URL?
+
+  var title: String { retryFileURL == nil ? "saved" : "save failed" }
 }
 
 // MARK: - AdaptiveMediaView Export & Overlay Helpers
 
 extension AdaptiveMediaView {
-  func saveToPhotos(_ fileURL: URL) {
-    Task { @MainActor in
-      let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
-      switch status {
-      case .authorized, .limited:
-        break
-      case .denied, .restricted:
-        showExportFeedback(
-          title: "photos access needed",
-          message: "allow add-only photos access in settings to save videos to your gallery."
-        )
-        return
-      case .notDetermined:
-        showExportFeedback(title: "save failed", message: "couldn't determine photos permission.")
-        return
-      @unknown default:
-        showExportFeedback(title: "save failed", message: "unexpected photos permission state.")
-        return
-      }
-
+  func saveToPhotos(_ target: LocalMediaExportTarget) {
+    guard photoSaveTask == nil else { return }
+    photoSaveTask = Task { @MainActor in
+      defer { if !Task.isCancelled { photoSaveTask = nil } }
+      guard !Task.isCancelled else { return }
       do {
-        try await withCheckedThrowingContinuation { continuation in
-          PHPhotoLibrary.shared().performChanges(
-            {
-              let creationRequest = PHAssetCreationRequest.forAsset()
-              creationRequest.addResource(with: .video, fileURL: fileURL, options: nil)
-            },
-            completionHandler: { success, error in
-              if success {
-                continuation.resume(returning: ())
-              } else {
-                continuation.resume(throwing: error ?? URLError(.cannotWriteToFile))
-              }
-            }
-          )
-        }
-        showExportFeedback(title: "saved", message: "saved to photos.")
+        try await target.saveToPhotos()
+        guard !Task.isCancelled else { return }
+        exportFeedback = LocalMediaExportFeedback(message: "saved to photos.")
       } catch {
-        showExportFeedback(title: "save failed", message: "couldn't save this video to photos.")
+        guard !Task.isCancelled else { return }
+        exportFeedback = LocalMediaExportFeedback(
+          message: PhotoSaveError.message(for: error), retryFileURL: target.fileURL
+        )
       }
     }
   }
 
-  func showExportFeedback(title: String, message: String) {
-    exportFeedbackTitle = title
-    exportFeedbackMessage = message
+  func cancelPhotoSave() {
+    photoSaveTask?.cancel()
+    photoSaveTask = nil
   }
+
 }
 
 extension AdaptiveMediaView {
@@ -86,7 +133,7 @@ extension AdaptiveMediaView {
     guard let media = cachedLocalMedia ?? readyPlaybackMedia,
       let fileURL = exportableLocalMediaURL(for: media) else { return nil }
     return {
-      exportTarget = LocalMediaExportTarget(fileURL: fileURL, allowsPhotoSave: supportsPhotoSave(fileURL: fileURL))
+      exportTarget = LocalMediaExportTarget(fileURL: fileURL)
     }
   }
 
@@ -95,11 +142,17 @@ extension AdaptiveMediaView {
     return currentPlaybackCandidate(from: candidates)
   }
 
-  func watchContentArea<Content: View>(@ViewBuilder content: @escaping (CGSize) -> Content) -> some View {
+  func watchContentArea<Content: View>(
+    edgeToEdge: Bool = false,
+    @ViewBuilder content: @escaping (CGSize) -> Content
+  ) -> some View {
     GeometryReader { proxy in
-      let top = watchInsets.top + 112
-      let height = max(1, proxy.size.height - top - overlayHeight - 16)
-      let size = CGSize(width: max(1, proxy.size.width - 32), height: height)
+      let top = watchInsets.top + LinkstrTheme.compactSpacing
+      let bottom = watchInsets.bottom + postControlsReservedHeight + LinkstrTheme.compactSpacing
+      let height = max(1, proxy.size.height - top - bottom)
+      let insetWidth = min(proxy.size.width, LinkstrTheme.readableContentMaxWidth)
+        - LinkstrTheme.screenHorizontalPadding * 2
+      let size = CGSize(width: max(1, edgeToEdge ? proxy.size.width : insetWidth), height: height)
       content(size)
         .frame(width: size.width, height: size.height)
         .frame(maxWidth: .infinity)
@@ -108,87 +161,156 @@ extension AdaptiveMediaView {
   }
 
   func retryEmbeddedPlayback() {
-    embeddedLoadFailed = false
+    LinkstrPlaybackDiagnostics.logger.info("retrying official embed")
+    resetEmbeddedPresentation()
+    embeddedReloadID += 1
+  }
+
+  func resetEmbeddedPresentation() {
+    embeddedLoadFailure = nil
     isEmbeddedContentReady = false
+    hasRenderedEmbeddedPost = false
     embeddedContentHeight = nil
   }
 
-  func mediaStatus(
-    _ title: String, message: String, isLoading: Bool,
-    offersEmbed: Bool = false, offersRetry: Bool = false
-  ) -> some View {
-    ScrollView {
-      VStack(spacing: 16) {
-        if isLoading {
-          ProgressView().tint(LinkstrTheme.accent)
-        } else {
-          Image(systemName: "exclamationmark.triangle").font(.title2)
+  @ViewBuilder
+  func mediaRecovery(_ title: String, retry: (() -> Void)?, offersLocalPlayback: Bool = false) -> some View {
+    let recovery = VStack(spacing: LinkstrTheme.rowSpacing) {
+      Image(systemName: "exclamationmark.triangle")
+        .font(.title2)
+        .foregroundStyle(LinkstrTheme.amber)
+        .accessibilityHidden(true)
+      Text(title)
+        .font(LinkstrTheme.font(.headline))
+        .accessibilityAddTraits(.isHeader)
+      VStack(spacing: LinkstrTheme.compactSpacing) {
+        if let retry {
+          secondaryActionButton("try again", systemImage: "arrow.clockwise", action: retry)
         }
-        Text(title).font(LinkstrTheme.font(.headline))
-        if !message.isEmpty {
-          Text(message)
-            .font(LinkstrTheme.font(.subheadline))
-            .foregroundStyle(LinkstrTheme.textSecondary)
-        }
-        if offersRetry {
-          secondaryActionButton("retry embed", action: retryEmbeddedPlayback)
-        }
-        if offersEmbed { useEmbeddedButton }
-        openInBrowserButton(action: openSourceAction)
+        LinkstrBrowserButton(action: openSourceAction)
+        if offersLocalPlayback { tryLocalPlaybackButton }
       }
-      .multilineTextAlignment(.center)
-      .padding(20)
-      .background(LinkstrTheme.panel, in: .rect(cornerRadius: 20))
     }
-    .scrollBounceBehavior(.basedOnSize)
-    .defaultScrollAnchor(.center, for: .alignment)
+    .multilineTextAlignment(.center)
+    .frame(maxWidth: 320)
+    .frame(maxWidth: .infinity)
+    .padding(.vertical, LinkstrTheme.compactSpacing)
     .foregroundStyle(LinkstrTheme.textPrimary)
+
+    if immersive {
+      ScrollView { recovery }
+        .scrollBounceBehavior(.basedOnSize)
+        .defaultScrollAnchor(.center, for: .alignment)
+    } else {
+      recovery
+    }
   }
 
   func loadingIndicator(_ title: String) -> some View {
-    VStack(spacing: 8) {
-      ProgressView().tint(LinkstrTheme.accent)
-      Text(title)
-        .font(LinkstrTheme.font(.caption))
-        .foregroundStyle(LinkstrTheme.textSecondary)
+    let label = Text(title)
+      .font(LinkstrTheme.font(.caption))
+      .foregroundStyle(LinkstrTheme.textSecondary)
+      .multilineTextAlignment(.center)
+      .fixedSize(horizontal: false, vertical: true)
+    return ViewThatFits(in: .vertical) {
+      VStack(spacing: LinkstrTheme.compactSpacing) {
+        ProgressView()
+          .tint(LinkstrTheme.accent)
+          .accessibilityHidden(true)
+        label
+      }
+      label
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 
-  func immersivePlaybackMenu(
-    local: Bool, showsSystemPlayer: Bool = false
-  ) -> some View {
-    Menu {
-      if local {
-        Button("use official embed", systemImage: "rectangle.inset.filled") {
-          cancelLocalCaching()
-          localPlaybackMode = .embedPreferred
-        }
-      } else {
-        Button("try extracted video", systemImage: "play.rectangle", action: tryLocalPlayback)
+  func localPlaybackActions(exportFileURL: URL?, offersEmbed: Bool) -> some View {
+    VStack(spacing: LinkstrTheme.compactSpacing) {
+      if offersEmbed {
+        secondaryActionButton(
+          officialEmbedActionTitle, systemImage: "rectangle.inset.filled", action: useOfficialEmbed
+        )
       }
-      if showsSystemPlayer {
-        Button("open system player", systemImage: "arrow.up.left.and.arrow.down.right") {
-          isPresentingSystemPlayer = true
-        }
+      LinkstrBrowserButton(action: openSourceAction)
+      if let exportFileURL {
+        saveButton(for: exportFileURL)
       }
-    } label: {
-      Image(systemName: "slider.horizontal.3")
-        .font(LinkstrTheme.font(.subheadline, weight: .semibold))
-        .foregroundStyle(LinkstrTheme.textPrimary)
-        .frame(width: 44, height: 44)
-        .background(.black.opacity(0.58), in: Circle())
     }
-    .accessibilityLabel("playback options")
-    .padding(.top, 62 + watchInsets.top)
-    .padding(.trailing, 12)
   }
+
+  var officialEmbedActionTitle: String { "use official embed" }
+
+  var tryLocalPlaybackButton: some View {
+    secondaryActionButton(localPlaybackActionTitle, systemImage: "play.rectangle", action: tryLocalPlayback)
+  }
+
+  var localPlaybackActionTitle: String {
+    cachedLocalMedia?.isLocalFile == true ? "play downloaded video" : "try extracted video"
+  }
+
+  func saveButton(for fileURL: URL) -> some View {
+    secondaryActionButton("save video", systemImage: "square.and.arrow.down") {
+      exportTarget = LocalMediaExportTarget(fileURL: fileURL)
+    }
+  }
+
+  func secondaryActionButton(_ title: String, systemImage: String, action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+      LinkstrActionButtonLabel(title: title, systemImage: systemImage)
+    }
+    .frame(maxWidth: .infinity)
+    .linkstrSecondaryButton()
+  }
+
+  func useOfficialEmbed() {
+    LinkstrPlaybackDiagnostics.logger.info("switching to official embed")
+    cancelLocalCaching()
+    localPlaybackMode = .embedPreferred
+  }
+
+  func tryLocalPlayback() {
+    LinkstrPlaybackDiagnostics.logger.info("retrying local playback")
+    if case .cannotExtract = extractionState, cachedLocalMedia == nil {
+      clearFailedLocalPlaybackState()
+    }
+    localPlaybackMode = .localPreferred
+    localPlaybackRequestID += 1
+    playbackCandidateIndex = 0
+    resetEmbeddedPresentation()
+    detectedMediaAspectRatio = nil
+    extractionState = nil
+  }
+
+  func handlePlaybackFailure(currentMedia: PlayableMedia, candidates: [PlayableMedia]) {
+    LinkstrPlaybackDiagnostics.logger.notice("playback candidate failed; cached file: \(currentMedia.isLocalFile)")
+    if !currentMedia.isLocalFile, let cachedLocalMedia, cachedLocalMedia.isLocalFile {
+      LinkstrPlaybackDiagnostics.logger.info("stream failed; trying downloaded copy")
+      cancelLocalCaching()
+      playbackCandidateIndex = 0
+      useCachedMedia(cachedLocalMedia)
+      return
+    }
+
+    if currentMedia.isLocalFile || cachedLocalMedia != nil {
+      clearFailedLocalPlaybackState()
+    } else {
+      cancelLocalCaching()
+    }
+
+    if currentMedia.isLocalFile {
+      tryLocalPlayback()
+      return
+    }
+
+    advancePlaybackCandidate(candidates: candidates)
+  }
+
 }
 
 enum LocalFileExportResult {
   case exported
   case cancelled
-  case failed(String)
+  case failed
 }
 
 #if canImport(UIKit)
@@ -209,7 +331,7 @@ enum LocalFileExportResult {
       ) {
         guard !didComplete else { return }
         didComplete = true
-        onComplete(.exported)
+        onComplete(urls.isEmpty ? .failed : .exported)
       }
 
       func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {

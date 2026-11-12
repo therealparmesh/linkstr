@@ -15,11 +15,13 @@ extension AppSession {
     }
 
     let storageID = post.storageID
+    let sourceService = nostrService
     guard pendingNoteEdits.insert(storageID).inserted else { return false }
     defer { pendingNoteEdits.remove(storageID) }
 
     do {
       try await prepareRelayMutationIfNeeded(timeoutSeconds: timeoutSeconds, pollIntervalSeconds: pollIntervalSeconds)
+      try checkMutationContext(ownerPubkey: owner, sourceService: sourceService)
       guard let current = try messageStore.message(storageID: storageID) else {
         composeError = "this post is no longer available."
         return false
@@ -29,9 +31,8 @@ extension AppSession {
         after: current.noteEditedAt ?? current.timestamp,
         subject: "note edit", publicationOverridden: testingOverrides.sendPayload != nil
       )
-      guard identityService.pubkeyHex == owner,
-        let current = try messageStore.message(storageID: storageID)
-      else {
+      try checkMutationContext(ownerPubkey: owner, sourceService: sourceService)
+      guard let current = try messageStore.message(storageID: storageID) else {
         composeError = "this post is no longer available."
         return false
       }
@@ -52,7 +53,7 @@ extension AppSession {
     } catch MutationPreparationError.relayBlocked {
       return false
     } catch {
-      report(error: error)
+      reportMutationError(error, ownerPubkey: owner, sourceService: sourceService)
       return false
     }
   }
@@ -62,6 +63,7 @@ extension AppSession {
   ) async throws -> Bool {
     let storageID = post.storageID
     let owner = post.ownerPubkey
+    let sourceService = nostrService
     let payload = LinkstrPayload(
       conversationID: post.conversationID, rootID: post.rootID, kind: .noteEdit,
       url: nil, note: note, timestamp: timestamp
@@ -74,9 +76,8 @@ extension AppSession {
     } else {
       eventID = makeLocalEventID()
     }
-    guard identityService.pubkeyHex == owner,
-      let current = try messageStore.message(storageID: storageID)
-    else {
+    try checkMutationContext(ownerPubkey: owner, sourceService: sourceService)
+    guard let current = try messageStore.message(storageID: storageID) else {
       composeError = "this post is no longer available."
       return false
     }

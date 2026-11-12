@@ -11,23 +11,37 @@ extension AppSession {
     timeoutSeconds: TimeInterval = RelayMutationDefaults.timeoutSeconds,
     pollIntervalSeconds: TimeInterval = RelayMutationDefaults.pollIntervalSeconds
   ) async -> Bool {
-    guard let draft = makeReactionDraft(emoji: emoji, post: post) else {
-      return false
+    let owner = post.ownerPubkey
+    let storageID = post.storageID
+    let sourceService = nostrService
+    let key = SessionReactionEntity.storageID(
+      ownerPubkey: owner, sessionID: post.conversationID, postID: post.rootID,
+      emoji: emoji.trimmingCharacters(in: .whitespacesAndNewlines), senderPubkey: owner
+    )
+    return await reactionMutations.run(key: key) { [self] in
+      guard !Task.isCancelled, identityService.pubkeyHex == owner, nostrService === sourceService else { return false }
+      return await publishReaction(
+        emoji: emoji, storageID: storageID, timeoutSeconds: timeoutSeconds, pollIntervalSeconds: pollIntervalSeconds
+      )
     }
+  }
+
+  private func publishReaction(
+    emoji: String, storageID: String, timeoutSeconds: TimeInterval, pollIntervalSeconds: TimeInterval
+  ) async -> Bool {
+    guard let owner = identityService.pubkeyHex else { return false }
+    let sourceService = nostrService
 
     do {
       try await prepareRelayMutationIfNeeded(
-        timeoutSeconds: timeoutSeconds,
-        pollIntervalSeconds: pollIntervalSeconds
+        timeoutSeconds: timeoutSeconds, pollIntervalSeconds: pollIntervalSeconds
       )
-    } catch MutationPreparationError.relayBlocked {
-      return false
-    } catch {
-      report(error: error)
-      return false
-    }
+      try checkMutationContext(ownerPubkey: owner, sourceService: sourceService)
+      guard let post = try messageStore.message(storageID: storageID),
+        let draft = try await makeReactionDraft(emoji: emoji, post: post) else { return false }
+      try checkMutationContext(ownerPubkey: owner, sourceService: sourceService)
+      guard try messageStore.message(storageID: storageID) != nil else { return false }
 
-    do {
       let reactionEventID: String
       let shouldEnqueuePush: Bool
       if isRelayPublicationEnabledForCurrentProcess() {
@@ -40,6 +54,8 @@ extension AppSession {
         reactionEventID = makeLocalEventID()
         shouldEnqueuePush = false
       }
+      try checkMutationContext(ownerPubkey: draft.ownerPubkey, sourceService: sourceService)
+      guard try messageStore.message(storageID: storageID) != nil else { return false }
       try persistReactionState(draft, eventID: reactionEventID)
       if shouldEnqueuePush, draft.payload.reactionActive == true {
         schedulePushEnqueue(
@@ -49,19 +65,21 @@ extension AppSession {
             conversationID: draft.payload.conversationID,
             recipientPubkeys: draft.recipientPubkeys,
             emoji: draft.payload.emoji,
-            postID: post.rootID
+            postID: draft.payload.rootID
           )
         )
       }
       composeError = nil
       return true
+    } catch MutationPreparationError.relayBlocked {
+      return false
     } catch {
-      report(error: error)
+      reportMutationError(error, ownerPubkey: owner, sourceService: sourceService)
       return false
     }
   }
 
-  func makeReactionDraft(emoji: String, post: SessionMessageEntity) -> ReactionDraft? {
+  private func makeReactionDraft(emoji: String, post: SessionMessageEntity) async throws -> ReactionDraft? {
     let normalizedEmoji = emoji.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !normalizedEmoji.isEmpty else {
       composeError = "pick an emoji reaction."
@@ -71,42 +89,34 @@ extension AppSession {
       composeError = "you're signed out. sign in to react."
       return nil
     }
-
-    guard
-      let recipientPubkeys = resolveOutboundRecipients(
-        sessionID: post.conversationID,
-        ownerPubkey: ownerPubkey,
-        senderPubkey: keypair.publicKey.hex
-      )
-    else {
+    guard post.ownerPubkey == ownerPubkey else {
+      composeError = "this post belongs to a different account."
       return nil
     }
 
-    let existingReactions =
-      (try? messageStore.reactions(
-        ownerPubkey: ownerPubkey,
-        sessionID: post.conversationID
-      )) ?? []
+    let existingReactions = try messageStore.reactions(ownerPubkey: ownerPubkey, sessionID: post.conversationID)
     let senderHash = LocalDataCrypto.shared.digestHex(keypair.publicKey.hex)
-    let currentlyActive = existingReactions.contains { reaction in
+    let existing = existingReactions.first { reaction in
       reaction.postID == post.rootID
         && reaction.emoji == normalizedEmoji
         && reaction.senderMatchesHash(senderHash)
-        && reaction.isActive
     }
-    let nextState = !currentlyActive
-    let timestamp = Int64(Date.now.timeIntervalSince1970)
-
+    let sessionID = post.conversationID
+    let rootID = post.rootID
+    let nextState = !(existing?.isActive ?? false)
+    let sourceService = nostrService
+    let timestamp = try await nextPublicationTimestamp(
+      after: existing?.updatedAt, subject: "reaction", publicationOverridden: testingOverrides.sendPayload != nil
+    )
+    try checkMutationContext(ownerPubkey: ownerPubkey, sourceService: sourceService)
+    guard let recipientPubkeys = resolveOutboundRecipients(
+      sessionID: sessionID, ownerPubkey: ownerPubkey, senderPubkey: keypair.publicKey.hex
+    ) else { return nil }
     return ReactionDraft(
       payload: LinkstrPayload(
-        conversationID: post.conversationID,
-        rootID: post.rootID,
-        kind: .reaction,
-        url: nil,
-        note: nil,
-        timestamp: timestamp,
-        emoji: normalizedEmoji,
-        reactionActive: nextState
+        conversationID: sessionID, rootID: rootID, kind: .reaction,
+        url: nil, note: nil, timestamp: timestamp,
+        emoji: normalizedEmoji, reactionActive: nextState
       ),
       ownerPubkey: ownerPubkey,
       senderPubkey: keypair.publicKey.hex,
@@ -131,7 +141,7 @@ extension AppSession {
         emoji: emoji,
         senderPubkey: draft.senderPubkey,
         isActive: isActive,
-        updatedAt: .now,
+        updatedAt: Date(timeIntervalSince1970: TimeInterval(draft.payload.timestamp)),
         eventID: eventID
       ))
   }
@@ -280,17 +290,4 @@ extension AppSession {
     }
   }
 
-  func existingSessionName(for sessionID: String, ownerPubkey: String) -> String {
-    do {
-      if let session = try messageStore.session(sessionID: sessionID, ownerPubkey: ownerPubkey) {
-        let trimmed = session.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty {
-          return trimmed
-        }
-      }
-    } catch {
-      // Ignore fetch failures and fall back to a generic title.
-    }
-    return "session"
-  }
 }

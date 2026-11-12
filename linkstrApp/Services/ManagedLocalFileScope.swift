@@ -6,6 +6,7 @@ final class ManagedLocalFileScope {
 
   let thumbnailDirectory: URL
   let videoDirectory: URL
+  let hlsRegistry = HLSMediaRegistry()
 
   private let fileManager = FileManager.default
 
@@ -31,15 +32,12 @@ final class ManagedLocalFileScope {
     thumbnailDirectory.appendingPathComponent(identifier).appendingPathExtension(fileExtension)
   }
 
-  func cachedVideoFileURL(for remoteURL: URL, preferredExtension: String) -> URL {
+  func cachedHLSPackageURL(for remoteURL: URL) -> URL? {
+    if let registered = hlsRegistry.cachedURL(for: remoteURL) { return registered }
+    // Keep previously cached packages readable until they are cleared or evicted.
     let fileName = remoteURL.absoluteString.sha256Hex
-    return videoDirectory.appendingPathComponent(fileName).appendingPathExtension(
-      preferredExtension)
-  }
-
-  func cachedHLSPackageURL(for remoteURL: URL) -> URL {
-    let fileName = remoteURL.absoluteString.sha256Hex
-    return videoDirectory.appendingPathComponent(fileName).appendingPathExtension("movpkg")
+    let legacy = videoDirectory.appendingPathComponent(fileName).appendingPathExtension("movpkg")
+    return fileManager.fileExists(atPath: legacy.path) ? legacy : nil
   }
 
   func managedFileURL(fromPath path: String?) -> URL? {
@@ -51,9 +49,13 @@ final class ManagedLocalFileScope {
       URL(fileURLWithPath: trimmed, isDirectory: false)
       .standardizedFileURL
       .resolvingSymlinksInPath()
-    if isManagedFileURL(candidate) {
+    if containsResolvedPath(candidate.path) {
       return candidate
     }
+
+    if let package = hlsRegistry.registeredURLs.first(where: {
+      $0.path == candidate.path || $0.lastPathComponent == candidate.lastPathComponent
+    }) { return package }
 
     return rebasedManagedFileURL(forLegacyPath: candidate)
   }
@@ -62,14 +64,7 @@ final class ManagedLocalFileScope {
     managedFileURL(fromPath: path)?.path
   }
 
-  func isManagedFileURL(_ url: URL) -> Bool {
-    guard url.isFileURL else { return false }
-
-    let candidatePath =
-      url
-      .standardizedFileURL
-      .resolvingSymlinksInPath()
-      .path
+  private func containsResolvedPath(_ candidatePath: String) -> Bool {
     let roots = [thumbnailDirectory, videoDirectory].map {
       $0.standardizedFileURL.resolvingSymlinksInPath().path
     }
@@ -96,7 +91,7 @@ final class ManagedLocalFileScope {
         .appendingPathComponent(fileName, isDirectory: candidate.hasDirectoryPath)
         .standardizedFileURL
         .resolvingSymlinksInPath()
-      guard fileManager.fileExists(atPath: rebased.path), isManagedFileURL(rebased) else {
+      guard fileManager.fileExists(atPath: rebased.path), containsResolvedPath(rebased.path) else {
         continue
       }
       return rebased

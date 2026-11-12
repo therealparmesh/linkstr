@@ -334,6 +334,19 @@ extension SocialVideoExtractionService {
 
 extension SocialVideoExtractionService {
   func cachePlayableMediaLocally(_ media: PlayableMedia) async -> PlayableMedia? {
+    for _ in 0..<2 {
+      guard !Task.isCancelled, let local = await cachedOrDownloadedMedia(media) else { return nil }
+      if await local.loadVideoAsset() != nil { return local }
+      guard !Task.isCancelled,
+        let fileURL = ManagedLocalFileScope.shared.managedFileURL(fromPath: local.playbackURL.path)
+      else { return nil }
+      LinkstrPlaybackDiagnostics.logger.warning("discarding unreadable downloaded video")
+      try? FileManager.default.removeItem(at: fileURL)
+    }
+    return nil
+  }
+
+  private func cachedOrDownloadedMedia(_ media: PlayableMedia) async -> PlayableMedia? {
     guard !media.isLocalFile else {
       return media
     }

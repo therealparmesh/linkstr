@@ -36,11 +36,11 @@ extension PostDetailView {
         )
       }
       .sorted {
-        if $0.displayName == "you" { return true }
-        if $1.displayName == "you" { return false }
-        return
-          $0.displayName.localizedCaseInsensitiveCompare($1.displayName)
-          == .orderedAscending
+        let lhsIsCurrentUser = $0.id == myPubkeyHash
+        let rhsIsCurrentUser = $1.id == myPubkeyHash
+        if lhsIsCurrentUser != rhsIsCurrentUser { return lhsIsCurrentUser }
+        let nameOrder = $0.displayName.localizedCaseInsensitiveCompare($1.displayName)
+        return nameOrder == .orderedSame ? $0.id < $1.id : nameOrder == .orderedAscending
       }
   }
 
@@ -64,54 +64,30 @@ extension PostDetailView {
   var postCardNoteBlock: some View {
     if noteText != nil || remotePostText != nil {
       VStack(alignment: .leading, spacing: LinkstrTheme.compactSpacing) {
-        if let noteText {
-          accentTextBlock(label: "note", text: noteText)
-        }
-
         if let remotePostText {
           Text(remotePostText)
-            .font(LinkstrTheme.font(.footnote))
-            .foregroundStyle(LinkstrTheme.textSecondary)
+            .font(LinkstrTheme.font(.subheadline))
+            .foregroundStyle(LinkstrTheme.textPrimary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .multilineTextAlignment(.leading)
             .fixedSize(horizontal: false, vertical: true)
             .textSelection(.enabled)
+        }
+        if let noteText {
+          accentTextBlock(label: "note", text: noteText)
         }
       }
     }
   }
 
   @ViewBuilder
-  var postCardReadOnlyNotice: some View {
-    if !canReactToPost {
-      Text("you're no longer a member of this session. reactions are read-only.")
-        .font(LinkstrTheme.font(.caption))
-        .foregroundStyle(LinkstrTheme.textSecondary)
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-  }
-
-  var postCardReactionRow: some View {
-    LinkstrReactionRow(
-      summaries: reactionSummaries,
-      mode: canReactToPost ? .interactive : .readOnly,
-      onToggleEmoji: canReactToPost
-        ? { emoji in
-          toggleReaction(emoji)
-        } : nil,
-      onAddReaction: canReactToPost
-        ? {
-          isPresentingEmojiPicker = true
-        } : nil
-    )
-  }
-
-  @ViewBuilder
   func mediaBlock(_ post: SessionMessageEntity, isCovered: Bool) -> some View {
-    if let urlString = post.url, let url = URL(string: urlString) {
+    if let url = LinkstrPostPreview.webURL(for: post.url) {
       AdaptiveMediaView(
         sourceURL: url,
         openSourceAction: { openURL(url) },
+        reloadID: mediaReloadID,
+        cachedCanonicalSourceURL: LinkstrPostPreview.webURL(for: post.cachedMediaSourceURL),
         resolveCachedLocalMedia: { sourceURL in
           guard
             let localURL = ManagedLocalFileScope.shared.managedFileURL(
@@ -143,29 +119,67 @@ extension PostDetailView {
         clearPersistedLocalMedia: {
           clearPersistedLocalMedia(for: post)
         },
-        reloadID: mediaReloadID,
-        immersive: true,
-        isCovered: isCovered,
+        immersive: true, isCovered: isCovered,
         watchInsets: watchInsets,
-        linkContent: { WatchLinkPreview(post: post) },
-        overlayContent: { saveAction, hasNativePlayer in
-          watchPostOverlay(post, saveAction: saveAction, hasNativePlayer: hasNativePlayer)
+        postControlsSummary: controlsSummary(for: post),
+        linkContent: {
+          WatchLinkPreview(post: post, postText: remotePostText)
+        },
+        overlayContent: { saveAction in
+          watchPostOverlay(post, saveAction: saveAction)
         }
       )
     } else {
       missingLinkPost(post)
     }
   }
+  private func controlsSummary(for post: SessionMessageEntity) -> WatchPostSummary {
+    WatchPostSummary(
+      author: sender,
+      timestamp: post.timestamp.linkstrMessageTimestampLabel,
+      caption: remotePostText ?? LinkstrPostPreview.title(for: post) ?? noteText,
+      note: noteText,
+      reactions: reactionSummaries,
+      toggleReaction: canReactToPost ? toggleReaction : nil,
+      pickReaction: canReactToPost ? { activeSheet = .emojiPicker } : nil,
+      openReactions: { emoji in
+        selectedReactionEmoji = emoji
+        activeSheet = .reactions
+      },
+      shareLink: shareDeepLinkURL == nil ? nil : { activeSheet = .share }
+    )
+  }
+
   private func missingLinkPost(_ post: SessionMessageEntity) -> some View {
-    VStack(spacing: 0) {
-      ContentUnavailableView(
-        "link unavailable", systemImage: "link",
-        description: Text("the original link is missing. you can still view the note and reactions.")
-      )
+    ZStack {
+      ViewThatFits(in: .vertical) {
+        missingLinkNotice(icon: "link")
+          .padding(.vertical, LinkstrTheme.panelPadding)
+          .fixedSize(horizontal: false, vertical: true)
+        missingLinkNotice(icon: nil)
+          .fixedSize(horizontal: false, vertical: true)
+        ScrollView { missingLinkNotice(icon: nil) }
+          .scrollBounceBehavior(.basedOnSize)
+      }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
-      watchPostOverlay(post, saveAction: nil, hasNativePlayer: false)
+      .padding(.top, watchInsets.top + 10)
+      .padding(.bottom, watchInsets.bottom + missingLinkControlsHeight)
+      WatchPostControls(
+        summary: controlsSummary(for: post),
+        topInset: watchInsets.top, bottomInset: watchInsets.bottom, playbackControlsHeight: 0,
+        onReservedHeightChange: { missingLinkControlsHeight = $0 },
+        content: { watchPostOverlay(post, saveAction: nil) }
+      )
     }
-    .padding(.top, watchInsets.top + 64)
+  }
+
+  private func missingLinkNotice(icon: String?) -> some View {
+    LinkstrCenteredEmptyStateView(
+      title: "link unavailable", systemImage: icon,
+      description: noteText == nil
+        ? "you can still view reactions for this post."
+        : "you can still read the note and view reactions."
+    )
   }
 
   func toggleReaction(_ emoji: String) {
@@ -175,17 +189,20 @@ extension PostDetailView {
       _ = await session.toggleReactionAwaitingRelay(emoji: emoji, post: post)
     }
   }
-  func refreshPostMetadata(_ post: SessionMessageEntity) {
-    guard !isRefreshingMetadata else { return }
-    isRefreshingMetadata = true
-    Task { @MainActor in
-      defer { isRefreshingMetadata = false }
-      if let urlString = post.url, let url = URL(string: urlString) {
-        await session.invalidateTransientMediaCaches(for: url)
-      }
-      clearPersistedLocalMedia(for: post)
-      mediaReloadID += 1
-      _ = await session.refreshPostMetadata(post)
+  func refreshPostMetadata() async {
+    guard let request = metadataRefreshRequest, let post else { return }
+    defer {
+      if metadataRefreshRequest == request { metadataRefreshRequest = nil }
+    }
+    let result = await session.refreshPostMetadata(post)
+    guard !Task.isCancelled, metadataRefreshRequest == request, result != .interrupted else { return }
+    guard clearPersistedLocalMedia(for: post) else { return }
+    mediaReloadID += 1
+    previewRefreshID += 1
+    switch result {
+    case .updated, .unchanged: LinkstrToast.showSuccess("post refreshed")
+    case .unavailable: session.composeError = "retrying playback, but the preview couldn’t be refreshed."
+    case .interrupted: break
     }
   }
   var noteText: String? {
@@ -195,26 +212,34 @@ extension PostDetailView {
     return trimmed.isEmpty ? nil : trimmed
   }
 
-  var remotePostTextRequestID: String? {
-    guard let post else { return nil }
-    guard let urlString = post.url else { return nil }
-    return shouldLoadRemotePostText(for: urlString) ? urlString : nil
+  struct PostTextRequest: Equatable {
+    let url: URL
+    let revision: Int
   }
 
-  func shouldLoadRemotePostText(for urlString: String) -> Bool {
-    guard let url = URL(string: urlString) else { return false }
-    return SocialPostResolutionService.supportsRemotePostText(for: url)
+  var remotePostText: String? {
+    guard let loadedPostText, loadedPostText.request.url == remotePostTextRequest?.url else { return nil }
+    return loadedPostText.body
   }
 
-  func resolvedRemotePostText() async -> String? {
-    guard let post else { return nil }
-    guard let urlString = post.url, shouldLoadRemotePostText(for: urlString) else { return nil }
-    guard let url = URL(string: urlString) else { return nil }
-    return await SocialPostResolutionService.resolveRemotePostText(for: url)
+  var remotePostTextRequest: PostTextRequest? {
+    guard let url = LinkstrPostPreview.webURL(for: post?.url),
+      SocialPostResolutionService.supportsRemotePostText(for: url) else { return nil }
+    return PostTextRequest(url: url, revision: previewRefreshID)
+  }
+
+  func loadRemotePostText() async {
+    guard let request = remotePostTextRequest, loadedPostText?.request != request else { return }
+    let sourceURL = await URLCanonicalizationService.shared.canonicalPlaybackURL(for: request.url)
+    guard !Task.isCancelled, request == remotePostTextRequest else { return }
+    let result = await SocialPostResolutionService.resolveRemotePostText(for: sourceURL)
+    guard !Task.isCancelled, request == remotePostTextRequest,
+      let body = LinkstrPostPreview.text(result) else { return }
+    loadedPostText = (request, body)
   }
 
   func accentTextBlock(label: String, text: String) -> some View {
-    HStack(alignment: .top, spacing: 12) {
+    HStack(alignment: .top, spacing: LinkstrTheme.rowSpacing) {
       Capsule(style: .continuous)
         .fill(LinkstrTheme.accent)
         .frame(width: 4)
@@ -225,22 +250,25 @@ extension PostDetailView {
           .foregroundStyle(LinkstrTheme.accent)
 
         Text(text)
-          .font(LinkstrTheme.font(.footnote))
-          .foregroundStyle(LinkstrTheme.textSecondary)
+          .font(LinkstrTheme.font(.subheadline))
+          .foregroundStyle(LinkstrTheme.textPrimary)
           .fixedSize(horizontal: false, vertical: true)
+          .textSelection(.enabled)
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(.leading, 2)
   }
 
-  func clearPersistedLocalMedia(for post: SessionMessageEntity) {
-    if let localURL = ManagedLocalFileScope.shared.managedFileURL(fromPath: post.cachedMediaPath) {
-      try? FileManager.default.removeItem(at: localURL)
+  @discardableResult
+  func clearPersistedLocalMedia(for post: SessionMessageEntity) -> Bool {
+    do {
+      try session.messageStore.clearCachedMedia(messages: [post])
+      return true
+    } catch {
+      session.report(error: error)
+      return false
     }
-    post.cachedMediaPath = nil
-    post.cachedMediaSourceURL = nil
-    try? modelContext.save()
   }
 
   func fetchContacts(senderPubkeys: Set<String>) throws -> [ContactEntity] {
@@ -266,117 +294,46 @@ extension PostDetailView {
   }
 
   private func watchPostOverlay(
-    _ post: SessionMessageEntity, saveAction: (() -> Void)?, hasNativePlayer: Bool
+    _ post: SessionMessageEntity, saveAction: (() -> Void)?
   ) -> some View {
-    HStack(alignment: .bottom, spacing: 14) {
-      watchCaption(post)
-      watchActions(post, saveAction: saveAction)
-    }
-    .padding(.horizontal, 16)
-    .background(alignment: .bottom) {
-      if hasNativePlayer {
-        LinearGradient(
-          stops: [.init(color: .clear, location: 0), .init(color: .black.opacity(0.76), location: 0.76),
-                  .init(color: .clear, location: 1)],
-          startPoint: .top, endPoint: .bottom
-        )
-        .padding(.top, -32)
-        .padding(.bottom, -12)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-      }
-    }
-    .padding(.bottom, (hasNativePlayer ? 65 : 20) + watchInsets.bottom)
-    .foregroundStyle(LinkstrTheme.textPrimary)
-    .buttonStyle(.plain)
-    .zIndex(1)
-  }
-
-  private func watchCaption(_ post: SessionMessageEntity) -> some View {
-    VStack(alignment: .leading, spacing: 7) {
-      HStack(spacing: 8) {
-        LinkstrContactAvatar(name: sender, size: 29, seed: post.senderPubkeyHash)
-        Text(sender)
-          .font(LinkstrTheme.font(.subheadline, weight: .semibold))
-          .lineLimit(1)
-        Text(post.timestamp.linkstrActivityTimestampLabel)
-          .font(LinkstrTheme.font(.caption))
-          .foregroundStyle(LinkstrTheme.textSecondary)
-          .lineLimit(1)
-      }
-      if let caption = noteText ?? LinkstrPostPreview.title(for: post) {
-        Button {
-          activeSheet = .details
-        } label: {
-          Text(caption)
-            .font(LinkstrTheme.font(.subheadline))
-            .multilineTextAlignment(.leading)
-            .lineLimit(3)
-        }
-        .accessibilityHint("open post details")
-      }
-      if let source = LinkstrPostPreview.source(for: post.url) {
-        Text(source)
-          .font(LinkstrTheme.font(.caption))
-          .foregroundStyle(LinkstrTheme.textSecondary)
-          .lineLimit(1)
-      }
-      if !reactionSummaries.isEmpty {
-        Button {
-          activeSheet = .reactions
-        } label: {
-          HStack(spacing: 9) {
-            ForEach(reactionSummaries.prefix(3)) { reaction in
-              Text("\(reaction.emoji) \(reaction.count)")
+    HStack(alignment: .top, spacing: LinkstrTheme.compactSpacing) {
+      watchDetails(post)
+      let canRefresh = LinkstrPostPreview.webURL(for: post.url) != nil
+      if canRefresh || canDelete || saveAction != nil {
+        Menu {
+          if canRefresh {
+            Button(isRefreshingMetadata ? "refreshing post…" : "refresh post", systemImage: "arrow.clockwise") {
+              metadataRefreshRequest = UUID()
+            }
+            .disabled(isRefreshingMetadata)
+            .accessibilityHint("reloads the preview and retries playback")
+          }
+          if canDelete && canReactToPost {
+            Button(noteText == nil ? "add a note" : "edit note", systemImage: "pencil") {
+              activeSheet = .editNote
             }
           }
-          .font(LinkstrTheme.font(.caption, weight: .medium))
-          .frame(minHeight: 44)
-          .contentShape(Rectangle())
-        }
-        .accessibilityLabel("view reactions")
-      }
-    }
-    .frame(maxWidth: .infinity, alignment: .leading)
-  }
-
-  private func watchActions(_ post: SessionMessageEntity, saveAction: (() -> Void)?) -> some View {
-    VStack(spacing: 9) {
-      Button {
-        activeSheet = .reactions
-      } label: {
-        WatchActionLabel(title: canReactToPost ? "react" : "reactions", icon: "face.smiling")
-      }
-      if let url = post.url.flatMap(URL.init(string:)) {
-        Button {
-          openURL(url)
-        } label: {
-          WatchActionLabel(title: "open", icon: "arrow.up.right.square")
-        }
-        .accessibilityLabel("open in browser")
-      }
-      Menu {
-        Button("post details", systemImage: "info.circle") { activeSheet = .details }
-        if canDelete && canReactToPost {
-          Button(noteText == nil ? "add a note" : "edit note", systemImage: "pencil") {
-            activeSheet = .editNote
+          if let saveAction {
+            Button("save video", systemImage: "square.and.arrow.down", action: saveAction)
           }
+          if canDelete {
+            Button("delete post", systemImage: "trash", role: .destructive, action: delete)
+          }
+        } label: {
+          Group {
+            if isRefreshingMetadata {
+              ProgressView().controlSize(.small)
+            } else {
+              Image(systemName: "ellipsis")
+            }
+          }
+          .linkstrToolbarIconLabel()
         }
-        Button("refresh preview", systemImage: "arrow.clockwise") { refreshPostMetadata(post) }
-          .disabled(isRefreshingMetadata)
-        if shareDeepLinkURL != nil {
-          Button("share link", systemImage: "square.and.arrow.up") { activeSheet = .share }
-        }
-        if let saveAction {
-          Button("save video", systemImage: "square.and.arrow.down", action: saveAction)
-        }
-        if canDelete {
-          Button("delete post", systemImage: "trash", role: .destructive, action: delete)
-        }
-      } label: {
-        WatchActionLabel(title: "more", icon: "ellipsis")
+        .accessibilityLabel("more post actions")
       }
-      .accessibilityLabel("more post actions")
     }
+    .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+    .foregroundStyle(LinkstrTheme.textPrimary)
+    .buttonStyle(.plain)
   }
 }

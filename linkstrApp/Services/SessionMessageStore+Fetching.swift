@@ -240,16 +240,29 @@ extension SessionMessageStore {
     try clearCachedMetadata(messages: storageMessages())
   }
 
-  func managedStorageUsage() throws -> ManagedStorageUsage {
+  func managedStorageUsage() async throws -> ManagedStorageUsage {
     let messages = try storageMessages()
-    return managedStorageUsage(messages: messages)
+    let previewPaths = Set(messages.compactMap(\.thumbnailURL))
+    let cachedMediaPaths = Set(messages.compactMap(\.cachedMediaPath))
+    return await Task.detached(priority: .utility) {
+      func totalBytes(for paths: Set<String>) -> Int64 {
+        let urls = Set(paths.compactMap { ManagedLocalFileScope.shared.managedFileURL(fromPath: $0) })
+        return urls.reduce(into: Int64(0)) { total, url in
+          total += LocalFileMetrics.allocatedSize(at: url)
+        }
+      }
+      return ManagedStorageUsage(
+        previewBytes: totalBytes(for: previewPaths),
+        cachedMediaBytes: totalBytes(for: cachedMediaPaths)
+      )
+    }.value
   }
 
   private func storageMessages() throws -> [SessionMessageEntity] {
     return try modelContext.fetch(FetchDescriptor<SessionMessageEntity>())
   }
 
-  private func clearCachedMedia(messages: [SessionMessageEntity]) throws {
+  func clearCachedMedia(messages: [SessionMessageEntity]) throws {
     var didChange = false
     var clearedMediaURLs = Set<URL>()
     for message in messages {
@@ -279,7 +292,7 @@ extension SessionMessageStore {
     for message in messages {
       let currentThumbnailPath = ManagedLocalFileScope.shared.normalizedManagedPath(
         message.thumbnailURL)
-      let hadCachedMetadata = message.metadataTitle != nil || currentThumbnailPath != nil
+      let hadCachedMetadata = message.metadataTitle != nil || message.thumbnailURL != nil
       guard hadCachedMetadata else { continue }
 
       if let currentThumbnailPath {
@@ -293,28 +306,6 @@ extension SessionMessageStore {
       try modelContext.save()
       removeManagedFiles(at: clearedThumbnailURLs)
     }
-  }
-
-  private func managedStorageUsage(messages: [SessionMessageEntity]) -> ManagedStorageUsage {
-    let previewURLs = Set(
-      messages.compactMap { message in
-        ManagedLocalFileScope.shared.managedFileURL(fromPath: message.thumbnailURL)
-      }
-    )
-    let cachedMediaURLs = Set(
-      messages.compactMap { message in
-        ManagedLocalFileScope.shared.managedFileURL(fromPath: message.cachedMediaPath)
-      }
-    )
-
-    return ManagedStorageUsage(
-      previewBytes: previewURLs.reduce(into: Int64(0)) { total, fileURL in
-        total += LocalFileMetrics.allocatedSize(at: fileURL)
-      },
-      cachedMediaBytes: cachedMediaURLs.reduce(into: Int64(0)) { total, fileURL in
-        total += LocalFileMetrics.allocatedSize(at: fileURL)
-      }
-    )
   }
 
   func managedStoredFileURLs(for messages: [SessionMessageEntity]) -> Set<URL> {

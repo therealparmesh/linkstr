@@ -1,13 +1,13 @@
 import Foundation
 
-/// Serialize follow-list changes so each update starts from the last completed one.
+/// Serialize changes to the same record while allowing independent records to proceed.
 @MainActor
-final class ContactMutationQueue {
-  private var tail: Task<Bool, Never>?
+final class MutationQueue {
+  private var tails: [String: (id: UUID, task: Task<Bool, Never>)] = [:]
   private var tasks: [UUID: Task<Bool, Never>] = [:]
 
-  func run(_ operation: @escaping @MainActor () async -> Bool) async -> Bool {
-    let predecessor = tail
+  func run(key: String = "", _ operation: @escaping @MainActor () async -> Bool) async -> Bool {
+    let predecessor = tails[key]?.task
     let id = UUID()
     let task = Task { @MainActor in
       _ = await predecessor?.value
@@ -15,20 +15,20 @@ final class ContactMutationQueue {
       return await operation()
     }
     tasks[id] = task
-    tail = task
+    tails[key] = (id, task)
     let result = await withTaskCancellationHandler {
       await task.value
     } onCancel: {
       task.cancel()
     }
     tasks.removeValue(forKey: id)
-    if tasks.isEmpty { tail = nil }
+    if tails[key]?.id == id { tails.removeValue(forKey: key) }
     return result
   }
 
   func cancel() {
     tasks.values.forEach { $0.cancel() }
     tasks.removeAll()
-    tail = nil
+    tails.removeAll()
   }
 }

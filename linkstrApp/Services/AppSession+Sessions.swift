@@ -21,16 +21,18 @@ extension AppSession {
       composeError = "you're signed out. sign in to create sessions."
       return false
     }
+    let sourceService = nostrService
 
     do {
       try await prepareRelayMutationIfNeeded(
         timeoutSeconds: timeoutSeconds,
         pollIntervalSeconds: pollIntervalSeconds
       )
+      try checkMutationContext(ownerPubkey: ownerPubkey, sourceService: sourceService)
     } catch MutationPreparationError.relayBlocked {
       return false
     } catch {
-      report(error: error)
+      reportMutationError(error, ownerPubkey: ownerPubkey, sourceService: sourceService)
       return false
     }
 
@@ -52,8 +54,9 @@ extension AppSession {
     name: String,
     members: [String]
   ) async -> Bool {
+    let sourceService = nostrService
     let sessionID = makeLocalEventID()
-    let now = Date.now
+    let now = Date(timeIntervalSince1970: Date.now.timeIntervalSince1970.rounded(.down))
     let payload = makeSessionCreatePayload(
       sessionID: sessionID,
       name: name,
@@ -66,6 +69,7 @@ extension AppSession {
         payload: payload,
         recipientPubkeyHexes: members
       )
+      try checkMutationContext(ownerPubkey: ownerPubkey, sourceService: sourceService)
       _ = try applySessionSnapshotLocally(
         SessionSnapshotParams(
           ownerPubkey: ownerPubkey,
@@ -80,7 +84,7 @@ extension AppSession {
       composeError = nil
       return true
     } catch {
-      report(error: error)
+      reportMutationError(error, ownerPubkey: ownerPubkey, sourceService: sourceService)
       return false
     }
   }
@@ -134,29 +138,30 @@ extension AppSession {
       composeError = "only the session creator can manage this session."
       return false
     }
+    let sourceService = nostrService
+    let sessionID = session.sessionID
 
     do {
       try await prepareRelayMutationIfNeeded(
         timeoutSeconds: timeoutSeconds,
         pollIntervalSeconds: pollIntervalSeconds
       )
+      try checkMutationContext(ownerPubkey: ownerPubkey, sourceService: sourceService)
+      guard let current = try messageStore.session(sessionID: sessionID, ownerPubkey: ownerPubkey) else {
+        composeError = "this session is no longer available."
+        return false
+      }
+      return await publishAndPersistMemberUpdate(
+        session: current, ownerPubkey: ownerPubkey,
+        members: normalizedMemberPubkeys(fromNPubs: memberNPubs, myPubkey: keypair.publicKey.hex),
+        sessionName: sessionName
+      )
     } catch MutationPreparationError.relayBlocked {
       return false
     } catch {
-      report(error: error)
+      reportMutationError(error, ownerPubkey: ownerPubkey, sourceService: sourceService)
       return false
     }
-
-    let members = normalizedMemberPubkeys(
-      fromNPubs: memberNPubs,
-      myPubkey: keypair.publicKey.hex
-    )
-    return await publishAndPersistMemberUpdate(
-      session: session,
-      ownerPubkey: ownerPubkey,
-      members: members,
-      sessionName: sessionName
-    )
   }
 
   private func publishAndPersistMemberUpdate(
@@ -165,42 +170,60 @@ extension AppSession {
     members: [String],
     sessionName: String?
   ) async -> Bool {
-    let now = Date.now
-    let effectiveName = sessionName ?? session.name
-    let payload = makeSessionMembersPayload(
-      session: session,
-      name: effectiveName,
-      members: members,
-      timestamp: now
-    )
-
+    let sourceService = nostrService
+    let sessionID = session.sessionID
+    let previousTimestamp = session.membershipStateUpdatedAt ?? session.updatedAt
     do {
+      let timestamp = try await nextPublicationTimestamp(
+        after: previousTimestamp, subject: "session update", publicationOverridden: testingOverrides.sendPayload != nil
+      )
+      try checkMutationContext(ownerPubkey: ownerPubkey, sourceService: sourceService)
+      guard let current = try messageStore.session(sessionID: sessionID, ownerPubkey: ownerPubkey) else {
+        composeError = "this session is no longer available."
+        return false
+      }
+      let payload = makeSessionMembersPayload(
+        session: current, name: sessionName ?? current.name, members: members,
+        timestamp: Date(timeIntervalSince1970: TimeInterval(timestamp))
+      )
       let updateRecipients = try computeMemberUpdateRecipients(
-        session: session,
-        ownerPubkey: ownerPubkey,
-        members: members
+        session: current, ownerPubkey: ownerPubkey, members: members
       )
-      let membershipEventID = try await publishOrLocalEventID(
-        payload: payload,
-        recipientPubkeyHexes: updateRecipients
-      )
-      _ = try applySessionSnapshotLocally(
-        SessionSnapshotParams(
-          ownerPubkey: ownerPubkey,
-          sessionID: session.sessionID,
-          createdByPubkey: session.createdByPubkey,
-          sessionName: effectiveName,
-          memberPubkeys: members,
-          updatedAt: now,
-          eventID: membershipEventID,
-          isArchived: session.isArchived
-        ))
-      composeError = nil
-      return true
+      let membershipEventID = try await publishOrLocalEventID(payload: payload, recipientPubkeyHexes: updateRecipients)
+      try checkMutationContext(ownerPubkey: ownerPubkey, sourceService: sourceService)
+      return try persistMemberUpdate(payload, ownerPubkey: ownerPubkey, members: members, eventID: membershipEventID)
     } catch {
-      report(error: error)
+      reportMutationError(error, ownerPubkey: ownerPubkey, sourceService: sourceService)
       return false
     }
+  }
+
+  private func persistMemberUpdate(
+    _ payload: LinkstrPayload, ownerPubkey: String, members: [String], eventID: String
+  ) throws -> Bool {
+    guard let current = try messageStore.session(sessionID: payload.conversationID, ownerPubkey: ownerPubkey) else {
+      composeError = "this session is no longer available."
+      return false
+    }
+    if current.membershipStateEventID == NostrValueNormalizer.normalizedEventID(eventID) {
+      composeError = nil
+      return true
+    }
+    let updatedAt = Date(timeIntervalSince1970: TimeInterval(payload.timestamp))
+    guard try messageStore.shouldApplyMemberSnapshot(
+      ownerPubkey: ownerPubkey, sessionID: payload.conversationID, updatedAt: updatedAt, eventID: eventID
+    ) else {
+      composeError = "this session changed on another device. review it and try again."
+      return false
+    }
+    _ = try applySessionSnapshotLocally(
+      SessionSnapshotParams(
+        ownerPubkey: ownerPubkey, sessionID: payload.conversationID, createdByPubkey: current.createdByPubkey,
+        sessionName: payload.sessionName, memberPubkeys: members, updatedAt: updatedAt,
+        eventID: eventID, isArchived: current.isArchived
+      ))
+    composeError = nil
+    return true
   }
 
   private func makeSessionMembersPayload(
@@ -232,162 +255,6 @@ extension AppSession {
       activeOnly: true
     ).map(\.memberPubkey)
     return NostrValueNormalizer.dedupedNormalizedPubkeyHexes(priorActiveMembers + members)
-  }
-
-  @discardableResult
-  func deleteSessionAwaitingRelay(
-    _ session: SessionEntity,
-    timeoutSeconds: TimeInterval = RelayMutationDefaults.timeoutSeconds,
-    pollIntervalSeconds: TimeInterval = RelayMutationDefaults.pollIntervalSeconds
-  ) async -> Bool {
-    guard let draft = makeSessionDeletionDraft(session: session) else {
-      return false
-    }
-
-    if !isRelayPublicationEnabledForCurrentProcess() {
-      return persistLocalSessionDeletion(draft)
-    }
-
-    do {
-      try await prepareRelayMutationIfNeeded(
-        timeoutSeconds: timeoutSeconds,
-        pollIntervalSeconds: pollIntervalSeconds
-      )
-    } catch MutationPreparationError.relayBlocked {
-      return false
-    } catch {
-      report(error: error)
-      return false
-    }
-
-    guard let keypair = identityService.keypair else {
-      composeError = "you're signed out. sign in to manage this session."
-      return false
-    }
-
-    return await publishSessionDeletion(draft: draft, keypair: keypair)
-  }
-
-  private func persistLocalSessionDeletion(_ draft: SessionDeletionDraft) -> Bool {
-    do {
-      try persistSessionDeletion(draft, eventID: makeLocalEventID())
-      composeError = nil
-      return true
-    } catch {
-      report(error: error)
-      return false
-    }
-  }
-
-  private func publishSessionDeletion(draft: SessionDeletionDraft, keypair: Keypair) async -> Bool {
-    do {
-      let deletionEventID = try await sendPayloadAwaitingRelayAcceptance(
-        payload: draft.payload,
-        recipientPubkeyHexes: draft.recipientPubkeys
-      ).rumorEventID
-      try persistSessionDeletion(draft, eventID: deletionEventID)
-
-      guard !draft.publishedTransportEventIDs.isEmpty else {
-        composeError =
-          draft.hadStoredRootPosts
-          ? "session deleted, but older relay copies of its posts may remain."
-          : nil
-        return true
-      }
-
-      await requestRelayDeletionForSession(draft: draft, keypair: keypair)
-      return true
-    } catch {
-      report(error: error)
-      return false
-    }
-  }
-
-  private func requestRelayDeletionForSession(draft: SessionDeletionDraft, keypair: Keypair) async {
-    do {
-      _ = try await publishEventAwaitingRelayAcceptance(
-        makeRelayDeletionEvent(
-          publishedTransportEventIDs: draft.publishedTransportEventIDs,
-          reason: "linkstr session deletion request",
-          signedBy: keypair
-        )
-      )
-      composeError = nil
-    } catch {
-      NSLog("Session relay deletion request failed: \(error.localizedDescription)")
-      composeError = "session deleted, but older relay copies of its posts may remain."
-    }
-  }
-
-  func makeSessionDeletionDraft(session: SessionEntity) -> SessionDeletionDraft? {
-    guard let keypair = identityService.keypair, let ownerPubkey = identityService.pubkeyHex else {
-      composeError = "you're signed out. sign in to manage this session."
-      return nil
-    }
-    guard canManageSession(for: session) else {
-      composeError = "only the session creator can delete this session."
-      return nil
-    }
-
-    guard
-      let recipientPubkeys = resolveDeletionRecipients(
-        sessionID: session.sessionID,
-        ownerPubkey: ownerPubkey,
-        senderPubkey: keypair.publicKey.hex
-      )
-    else {
-      return nil
-    }
-
-    let publishedTransportEventIDs: [String]
-    let hadStoredRootPosts: Bool
-    do {
-      publishedTransportEventIDs = try messageStore.knownSessionTransportEventIDs(
-        ownerPubkey: ownerPubkey,
-        sessionID: session.sessionID
-      )
-      hadStoredRootPosts = try messageStore.hasRootPosts(
-        ownerPubkey: ownerPubkey,
-        sessionID: session.sessionID
-      )
-    } catch {
-      composeError = error.localizedDescription
-      return nil
-    }
-
-    let timestamp = Int64(Date.now.timeIntervalSince1970)
-    return SessionDeletionDraft(
-      payload: LinkstrPayload(
-        conversationID: session.sessionID,
-        rootID: makeLocalEventID(),
-        kind: .sessionDelete,
-        url: nil,
-        note: nil,
-        timestamp: timestamp
-      ),
-      ownerPubkey: ownerPubkey,
-      senderPubkey: keypair.publicKey.hex,
-      recipientPubkeys: recipientPubkeys,
-      sessionID: session.sessionID,
-      hadStoredRootPosts: hadStoredRootPosts,
-      publishedTransportEventIDs: publishedTransportEventIDs
-    )
-  }
-
-  func persistSessionDeletion(_ draft: SessionDeletionDraft, eventID: String) throws {
-    _ = try messageStore.applySessionDeletion(
-      ownerPubkey: draft.ownerPubkey,
-      sessionID: draft.sessionID,
-      deletedByPubkey: draft.senderPubkey,
-      updatedAt: Date(timeIntervalSince1970: TimeInterval(draft.payload.timestamp)),
-      eventID: eventID
-    )
-    discardPendingIncomingSessionData(sessionID: draft.sessionID)
-    invalidateMemberIntervalCache(sessionID: draft.sessionID)
-    if pendingSessionNavigationRequest?.sessionID == draft.sessionID {
-      pendingSessionNavigationRequest = nil
-    }
-    schedulePushStateSync()
   }
 
 }

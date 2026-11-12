@@ -226,12 +226,12 @@ extension AppSessionContactAndRelayTests {
     )
 
     let firstToastDeadline = Date(timeIntervalSinceNow: 0.2)
-    while session.composeError != "you're offline. waiting for a relay connection.",
+    while session.composeError != "you’re offline. waiting for a relay connection.",
       Date() < firstToastDeadline {
       RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.01))
     }
 
-    XCTAssertEqual(session.composeError, "you're offline. waiting for a relay connection.")
+    XCTAssertEqual(session.composeError, "you’re offline. waiting for a relay connection.")
 
     session.composeError = nil
     session.simulateRuntimeRelayStatusForTesting(relayURL: relay.url, status: .connected)
@@ -264,11 +264,11 @@ extension AppSessionContactAndRelayTests {
     )
 
     let firstToastDeadline = Date(timeIntervalSinceNow: 0.2)
-    while session.composeError != "you're offline. waiting for a relay connection.",
+    while session.composeError != "you’re offline. waiting for a relay connection.",
       Date() < firstToastDeadline {
       RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.01))
     }
-    XCTAssertEqual(session.composeError, "you're offline. waiting for a relay connection.")
+    XCTAssertEqual(session.composeError, "you’re offline. waiting for a relay connection.")
 
     session.composeError = nil
     session.beginForegroundCycle()
@@ -280,12 +280,12 @@ extension AppSessionContactAndRelayTests {
     )
 
     let secondToastDeadline = Date(timeIntervalSinceNow: 0.2)
-    while session.composeError != "you're offline. waiting for a relay connection.",
+    while session.composeError != "you’re offline. waiting for a relay connection.",
       Date() < secondToastDeadline {
       RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.01))
     }
 
-    XCTAssertEqual(session.composeError, "you're offline. waiting for a relay connection.")
+    XCTAssertEqual(session.composeError, "you’re offline. waiting for a relay connection.")
   }
 
   func testPassiveOfflineToastWaitsThroughInitialForegroundReconnectGrace() throws {
@@ -305,19 +305,19 @@ extension AppSessionContactAndRelayTests {
     XCTAssertNil(session.composeError)
 
     let toastDeadline = Date(timeIntervalSinceNow: 0.2)
-    while session.composeError != "you're offline. waiting for a relay connection.",
+    while session.composeError != "you’re offline. waiting for a relay connection.",
       Date() < toastDeadline {
       RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.01))
     }
 
-    XCTAssertEqual(session.composeError, "you're offline. waiting for a relay connection.")
+    XCTAssertEqual(session.composeError, "you’re offline. waiting for a relay connection.")
   }
 
   func testForegroundCycleClearsStaleOfflineToast() throws {
     let (session, container) = try makeSession(passiveOfflineToastGraceInterval: 0.01)
     _ = container
 
-    session.composeError = "you're offline. waiting for a relay connection."
+    session.composeError = "you’re offline. waiting for a relay connection."
 
     session.beginForegroundCycle()
 

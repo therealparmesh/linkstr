@@ -3,6 +3,10 @@ import Foundation
 
 enum LinkstrURLValidator {
   static func normalizedWebURL(from rawValue: String) -> String? {
+    validatedWebURL(from: rawValue)?.absoluteString
+  }
+
+  static func validatedWebURL(from rawValue: String) -> URL? {
     let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return nil }
     let candidate = candidateWebURLString(from: trimmed)
@@ -17,7 +21,7 @@ enum LinkstrURLValidator {
       return nil
     }
 
-    return canonicalURL.absoluteString
+    return canonicalURL
   }
 
   private static func candidateWebURLString(from value: String) -> String {

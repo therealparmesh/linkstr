@@ -1,4 +1,3 @@
-import Photos
 import SwiftUI
 
 #if canImport(UIKit)
@@ -6,14 +5,20 @@ import SwiftUI
 #endif
 
 struct ShareMediaSaveView: View {
+  @Environment(\.openURL) private var openURL
   @EnvironmentObject private var deepLinkHandler: DeepLinkHandler
 
   let draft: LinkstrDeepLinkCodec.MediaSaveDraft
 
   @State private var status: SaveStatus = .resolving
-  @State private var cachedFileURL: URL?
+  @State private var resolutionAttempt = 0
+  @State private var exportTarget: LocalMediaExportTarget?
   @State private var showingSaveDialog = false
   @State private var fileExportItem: LocalFileExportItem?
+
+  private var sourceURL: URL? {
+    LinkstrURLValidator.normalizedWebURL(from: draft.url).flatMap(URL.init(string:))
+  }
 
   var body: some View {
     NavigationStack {
@@ -22,7 +27,7 @@ struct ShareMediaSaveView: View {
 
         ScrollView {
           VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
-            LinkstrScreenTitle(title: "save media")
+            LinkstrSheetTitle(title: "save video")
 
             LinkstrInsetSection {
               HStack(alignment: .top, spacing: LinkstrTheme.rowSpacing) {
@@ -33,27 +38,47 @@ struct ShareMediaSaveView: View {
                     .font(LinkstrTheme.font(.headline, weight: .semibold))
                     .foregroundStyle(LinkstrTheme.textPrimary)
 
-                  Text(status.message)
-                    .font(LinkstrTheme.font(.footnote))
-                    .foregroundStyle(LinkstrTheme.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                  if let message = status.message {
+                    Text(message)
+                      .font(LinkstrTheme.font(.subheadline))
+                      .foregroundStyle(LinkstrTheme.textSecondary)
+                      .fixedSize(horizontal: false, vertical: true)
+                  }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
               }
               .frame(maxWidth: .infinity, alignment: .leading)
             }
-            if cachedFileURL != nil, !status.showsProgress {
-              Button { showingSaveDialog = true } label: {
+            if exportTarget != nil, !status.showsProgress {
+              Button {
+                if let exportTarget, FileManager.default.fileExists(atPath: exportTarget.fileURL.path) {
+                  showingSaveDialog = true
+                } else {
+                  status = .resolving
+                  resolutionAttempt += 1
+                }
+              } label: {
                 LinkstrActionButtonLabel(title: "choose where to save", systemImage: "square.and.arrow.down")
               }
               .linkstrPrimaryButton()
             }
+            if status.offersBrowserRecovery, let sourceURL {
+              VStack(spacing: LinkstrTheme.compactSpacing) {
+                if exportTarget == nil {
+                  Button {
+                    status = .resolving
+                    resolutionAttempt += 1
+                  } label: {
+                    LinkstrActionButtonLabel(title: "try again", systemImage: "arrow.clockwise")
+                  }
+                  .linkstrPrimaryButton()
+                }
+                LinkstrBrowserButton { openURL(sourceURL) }
+              }
+            }
 
-            LinkstrInsetSection(title: "link") {
-              Text(draft.url)
-                .font(LinkstrTheme.font(.footnote))
-                .foregroundStyle(LinkstrTheme.textPrimary)
-                .lineLimit(4)
+            LinkstrInsetSection(title: "original link") {
+              LinkstrURLText(address: sourceURL?.absoluteString ?? draft.url)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -67,54 +92,50 @@ struct ShareMediaSaveView: View {
       .linkstrBarChrome()
       .toolbar {
         ToolbarItem(placement: .topBarLeading) {
-          Button {
-            deepLinkHandler.clearMediaSaveDraft()
-          } label: {
-            Image(systemName: "xmark")
-              .linkstrToolbarIconLabel()
+          LinkstrHeaderButton(title: "close video save", icon: "xmark") {
+            deepLinkHandler.clearMediaSaveDraft(matching: draft)
           }
-          .accessibilityLabel("close media save")
-          .tint(LinkstrTheme.textSecondary)
         }
+        .linkstrFlatToolbarItem()
       }
-      .alert(
-        "save media",
-        isPresented: $showingSaveDialog
-      ) {
-        Button("save to photos") {
-          Task { await performSaveToPhotos() }
-        }
-        Button("save to files") {
-          guard let url = cachedFileURL else { return }
-          fileExportItem = LocalFileExportItem(fileURL: url)
-        }
-        Button("cancel", role: .cancel) {}
-      } message: {
-        Text("choose where to save this video")
-      }
+      .linkstrVideoSaveDialog(
+        isPresented: $showingSaveDialog,
+        target: exportTarget,
+        onSaveToPhotos: { _ in status = .saving },
+        onSaveToFiles: { fileExportItem = LocalFileExportItem(fileURL: $0, requestID: resolutionTaskID) }
+      )
       #if canImport(UIKit)
         .sheet(item: $fileExportItem) { item in
           LocalFileExportSheet(url: item.fileURL) { result in
+            guard deepLinkHandler.pendingMediaSaveDraft == draft, item.requestID == resolutionTaskID,
+              fileExportItem == nil || fileExportItem?.id == item.id
+            else { return }
             fileExportItem = nil
             switch result {
             case .exported:
               status = .saved("files")
               triggerSuccessHaptic()
-              deepLinkHandler.clearMediaSaveDraft()
+              deepLinkHandler.clearMediaSaveDraft(matching: draft)
             case .cancelled:
               status = .ready
             case .failed:
-              status = .unavailable("could not save to files")
+              status = .failed("couldn’t save this video to files.")
             }
           }
         }
       #endif
     }
     .preferredColorScheme(.dark)
-    .task(id: draft.id) {
+    .task(id: resolutionTaskID) {
       await resolveAndCache()
     }
+    .task(id: status == .saving) {
+      guard status == .saving, let exportTarget else { return }
+      await performSaveToPhotos(exportTarget)
+    }
   }
+
+  private var resolutionTaskID: String { "\(draft.id)#\(resolutionAttempt)" }
 
   @ViewBuilder
   private var statusIndicator: some View {
@@ -137,10 +158,10 @@ struct ShareMediaSaveView: View {
 
   @MainActor
   private func resolveAndCache() async {
-    guard let sourceURL = URL(string: draft.url),
-      LinkstrURLValidator.normalizedWebURL(from: draft.url) != nil
-    else {
-      status = .unavailable("this share does not contain a valid web link")
+    exportTarget = nil
+    showingSaveDialog = false
+    guard let sourceURL else {
+      status = .unavailable("this share doesn’t contain a valid web link.")
       return
     }
 
@@ -150,26 +171,21 @@ struct ShareMediaSaveView: View {
     guard !Task.isCancelled else { return }
 
     switch extraction {
-    case .ready(let candidates):
-      guard !candidates.isEmpty else {
-        status = .unavailable("this link doesn’t have a video linkstr can save")
-        return
-      }
-
+    case .ready(let candidates) where !candidates.isEmpty:
       status = .caching
       if let localMedia = await cacheFirstAvailable(from: candidates) {
         guard !Task.isCancelled else { return }
-        cachedFileURL = localMedia.playbackURL
+        exportTarget = LocalMediaExportTarget(fileURL: localMedia.playbackURL)
         status = .ready
         showingSaveDialog = true
       } else {
         guard !Task.isCancelled else { return }
-        status = .unavailable("couldn’t download this video")
+        status = .unavailable("couldn’t download this video. you can still open the original link.")
       }
     case .noVideo:
-      status = .unavailable("this post doesn’t include a playable video")
-    case .cannotExtract(let reason):
-      status = .unavailable(reason)
+      status = .unavailable("no video found in this post.")
+    case .ready, .cannotExtract:
+      status = .unavailable("couldn’t find a downloadable video. you can still open the original link.")
     }
   }
 
@@ -188,42 +204,16 @@ struct ShareMediaSaveView: View {
   }
 
   @MainActor
-  private func performSaveToPhotos() async {
-    guard let fileURL = cachedFileURL else {
-      status = .unavailable("no cached file available")
-      return
-    }
-
-    status = .saving
-    let authStatus = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
-    guard authStatus == .authorized || authStatus == .limited else {
-      status = .unavailable(
-        "allow photos access in ios settings to save this video.")
-      return
-    }
-
+  private func performSaveToPhotos(_ target: LocalMediaExportTarget) async {
     do {
-      try await withCheckedThrowingContinuation { continuation in
-        PHPhotoLibrary.shared().performChanges(
-          {
-            let request = PHAssetCreationRequest.forAsset()
-            request.addResource(with: .video, fileURL: fileURL, options: nil)
-          },
-          completionHandler: { success, error in
-            if success {
-              continuation.resume(returning: ())
-            } else {
-              continuation.resume(
-                throwing: error ?? URLError(.cannotWriteToFile))
-            }
-          }
-        )
-      }
+      try await target.saveToPhotos()
+      guard !Task.isCancelled, deepLinkHandler.pendingMediaSaveDraft == draft else { return }
       status = .saved("photos")
       triggerSuccessHaptic()
-      deepLinkHandler.clearMediaSaveDraft()
+      deepLinkHandler.clearMediaSaveDraft(matching: draft)
     } catch {
-      status = .unavailable("could not save to photos")
+      guard !Task.isCancelled, deepLinkHandler.pendingMediaSaveDraft == draft else { return }
+      status = .failed(PhotoSaveError.message(for: error))
     }
   }
 
@@ -246,13 +236,14 @@ extension ShareMediaSaveView {
     case saving
     case saved(String)
     case unavailable(String)
+    case failed(String)
 
     var title: String {
       switch self {
       case .resolving:
         return "checking link"
       case .caching:
-        return "preparing media"
+        return "preparing video"
       case .ready:
         return "ready to save"
       case .saving:
@@ -261,22 +252,22 @@ extension ShareMediaSaveView {
         return "saved"
       case .unavailable:
         return "save unavailable"
+      case .failed:
+        return "save failed"
       }
     }
 
-    var message: String {
+    var message: String? {
       switch self {
       case .resolving:
-        return "looking for saveable media"
+        return "looking for a video to save."
       case .caching:
-        return "downloading media"
-      case .ready:
-        return "choose where to save"
-      case .saving:
-        return "saving now"
+        return "downloading the video."
+      case .ready, .saving:
+        return nil
       case .saved(let destination):
-        return "saved to \(destination)"
-      case .unavailable(let reason):
+        return "saved to \(destination)."
+      case .unavailable(let reason), .failed(let reason):
         return reason
       }
     }
@@ -289,7 +280,7 @@ extension ShareMediaSaveView {
         return "arrow.down.circle"
       case .saved:
         return "checkmark.circle.fill"
-      case .unavailable:
+      case .unavailable, .failed:
         return "exclamationmark.triangle.fill"
       }
     }
@@ -298,7 +289,7 @@ extension ShareMediaSaveView {
       switch self {
       case .saved:
         return LinkstrTheme.statusSuccess
-      case .unavailable:
+      case .unavailable, .failed:
         return LinkstrTheme.amber
       case .resolving, .caching, .ready, .saving:
         return LinkstrTheme.accent
@@ -309,8 +300,15 @@ extension ShareMediaSaveView {
       switch self {
       case .resolving, .caching, .saving:
         return true
-      case .ready, .saved, .unavailable:
+      case .ready, .saved, .unavailable, .failed:
         return false
+      }
+    }
+
+    var offersBrowserRecovery: Bool {
+      switch self {
+      case .unavailable, .failed: true
+      default: false
       }
     }
   }

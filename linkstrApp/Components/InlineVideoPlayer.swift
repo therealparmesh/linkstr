@@ -19,16 +19,16 @@ struct InlineVideoPlayer: View {
   var aspectRatio: CGFloat = 16.0 / 9.0
   var isCovered = false
   var watchBottomInset: CGFloat = 0
-  var systemPlayerRequest: Binding<Bool>?
+  var watchVideoInsets: EdgeInsets?
+  var onWatchControlsHeightChange: (CGFloat) -> Void = { _ in }
   @State private var player: AVPlayer?
   @State private var isShowingFullscreenPlayer = false
   @State private var statusObservation: NSKeyValueObservation?
   @State private var presentationSizeObservation: NSKeyValueObservation?
   @State private var resumeAfterCover = false
+  @State private var hasAudio = true
 
-  private var fullscreen: Binding<Bool> { systemPlayerRequest ?? $isShowingFullscreenPlayer }
-
-  private var shouldSuspend: Bool { immersive && (isCovered || scenePhase != .active) }
+  private var shouldSuspend: Bool { isCovered || (immersive && scenePhase != .active) }
 
   var body: some View {
     ZStack(alignment: .topTrailing) {
@@ -37,7 +37,10 @@ struct InlineVideoPlayer: View {
           Group {
             if immersive {
               WatchVideoSurface(
-                player: player, aspectRatio: aspectRatio, bottomInset: watchBottomInset, isMuted: $watchMuted
+                player: player, aspectRatio: aspectRatio, bottomInset: watchBottomInset,
+                videoInsets: watchVideoInsets,
+                isMuted: $watchMuted, hasAudio: hasAudio, onControlsHeightChange: onWatchControlsHeightChange,
+                openSystemPlayer: { isShowingFullscreenPlayer = true }
               )
             } else {
               VideoPlayer(player: player)
@@ -46,6 +49,8 @@ struct InlineVideoPlayer: View {
           .scopedPlaybackAudioSession()
         } else {
           ProgressView()
+            .tint(LinkstrTheme.accent)
+            .accessibilityLabel("loading video")
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         }
       }
@@ -56,23 +61,16 @@ struct InlineVideoPlayer: View {
           isShowingFullscreenPlayer = true
         } label: {
           Image(systemName: "arrow.up.left.and.arrow.down.right")
-            .font(LinkstrTheme.font(.footnote, weight: .semibold))
-            .foregroundStyle(LinkstrTheme.textPrimary)
-            .frame(
-              width: LinkstrTheme.minimumInteractiveDimension,
-              height: LinkstrTheme.minimumInteractiveDimension)
-            .background(Circle().fill(LinkstrTheme.panel.opacity(0.84)))
+            .linkstrMediaOverlayIconLabel()
         }
-        .accessibilityLabel("open video fullscreen")
+        .accessibilityLabel("open system player")
         .padding(8)
       }
     }
-    .fullScreenCover(isPresented: fullscreen) {
+    .background {
       if let player {
-        FullScreenAVPlayerView(player: player)
-          .scopedPlaybackAudioSession()
-          .ignoresSafeArea()
-          .background(Color.black)
+        SystemPlayerPresentation(player: player, isPresented: $isShowingFullscreenPlayer)
+          .frame(width: 0, height: 0)
       }
     }
     .onReceive(
@@ -94,6 +92,7 @@ struct InlineVideoPlayer: View {
       presentationSizeObservation = nil
       player?.pause()
       player = nil
+      hasAudio = true
 
       guard let asset = await media.loadVideoAsset() else {
         guard !Task.isCancelled else { return }
@@ -106,7 +105,10 @@ struct InlineVideoPlayer: View {
       let item = AVPlayerItem(asset: asset)
       statusObservation = item.observe(\.status, options: [.new]) { observed, _ in
         if observed.status == .failed {
-          Task { @MainActor in onPlaybackFailed?() }
+          Task { @MainActor in
+            guard player?.currentItem === observed else { return }
+            onPlaybackFailed?()
+          }
         }
       }
       presentationSizeObservation = item.observe(
@@ -116,13 +118,21 @@ struct InlineVideoPlayer: View {
         guard let aspectRatio = MediaPresentationGeometry.aspectRatio(
           for: observed.presentationSize
         ) else { return }
-        Task { @MainActor in onAspectRatioChange?(aspectRatio) }
+        Task { @MainActor in
+          guard player?.currentItem === observed else { return }
+          onAspectRatioChange?(aspectRatio)
+        }
       }
       let newPlayer = AVPlayer(playerItem: item)
       newPlayer.isMuted = immersive && watchMuted
       player = newPlayer
       resumeAfterCover = shouldSuspend
       if !shouldSuspend { newPlayer.play() }
+      if immersive, media.isLocalFile, asset.assetCache == nil,
+        let tracks = try? await asset.loadTracks(withMediaType: .audio),
+        !Task.isCancelled, player === newPlayer {
+        hasAudio = !tracks.isEmpty
+      }
     }
     .onChange(of: shouldSuspend) { _, shouldSuspend in
       guard let player else { return }
@@ -138,7 +148,7 @@ struct InlineVideoPlayer: View {
       if immersive { player?.isMuted = isMuted }
     }
     .onDisappear {
-      guard !fullscreen.wrappedValue else { return }
+      guard !isShowingFullscreenPlayer else { return }
       player?.pause()
       player = nil
       statusObservation?.invalidate()
@@ -149,20 +159,81 @@ struct InlineVideoPlayer: View {
   }
 }
 
-private struct FullScreenAVPlayerView: UIViewControllerRepresentable {
+private struct SystemPlayerPresentation: UIViewControllerRepresentable {
   let player: AVPlayer
+  @Binding var isPresented: Bool
 
-  func makeUIViewController(context: Context) -> AVPlayerViewController {
-    let controller = AVPlayerViewController()
-    controller.showsPlaybackControls = true
-    controller.entersFullScreenWhenPlaybackBegins = true
-    controller.exitsFullScreenWhenPlaybackEnds = false
-    controller.player = player
-    player.play()
-    return controller
+  func makeUIViewController(context: Context) -> SystemPlayerPresenter {
+    SystemPlayerPresenter()
   }
-  func updateUIViewController(_ uiViewController: AVPlayerViewController, context: Context) {
-    uiViewController.player = player
+
+  func updateUIViewController(_ controller: SystemPlayerPresenter, context: Context) {
+    controller.update(player: player, isPresented: isPresented) { isPresented = false }
+  }
+
+  static func dismantleUIViewController(_ controller: SystemPlayerPresenter, coordinator: ()) {
+    controller.dismissPlayer(animated: false)
+  }
+}
+
+private final class SystemPlayerPresenter: UIViewController, AVPlayerViewControllerDelegate {
+  private var player: AVPlayer?
+  private var playerController: AVPlayerViewController?
+  private var wantsPresentation = false
+  private var onDismiss: (() -> Void)?
+
+  func update(player: AVPlayer, isPresented: Bool, onDismiss: @escaping () -> Void) {
+    self.player = player
+    self.onDismiss = onDismiss
+    wantsPresentation = isPresented
+    if isPresented {
+      presentPlayerIfNeeded()
+    } else if playerController != nil {
+      dismissPlayer(animated: true)
+    }
+  }
+
+  func dismissPlayer(animated: Bool) {
+    guard let playerController else { return }
+    wantsPresentation = false
+    self.playerController = nil
+    // Dismantling an idle child must not dismiss the containing SwiftUI presentation.
+    playerController.dismiss(animated: animated)
+  }
+
+  override func viewDidAppear(_ animated: Bool) {
+    super.viewDidAppear(animated)
+    presentPlayerIfNeeded()
+  }
+
+  private func presentPlayerIfNeeded() {
+    guard wantsPresentation, playerController == nil, viewIfLoaded?.window != nil, let player else { return }
+    let pausedPosition = player.timeControlStatus == .paused ? player.currentTime() : nil
+    let controller = AVPlayerViewController()
+    controller.player = player
+    controller.delegate = self
+    // Keep the inline player and its pause/seek state alive underneath the native player.
+    controller.modalPresentationStyle = .overFullScreen
+    controller.exitsFullScreenWhenPlaybackEnds = false
+    playerController = controller
+    present(controller, animated: true) {
+      if let pausedPosition, pausedPosition.isNumeric,
+        player.timeControlStatus == .paused, player.currentTime() != pausedPosition {
+        player.seek(to: pausedPosition, toleranceBefore: .zero, toleranceAfter: .zero)
+      }
+    }
+  }
+
+  func playerViewController(
+    _ playerViewController: AVPlayerViewController,
+    willEndFullScreenPresentationWithAnimationCoordinator coordinator: UIViewControllerTransitionCoordinator
+  ) {
+    coordinator.animate(alongsideTransition: nil) { [weak self] context in
+      guard !context.isCancelled else { return }
+      self?.wantsPresentation = false
+      self?.playerController = nil
+      self?.onDismiss?()
+    }
   }
 }
 

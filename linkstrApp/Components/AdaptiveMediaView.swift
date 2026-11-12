@@ -1,4 +1,9 @@
+import OSLog
 import SwiftUI
+
+enum LinkstrPlaybackDiagnostics {
+  static let logger = Logger(subsystem: "com.parmscript.linkstr", category: "playback")
+}
 
 extension EnvironmentValues {
   @Entry var isUnderlyingMediaCovered = false
@@ -13,17 +18,22 @@ struct AdaptiveMediaView<LinkContent: View, OverlayContent: View>: View {
   }
 
   let sourceURL: URL
+  let reloadID: Int
   let openSourceAction: () -> Void
+  let cachedCanonicalSourceURL: URL?
   let resolveCachedLocalMedia: ((URL) -> PlayableMedia?)?
   let persistLocalMedia: ((URL, PlayableMedia) -> Void)?
   let clearPersistedLocalMedia: (() -> Void)?
-  let reloadID: Int
   let immersive: Bool
   let isCovered: Bool
   let watchInsets: EdgeInsets
+  let postControlsSummary: WatchPostSummary?
+  let onResolvedSource: ((URL) -> Void)?
+  let onEmbeddedPostVisibilityChange: ((Bool) -> Void)?
   let linkContent: LinkContent
-  let overlayContent: ((() -> Void)?, Bool) -> OverlayContent
-  @State var overlayHeight: CGFloat = 240
+  let overlayContent: ((() -> Void)?) -> OverlayContent
+  @State var postControlsReservedHeight = LinkstrTheme.minimumInteractiveDimension
+  @State var watchControlsHeight: CGFloat = 52
 
   @State var resolvedPresentation: ResolvedPresentation?
   @State var extractionState: ExtractionState?
@@ -32,49 +42,75 @@ struct AdaptiveMediaView<LinkContent: View, OverlayContent: View>: View {
   @State var localPlaybackMode: LocalPlaybackMode = .localPreferred
   @State var localPlaybackRequestID = 0
   @State var playbackCandidateIndex = 0
-  @State var extractionFallbackReason: String?
   @State var exportTarget: LocalMediaExportTarget?
   @State var fileExportItem: LocalFileExportItem?
-  @State var exportFeedbackTitle = ""
-  @State var exportFeedbackMessage: String?
+  @State var exportFeedback: LocalMediaExportFeedback?
+  @State var photoSaveTask: Task<Void, Never>?
   @State var embeddedContentHeight: CGFloat?
   @State var isEmbeddedContentReady = false
+  @State var hasRenderedEmbeddedPost = false
   @State var detectedMediaAspectRatio: CGFloat?
-  @State var embeddedLoadFailed = false
-  @State var isPresentingSystemPlayer = false
+  @State var embeddedLoadFailure: EmbeddedWebView.LoadFailure?
+  @State var embeddedReloadID = 0
+  @State var fitsEntireVideo = false
 
   init(
     sourceURL: URL,
     openSourceAction: @escaping () -> Void,
+    reloadID: Int = 0,
+    cachedCanonicalSourceURL: URL? = nil,
     resolveCachedLocalMedia: ((URL) -> PlayableMedia?)? = nil,
     persistLocalMedia: ((URL, PlayableMedia) -> Void)? = nil,
     clearPersistedLocalMedia: (() -> Void)? = nil,
-    reloadID: Int = 0,
     immersive: Bool = false,
     isCovered: Bool = false,
     watchInsets: EdgeInsets = EdgeInsets(),
+    postControlsSummary: WatchPostSummary? = nil,
+    onResolvedSource: ((URL) -> Void)? = nil,
+    onEmbeddedPostVisibilityChange: ((Bool) -> Void)? = nil,
     @ViewBuilder linkContent: () -> LinkContent = { EmptyView() },
-    @ViewBuilder overlayContent: @escaping ((() -> Void)?, Bool) -> OverlayContent = { _, _ in EmptyView() }
+    @ViewBuilder overlayContent: @escaping ((() -> Void)?) -> OverlayContent = { _ in EmptyView() }
   ) {
     self.sourceURL = sourceURL
+    self.reloadID = reloadID
     self.openSourceAction = openSourceAction
+    self.cachedCanonicalSourceURL = cachedCanonicalSourceURL
     self.resolveCachedLocalMedia = resolveCachedLocalMedia
     self.persistLocalMedia = persistLocalMedia
     self.clearPersistedLocalMedia = clearPersistedLocalMedia
-    self.reloadID = reloadID
     self.immersive = immersive
     self.isCovered = isCovered
     self.watchInsets = watchInsets
+    self.postControlsSummary = postControlsSummary
+    self.onResolvedSource = onResolvedSource
+    self.onEmbeddedPostVisibilityChange = onEmbeddedPostVisibilityChange
     self.linkContent = linkContent()
     self.overlayContent = overlayContent
   }
 
   var body: some View {
     content
+      .id(playbackReloadTaskID)
       .frame(maxWidth: .infinity, alignment: .leading)
       .overlay(alignment: .bottom) {
-        overlayContent(saveVideoAction, isShowingNativePlayer)
-          .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { overlayHeight = $0 }
+        if immersive, let postControlsSummary {
+          WatchPostControls(
+            summary: postControlsSummary,
+            topInset: watchInsets.top,
+            bottomInset: watchInsets.bottom,
+            playbackControlsHeight: isShowingNativePlayer ? watchControlsHeight : 0,
+            showsLinkPreview: !isResolvingPresentation && (effectiveMediaStrategy == .link || showsEmbeddedPost),
+            reservesExpandedSpace: effectiveMediaStrategy == .link,
+            onReservedHeightChange: { postControlsReservedHeight = $0 },
+            content: {
+              VStack(alignment: .leading, spacing: LinkstrTheme.rowSpacing) {
+                overlayContent(saveVideoAction)
+                watchPlaybackOptions
+                  .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+              }
+            }
+          )
+        }
       }
       .task(id: playbackReloadTaskID) {
         await reloadPlaybackPresentation()
@@ -82,71 +118,79 @@ struct AdaptiveMediaView<LinkContent: View, OverlayContent: View>: View {
       .task(id: localPreparationTaskID) {
         await prepareMediaIfNeeded()
       }
-      .alert(
-        "save video",
+      .onChange(of: showsEmbeddedPost, initial: true) { _, isVisible in
+        onEmbeddedPostVisibilityChange?(isVisible)
+      }
+      .linkstrVideoSaveDialog(
         isPresented: Binding(
           get: { exportTarget != nil },
-          set: { isPresented in
-            if !isPresented {
-              exportTarget = nil
-            }
-          }
+          set: { if !$0 { exportTarget = nil } }
         ),
-        presenting: exportTarget
-      ) { target in
-        if target.allowsPhotoSave {
-          Button("save to photos") {
-            saveToPhotos(target.fileURL)
-            exportTarget = nil
-          }
-        }
-        Button("save to files") {
-          fileExportItem = LocalFileExportItem(fileURL: target.fileURL)
-          exportTarget = nil
-        }
-        Button("cancel", role: .cancel) {
-          exportTarget = nil
-        }
-      } message: { _ in
-        Text("choose where to save this video.")
-      }
+        target: exportTarget,
+        onSaveToPhotos: saveToPhotos,
+        onSaveToFiles: saveToFiles
+      )
       .sheet(item: $fileExportItem) { item in
         LocalFileExportSheet(url: item.fileURL) { result in
+          // iOS may clear the sheet binding before reporting a completed export.
+          guard item.requestID == resolvedPresentation?.taskID,
+            fileExportItem == nil || fileExportItem?.id == item.id
+          else { return }
           fileExportItem = nil
           switch result {
           case .exported:
-            showExportFeedback(title: "saved", message: "saved to files.")
+            exportFeedback = LocalMediaExportFeedback(message: "saved to files.")
           case .cancelled:
             break
-          case .failed(let message):
-            showExportFeedback(title: "save failed", message: message)
+          case .failed:
+            exportFeedback = LocalMediaExportFeedback(
+              message: "couldn’t save this video to files.", retryFileURL: item.fileURL
+            )
           }
         }
       }
       .alert(
-        exportFeedbackTitle,
+        exportFeedback?.title ?? "",
         isPresented: Binding(
-          get: { exportFeedbackMessage != nil },
+          get: { exportFeedback != nil },
           set: { isPresented in
             if !isPresented {
-              exportFeedbackMessage = nil
+              exportFeedback = nil
             }
           }
         ),
-        actions: {
+        presenting: exportFeedback
+      ) { feedback in
+        if let fileURL = feedback.retryFileURL {
+          Button("save to files") { saveToFiles(fileURL) }
+          Button(LinkstrBrowserAction.title, action: openSourceAction)
+          Button("cancel", role: .cancel) {}
+        } else {
           Button("ok", role: .cancel) {}
-        },
-        message: {
-          Text(exportFeedbackMessage ?? "")
         }
-      )
+      } message: { feedback in
+        Text(feedback.message)
+      }
       .onDisappear {
         cancelLocalCaching()
+        cancelPhotoSave()
       }
   }
 }
 
 extension AdaptiveMediaView {
+  private func saveToFiles(_ fileURL: URL) {
+    fileExportItem = LocalFileExportItem(fileURL: fileURL, requestID: playbackReloadTaskID)
+  }
+
+  private var showsEmbeddedPost: Bool {
+    guard isEmbeddedContentReady, hasRenderedEmbeddedPost,
+      embeddedLoadFailure == nil,
+      let presentation = activeResolvedPresentation, case .embedOnly = presentation.mediaStrategy
+    else { return false }
+    return SocialURLHeuristics.isTwitterStatusURL(presentation.canonicalSourceURL)
+  }
+
   var playbackReloadTaskID: String {
     "\(sourceURL.absoluteString)#\(reloadID)"
   }
@@ -178,9 +222,8 @@ extension AdaptiveMediaView {
   func clearFailedLocalPlaybackState() {
     cancelLocalCaching()
 
-    if clearPersistedLocalMedia == nil,
-      let cachedLocalMedia,
-      cachedLocalMedia.isLocalFile {
+    // A failed file must not be reused by the cache, even when another post references it.
+    if let cachedLocalMedia, cachedLocalMedia.isLocalFile {
       try? FileManager.default.removeItem(at: cachedLocalMedia.playbackURL)
     }
 

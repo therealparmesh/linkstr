@@ -16,7 +16,7 @@ private let facebookVideoDocumentTemplate = """
           padding: 0;
           background: transparent;
           color-scheme: dark;
-          overflow: hidden;
+          overflow-x: hidden;
         }
 
         #facebook-container {
@@ -31,6 +31,18 @@ private let facebookVideoDocumentTemplate = """
           max-width: 100% !important;
           margin: 0 !important;
         }
+
+        #facebook-container span {
+          display: block !important;
+          height: auto !important;
+        }
+
+        #facebook-container iframe {
+          height: auto !important;
+          aspect-ratio: var(--facebook-video-ratio, 1);
+        }
+
+        \(EmbeddedWebSource.fallbackCSS)
       </style>
     </head>
     <body>
@@ -42,18 +54,30 @@ private let facebookVideoDocumentTemplate = """
           const markReady = () => {
             document.body.classList.add("linkstr-embed-ready");
             metricsHandler?.postMessage({
-              height: Math.ceil(document.documentElement.scrollHeight),
+              height: Math.ceil(container.scrollHeight),
               ready: true
             });
           };
 
+          new ResizeObserver(() => {
+            metricsHandler?.postMessage({ height: Math.ceil(container.scrollHeight) });
+          }).observe(container);
+
           const observer = new MutationObserver(() => {
-            if (container.querySelector("iframe")) {
-              observer.disconnect();
-              requestAnimationFrame(markReady);
+            const player = container.querySelector("iframe");
+            if (!player) return;
+            container.querySelector(".linkstr-embed-fallback")?.remove();
+            const width = parseFloat(player.style.width);
+            const height = parseFloat(player.style.height);
+            if (width > 0 && height > 0) {
+              const ratio = String(width / height);
+              if (container.style.getPropertyValue('--facebook-video-ratio') !== ratio) {
+                container.style.setProperty('--facebook-video-ratio', ratio);
+              }
             }
+            requestAnimationFrame(markReady);
           });
-          observer.observe(container, { childList: true, subtree: true });
+          observer.observe(container, { childList: true, subtree: true, attributes: true, attributeFilter: ['style'] });
 
           fetch("__LINKSTR_FACEBOOK_OEMBED_ENDPOINT__")
             .then(response => {
@@ -74,12 +98,21 @@ private let facebookVideoDocumentTemplate = """
                 oldScript.replaceWith(script);
               });
             })
-            .catch(() => {
-              container.textContent = "embedded playback unavailable.";
-              markReady();
-            });
+            .catch(showFallback);
 
-          window.setTimeout(markReady, __LINKSTR_FACEBOOK_READY_TIMEOUT__);
+          function showFallback() {
+            if (container.querySelector(".linkstr-embed-fallback")) return;
+            const fallback = document.createElement("div");
+            fallback.className = "linkstr-embed-fallback";
+            fallback.textContent = "\(EmbeddedWebSource.fallbackMessage)";
+            container.appendChild(fallback);
+            markReady();
+          }
+
+          window.setTimeout(() => {
+            if (!container.querySelector("iframe, .linkstr-embed-fallback")) showFallback();
+            else markReady();
+          }, __LINKSTR_FACEBOOK_READY_TIMEOUT__);
         })();
       </script>
     </body>

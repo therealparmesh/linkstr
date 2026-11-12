@@ -77,14 +77,14 @@ struct SessionMembershipChangeRowView: View {
   private var markerLabel: String {
     switch row.change.kind {
     case .joined:
-      return "in: \(row.displayName)"
+      return "\(row.displayName) became a member"
     case .left:
-      return "out: \(row.displayName)"
+      return "membership ended for \(row.displayName)"
     }
   }
 
   var body: some View {
-    HStack(spacing: 10) {
+    HStack(spacing: LinkstrTheme.buttonRowSpacing) {
       Rectangle()
         .fill(LinkstrTheme.separator)
         .frame(height: 1)
@@ -92,13 +92,15 @@ struct SessionMembershipChangeRowView: View {
       Text(markerLabel)
         .font(LinkstrTheme.font(.caption, weight: .semibold))
         .foregroundStyle(LinkstrTheme.textTertiary)
-        .lineLimit(1)
+        .multilineTextAlignment(.center)
+        .fixedSize(horizontal: false, vertical: true)
+        .layoutPriority(1)
 
       Rectangle()
         .fill(LinkstrTheme.separator)
         .frame(height: 1)
     }
-    .padding(.vertical, 8)
+    .padding(.vertical, LinkstrTheme.compactSpacing)
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(markerLabel)
     .accessibilityValue(row.change.timestamp.linkstrMessageTimestampLabel)

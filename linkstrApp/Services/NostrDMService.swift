@@ -375,7 +375,7 @@ enum NostrServiceError: Error, LocalizedError {
     case .missingIdentity:
       return "you're signed out. sign in to continue."
     case .relayUnavailable:
-      return "you're offline. waiting for a relay connection."
+      return "you’re offline. waiting for a relay connection."
     case .payloadEncodingFailed:
       return "couldn't prepare this message. try again."
     case .invalidPubkey:

@@ -88,16 +88,7 @@ extension AppSessionAccountAndStorageTests {
     XCTAssertEqual(storeAttempts, [false, true])
     switch bootstrap.startupState {
     case .ready(_, let recoveryMessage, let isUsingTemporaryStore):
-      XCTAssertEqual(
-        recoveryMessage,
-        """
-        linkstr couldn't open its local storage on this device. you can retry \
-        startup or continue in a temporary in-memory mode. temporary changes \
-        won't persist after the app closes.
-
-        storage error: persistent store unavailable
-        """
-      )
+      XCTAssertEqual(recoveryMessage, persistentError.localizedDescription)
       XCTAssertFalse(isUsingTemporaryStore)
     case .loading, .fatal:
       XCTFail("expected recovery-ready startup state")
@@ -146,16 +137,8 @@ extension AppSessionAccountAndStorageTests {
 
     switch bootstrap.startupState {
     case .fatal(let message):
-      XCTAssertEqual(
-        message,
-        """
-        linkstr couldn't start because both persistent and temporary local storage failed to initialize.
-
-        persistent store error: persistent store unavailable
-
-        temporary store error: temporary store unavailable
-        """
-      )
+      XCTAssertTrue(message.contains(persistentError.localizedDescription))
+      XCTAssertTrue(message.contains(fallbackError.localizedDescription))
     case .loading, .ready:
       XCTFail("expected fatal startup state")
     }

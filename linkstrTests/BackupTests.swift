@@ -175,6 +175,38 @@ final class BackupTests: AppSessionTestCase {
     XCTAssertEqual(snapshot.reactions.count, original.reactions.count)
   }
 
+  func testFileImportValidatesFormatAndSizeBeforeRestore() async throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let file = directory.appendingPathComponent("backup.linkstrbackup")
+    let worker = BackupWorker()
+    let original = try populatedBackup()
+    try JSONEncoder().encode(original).write(to: file)
+    let imported = try await worker.read(file)
+    XCTAssertEqual(imported.owner, original.owner)
+    XCTAssertEqual(imported.posts.first?.note, original.posts.first?.note)
+
+    for (contents, expected) in [("{}", BackupError.invalidFile), ("{\"version\":2}", .newerVersion)] {
+      try Data(contents.utf8).write(to: file)
+      do {
+        _ = try await worker.read(file)
+        XCTFail("invalid backup was accepted")
+      } catch { XCTAssertEqual(error as? BackupError, expected) }
+    }
+    let handle = try FileHandle(forWritingTo: file)
+    try handle.truncate(atOffset: UInt64(LinkstrBackup.maximumFileBytes + 1))
+    try handle.close()
+    do {
+      _ = try await worker.read(file)
+      XCTFail("oversized backup was accepted")
+    } catch { XCTAssertEqual(error as? BackupError, .tooLarge) }
+    do {
+      _ = try await worker.read(directory)
+      XCTFail("directory was accepted as a backup")
+    } catch { XCTAssertEqual(error as? BackupError, .invalidFile) }
+  }
+
   private func populatedBackup() throws -> LinkstrBackup {
     let keypair = try XCTUnwrap(Keypair())
     let owner = keypair.publicKey.hex

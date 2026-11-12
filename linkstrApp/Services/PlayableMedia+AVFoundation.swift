@@ -7,7 +7,12 @@ extension PlayableMedia {
 
     do {
       let videoTracks = try await asset.loadTracks(withMediaType: .video)
-      guard !Task.isCancelled, !videoTracks.isEmpty else { return nil }
+      if videoTracks.isEmpty {
+        // HLS may have no asset tracks until playback, including downloaded packages.
+        let isHLS = playbackURL.absoluteString.lowercased().contains(".m3u8") || asset.assetCache != nil
+        guard isHLS, try await asset.load(.isPlayable) else { return nil }
+      }
+      guard !Task.isCancelled else { return nil }
       return asset
     } catch {
       return nil

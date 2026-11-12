@@ -42,7 +42,7 @@ enum TwitterEmbedDocumentBuilder {
               padding: 0;
               background: transparent;
               color-scheme: dark;
-              overflow: hidden;
+              overflow-x: hidden;
             }
 
             body {
@@ -57,8 +57,6 @@ enum TwitterEmbedDocumentBuilder {
             #tweet-container {
               width: 100%;
               min-height: 220px;
-              display: flex;
-              justify-content: center;
             }
 
             #tweet-container > * {
@@ -72,18 +70,7 @@ enum TwitterEmbedDocumentBuilder {
               max-width: 100% !important;
             }
 
-            .linkstr-embed-fallback {
-              min-height: 220px;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              padding: 24px;
-              color: rgba(255, 255, 255, 0.74);
-              text-align: center;
-              font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
-              font-size: 15px;
-              line-height: 1.4;
-            }
+            \(EmbeddedWebSource.fallbackCSS)
     """
   }
 
@@ -129,21 +116,16 @@ enum TwitterEmbedDocumentBuilder {
                       const metricsHandler = window.webkit?.messageHandlers?.linkstrEmbedMetrics;
 
                       const height = () => Math.max(
-                        root?.scrollHeight ?? 0,
-                        body?.scrollHeight ?? 0,
                         container?.scrollHeight ?? 0,
-                        root?.offsetHeight ?? 0,
-                        body?.offsetHeight ?? 0,
                         container?.offsetHeight ?? 0,
-                        root?.clientHeight ?? 0,
-                        body?.clientHeight ?? 0,
                         container?.clientHeight ?? 0
                       );
 
                       const postMetrics = (readyOverride) => {
                         metricsHandler?.postMessage({
                           height: Math.ceil(height()),
-                          ready: readyOverride ?? body.classList.contains(readyClass)
+                          ready: readyOverride ?? body.classList.contains(readyClass),
+                          hasRenderedPost: Boolean(hasRenderedTweet())
                         });
                       };
 
@@ -180,18 +162,22 @@ enum TwitterEmbedDocumentBuilder {
                       };
 
                       const showFallback = () => {
-                        if (!container || container.children.length > 0) {
+                        if (!container || hasRenderedTweet() || container.querySelector('.linkstr-embed-fallback')) {
                           markReady();
                           return;
                         }
 
-                        container.innerHTML =
-                          '<div class="linkstr-embed-fallback">' +
-                          'couldn\\'t load this post preview. use open in browser.</div>';
+                        const fallback = document.createElement("div");
+                        fallback.className = "linkstr-embed-fallback";
+                        fallback.textContent = "\(EmbeddedWebSource.fallbackMessage)";
+                        container.appendChild(fallback);
                         markReady();
                       };
 
                       const refresh = () => {
+                        if (hasRenderedTweet()) {
+                          container.querySelector('.linkstr-embed-fallback')?.remove();
+                        }
                         sizeRenderedTweet();
                         postMetrics();
                         if (hasRenderedTweet()) {

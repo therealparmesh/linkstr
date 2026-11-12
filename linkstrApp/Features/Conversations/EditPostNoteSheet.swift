@@ -1,13 +1,17 @@
 import SwiftUI
 
 struct EditPostNoteSheet: View {
+  private enum Field: Hashable {
+    case note
+  }
+
   @Environment(\.dismiss) private var dismiss
   @EnvironmentObject private var session: AppSession
 
   let post: SessionMessageEntity
   @State private var draft: String
   @State private var isSaving = false
-  @FocusState private var isNoteFocused: Bool
+  @FocusState private var focusedField: Field?
   @State private var feedback = LinkstrSheetMutationFeedback()
 
   init(post: SessionMessageEntity) {
@@ -15,75 +19,85 @@ struct EditPostNoteSheet: View {
     _draft = State(initialValue: post.note ?? "")
   }
 
+  private var originalNote: String? { LinkstrPostPreview.text(post.note) }
   private var normalizedDraft: String? { LinkstrPostPreview.text(draft) }
+  private var isRemovingNote: Bool { originalNote != nil && normalizedDraft == nil }
+  private var canSave: Bool { !isSaving && normalizedDraft != originalNote }
 
   private var status: LinkstrSheetFooterStatus? {
-    feedback.footerStatus(isRunning: isSaving, progressMessage: "waiting for a relay connection")
+    feedback.footerStatus(isRunning: isSaving, progressMessage: "saving note…")
   }
 
   var body: some View {
     NavigationStack {
       ScrollView {
-        VStack(alignment: .leading, spacing: 12) {
-          Text("your note")
-            .font(LinkstrTheme.font(.subheadline, weight: .semibold))
-            .foregroundStyle(LinkstrTheme.textPrimary)
-          ZStack(alignment: .topLeading) {
-            if draft.isEmpty {
-              Text("say something about this link")
-                .foregroundStyle(LinkstrTheme.textSecondary)
-                .padding(.top, 8)
-                .padding(.leading, 5)
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
-            }
+        VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
+          LinkstrSheetTitle(title: originalNote == nil ? "add a note" : "edit note")
 
-            TextEditor(text: $draft)
-              .scrollContentBackground(.hidden)
-              .frame(minHeight: 100, maxHeight: 180)
+          LinkstrInsetSection(title: "note", footer: noteFooter) {
+            LinkstrNoteEditor(note: $draft, isDisabled: isSaving, focusedField: $focusedField, field: .note)
+              .id(Field.note)
+            if !draft.isEmpty {
+              Button {
+                draft = ""
+              } label: {
+                LinkstrActionButtonLabel(title: "clear text", systemImage: "xmark.circle")
+              }
+              .linkstrSecondaryButton()
               .disabled(isSaving)
-              .focused($isNoteFocused)
-              .accessibilityLabel("your note")
+            }
           }
-          .font(LinkstrTheme.font(.body))
-          .padding(9)
-          .linkstrFieldChrome()
-
-          Text("leave it blank to remove your note.")
-            .font(LinkstrTheme.font(.caption))
-            .foregroundStyle(LinkstrTheme.textSecondary)
         }
-        .padding(LinkstrTheme.screenHorizontalPadding)
+        .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+        .padding(.top, LinkstrTheme.screenTopPadding)
+        .padding(.bottom, LinkstrTheme.screenBottomPadding)
         .linkstrReadableContent()
       }
       .background(LinkstrBackgroundView())
-      .navigationTitle(post.note == nil ? "add a note" : "edit note")
+      .linkstrBarChrome()
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
-          Button("cancel") { dismiss() }.disabled(isSaving)
+          LinkstrHeaderButton(title: "cancel", icon: "xmark") { dismiss() }
+            .disabled(isSaving)
         }
+        .linkstrFlatToolbarItem()
         ToolbarItem(placement: .confirmationAction) {
-          Button(isSaving ? "saving…" : "save", action: save)
-            .disabled(isSaving || normalizedDraft == LinkstrPostPreview.text(post.note))
+          LinkstrHeaderButton(
+            title: isRemovingNote ? "remove note" : "save note",
+            icon: isRemovingNote ? "trash" : "checkmark",
+            foreground: isRemovingNote ? LinkstrTheme.destructive : LinkstrTheme.accent,
+            action: save
+          )
+          .disabled(!canSave)
         }
+        .linkstrFlatToolbarItem()
       }
       .safeAreaInset(edge: .bottom, spacing: 0) {
         if let status {
           LinkstrSheetStatusFooter(message: status.message, messageColor: status.color)
         }
       }
-      .onAppear { isNoteFocused = true }
+      .onAppear { focusedField = .note }
       .linkstrKeyboardDismissal()
+      .modifier(LinkstrFocusedFieldScrolling(focusedField: focusedField))
       .interactiveDismissDisabled(isSaving)
       .onChange(of: draft) { _, _ in feedback.clear() }
     }
   }
 
+  private var noteFooter: String? {
+    guard originalNote != nil else { return nil }
+    return isRemovingNote
+      ? "confirm to remove the note from this post."
+      : "clear the text and confirm to remove your note."
+  }
+
   private func save() {
+    guard canSave else { return }
     let note = normalizedDraft
     isSaving = true
-    isNoteFocused = false
+    focusedField = nil
     feedback.clear()
     Task { @MainActor in
       let result = await session.performFormMutation {

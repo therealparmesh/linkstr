@@ -7,23 +7,25 @@ import SwiftUI
 // MARK: - AdaptiveMediaView Controls & Helpers
 
 extension AdaptiveMediaView {
+  private var sharedLinkLoadingHeight: CGFloat { 180 }
+
   var isMediaCovered: Bool {
     isCovered || isUnderlyingMediaCovered || exportTarget != nil
-      || fileExportItem != nil || exportFeedbackMessage != nil
+      || fileExportItem != nil || exportFeedback != nil || photoSaveTask != nil
   }
 
   @ViewBuilder
   var content: some View {
     if isResolvingPresentation, immersive {
       watchContentArea { _ in
-        mediaStatus("loading post", message: "", isLoading: true)
+        loadingIndicator("loading post")
       }
     } else if isResolvingPresentation {
-      VStack(alignment: .leading, spacing: 8) {
-        mediaSurface {
+      VStack(alignment: .leading, spacing: LinkstrTheme.compactSpacing) {
+        LinkstrBrowserButton(action: openSourceAction)
+        mediaSurface(explicitHeight: sharedLinkLoadingHeight) {
           loadingIndicator("loading post")
         }
-        openInBrowserButton(action: openSourceAction)
       }
     } else {
       switch effectiveMediaStrategy {
@@ -37,18 +39,24 @@ extension AdaptiveMediaView {
       case .embedOnly(let embedURL):
         embedPlaybackBlock(
           embedSource: resolvedOrFallbackEmbedSource(embedURL), allowsTryLocalPlayback: false)
+      case .directVideo:
+        if localPlaybackMode == .embedPreferred {
+          directVideoUnavailable
+        } else {
+          extractionPlaybackBlock(embedSource: nil)
+        }
       case .link:
         if immersive {
           watchContentArea { _ in linkContent }
         } else {
-          openInBrowserButton(action: openSourceAction)
+          LinkstrBrowserButton(action: openSourceAction)
         }
       }
     }
   }
 
   @ViewBuilder
-  func extractionPlaybackBlock(embedSource: EmbeddedWebSource) -> some View {
+  func extractionPlaybackBlock(embedSource: EmbeddedWebSource?) -> some View {
     switch extractionState {
     case .ready(let candidates):
       if let media = currentPlaybackCandidate(from: candidates) {
@@ -75,44 +83,73 @@ extension AdaptiveMediaView {
           aspectRatio: effectiveMediaAspectRatio,
           isCovered: isMediaCovered,
           watchBottomInset: watchInsets.bottom,
-          systemPlayerRequest: immersive ? $isPresentingSystemPlayer : nil
+          watchVideoInsets: fitsEntireVideo ? EdgeInsets(
+            top: watchInsets.top, leading: watchInsets.leading,
+            bottom: watchInsets.bottom + postControlsReservedHeight + watchControlsHeight,
+            trailing: watchInsets.trailing
+          ) : nil,
+          onWatchControlsHeightChange: { watchControlsHeight = $0 }
         )
-        localPlayerBlock(player, exportFileURL: exportFileURL)
+        localPlayerBlock(player, exportFileURL: exportFileURL, offersEmbed: embedSource != nil)
       } else {
-        embedPlaybackBlock(embedSource: embedSource, allowsTryLocalPlayback: true)
+        fallbackPlaybackBlock(embedSource)
       }
 
     case .noVideo, .cannotExtract:
-      embedPlaybackBlock(embedSource: embedSource, allowsTryLocalPlayback: true)
+      fallbackPlaybackBlock(embedSource)
 
     case nil:
-      if immersive {
-        ZStack(alignment: .topTrailing) {
-          watchContentArea { _ in
-            mediaStatus("getting video ready", message: "you can switch to the official embed while this loads.",
-                        isLoading: true, offersEmbed: true)
-          }
-          immersivePlaybackMenu(local: true)
+      localPlaybackLoading(offersEmbed: embedSource != nil)
+    }
+  }
+
+  @ViewBuilder
+  private func localPlaybackLoading(offersEmbed: Bool) -> some View {
+    if immersive {
+      watchContentArea { _ in
+        VStack(spacing: LinkstrTheme.rowSpacing) {
+          loadingIndicator("getting video ready")
+          localPlaybackActions(exportFileURL: nil, offersEmbed: offersEmbed)
         }
-      } else {
-        VStack(alignment: .leading, spacing: 8) {
-          mediaSurface { loadingIndicator("getting video ready") }
-          localPlaybackActions(exportFileURL: nil)
-        }
+      }
+    } else {
+      VStack(alignment: .leading, spacing: LinkstrTheme.compactSpacing) {
+        localPlaybackActions(exportFileURL: nil, offersEmbed: offersEmbed)
+        mediaSurface(explicitHeight: sharedLinkLoadingHeight) { loadingIndicator("getting video ready") }
       }
     }
   }
 
   @ViewBuilder
-  private func localPlayerBlock(_ player: InlineVideoPlayer, exportFileURL: URL?) -> some View {
-    if immersive {
-      player.overlay(alignment: .topTrailing) {
-        immersivePlaybackMenu(local: true, showsSystemPlayer: true)
-      }
+  private func fallbackPlaybackBlock(_ embedSource: EmbeddedWebSource?) -> some View {
+    if let embedSource {
+      embedPlaybackBlock(embedSource: embedSource, allowsTryLocalPlayback: true)
     } else {
-      VStack(alignment: .leading, spacing: 8) {
+      directVideoUnavailable
+    }
+  }
+
+  @ViewBuilder
+  private var directVideoUnavailable: some View {
+    if immersive {
+      watchContentArea { _ in directVideoRecovery }
+    } else {
+      directVideoRecovery
+    }
+  }
+
+  private var directVideoRecovery: some View {
+    mediaRecovery("couldn’t play this video", retry: tryLocalPlayback)
+  }
+
+  @ViewBuilder
+  private func localPlayerBlock(_ player: InlineVideoPlayer, exportFileURL: URL?, offersEmbed: Bool) -> some View {
+    if immersive {
+      player
+    } else {
+      VStack(alignment: .leading, spacing: LinkstrTheme.compactSpacing) {
+        localPlaybackActions(exportFileURL: exportFileURL, offersEmbed: offersEmbed)
         mediaSurface { player }
-        localPlaybackActions(exportFileURL: exportFileURL)
       }
     }
   }
@@ -122,22 +159,27 @@ extension AdaptiveMediaView {
     embedSource: EmbeddedWebSource,
     allowsTryLocalPlayback: Bool
   ) -> some View {
+    let canRetry = isRenderableEmbedSource(embedSource)
     if immersive {
-      watchContentArea { size in
-        if isRenderableEmbedSource(embedSource), !embeddedLoadFailed {
+      watchContentArea(
+        edgeToEdge: canRetry && embeddedLoadFailure == nil && !embedSource.usesManagedHTMLDocument
+      ) { size in
+        if canRetry, embeddedLoadFailure == nil {
           let isDocument = embedSource.usesManagedHTMLDocument
-          let width = isDocument ? size.width : min(size.width, size.height * effectiveMediaAspectRatio)
-          let height = min(size.height, embedSurfaceHeight(for: embedSource) ?? width / effectiveMediaAspectRatio)
-          embeddedPlayerSurface(embedSource, explicitHeight: height, allowsVerticalScroll: isDocument)
+          let aspectRatio = effectiveMediaAspectRatio
+          let fittedWidth = isDocument ? size.width : min(size.width, size.height * aspectRatio)
+          // Give portrait web players room to lay out their controls before scaling them down.
+          let width = !isDocument && aspectRatio < 1 ? max(320, fittedWidth) : fittedWidth
+          let documentHeight = embedSurfaceHeight(for: embedSource) ?? width / aspectRatio
+          let scalesToFit = embedSource.isFacebookVideoDocument || width > fittedWidth
+          let height = scalesToFit ? documentHeight : min(size.height, documentHeight)
+          let scale = scalesToFit ? min(1, fittedWidth / width, size.height / height) : 1
+          embeddedPlayerSurface(embedSource, explicitHeight: height, allowsVerticalScroll: isDocument && !scalesToFit)
             .frame(width: width)
+            .scaleEffect(scale)
+            .frame(width: width * scale, height: height * scale)
         } else {
-          mediaStatus("can't load this post", message: "try again or open the original in your browser.",
-                      isLoading: false, offersEmbed: false, offersRetry: isRenderableEmbedSource(embedSource))
-        }
-      }
-      .overlay(alignment: .topTrailing) {
-        if allowsTryLocalPlayback {
-          immersivePlaybackMenu(local: false)
+          embedRecovery(canRetry: canRetry, offersModeSwitch: allowsTryLocalPlayback)
         }
       }
     } else {
@@ -148,41 +190,38 @@ extension AdaptiveMediaView {
   private func standardEmbedPlaybackBlock(
     embedSource: EmbeddedWebSource, allowsTryLocalPlayback: Bool
   ) -> some View {
-    VStack(alignment: .leading, spacing: 8) {
-      if isRenderableEmbedSource(embedSource), !embeddedLoadFailed {
+    let canRetry = isRenderableEmbedSource(embedSource)
+    return VStack(alignment: .leading, spacing: LinkstrTheme.compactSpacing) {
+      if canRetry, embeddedLoadFailure == nil {
+        secondaryActionButton("retry embed", systemImage: "arrow.clockwise", action: retryEmbeddedPlayback)
+        LinkstrBrowserButton(action: openSourceAction)
+        if allowsTryLocalPlayback { tryLocalPlaybackButton }
         embeddedPlayerSurface(embedSource)
       } else {
-        Text("embedded playback unavailable. open the original post to view it.")
-          .font(LinkstrTheme.font(.caption))
-          .foregroundStyle(LinkstrTheme.textSecondary)
-          .frame(maxWidth: .infinity, alignment: .leading)
-      }
-
-      if extractionFallbackReason != nil {
-        Text("in-app video unavailable. try the official embed or open the original post.")
-          .font(LinkstrTheme.font(.caption))
-          .foregroundStyle(LinkstrTheme.textSecondary)
-      }
-
-      if embeddedLoadFailed, isRenderableEmbedSource(embedSource) {
-        secondaryActionButton("retry embed", action: retryEmbeddedPlayback)
-      }
-      if allowsTryLocalPlayback {
-        playbackModeActions {
-          tryLocalPlaybackButton
-        }
-      } else {
-        openInBrowserButton(action: openSourceAction)
+        embedRecovery(canRetry: canRetry, offersModeSwitch: allowsTryLocalPlayback)
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
   }
 
+  private func embedRecovery(canRetry: Bool, offersModeSwitch: Bool) -> some View {
+    mediaRecovery(
+      embeddedLoadFailure == .tiktokRateLimited
+        ? "tiktok is limiting requests"
+        : "couldn’t load the official embed",
+      retry: canRetry ? retryEmbeddedPlayback : nil,
+      offersLocalPlayback: offersModeSwitch
+    )
+  }
+
   func embeddedPlayerSurface(
     _ embedSource: EmbeddedWebSource, explicitHeight: CGFloat? = nil, allowsVerticalScroll: Bool = false
   ) -> some View {
-    mediaSurface(explicitHeight: explicitHeight ?? embedSurfaceHeight(for: embedSource)) {
-      ZStack {
+    let waitsForEmbed = !isEmbeddedContentReady
+    let hidesDocument = embedSource.usesManagedHTMLDocument && waitsForEmbed
+    let height = explicitHeight ?? (hidesDocument ? sharedLinkLoadingHeight : embedSurfaceHeight(for: embedSource))
+    return mediaSurface(explicitHeight: height) { Color.clear }
+      .overlay {
         EmbeddedWebView(
           source: embedSource,
           onIntrinsicHeightChange: { height in
@@ -192,113 +231,91 @@ extension AdaptiveMediaView {
           onContentReadyChange: { isReady in
             isEmbeddedContentReady = isReady
           },
-          onLoadFailure: {
-            embeddedLoadFailed = true
+          onRenderedPostChange: { hasRenderedEmbeddedPost = $0 },
+          onProviderFailure: {
+            LinkstrPlaybackDiagnostics.logger.notice("official player reported a provider error")
           },
-          isPlaybackSuspended: immersive && (isMediaCovered || scenePhase != .active),
+          onLoadFailure: { failure in
+            if embeddedLoadFailure == nil {
+              LinkstrPlaybackDiagnostics.logger.notice(
+                "official embed failed; rate limited: \(failure == .tiktokRateLimited)"
+              )
+              embeddedLoadFailure = failure
+            }
+          },
+          isPlaybackSuspended: isMediaCovered || (immersive && scenePhase != .active),
           allowsVerticalScroll: allowsVerticalScroll
         )
+        .id(embeddedReloadID)
         .scopedPlaybackAudioSession()
-        .opacity(isEmbeddedContentReady ? 1 : 0)
-        .task(id: embedSource) {
-          do { try await Task.sleep(for: .seconds(20)) } catch { return }
-          guard !Task.isCancelled, !isEmbeddedContentReady else { return }
-          embeddedLoadFailed = true
-        }
+        .opacity(hidesDocument ? 0 : 1)
+        .allowsHitTesting(!hidesDocument)
+        .accessibilityHidden(hidesDocument)
 
-        if !isEmbeddedContentReady, immersive {
-          mediaStatus("loading embed", message: "", isLoading: true)
-        } else if !isEmbeddedContentReady {
+        if waitsForEmbed {
           loadingIndicator("loading embed")
+            .allowsHitTesting(false)
+        }
+      }
+      .clipShape(.rect(cornerRadius: LinkstrTheme.fieldCornerRadius))
+  }
+
+  var watchPlaybackOptions: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      LinkstrListRowDivider(leadingInset: 0)
+      if canRetryOfficialEmbed {
+        watchPlaybackRow("retry embed", icon: "arrow.clockwise", action: retryEmbeddedPlayback)
+      }
+      watchPlaybackRow(LinkstrBrowserAction.title, icon: LinkstrBrowserAction.icon, action: openSourceAction)
+      if effectiveMediaStrategy.allowsLocalPlaybackToggle {
+        if localPlaybackMode == .localPreferred && (isShowingNativePlayer || extractionState == nil) {
+          watchPlaybackRow(officialEmbedActionTitle, icon: "rectangle.inset.filled", action: useOfficialEmbed)
+        } else {
+          watchPlaybackRow(localPlaybackActionTitle, icon: "play.rectangle", action: tryLocalPlayback)
+        }
+      }
+      if isShowingNativePlayer {
+        watchPlaybackRow(
+          fitsEntireVideo ? "fill screen" : "fit entire video",
+          icon: fitsEntireVideo ? "arrow.up.left.and.arrow.down.right" : "arrow.down.right.and.arrow.up.left"
+        ) {
+          fitsEntireVideo.toggle()
         }
       }
     }
   }
 
-  func localPlaybackActions(exportFileURL: URL?) -> some View {
-    VStack(spacing: 8) {
-      playbackModeActions {
-        useEmbeddedButton
-      }
-      if let exportFileURL {
-        saveButton(for: exportFileURL)
-      }
+  private var canRetryOfficialEmbed: Bool {
+    guard !isResolvingPresentation else { return false }
+    switch effectiveMediaStrategy {
+    case .embedOnly(let url):
+      return isRenderableEmbedSource(resolvedOrFallbackEmbedSource(url))
+    case .extractionPreferred(let url):
+      let showsEmbed = localPlaybackMode == .embedPreferred || (extractionState != nil && !isShowingNativePlayer)
+      return showsEmbed && isRenderableEmbedSource(resolvedOrFallbackEmbedSource(url))
+    case .directVideo, .link:
+      return false
     }
   }
 
-  func playbackModeActions<Action: View>(
-    @ViewBuilder action: () -> Action
-  ) -> some View {
-    HStack(spacing: 8) {
-      action()
-      openInBrowserButton(action: openSourceAction)
-    }
-  }
-
-  var useEmbeddedButton: some View {
-    secondaryActionButton("use official embed") {
-      cancelLocalCaching()
-      localPlaybackMode = .embedPreferred
-    }
-  }
-
-  var tryLocalPlaybackButton: some View {
-    secondaryActionButton("try extracted video") {
-      tryLocalPlayback()
-    }
-  }
-
-  func openInBrowserButton(action: @escaping () -> Void) -> some View {
-    secondaryActionButton("open in browser") {
-      action()
-    }
-  }
-
-  func saveButton(for fileURL: URL) -> some View {
-    secondaryActionButton("save video") {
-      exportTarget = LocalMediaExportTarget(
-        fileURL: fileURL,
-        allowsPhotoSave: supportsPhotoSave(fileURL: fileURL)
-      )
-    }
-  }
-
-  func secondaryActionButton(_ title: String, action: @escaping () -> Void) -> some View {
+  private func watchPlaybackRow(_ title: String, icon: String, action: @escaping () -> Void) -> some View {
     Button(action: action) {
-      LinkstrActionButtonLabel(title: title)
+      HStack(spacing: LinkstrTheme.rowSpacing) {
+        Image(systemName: icon)
+          .frame(minWidth: 22)
+          .foregroundStyle(LinkstrTheme.accent)
+          .accessibilityHidden(true)
+        Text(title)
+          .foregroundStyle(LinkstrTheme.textPrimary)
+          .multilineTextAlignment(.leading)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+      .font(LinkstrTheme.font(.subheadline, weight: .medium))
+      .padding(.vertical, LinkstrTheme.tightSpacing)
+      .frame(maxWidth: .infinity, minHeight: LinkstrTheme.minimumInteractiveDimension, alignment: .leading)
+      .contentShape(Rectangle())
     }
-    .frame(maxWidth: .infinity)
-    .linkstrSecondaryButton()
-  }
-
-  func tryLocalPlayback() {
-    if extractionFallbackReason != nil, cachedLocalMedia == nil {
-      clearFailedLocalPlaybackState()
-    }
-    localPlaybackMode = .localPreferred
-    localPlaybackRequestID += 1
-    playbackCandidateIndex = 0
-    embeddedContentHeight = nil
-    isEmbeddedContentReady = false
-    detectedMediaAspectRatio = nil
-    embeddedLoadFailed = false
-    extractionState = nil
-    extractionFallbackReason = nil
-  }
-
-  func handlePlaybackFailure(currentMedia: PlayableMedia, candidates: [PlayableMedia]) {
-    if currentMedia.isLocalFile || cachedLocalMedia != nil {
-      clearFailedLocalPlaybackState()
-    } else {
-      cancelLocalCaching()
-    }
-
-    if currentMedia.isLocalFile {
-      tryLocalPlayback()
-      return
-    }
-
-    advancePlaybackCandidate(candidates: candidates)
+    .buttonStyle(.plain)
   }
 
   func currentPlaybackCandidate(from candidates: [PlayableMedia]) -> PlayableMedia? {
@@ -311,17 +328,6 @@ extension AdaptiveMediaView {
       case .ready(let candidates) = extractionState
     else { return false }
     return currentPlaybackCandidate(from: candidates)?.playbackURL == media.playbackURL
-  }
-
-  func advancePlaybackCandidate(candidates: [PlayableMedia]) {
-    let nextIndex = playbackCandidateIndex + 1
-    if nextIndex < candidates.count {
-      detectedMediaAspectRatio = nil
-      playbackCandidateIndex = nextIndex
-    } else {
-      extractionFallbackReason = "none of the extracted video streams were playable."
-      localPlaybackMode = .embedPreferred
-    }
   }
 
   func mediaSurface<Content: View>(
@@ -340,7 +346,7 @@ extension AdaptiveMediaView {
       }
     }
     .background(LinkstrTheme.panelMuted)
-    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    .clipShape(RoundedRectangle(cornerRadius: LinkstrTheme.fieldCornerRadius, style: .continuous))
   }
 
   func isRenderableEmbedSource(_ embedSource: EmbeddedWebSource) -> Bool {
@@ -370,13 +376,5 @@ extension AdaptiveMediaView {
     guard fileURL.isFileURL else { return nil }
     guard FileManager.default.fileExists(atPath: fileURL.path) else { return nil }
     return fileURL
-  }
-
-  func supportsPhotoSave(fileURL: URL) -> Bool {
-    guard fileURL.isFileURL else { return false }
-    let isDirectory = (try? fileURL.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
-    if isDirectory { return false }
-    let ext = fileURL.pathExtension.lowercased()
-    return ext == "mp4" || ext == "mov" || ext == "m4v"
   }
 }

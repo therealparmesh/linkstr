@@ -30,15 +30,14 @@ struct LinkstrAppMain: App {
   }
 
   private static func configureNavigationAppearance() {
-    let chromeColor = UIColor(red: 0.09, green: 0.10, blue: 0.16, alpha: 0.88)
-    let textColor = UIColor(red: 0.92, green: 0.94, blue: 0.99, alpha: 1)
-    let secondaryColor = UIColor(red: 0.66, green: 0.71, blue: 0.84, alpha: 1)
-    let accentColor = UIColor(red: 0.49, green: 0.67, blue: 0.99, alpha: 1)
-    let separatorColor = UIColor.white.withAlphaComponent(0.06)
+    let chromeColor = UIColor(LinkstrTheme.chrome)
+    let textColor = UIColor(LinkstrTheme.textPrimary)
+    let secondaryColor = UIColor(LinkstrTheme.textSecondary)
+    let accentColor = UIColor(LinkstrTheme.accent)
+    let separatorColor = UIColor(LinkstrTheme.separator)
 
     let navigationAppearance = UINavigationBarAppearance()
-    navigationAppearance.configureWithTransparentBackground()
-    navigationAppearance.backgroundEffect = UIBlurEffect(style: .systemThinMaterialDark)
+    navigationAppearance.configureWithOpaqueBackground()
     navigationAppearance.backgroundColor = chromeColor
     navigationAppearance.shadowColor = separatorColor
     navigationAppearance.titleTextAttributes = [.foregroundColor: textColor]
@@ -51,8 +50,7 @@ struct LinkstrAppMain: App {
     navigationBarAppearance.tintColor = accentColor
 
     let tabBarAppearance = UITabBarAppearance()
-    tabBarAppearance.configureWithTransparentBackground()
-    tabBarAppearance.backgroundEffect = UIBlurEffect(style: .systemThinMaterialDark)
+    tabBarAppearance.configureWithOpaqueBackground()
     tabBarAppearance.backgroundColor = chromeColor
     tabBarAppearance.shadowColor = separatorColor
 
@@ -81,20 +79,18 @@ struct LinkstrAppMain: App {
     WindowGroup {
       Group {
         switch bootstrap.startupState {
-        case .ready(let readyContext, let recoveryMessage, let isUsingTemporaryStore):
+        case .ready(let readyContext, let storageIssue, let isUsingTemporaryStore):
           Group {
-            if let recoveryMessage, !isUsingTemporaryStore {
+            if let storageIssue, !isUsingTemporaryStore {
               LinkstrStorageRecoveryView(
                 title: "local storage unavailable",
-                message: recoveryMessage,
-                primaryActionTitle: "continue temporarily",
-                onPrimaryAction: {
-                  bootstrap.continueWithTemporaryStore()
-                },
-                secondaryActionTitle: "retry startup",
-                onSecondaryAction: {
-                  bootstrap.reload()
-                }
+                message: "linkstr couldn’t open saved data. retry startup or continue temporarily. "
+                  + "changes you make in temporary mode won’t be saved when the app closes.",
+                diagnostics: storageIssue,
+                primaryActionTitle: "retry startup",
+                onPrimaryAction: { bootstrap.reload() },
+                secondaryActionTitle: "continue temporarily",
+                onSecondaryAction: { bootstrap.continueWithTemporaryStore() }
               )
             } else {
               RootView()
@@ -138,10 +134,11 @@ struct LinkstrAppMain: App {
             }
           }
           .modelContainer(readyContext.container)
-        case .fatal(let fatalStartupMessage):
+        case .fatal(let diagnostics):
           LinkstrStorageRecoveryView(
-            title: "startup failed",
-            message: fatalStartupMessage,
+            title: "couldn’t start linkstr",
+            message: "local storage and temporary mode are unavailable. retry startup.",
+            diagnostics: diagnostics,
             primaryActionTitle: "retry startup",
             onPrimaryAction: {
               bootstrap.reload()
@@ -165,6 +162,7 @@ struct LinkstrAppMain: App {
       .onOpenURL { url in
         deepLinkHandler.handle(url: url)
       }
+      .preferredColorScheme(.dark)
     }
   }
 }
@@ -196,7 +194,7 @@ final class AppBootstrapState: ObservableObject {
 
   enum StartupState {
     case loading
-    case ready(ReadyContext, recoveryMessage: String?, isUsingTemporaryStore: Bool)
+    case ready(ReadyContext, storageIssue: String?, isUsingTemporaryStore: Bool)
     case fatal(String)
   }
 
@@ -224,7 +222,7 @@ final class AppBootstrapState: ObservableObject {
         container: container,
         session: makeSession(container.mainContext)
       )
-      startupState = .ready(readyContext, recoveryMessage: nil, isUsingTemporaryStore: false)
+      startupState = .ready(readyContext, storageIssue: nil, isUsingTemporaryStore: false)
     } catch {
       NSLog("Persistent store unavailable, attempting in-memory recovery: \(error)")
 
@@ -238,12 +236,12 @@ final class AppBootstrapState: ObservableObject {
         readyContext.session.isUsingRecoveryStore = true
         startupState = .ready(
           readyContext,
-          recoveryMessage: Self.recoveryMessage(for: error),
+          storageIssue: error.localizedDescription,
           isUsingTemporaryStore: false
         )
       } catch let fallbackError {
         startupState = .fatal(
-          Self.fatalStartupMessage(
+          Self.fatalStorageDiagnostics(
             persistentStoreError: error,
             fallbackError: fallbackError
           )
@@ -253,10 +251,10 @@ final class AppBootstrapState: ObservableObject {
   }
 
   func continueWithTemporaryStore() {
-    guard case .ready(let readyContext, let recoveryMessage, _) = startupState else { return }
+    guard case .ready(let readyContext, let storageIssue, _) = startupState else { return }
     startupState = .ready(
       readyContext,
-      recoveryMessage: recoveryMessage,
+      storageIssue: storageIssue,
       isUsingTemporaryStore: true
     )
   }
@@ -273,26 +271,7 @@ final class AppBootstrapState: ObservableObject {
     return try ModelContainer(for: schema, configurations: [configuration])
   }
 
-  private static func recoveryMessage(for error: Error) -> String {
-    let description = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
-    if description.isEmpty {
-      return
-        "linkstr couldn't open its local storage on this device. "
-        + "you can retry startup or continue in a temporary in-memory "
-        + "mode. temporary changes won't persist after the app closes."
-    }
-
-    return
-      """
-      linkstr couldn't open its local storage on this device. you can retry \
-      startup or continue in a temporary in-memory mode. temporary changes \
-      won't persist after the app closes.
-
-      storage error: \(description)
-      """
-  }
-
-  private static func fatalStartupMessage(
+  private static func fatalStorageDiagnostics(
     persistentStoreError: Error,
     fallbackError: Error
   ) -> String {
@@ -305,12 +284,8 @@ final class AppBootstrapState: ObservableObject {
 
     return
       """
-      linkstr couldn't start because both persistent and temporary local \
-      storage failed to initialize.
-
-      persistent store error: \(persistentDescription)
-
-      temporary store error: \(fallbackDescription)
+      saved storage: \(persistentDescription)
+      temporary storage: \(fallbackDescription)
       """
   }
 }
@@ -318,6 +293,7 @@ final class AppBootstrapState: ObservableObject {
 struct LinkstrStorageRecoveryView: View {
   let title: String
   let message: String
+  var diagnostics: String?
   let primaryActionTitle: String
   let onPrimaryAction: () -> Void
   let secondaryActionTitle: String?
@@ -333,7 +309,7 @@ struct LinkstrStorageRecoveryView: View {
             .font(LinkstrTheme.font(.title2, weight: .semibold))
             .foregroundStyle(LinkstrTheme.amber)
             .frame(width: 52, height: 52)
-            .background(LinkstrTheme.panelElevated, in: .rect(cornerRadius: 14))
+            .background(LinkstrTheme.panelElevated, in: .rect(cornerRadius: LinkstrTheme.fieldCornerRadius))
             .accessibilityHidden(true)
 
           LinkstrScreenTitle(title: title)
@@ -342,7 +318,6 @@ struct LinkstrStorageRecoveryView: View {
             .font(LinkstrTheme.font(.subheadline))
             .foregroundStyle(LinkstrTheme.textSecondary)
             .fixedSize(horizontal: false, vertical: true)
-            .textSelection(.enabled)
 
           VStack(spacing: LinkstrTheme.buttonRowSpacing) {
             Button(action: onPrimaryAction) {
@@ -357,10 +332,14 @@ struct LinkstrStorageRecoveryView: View {
               .linkstrSecondaryButton()
             }
           }
+
+          if let diagnostics, !diagnostics.isEmpty {
+            LinkstrDiagnosticDisclosure(details: diagnostics)
+          }
         }
         .padding(LinkstrTheme.panelPadding)
         .frame(maxWidth: 520, alignment: .leading)
-        .background(LinkstrTheme.panelMuted, in: .rect(cornerRadius: 22))
+        .linkstrCardSurface(fill: LinkstrTheme.panelMuted)
         .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
         .padding(.vertical, LinkstrTheme.screenTopPadding)
         .frame(maxWidth: .infinity)

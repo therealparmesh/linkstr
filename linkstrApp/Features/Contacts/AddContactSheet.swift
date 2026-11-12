@@ -27,10 +27,10 @@ struct AddContactSheet: View {
         LinkstrBackgroundView()
         ScrollView {
           VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
-            LinkstrScreenTitle(title: "add contact")
+            LinkstrSheetTitle(title: "add contact")
 
             LinkstrInsetSection(title: "public key (npub)") {
-              TextField("public key (npub...)", text: $npub)
+              TextField("public key (npub)", text: $npub)
                 .font(LinkstrTheme.font(.subheadline))
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled(true)
@@ -63,25 +63,20 @@ struct AddContactSheet: View {
             if let previewIdentity {
               LinkstrInsetSection(title: "preview") {
                 HStack(spacing: LinkstrTheme.rowSpacing) {
-                  LinkstrContactAvatar(name: previewIdentity.displayName, size: 50)
+                  LinkstrContactAvatar(name: previewIdentity.displayName, size: LinkstrTheme.contactAvatarSize)
                   LinkstrContactIdentityView(
                     identity: previewIdentity,
                     primaryFont: LinkstrTheme.font(.subheadline, weight: .medium),
-                    nameLineLimit: 2
+                    nameLineLimit: 2,
+                    keyLineLimit: nil
                   )
                   .frame(maxWidth: .infinity, alignment: .leading)
-                }
-
-                if previewIdentity.chosenName == nil && normalizedAliasPreview == nil {
-                  Text("looking up published nostr name...")
-                    .font(LinkstrTheme.font(.caption))
-                    .foregroundStyle(LinkstrTheme.textSecondary)
                 }
               }
             }
 
-            LinkstrInsetSection(title: "alias", footer: "optional. only you see this alias.") {
-              TextField("alias", text: $alias)
+            LinkstrInsetSection(title: "alias", footer: "only you see this alias.") {
+              TextField("optional alias", text: $alias)
                 .font(LinkstrTheme.font(.subheadline))
                 .textInputAutocapitalization(.words)
                 .focused($focusedField, equals: .alias)
@@ -105,46 +100,35 @@ struct AddContactSheet: View {
       .linkstrBarChrome()
       .toolbar {
         ToolbarItem(placement: .topBarLeading) {
-          Button {
-            dismiss()
-          } label: {
-            Image(systemName: "xmark")
-              .linkstrToolbarIconLabel()
-          }
-          .accessibilityLabel("cancel")
-          .tint(LinkstrTheme.textSecondary)
-          .disabled(isSubmitting)
+          LinkstrHeaderButton(title: "cancel", icon: "xmark") { dismiss() }
+            .disabled(isSubmitting)
         }
+        .linkstrFlatToolbarItem()
 
         ToolbarItem(placement: .topBarTrailing) {
-          Button {
-            confirmFollow()
-          } label: {
-            if isSubmitting {
-              ProgressView()
-                .frame(width: 30, height: 30, alignment: .center)
-            } else {
-              Image(systemName: existingContact == nil ? "person.crop.circle.badge.plus" : "checkmark")
-                .linkstrToolbarIconLabel()
-            }
+          if isSubmitting {
+            ProgressView()
+              .tint(LinkstrTheme.accent)
+              .frame(width: LinkstrTheme.minimumInteractiveDimension, height: LinkstrTheme.minimumInteractiveDimension)
+              .accessibilityLabel("saving contact")
+          } else {
+            LinkstrHeaderButton(
+              title: actionTitle,
+              icon: existingContact == nil ? "person.crop.circle.badge.plus" : "checkmark",
+              action: confirmFollow
+            )
+            .disabled(!canSubmit)
           }
-          .accessibilityLabel(actionTitle)
-          .tint(LinkstrTheme.accent)
-          .disabled(!canSubmit)
         }
+        .linkstrFlatToolbarItem()
       }
-      .alert(actionTitle, isPresented: $isPresentingConfirmation) {
-        Button("cancel", role: .cancel) {}
-        Button(actionTitle, action: submitFollow)
-      } message: {
-        if let existingContact {
-          let name = session.resolvedIdentity(for: existingContact).displayName
-          Text(normalizedAliasPreview == nil
-            ? "clear your private alias for \(name)?"
-            : "save this private alias for \(name)?")
-        } else {
-          Text("add \(previewIdentity?.displayName ?? npub) to your contacts and public follow list?")
-        }
+      .sheet(isPresented: $isPresentingConfirmation) {
+        LinkstrConfirmationSheet(
+          title: actionTitle,
+          message: confirmationMessage(for: existingContact),
+          isDestructive: false,
+          onConfirm: submitFollow
+        )
       }
       .safeAreaInset(edge: .bottom, spacing: 0) {
         if let footerStatus {
@@ -193,7 +177,7 @@ struct AddContactSheet: View {
   private var footerStatus: LinkstrSheetFooterStatus? {
     mutationFeedback.footerStatus(
       isRunning: isSubmitting,
-      progressMessage: "waiting for relay reconnect before adding...",
+      progressMessage: "connecting to add your contact",
       validationMessage: validationMessage,
       validationColor: LinkstrTheme.destructive.opacity(0.9)
     )
@@ -203,6 +187,16 @@ struct AddContactSheet: View {
     if let clipboardText = UIPasteboard.general.string {
       npub = clipboardText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
+  }
+
+  private func confirmationMessage(for existingContact: ContactEntity?) -> String {
+    if let existingContact {
+      let name = session.resolvedIdentity(for: existingContact).displayName
+      return normalizedAliasPreview == nil
+        ? "clear your private alias for \(name)?"
+        : "save this private alias for \(name)?"
+    }
+    return "add \(previewIdentity?.displayName ?? npub) to your contacts and public follow list?"
   }
 
   private func confirmFollow() {

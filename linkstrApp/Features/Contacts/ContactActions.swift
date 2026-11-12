@@ -10,21 +10,18 @@ private struct ContactAdditionModifier: ViewModifier {
   func body(content: Content) -> some View {
     content
       .disabled(isAdding)
-      .alert(
-        "add contact",
-        isPresented: Binding(
-          get: { pending != nil }, set: { if !$0 { pending = nil } }
-        ), presenting: pending
-      ) { person in
-        Button("cancel", role: .cancel) {}
-        Button("add contact") { add(person) }
-      } message: { person in
-        Text("add \(person.identity.displayName) to your contacts and public follow list?")
+      .sheet(item: $pending) { person in
+        LinkstrConfirmationSheet(
+          title: "add contact",
+          message: "add \(person.identity.displayName) to your contacts and public follow list?",
+          isDestructive: false,
+          onConfirm: { add(person) }
+        )
       }
       .safeAreaInset(edge: .bottom, spacing: 0) {
         if isAdding || errorMessage != nil {
           LinkstrSheetStatusFooter(
-            message: isAdding ? "adding contact..." : (errorMessage ?? ""),
+            message: isAdding ? "adding contact…" : (errorMessage ?? ""),
             messageColor: isAdding ? LinkstrTheme.textSecondary : LinkstrTheme.destructive
           )
         }
@@ -53,25 +50,19 @@ private struct ContactRemovalModifier: ViewModifier {
   func body(content: Content) -> some View {
     content
       .disabled(isRemoving)
-      .alert(
-        "remove contact",
-        isPresented: Binding(
-          get: { pending != nil }, set: { if !$0 { pending = nil } }
-        ), presenting: pending
-      ) { contact in
-        Button("cancel", role: .cancel) {}
-        Button("remove contact", role: .destructive) { remove(contact) }
-      } message: { contact in
+      .sheet(item: $pending) { contact in
         let name = session.resolvedIdentity(for: contact).displayName
-        Text(
-          "this removes \(name) from your contacts and public follow list. "
-            + "shared sessions and posts stay available."
+        LinkstrConfirmationSheet(
+          title: "remove contact",
+          message: "this removes \(name) from your contacts and public follow list. "
+            + "shared sessions and posts stay available.",
+          onConfirm: { remove(contact) }
         )
       }
       .safeAreaInset(edge: .bottom, spacing: 0) {
         if isRemoving || errorMessage != nil {
           LinkstrSheetStatusFooter(
-            message: isRemoving ? "removing contact..." : (errorMessage ?? ""),
+            message: isRemoving ? "removing contact…" : (errorMessage ?? ""),
             messageColor: isRemoving ? LinkstrTheme.textSecondary : LinkstrTheme.destructive
           )
         }

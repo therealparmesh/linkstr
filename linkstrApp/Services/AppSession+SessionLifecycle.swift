@@ -102,15 +102,24 @@ extension AppSession {
   }
 
   var shouldPresentComposeErrorToast: Bool {
-    suppressedComposeErrorPresentationCount == 0
+    !formMutationContexts.values.contains {
+      $0.ownerPubkey == identityService.pubkeyHex && $0.serviceID == ObjectIdentifier(nostrService)
+    }
   }
 
   func performFormMutation(_ operation: () async -> Bool) async -> FormMutationResult {
-    suppressedComposeErrorPresentationCount += 1
-    defer { suppressedComposeErrorPresentationCount -= 1 }
+    guard !Task.isCancelled else { return FormMutationResult(didSucceed: false, errorMessage: nil) }
+    let ownerPubkey = identityService.pubkeyHex
+    let sourceService = nostrService
+    let requestID = UUID()
+    formMutationContexts[requestID] = (ownerPubkey, ObjectIdentifier(sourceService))
+    defer { formMutationContexts[requestID] = nil }
 
     let didSucceed = await operation()
-    let errorMessage = didSucceed ? nil : takeComposeError()
+    guard !Task.isCancelled, identityService.pubkeyHex == ownerPubkey, nostrService === sourceService else {
+      return FormMutationResult(didSucceed: false, errorMessage: nil)
+    }
+    let errorMessage = didSucceed ? nil : (takeComposeError() ?? "couldn’t complete this action. try again.")
     return FormMutationResult(didSucceed: didSucceed, errorMessage: errorMessage)
   }
 
@@ -131,7 +140,7 @@ extension AppSession {
 extension AppSession {
   func canManageSession(for session: SessionEntity) -> Bool {
     guard let myPubkey = identityService.pubkeyHex else { return false }
-    return session.createdByPubkey == myPubkey
+    return session.ownerPubkey == myPubkey && session.createdByPubkey == myPubkey
   }
 
   func isCurrentUserActiveMember(of session: SessionEntity, at timestamp: Date = .now) -> Bool {
@@ -160,12 +169,15 @@ extension AppSession {
     }
   }
 
-  func setSessionArchived(sessionID: String, archived: Bool) {
-    guard identityService.pubkeyHex != nil else { return }
+  @discardableResult
+  func setSessionArchived(sessionID: String, archived: Bool) -> Bool {
+    guard identityService.pubkeyHex != nil else { return false }
     do {
       try savePrivatePreference(.archive(sessionID: sessionID, archived: archived))
+      return true
     } catch {
       report(error: error)
+      return false
     }
   }
 

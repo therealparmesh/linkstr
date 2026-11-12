@@ -2,38 +2,72 @@ import SwiftUI
 import UIKit
 
 enum LinkstrPostPreview {
+  static let maximumArtworkHeight: CGFloat = 220
+
+  static func webURL(for rawURL: String?) -> URL? {
+    guard let rawURL, let normalizedURL = LinkstrURLValidator.normalizedWebURL(from: rawURL) else {
+      return nil
+    }
+    return URL(string: normalizedURL)
+  }
+
   static func text(_ value: String?) -> String? {
     guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else { return nil }
     return value
   }
 
   static func title(for post: SessionMessageEntity) -> String? {
-    guard let title = text(post.metadataTitle), title != post.url,
+    displayTitle(post.metadataTitle, for: post.url)
+  }
+
+  static func displayTitle(_ value: String?, for urlString: String?) -> String? {
+    let provider = webURL(for: urlString).map(URLClassifier.classify)
+    guard var title = text(value) else { return nil }
+    if provider == .tiktok, let prefix = title.range(of: "TikTok · ", options: [.anchored, .caseInsensitive]) {
+      guard let remainingTitle = text(String(title[prefix.upperBound...])) else { return nil }
+      title = remainingTitle
+    }
+
+    guard title != urlString,
       URL(string: title)?.scheme?.lowercased() != "https",
       URL(string: title)?.scheme?.lowercased() != "http"
     else { return nil }
+
+    let separators = CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "-–—|·"))
+    let comparableTitle = title.trimmingCharacters(in: separators).lowercased()
+    guard !comparableTitle.isEmpty, comparableTitle != source(for: urlString)?.lowercased() else { return nil }
+    if let provider {
+      if provider != .generic, comparableTitle == provider.rawValue.lowercased() { return nil }
+      if provider == .twitter, comparableTitle == "x" { return nil }
+    }
     return title
   }
 
   static func source(for urlString: String?) -> String? {
-    guard let urlString, let url = URL(string: urlString), let host = url.host else { return nil }
+    guard let url = webURL(for: urlString), let host = url.host else { return nil }
     let provider = URLClassifier.classify(url)
     let name = provider == .generic
       ? (host.hasPrefix("www.") ? String(host.dropFirst(4)) : host)
       : (provider == .twitter ? "x" : provider.rawValue)
-    return kind(for: urlString).map { "\(name) \($0)" } ?? name
+    return kind(for: url).map { "\(name) \($0)" } ?? name
   }
 
   static func kind(for urlString: String?) -> String? {
-    guard let urlString, let url = URL(string: urlString) else { return nil }
+    guard let url = webURL(for: urlString) else { return nil }
+    return kind(for: url)
+  }
+
+  private static func kind(for url: URL) -> String? {
     if SocialURLHeuristics.isInstagramReelURL(url) || SocialURLHeuristics.isFacebookReelURL(url) {
       return "reel"
     }
-    if SocialURLHeuristics.isYouTubeVideoURL(url) || SocialURLHeuristics.isRumbleVideoURL(url)
+    if URLClassifier.isDirectVideoURL(url) || SocialURLHeuristics.isYouTubeVideoURL(url)
+      || SocialURLHeuristics.isRumbleVideoURL(url)
       || SocialURLHeuristics.isTikTokVideoURL(url) || SocialURLHeuristics.isFacebookVideoURL(url) {
       return "video"
     }
     if SocialURLHeuristics.isTikTokPhotoURL(url) { return "photo post" }
+    if SocialURLHeuristics.isTwitterStatusURL(url) { return "post" }
     return nil
   }
 }
@@ -42,6 +76,8 @@ struct LinkstrPostThumbnail: View {
   let post: SessionMessageEntity
   let width: CGFloat
   let height: CGFloat
+  var size: ThumbnailImageCache.Size = .preview
+  var cornerRadius = LinkstrTheme.thumbnailCornerRadius
   @State private var image: UIImage?
 
   private var placeholderIcon: String {
@@ -65,12 +101,22 @@ struct LinkstrPostThumbnail: View {
         }
       }
       .frame(width: width, height: height)
-      .clipShape(.rect(cornerRadius: 10))
+      .clipShape(.rect(cornerRadius: cornerRadius))
+      .overlay(alignment: .bottomTrailing) {
+        if image != nil, size == .listRow, placeholderIcon == "play.fill" {
+          Image(systemName: "play.fill")
+            .font(.system(size: 8, weight: .semibold))
+            .foregroundStyle(LinkstrTheme.textPrimary)
+            .frame(width: 19, height: 19)
+            .background(LinkstrTheme.background, in: Circle())
+            .padding(4)
+        }
+      }
       .accessibilityHidden(true)
       .task(id: post.encryptedThumbnailURL) {
         image = nil
         guard let path = ManagedLocalFileScope.shared.managedFileURL(fromPath: post.thumbnailURL)?.path else { return }
-        let loaded = await ThumbnailImageCache.shared.loadImageAsync(at: path)
+        let loaded = await ThumbnailImageCache.shared.loadImageAsync(at: path, size: size)
         guard !Task.isCancelled else { return }
         image = loaded
       }

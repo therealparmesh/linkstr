@@ -52,6 +52,7 @@ struct SessionManagementSheet: View {
   var body: some View {
     let orderedContacts = sortedContacts
     let currentMembers = visibleCurrentMembers(contacts: orderedContacts)
+    let includesYou = session.identityService.pubkeyHex.map(includedMemberHexes.contains) ?? false
     let availableContacts = filteredContacts(contacts: orderedContacts)
     let lookupPubkeys = profileLookupPubkeys(contacts: orderedContacts, currentMembers: currentMembers)
 
@@ -60,7 +61,7 @@ struct SessionManagementSheet: View {
         LinkstrBackgroundView()
         ScrollView {
           VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
-            LinkstrScreenTitle(title: canManageSession ? "manage session" : "session members")
+            LinkstrSheetTitle(title: canManageSession ? "manage session" : "session members")
             LinkstrInsetSection(title: "session details") {
               if canManageSession {
                 TextField("session name", text: $sessionName)
@@ -72,7 +73,7 @@ struct SessionManagementSheet: View {
                   .linkstrInputField()
               } else {
                 Text(sessionEntity.name)
-                  .font(LinkstrTheme.font(.footnote))
+                  .font(LinkstrTheme.font(.subheadline))
                   .foregroundStyle(LinkstrTheme.textPrimary)
                   .lineLimit(3)
                   .textSelection(.enabled)
@@ -81,11 +82,11 @@ struct SessionManagementSheet: View {
             }
             LinkstrInsetSection(
               title: "members",
-              accessory: "\(currentMembers.count + 1) including you",
+              accessory: includesYou ? "\(includedMemberHexes.count) including you" : "\(includedMemberHexes.count)",
               footer: canManageSession ? "membership changes take effect when you save." : nil
             ) {
               if currentMembers.isEmpty {
-                Text("only you are in this session.")
+                Text(includesYou ? "only you are in this session." : "no active members.")
                   .font(LinkstrTheme.font(.footnote))
                   .foregroundStyle(LinkstrTheme.textSecondary)
               } else {
@@ -93,26 +94,32 @@ struct SessionManagementSheet: View {
                   ForEach(currentMembers) { member in
                     let identity = member.identity
                     HStack(spacing: LinkstrTheme.rowSpacing) {
-                      LinkstrContactAvatar(name: identity.displayName, size: 38)
+                      LinkstrContactAvatar(name: identity.displayName, size: LinkstrTheme.memberAvatarSize)
+                        .accessibilityHidden(true)
 
                       LinkstrContactIdentityView(
                         identity: identity,
-                        primaryFont: LinkstrTheme.font(.footnote, weight: .medium)
+                        primaryFont: LinkstrTheme.font(.subheadline, weight: .medium)
                       )
                       .frame(maxWidth: .infinity, alignment: .leading)
 
                       if member.contact == nil {
-                        Button { pendingContactAddition = member } label: {
-                          Image(systemName: "person.badge.plus")
-                            .frame(
-                              width: LinkstrTheme.minimumInteractiveDimension,
-                              height: LinkstrTheme.minimumInteractiveDimension
-                            )
-                            .contentShape(Rectangle())
+                        LinkstrHeaderButton(
+                          title: "add \(identity.displayName) to contacts", icon: "person.badge.plus"
+                        ) {
+                          pendingContactAddition = member
                         }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(LinkstrTheme.accent)
-                        .accessibilityLabel("add \(identity.displayName) to contacts")
+                        .disabled(isSaving || isDeletingSession)
+                      }
+
+                      if canManageSession {
+                        LinkstrHeaderButton(
+                          title: "remove \(identity.displayName) from session",
+                          icon: "person.badge.minus",
+                          foreground: LinkstrTheme.destructive
+                        ) {
+                          pendingMemberChange = member
+                        }
                         .disabled(isSaving || isDeletingSession)
                       }
                     }
@@ -130,11 +137,6 @@ struct SessionManagementSheet: View {
                       }
                     }
                     .accessibilityAction(named: Text("copy public key")) { UIPasteboard.general.string = identity.npub }
-                    .accessibilityActions {
-                      if canManageSession, !isSaving, !isDeletingSession {
-                        Button("remove from session") { pendingMemberChange = member }
-                      }
-                    }
 
                     if member.pubkey != currentMembers.last?.pubkey {
                       LinkstrListRowDivider(leadingInset: 50)
@@ -163,73 +165,63 @@ struct SessionManagementSheet: View {
       .linkstrBarChrome()
       .toolbar {
         ToolbarItem(placement: .topBarLeading) {
-          Button {
+          LinkstrHeaderButton(
+            title: canManageSession ? "cancel" : "close", icon: "xmark"
+          ) {
             dismiss()
-          } label: {
-            Image(systemName: "xmark")
-              .linkstrToolbarIconLabel()
           }
-          .accessibilityLabel(canManageSession ? "cancel" : "close")
-          .tint(LinkstrTheme.textSecondary)
           .disabled(isSaving || isDeletingSession)
         }
+        .linkstrFlatToolbarItem()
         if canManageSession {
           ToolbarItem(placement: .confirmationAction) {
-            Button {
-              saveSession()
-            } label: {
-              Image(systemName: "checkmark")
-                .linkstrToolbarIconLabel()
-            }
-            .accessibilityLabel(isSaving ? "saving session" : "save session")
-            .disabled(isSaving || isDeletingSession || !canSave)
-            .tint(LinkstrTheme.accent)
+            LinkstrHeaderButton(title: "save session", icon: "checkmark", action: saveSession)
+              .disabled(isSaving || isDeletingSession || !canSave)
           }
+          .linkstrFlatToolbarItem()
         }
       }
       .contactAddition(pending: $pendingContactAddition)
-      .alert(
-        pendingMemberChange.map { includedMemberHexes.contains($0.pubkey) }
-          == true ? "remove from session" : "add to session",
-        isPresented: Binding(
-          get: { pendingMemberChange != nil }, set: { if !$0 { pendingMemberChange = nil } }
-        ), presenting: pendingMemberChange
-      ) { member in
-        Button("cancel", role: .cancel) {}
-        if includedMemberHexes.contains(member.pubkey) {
-          Button("remove from session", role: .destructive) { includedMemberHexes.remove(member.pubkey) }
-        } else {
-          Button("add to session") { includedMemberHexes.insert(member.pubkey) }
-        }
-      } message: { member in
-        if includedMemberHexes.contains(member.pubkey) {
-          Text("remove \(member.identity.displayName) from this session when you save? your contacts stay unchanged.")
-        } else {
-          Text("add \(member.identity.displayName) to this session when you save?")
-        }
-      }
-      .alert("delete session", isPresented: $isPresentingDeleteConfirmation) {
-        Button("delete session", role: .destructive) {
-          guard !isDeletingSession else { return }
-          UINotificationFeedbackGenerator().notificationOccurred(.warning)
-          mutationFeedback.clear()
-          isDeletingSession = true
-          Task { @MainActor in
-            let result = await session.performFormMutation {
-              await session.deleteSessionAwaitingRelay(sessionEntity)
-            }
-            isDeletingSession = false
-            if result.didSucceed {
-              dismiss()
+      .sheet(item: $pendingMemberChange) { member in
+        let isRemoving = includedMemberHexes.contains(member.pubkey)
+        LinkstrConfirmationSheet(
+          title: isRemoving ? "remove from session" : "add to session",
+          message: isRemoving
+            ? "remove \(member.identity.displayName) from this session when you save? your contacts stay unchanged."
+            : "add \(member.identity.displayName) to this session when you save?",
+          isDestructive: isRemoving,
+          onConfirm: {
+            if isRemoving {
+              includedMemberHexes.remove(member.pubkey)
             } else {
-              mutationFeedback.record(errorMessage: result.errorMessage)
+              includedMemberHexes.insert(member.pubkey)
             }
           }
-        }
-        Button("cancel", role: .cancel) {}
-      } message: {
-        Text(
-          "this permanently removes the session from your device and sends a delete notice to known members."
+        )
+      }
+      .sheet(isPresented: $isPresentingDeleteConfirmation) {
+        LinkstrConfirmationSheet(
+          title: "delete session",
+          message:
+            "linkstr notifies known members and removes this session from this device. "
+              + "older copies may remain on relays.",
+          onConfirm: {
+            guard !isDeletingSession else { return }
+            UINotificationFeedbackGenerator().notificationOccurred(.warning)
+            mutationFeedback.clear()
+            isDeletingSession = true
+            Task { @MainActor in
+              let result = await session.performFormMutation {
+                await session.deleteSessionAwaitingRelay(sessionEntity)
+              }
+              isDeletingSession = false
+              if result.didSucceed {
+                dismiss()
+              } else {
+                mutationFeedback.record(errorMessage: result.errorMessage)
+              }
+            }
+          }
         )
       }
       .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -254,6 +246,7 @@ struct SessionManagementSheet: View {
         syncMembersIfNeeded()
       }
     }
+    .interactiveDismissDisabled(isSaving || isDeletingSession)
     .sheet(isPresented: $isPresentingAddContact) {
       AddContactSheet()
     }

@@ -50,13 +50,10 @@ struct AddedYouView: View {
     let hasSearch = !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     ScrollView {
       VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
-        LinkstrTabHeader(title: "added you") {
-          LinkstrHeaderButton(title: "add contact", icon: "person.badge.plus", action: addContact)
-        }
         LinkstrSearchField(prompt: "search people", text: $query)
         if visibleRows.isEmpty, discovery.loadState == .unavailable {
           LinkstrCenteredEmptyStateView(
-            title: "couldn't load people",
+            title: "couldn’t load people",
             systemImage: "wifi.exclamationmark",
             description: "check your connection and try again.",
             actionTitle: "try again",
@@ -81,14 +78,17 @@ struct AddedYouView: View {
           LinkstrCenteredEmptyStateView(
             title: "no one found yet",
             systemImage: "person.2.slash",
-            description: "people who added you to their contacts appear here when found on your relays."
+            description: "people who add you to their contacts appear here after syncing."
           )
           .frame(maxWidth: .infinity, minHeight: 220)
+        } else if visibleRows.isEmpty {
+          LinkstrLoadingStateView(title: "loading people")
         }
         LazyVStack(spacing: 0) {
           ForEach(visibleRows) { row in
             HStack(spacing: LinkstrTheme.rowSpacing) {
-              LinkstrContactAvatar(name: row.identity.displayName, size: 48)
+              LinkstrContactAvatar(name: row.identity.displayName, size: LinkstrTheme.contactAvatarSize)
+                .accessibilityHidden(true)
               LinkstrContactIdentityView(
                 identity: row.identity,
                 primaryFont: LinkstrTheme.font(.subheadline, weight: .medium)
@@ -97,21 +97,16 @@ struct AddedYouView: View {
               if row.contact != nil {
                 Image(systemName: "checkmark")
                   .font(LinkstrTheme.font(.caption, weight: .medium))
+                  .dynamicTypeSize(...DynamicTypeSize.xLarge)
                   .foregroundStyle(LinkstrTheme.textSecondary)
                   .frame(width: LinkstrTheme.minimumInteractiveDimension)
                   .accessibilityLabel("\(row.identity.displayName) is in your contacts")
               } else {
-                Button { pendingContactAddition = row } label: {
-                  Image(systemName: "person.badge.plus")
-                    .frame(
-                      width: LinkstrTheme.minimumInteractiveDimension,
-                      height: LinkstrTheme.minimumInteractiveDimension
-                    )
-                    .contentShape(Rectangle())
+                LinkstrHeaderButton(
+                  title: "add \(row.identity.displayName) to contacts", icon: "person.badge.plus"
+                ) {
+                  pendingContactAddition = row
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(LinkstrTheme.accent)
-                .accessibilityLabel("add \(row.identity.displayName) to contacts")
               }
             }
             .padding(.vertical, LinkstrTheme.fieldVerticalPadding)
@@ -129,18 +124,31 @@ struct AddedYouView: View {
             .onDisappear { discovery.watch(row.pubkey, visible: false) }
           }
         }
-        if discovery.canLoadMore {
-          Button("load more") { discovery.loadMore() }
-            .disabled(discovery.isLoading)
+        if discovery.isLoading, !visibleRows.isEmpty {
+          ProgressView("loading people")
+            .font(LinkstrTheme.font(.subheadline))
+            .foregroundStyle(LinkstrTheme.textSecondary)
             .tint(LinkstrTheme.accent)
+            .frame(maxWidth: .infinity, minHeight: LinkstrTheme.actionButtonMinHeight)
+        } else if discovery.canLoadMore {
+          Button { discovery.loadMore() } label: {
+            LinkstrActionButtonLabel(title: "load more")
+          }
+          .linkstrSecondaryButton()
+          .disabled(discovery.isLoading)
         }
       }
       .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-      .padding(.top, LinkstrTheme.screenTopPadding)
+      .padding(.top, LinkstrTheme.pinnedPageContentTopPadding)
       .padding(.bottom, LinkstrTheme.screenBottomPadding)
       .linkstrReadableContent()
     }
     .contactAddition(pending: $pendingContactAddition)
+    .linkstrPinnedPageHeader {
+      LinkstrPageHeader(title: "added you", backLabel: "back to contacts") {
+        LinkstrHeaderButton(title: "add contact", icon: "person.badge.plus", action: addContact)
+      }
+    }
     .linkstrKeyboardDismissal()
     .refreshable { discovery.refresh() }
     .task(id: visibleRows.map(\.pubkey).stableTaskID) {

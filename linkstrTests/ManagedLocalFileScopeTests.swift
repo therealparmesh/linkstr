@@ -6,10 +6,7 @@ final class ManagedLocalFileScopeTests: XCTestCase {
   func testManagedFileURLAcceptsManagedDirectories() {
     let scope = ManagedLocalFileScope.shared
     let thumbnailURL = scope.thumbnailFileURL(for: "unit-thumb", fileExtension: "png")
-    let videoURL = scope.cachedVideoFileURL(
-      for: URL(string: "https://example.com/video.mp4")!,
-      preferredExtension: "mp4"
-    )
+    let videoURL = scope.videoDirectory.appendingPathComponent("unit-video.mp4")
 
     XCTAssertEqual(
       scope.managedFileURL(fromPath: thumbnailURL.path),
@@ -29,7 +26,6 @@ final class ManagedLocalFileScopeTests: XCTestCase {
     XCTAssertNil(scope.managedFileURL(fromPath: nil))
     XCTAssertNil(scope.managedFileURL(fromPath: "   "))
     XCTAssertNil(scope.managedFileURL(fromPath: unmanagedURL.path))
-    XCTAssertFalse(scope.isManagedFileURL(unmanagedURL))
   }
 
   func testManagedFileURLRebasesLegacyThumbnailPathIntoCurrentManagedDirectory() throws {

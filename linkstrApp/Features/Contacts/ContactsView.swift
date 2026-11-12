@@ -73,7 +73,7 @@ struct ContactsView: View {
           addedYouShortcut
         }
         .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-        .padding(.top, LinkstrTheme.screenTopPadding)
+        .padding(.top, LinkstrTheme.pageHeaderTopPadding)
 
         if nostrService.contactListLoadState == .unavailable {
           retryState
@@ -87,7 +87,8 @@ struct ContactsView: View {
             action: addContact
           )
         } else {
-          Spacer()
+          LinkstrLoadingStateView(title: "loading contacts")
+            .frame(maxHeight: .infinity)
         }
       }
       .linkstrReadableContent()
@@ -112,6 +113,8 @@ struct ContactsView: View {
               action: { query = "" }
             )
             .frame(maxWidth: .infinity, minHeight: 220)
+          } else if visibleContacts.isEmpty {
+            LinkstrLoadingStateView(title: "loading contacts")
           } else {
             LazyVStack(spacing: 0) {
               ForEach(visibleContacts) { row in
@@ -138,7 +141,7 @@ struct ContactsView: View {
           }
         }
         .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-        .padding(.top, LinkstrTheme.screenTopPadding)
+        .padding(.top, LinkstrTheme.pageHeaderTopPadding)
         .padding(.bottom, LinkstrTheme.screenBottomPadding)
         .linkstrReadableContent()
       }
@@ -147,7 +150,7 @@ struct ContactsView: View {
   }
 
   private var heading: some View {
-    LinkstrTabHeader(title: "contacts") {
+    LinkstrPageHeader(title: "contacts") {
       LinkstrHeaderButton(title: "add contact", icon: "person.badge.plus", action: addContact)
     }
   }
@@ -156,20 +159,20 @@ struct ContactsView: View {
     Button {
       openAddedYou()
     } label: {
-      HStack(spacing: 10) {
+      HStack(spacing: LinkstrTheme.buttonRowSpacing) {
         Image(systemName: "person.crop.circle.badge.plus")
+          .dynamicTypeSize(...DynamicTypeSize.xLarge)
           .foregroundStyle(LinkstrTheme.accent)
+          .accessibilityHidden(true)
         Text("added you")
           .frame(maxWidth: .infinity, alignment: .leading)
-        Image(systemName: "chevron.right")
-          .font(LinkstrTheme.font(.caption, weight: .semibold))
-          .foregroundStyle(LinkstrTheme.textSecondary)
+        LinkstrDisclosureIndicator()
       }
       .font(LinkstrTheme.font(.subheadline, weight: .semibold))
       .foregroundStyle(LinkstrTheme.textPrimary)
-      .padding(.horizontal, 12)
-      .padding(.vertical, 8)
-      .frame(minHeight: 44)
+      .padding(.horizontal, LinkstrTheme.fieldVerticalPadding)
+      .padding(.vertical, LinkstrTheme.compactSpacing)
+      .frame(minHeight: LinkstrTheme.minimumInteractiveDimension)
       .background(LinkstrTheme.panel, in: .rect(cornerRadius: 12))
       .contentShape(Rectangle())
     }
@@ -179,7 +182,7 @@ struct ContactsView: View {
 
   private var retryState: some View {
     LinkstrCenteredEmptyStateView(
-      title: "couldn't load contacts",
+      title: "couldn’t load contacts",
       systemImage: "wifi.exclamationmark",
       description: "check your connection and try again.",
       actionTitle: "try again",
@@ -197,7 +200,8 @@ private struct ContactRowView: View {
 
   var body: some View {
     HStack(spacing: LinkstrTheme.rowSpacing) {
-      LinkstrContactAvatar(name: identity.displayName, size: 48)
+      LinkstrContactAvatar(name: identity.displayName, size: LinkstrTheme.contactAvatarSize)
+        .accessibilityHidden(true)
 
       LinkstrContactIdentityView(
         identity: identity,
@@ -205,10 +209,7 @@ private struct ContactRowView: View {
       )
       .frame(maxWidth: .infinity, alignment: .leading)
 
-      Image(systemName: "chevron.right")
-        .font(LinkstrTheme.font(.caption, weight: .semibold))
-        .foregroundStyle(LinkstrTheme.textTertiary)
-        .accessibilityHidden(true)
+      LinkstrDisclosureIndicator()
     }
     .padding(.vertical, LinkstrTheme.fieldVerticalPadding)
     .contentShape(Rectangle())

@@ -184,6 +184,7 @@ extension AppSession {
   }
 
   func resetRuntimeSessionState() {
+    reactionMutations.cancel()
     preparedPrivatePreferenceOwner = nil
     let relayURLs = enabledRelayURLsSnapshot()
     stopRelayRuntime()
@@ -197,9 +198,10 @@ extension AppSession {
     pendingMetadataRefreshes.removeAll()
     pendingMetadataRefreshHead = 0
     enqueuedMetadataStorageIDs.removeAll()
-    isProcessingMetadataQueue = false
+    metadataRefreshTask?.cancel()
+    metadataRefreshTask = nil
     activeMetadataRefreshStorageID = nil
-    metadataRefreshQueueGeneration = 0
+    metadataRefreshQueueGeneration += 1
     metadataRefreshRetryAfterByStorageID.removeAll()
     passiveOfflineToastGraceUntil = nil
     pendingSessionNavigationRequest = nil

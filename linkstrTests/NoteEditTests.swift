@@ -5,6 +5,100 @@ import XCTest
 
 @MainActor
 final class NoteEditTests: AppSessionTestCase {
+  func testDelayedAcceptanceDoesNotOverwriteANewerNoteRevision() async throws {
+    var release: CheckedContinuation<Void, Never>?
+    var sentTimestamp: Int64?
+    let started = expectation(description: "note publication started")
+    let (session, container) = try makeSession(
+      disableNostrStartup: false, hasConnectedRelays: { true },
+      sendPayload: { payload, _ in
+        sentTimestamp = payload.timestamp
+        await withCheckedContinuation {
+          release = $0
+          started.fulfill()
+        }
+        return SentPayloadReceipt(rumorEventID: "delayed-edit", publishedEventIDs: [])
+      }
+    )
+    try session.identityService.createNewIdentity()
+    let owner = try XCTUnwrap(session.identityService.pubkeyHex)
+    _ = try insertSessionFixture(
+      in: container.mainContext, ownerPubkey: owner, createdByPubkey: owner, memberPubkeys: [owner]
+    )
+    let post = try makePost(owner: owner, author: owner, timestamp: .now.addingTimeInterval(-10))
+    container.mainContext.insert(post)
+    try container.mainContext.save()
+
+    let publication = Task { await session.editPostNoteAwaitingRelay("delayed draft", on: post) }
+    await fulfillment(of: [started], timeout: asyncExpectationTimeoutSeconds)
+    let newerTimestamp = try XCTUnwrap(sentTimestamp) + 1
+    session.persistIncoming(message(
+      id: "newer-edit", author: owner, kind: .noteEdit, note: "newer revision", at: newerTimestamp
+    ))
+    XCTAssertEqual(post.note, "newer revision")
+    release?.resume()
+    let didEdit = await publication.value
+
+    XCTAssertFalse(didEdit)
+    XCTAssertEqual(post.note, "newer revision")
+    XCTAssertEqual(post.noteEditEventID, "newer-edit")
+    XCTAssertEqual(session.composeError, "a newer edit is already saved. review the note and try again.")
+    XCTAssertTrue(session.pendingNoteEdits.isEmpty)
+  }
+
+  func testLateNoteEditRespectsAccountChangesCancellationAndPostDeletion() async throws {
+    for transition in ["account", "relay", "cancel", "delete"] {
+      for relayRejects in [false, true] {
+        var release: CheckedContinuation<Void, Never>?
+        let started = expectation(description: "note publication started")
+        let (session, container) = try makeSession(
+          disableNostrStartup: false, hasConnectedRelays: { true },
+          sendPayload: { _, _ in
+            await withCheckedContinuation {
+              release = $0
+              started.fulfill()
+            }
+            if relayRejects { throw URLError(.cannotConnectToHost) }
+            return SentPayloadReceipt(rumorEventID: "late-edit", publishedEventIDs: [])
+          }
+        )
+        try session.identityService.createNewIdentity()
+        let owner = try XCTUnwrap(session.identityService.pubkeyHex)
+        _ = try insertSessionFixture(
+          in: container.mainContext, ownerPubkey: owner, createdByPubkey: owner, memberPubkeys: [owner]
+        )
+        let post = try makePost(owner: owner, author: owner, timestamp: .now.addingTimeInterval(-10))
+        container.mainContext.insert(post)
+        try container.mainContext.save()
+        let publication = Task { await session.editPostNoteAwaitingRelay("late edit", on: post) }
+        await fulfillment(of: [started], timeout: asyncExpectationTimeoutSeconds)
+        switch transition {
+        case "account": session.importNsec(try TestKeyMaterialFactory.makeKeypair().privateKey.nsec)
+        case "relay": session.replaceNostrService()
+        case "delete":
+          container.mainContext.delete(post)
+          try container.mainContext.save()
+        default: publication.cancel()
+        }
+        session.composeError = "current message"
+        release?.resume()
+        let didEdit = await publication.value
+
+        XCTAssertFalse(didEdit, transition)
+        if transition == "delete" {
+          XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
+          XCTAssertNotNil(session.composeError)
+          if !relayRejects { XCTAssertEqual(session.composeError, "this post is no longer available.") }
+        } else {
+          XCTAssertEqual(post.note, "original", transition)
+          XCTAssertNil(post.noteEditedAt, transition)
+          XCTAssertEqual(session.composeError, "current message", transition)
+        }
+        XCTAssertTrue(session.pendingNoteEdits.isEmpty)
+      }
+    }
+  }
+
   func testEditWaitsForAcceptanceAndOnlySendsToEligibleMembers() async throws {
     var deliveries: [(LinkstrPayload, [String])] = []
     var reject = true

@@ -54,6 +54,7 @@ final class SessionMessageEntity {
     return value
   }
 
+  // Read mutable ciphertext before returning cached text so SwiftUI observes later edits.
   @Transient private var _note: String??
   var note: String? {
     let ciphertext = encryptedNote
@@ -67,10 +68,11 @@ final class SessionMessageEntity {
 
   @Transient private var _thumbnailURL: String??
   var thumbnailURL: String? {
+    let ciphertext = encryptedThumbnailURL
     if let cached = _thumbnailURL { return cached }
     let value = LocalDataCrypto.shared.decryptString(
-      encryptedThumbnailURL, ownerPubkey: ownerPubkey)
-    if value != nil || encryptedThumbnailURL == nil {
+      ciphertext, ownerPubkey: ownerPubkey)
+    if value != nil || ciphertext == nil {
       _thumbnailURL = .some(value)
     }
     return value
@@ -78,10 +80,11 @@ final class SessionMessageEntity {
 
   @Transient private var _metadataTitle: String??
   var metadataTitle: String? {
+    let ciphertext = encryptedMetadataTitle
     if let cached = _metadataTitle { return cached }
     let value = LocalDataCrypto.shared.decryptString(
-      encryptedMetadataTitle, ownerPubkey: ownerPubkey)
-    if value != nil || encryptedMetadataTitle == nil {
+      ciphertext, ownerPubkey: ownerPubkey)
+    if value != nil || ciphertext == nil {
       _metadataTitle = .some(value)
     }
     return value
@@ -234,8 +237,9 @@ final class SessionEntity {
 
   @Transient private var _name: String?
   var name: String {
+    let ciphertext = encryptedName
     if let cached = _name { return cached }
-    let value = LocalDataCrypto.shared.decryptString(encryptedName, ownerPubkey: ownerPubkey)
+    let value = LocalDataCrypto.shared.decryptString(ciphertext, ownerPubkey: ownerPubkey)
     _name = value
     return value ?? ""
   }

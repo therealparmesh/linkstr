@@ -30,9 +30,10 @@ final class ContactEntity {
 
   @Transient private var _localAlias: String??
   var localAlias: String? {
+    let ciphertext = encryptedAlias
     if let cached = _localAlias { return cached }
     guard
-      let decrypted = LocalDataCrypto.shared.decryptString(encryptedAlias, ownerPubkey: ownerPubkey)
+      let decrypted = LocalDataCrypto.shared.decryptString(ciphertext, ownerPubkey: ownerPubkey)
     else { return nil }
     let trimmed = decrypted.trimmingCharacters(in: .whitespacesAndNewlines)
     let value: String? = trimmed.isEmpty ? nil : trimmed

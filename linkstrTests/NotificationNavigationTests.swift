@@ -103,8 +103,7 @@ final class NotificationNavigationTests: AppSessionTestCase {
     await waitUntil { self.navigationController(in: host)?.viewControllers.count == 2 }
     try await verifyLatePostScrollsWithoutOpening(in: container.mainContext, owner: owner, host: host)
 
-    notifications.enqueueNavigation(userInfo: ["conversation_id": "session", "type": "new_post"])
-    await waitUntil { self.navigationController(in: host)?.viewControllers.count == 2 }
+    await verifyNotificationDismissesCovers(deepLinks: deepLinks, notifications: notifications, host: host)
 
     notifications.enqueueNavigation(userInfo: reaction)
     await waitUntil { notifications.pendingNavigation == nil }
@@ -120,6 +119,30 @@ final class NotificationNavigationTests: AppSessionTestCase {
     await waitUntil { notifications.pendingNavigation == nil && session.pendingSessionNavigationRequest == nil }
     XCTAssertNil(session.pendingSessionNavigationRequest)
     XCTAssertNil(notifications.pendingNavigation)
+  }
+
+  private func verifyNotificationDismissesCovers(
+    deepLinks: DeepLinkHandler, notifications: PushNotificationService, host: UIViewController
+  ) async {
+    let present: [() -> Void] = [
+      { deepLinks.pendingShareDraft = .init(url: "https://example.com/shared", note: "unsent note") },
+      // Exercise the save recovery screen without depending on a remote download.
+      { deepLinks.pendingMediaSaveDraft = .init(url: "invalid") },
+      { _ = deepLinks.handle(url: URL(string: "linkstr://open?url=https%3A%2F%2Fexample.invalid")!) }
+    ]
+    for showPresentation in present {
+      showPresentation()
+      await waitUntil { host.presentedViewController != nil }
+      notifications.enqueueNavigation(userInfo: ["conversation_id": "session", "type": "new_post"])
+      await waitUntil {
+        host.presentedViewController == nil
+          && self.navigationController(in: host)?.viewControllers.count == 2
+          && notifications.pendingNavigation == nil
+      }
+      XCTAssertNil(deepLinks.pendingShareDraft)
+      XCTAssertNil(deepLinks.pendingMediaSaveDraft)
+      XCTAssertNil(deepLinks.pendingSharedURL)
+    }
   }
 
   func testWatchStartsAtRequestedPostAndLeavesEarlierPostsUnread() async throws {

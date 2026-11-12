@@ -55,6 +55,10 @@ actor URLMetadataService {
     }
   }
 
+  func invalidate(for url: URL) async {
+    await requests.invalidate(url.absoluteString)
+  }
+
   private func fetchUncachedPreview(for url: URL) async -> LinkPreviewData? {
     if let twitterPreview = await twitterPreview(for: url) {
       return twitterPreview
@@ -138,7 +142,7 @@ actor URLMetadataService {
     do {
       let metadata = try await provider.startFetchingMetadata(for: url)
       let title = metadata.title
-      let thumbnailPath = try await thumbnailPath(for: url, provider: metadata.imageProvider)
+      let thumbnailPath = try? await thumbnailPath(for: url, provider: metadata.imageProvider)
       return LinkPreviewData(title: title, thumbnailPath: thumbnailPath)
     } catch {
       return nil
@@ -184,6 +188,7 @@ actor URLMetadataService {
   }
 
   private func writeThumbnailImage(_ image: UIImage, sourceURL: URL) throws -> String? {
+    try Task.checkCancellation()
     guard image.size != .zero else { return nil }
     guard let normalizedPNGData = image.pngData() else { return nil }
     let fileURL = ManagedLocalFileScope.shared.thumbnailFileURL(

@@ -5,21 +5,6 @@ import XCTest
 
 @MainActor
 final class AppSessionMutationTests: AppSessionTestCase {
-  func testPerformFormMutationCapturesErrorAndRestoresGlobalToastPresentation() async throws {
-    let (session, _) = try makeSession()
-
-    let result = await session.performFormMutation {
-      XCTAssertFalse(session.shouldPresentComposeErrorToast)
-      session.composeError = "blocked: policy"
-      return false
-    }
-
-    XCTAssertFalse(result.didSucceed)
-    XCTAssertEqual(result.errorMessage, "blocked: policy")
-    XCTAssertNil(session.composeError)
-    XCTAssertTrue(session.shouldPresentComposeErrorToast)
-  }
-
   func testCreateSessionPostAwaitingRelayTimesOutWhenRelayNeverConnects() async throws {
     let (session, container) = try makeSession(disableNostrStartup: false)
     try session.identityService.createNewIdentity()
@@ -44,7 +29,7 @@ final class AppSessionMutationTests: AppSessionTestCase {
     )
 
     XCTAssertFalse(didCreate)
-    XCTAssertEqual(session.composeError, "couldn't reconnect to relays in time. try again.")
+    XCTAssertEqual(session.composeError, "couldn’t reconnect to relays in time. try again.")
     XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
   }
 
@@ -108,7 +93,7 @@ final class AppSessionMutationTests: AppSessionTestCase {
     XCTAssertFalse(didCreate)
     XCTAssertEqual(
       session.composeError,
-      "connected relays are read-only. add a writable relay to send."
+      "your connected relays are read-only. enable a writable relay to send."
     )
     XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
   }
@@ -144,7 +129,7 @@ final class AppSessionMutationTests: AppSessionTestCase {
     XCTAssertFalse(didCreate)
     XCTAssertEqual(
       session.composeError,
-      "connected relays are read-only. add a writable relay to send."
+      "your connected relays are read-only. enable a writable relay to send."
     )
     XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
   }
@@ -176,7 +161,7 @@ final class AppSessionMutationTests: AppSessionTestCase {
 
     XCTAssertFalse(didCreate)
     XCTAssertEqual(
-      session.composeError, "no relays are enabled. enable at least one relay in settings.")
+      session.composeError, "enable a relay in settings to continue.")
     XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty)
   }
 
@@ -251,5 +236,112 @@ final class AppSessionMutationTests: AppSessionTestCase {
     XCTAssertEqual(message.eventID, "root-rumor-id")
     XCTAssertEqual(message.rootID, "root-rumor-id")
     XCTAssertEqual(message.publishedTransportEventIDs, ["giftwrap-root-a", "giftwrap-root-b"])
+  }
+}
+
+extension AppSessionMutationTests {
+  func testLatePostCreationCannotWriteOrNotifyAfterAccountChangesOrCancellation() async throws {
+    for transition in ["account", "relay", "cancel"] {
+      for relayRejects in [false, true] {
+        var release: CheckedContinuation<Void, Never>?
+        var pushes = 0
+        let started = expectation(description: "post publication started")
+        let (session, container) = try makeSession(
+          disableNostrStartup: false, hasConnectedRelays: { true },
+          sendPayload: { _, _ in
+            await withCheckedContinuation {
+              release = $0
+              started.fulfill()
+            }
+            if relayRejects { throw URLError(.cannotConnectToHost) }
+            return SentPayloadReceipt(rumorEventID: "late-post", publishedEventIDs: [])
+          },
+          enqueuePushNotification: { _ in pushes += 1 }
+        )
+        try session.identityService.createNewIdentity()
+        let owner = try XCTUnwrap(session.identityService.pubkeyHex)
+        let target = try insertSessionFixture(
+          in: container.mainContext, ownerPubkey: owner, createdByPubkey: owner, memberPubkeys: [owner]
+        )
+        let publication = Task {
+          await session.createSessionPostAwaitingRelay(url: "https://example.com", note: nil, session: target)
+        }
+        await fulfillment(of: [started], timeout: asyncExpectationTimeoutSeconds)
+        switch transition {
+        case "account": session.importNsec(try TestKeyMaterialFactory.makeKeypair().privateKey.nsec)
+        case "relay": session.replaceNostrService()
+        default: publication.cancel()
+        }
+        session.composeError = "current message"
+        release?.resume()
+        let didCreate = await publication.value
+        await Task.yield()
+
+        XCTAssertFalse(didCreate, transition)
+        XCTAssertTrue(try fetchMessages(in: container.mainContext).isEmpty, transition)
+        XCTAssertEqual(session.composeError, "current message", transition)
+        XCTAssertEqual(pushes, 0, transition)
+      }
+    }
+  }
+}
+
+extension AppSessionMutationTests {
+  func testPerformFormMutationCapturesErrorAndRestoresGlobalToastPresentation() async throws {
+    let (session, _) = try makeSession()
+
+    let result = await session.performFormMutation {
+      XCTAssertFalse(session.shouldPresentComposeErrorToast)
+      session.composeError = "blocked: policy"
+      return false
+    }
+
+    XCTAssertFalse(result.didSucceed)
+    XCTAssertEqual(result.errorMessage, "blocked: policy")
+    XCTAssertNil(session.composeError)
+    XCTAssertTrue(session.shouldPresentComposeErrorToast)
+
+    let unexplainedFailure = await session.performFormMutation { false }
+    XCTAssertFalse(unexplainedFailure.didSucceed)
+    XCTAssertEqual(unexplainedFailure.errorMessage, "couldn’t complete this action. try again.")
+
+    let success = await session.performFormMutation { true }
+    XCTAssertTrue(success.didSucceed)
+    XCTAssertNil(success.errorMessage)
+  }
+
+  func testObsoleteFormDoesNotCaptureCurrentErrorsOrSuppressAnotherContext() async throws {
+    for transition in ["account", "relay", "cancel"] {
+      let (session, _) = try makeSession()
+      try session.identityService.createNewIdentity()
+      let started = expectation(description: "form mutation started")
+      var release: CheckedContinuation<Bool, Never>?
+      let mutation = Task {
+        await session.performFormMutation {
+          await withCheckedContinuation { release = $0; started.fulfill() }
+        }
+      }
+      await fulfillment(of: [started], timeout: asyncExpectationTimeoutSeconds)
+      XCTAssertFalse(session.shouldPresentComposeErrorToast)
+      switch transition {
+      case "account": session.importNsec(try TestKeyMaterialFactory.makeKeypair().privateKey.nsec)
+      case "relay": session.replaceNostrService()
+      default: mutation.cancel()
+      }
+      if transition != "cancel" { XCTAssertTrue(session.shouldPresentComposeErrorToast) }
+      session.composeError = "current account error"
+      let currentResult = await session.performFormMutation {
+        release?.resume(returning: false)
+        let result = await mutation.value
+        XCTAssertFalse(result.didSucceed)
+        XCTAssertNil(result.errorMessage)
+        XCTAssertEqual(session.composeError, "current account error")
+        XCTAssertFalse(session.shouldPresentComposeErrorToast)
+        return false
+      }
+      XCTAssertEqual(currentResult.errorMessage, "current account error")
+      XCTAssertNil(session.composeError)
+      XCTAssertTrue(session.shouldPresentComposeErrorToast)
+    }
   }
 }

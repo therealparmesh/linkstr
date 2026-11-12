@@ -15,7 +15,7 @@ struct MediaDiscoveryBudget: Sendable {
 extension SocialVideoExtractionService {
   func extractPlayableMedia(from sourceURL: URL) async -> ExtractionState {
     let sourceURLString = sourceURL.absoluteString.lowercased()
-    if Self.isLikelyMediaURLString(sourceURLString),
+    if URLClassifier.isDirectVideoURL(sourceURL) || Self.isLikelyMediaURLString(sourceURLString),
       let resolved = resolvePlayableMedia(
         from: [sourceURL],
         sourceURL: sourceURL,

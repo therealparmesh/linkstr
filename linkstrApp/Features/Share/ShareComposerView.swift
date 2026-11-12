@@ -6,15 +6,14 @@ import SwiftUI
 #endif
 
 struct ShareComposerView: View {
-  enum Field: Hashable {
-    case link
-    case note
-  }
-
   @EnvironmentObject var appSession: AppSession
   @EnvironmentObject var deepLinkHandler: DeepLinkHandler
+  let draft: LinkstrDeepLinkCodec.ShareDraft
 
   @Query var sessions: [SessionEntity]
+  @Query private var members: [SessionMemberEntity]
+  @Query private var contacts: [ContactEntity]
+  private let ownerPubkeyHash: String
 
   @State var link: String
   @State var note: String
@@ -22,9 +21,16 @@ struct ShareComposerView: View {
   @State var isPresentingSessionPicker = false
   @State var isSending = false
   @State var mutationFeedback = LinkstrSheetMutationFeedback()
-  @FocusState var focusedField: Field?
+  @FocusState var focusedField: LinkstrShareDraftFields.Field?
 
   init(draft: LinkstrDeepLinkCodec.ShareDraft, ownerPubkey: String) {
+    self.draft = draft
+    ownerPubkeyHash = LocalDataCrypto.shared.digestHex(ownerPubkey)
+    _members = Query(
+      filter: #Predicate<SessionMemberEntity> { $0.ownerPubkey == ownerPubkey && $0.isActive },
+      sort: [SortDescriptor(\SessionMemberEntity.createdAt), SortDescriptor(\SessionMemberEntity.storageID)]
+    )
+    _contacts = Query(filter: #Predicate<ContactEntity> { $0.ownerPubkey == ownerPubkey })
     _link = State(initialValue: draft.url)
     _note = State(initialValue: draft.note ?? "")
     _sessions = Query(
@@ -41,6 +47,13 @@ struct ShareComposerView: View {
     }
   }
 
+  private func memberAvatars(for sessionIDs: Set<String>) -> [String: [SessionMemberAvatar]] {
+    let index = Dictionary(contacts.map { ($0.targetPubkey, $0) }, uniquingKeysWith: { first, _ in first })
+    return SessionMemberAvatar.grouped(
+      members, sessionIDs: sessionIDs, ownerHash: ownerPubkeyHash, contacts: index, appSession: appSession
+    )
+  }
+
   var selectedSession: SessionEntity? {
     guard let selectedSessionID else { return nil }
     return activeSessions.first { $0.sessionID == selectedSessionID }
@@ -55,11 +68,11 @@ struct ShareComposerView: View {
   }
 
   private var validationMessage: String? {
-    if normalizedURL == nil {
+    if normalizedURL == nil, !link.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
       return "enter a valid link."
     }
-    if selectedSession == nil {
-      return activeSessions.isEmpty ? "no active sessions available." : "choose a session."
+    if selectedSession == nil, !activeSessions.isEmpty {
+      return "choose a session."
     }
     return nil
   }
@@ -67,7 +80,7 @@ struct ShareComposerView: View {
   private var footerStatus: LinkstrSheetFooterStatus? {
     mutationFeedback.footerStatus(
       isRunning: isSending,
-      progressMessage: "waiting for a relay connection",
+      progressMessage: "connecting to share your link",
       validationMessage: validationMessage,
       validationColor: LinkstrTheme.destructive.opacity(0.9)
     )
@@ -80,60 +93,16 @@ struct ShareComposerView: View {
 
         ScrollView {
           VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
+            LinkstrSheetTitle(title: "share a link")
+
             LinkstrInsetSection(title: "to") {
-              Button {
-                focusedField = nil
-                isPresentingSessionPicker = true
-              } label: {
-                selectedSessionRow
-              }
-              .buttonStyle(.plain)
-              .disabled(isSending || activeSessions.isEmpty)
+              selectedSessionRow
             }
 
-            LinkstrInsetSection(title: "link") {
-              TextField("example.com", text: $link)
-                .font(LinkstrTheme.font(.footnote))
-                .textInputAutocapitalization(.never)
-                .keyboardType(.URL)
-                .autocorrectionDisabled(true)
-                .disabled(isSending)
-                .focused($focusedField, equals: .link)
-                .lineLimit(1)
-                .submitLabel(.next)
-                .onSubmit {
-                  focusedField = .note
-                }
-                .linkstrInputField()
-
-              if let normalizedURL {
-                LinkstrDraftPreview(url: normalizedURL, loadsRichPreview: focusedField != .link)
-              }
-            }
-
-            LinkstrInsetSection(title: "add a note", accessory: "optional") {
-              ZStack(alignment: .topLeading) {
-                if note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                  Text("say something about this link")
-                    .font(LinkstrTheme.font(.footnote))
-                    .foregroundStyle(LinkstrTheme.textSecondary)
-                    .padding(.top, LinkstrTheme.fieldVerticalPadding)
-                    .padding(.leading, LinkstrTheme.fieldHorizontalPadding)
-                    .allowsHitTesting(false)
-                }
-
-                TextEditor(text: $note)
-                  .font(LinkstrTheme.font(.footnote))
-                  .foregroundStyle(LinkstrTheme.textPrimary)
-                  .scrollContentBackground(.hidden)
-                  .frame(minHeight: 112, maxHeight: 180)
-                  .padding(4)
-                  .focused($focusedField, equals: .note)
-                  .accessibilityLabel("note")
-                  .disabled(isSending)
-              }
-              .linkstrFieldChrome()
-            }
+            LinkstrShareDraftFields(
+              link: $link, note: $note, normalizedURL: normalizedURL,
+              isSending: isSending, focusedField: $focusedField
+            )
           }
           .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
           .padding(.top, LinkstrTheme.screenTopPadding)
@@ -141,26 +110,26 @@ struct ShareComposerView: View {
           .linkstrReadableContent()
         }
         .linkstrKeyboardDismissal()
+        .modifier(LinkstrFocusedFieldScrolling(focusedField: focusedField))
       }
       .linkstrBarChrome()
-      .navigationTitle("share a link")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
-          Button("cancel") { deepLinkHandler.clearShareDraft() }
+          LinkstrHeaderButton(title: "cancel", icon: "xmark") { deepLinkHandler.clearShareDraft(matching: draft) }
             .disabled(isSending)
         }
+        .linkstrFlatToolbarItem()
       }
       .safeAreaInset(edge: .bottom, spacing: 0) {
-        LinkstrShareFooter(status: footerStatus, canSend: canSend, isSending: isSending, send: sendSharedLink)
+        if focusedField == nil {
+          LinkstrShareFooter(status: footerStatus, canSend: canSend, isSending: isSending, send: sendSharedLink)
+        }
       }
     }
+    .interactiveDismissDisabled(isSending)
     .preferredColorScheme(.dark)
     .onAppear {
-      selectDefaultSessionIfNeeded()
-    }
-    .onChange(of: activeSessions.map(\.sessionID).stableTaskID) { _, _ in
-      clearMissingSelectionIfNeeded()
       selectDefaultSessionIfNeeded()
     }
     .onChange(of: focusedField) { previousField, focusedField in
@@ -180,6 +149,7 @@ struct ShareComposerView: View {
     .sheet(isPresented: $isPresentingSessionPicker) {
       ShareSessionPickerSheet(
         sessions: activeSessions,
+        avatarsBySessionID: memberAvatars(for: Set(activeSessions.map(\.sessionID))),
         selectedSessionID: $selectedSessionID
       )
       .presentationDetents([.fraction(0.86), .large])
@@ -189,16 +159,31 @@ struct ShareComposerView: View {
 
   @ViewBuilder
   private var selectedSessionRow: some View {
-    if let selectedSession {
-      ShareSelectedSessionRow(session: selectedSession)
+    if !activeSessions.isEmpty {
+      Button {
+        focusedField = nil
+        isPresentingSessionPicker = true
+      } label: {
+        if let selectedSession {
+          ShareSelectedSessionRow(
+            session: selectedSession,
+            memberAvatars: memberAvatars(for: [selectedSession.sessionID])[selectedSession.sessionID, default: []],
+            isSelectable: true
+          )
+        } else {
+          LinkstrActionButtonLabel(title: "choose a session", systemImage: "bubble.left.and.bubble.right")
+        }
+      }
+      .buttonStyle(.plain)
+      .accessibilityHint("choose where to share this link")
+      .disabled(isSending)
     } else {
-      LinkstrShareEmptyPickerState(
+      LinkstrCenteredEmptyStateView(
         title: "no active sessions",
         systemImage: "bubble.left.and.bubble.right",
         description: "create a session before sharing links."
       )
       .frame(maxWidth: .infinity, minHeight: 140)
-      .contentShape(Rectangle())
     }
   }
 }

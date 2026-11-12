@@ -57,6 +57,7 @@ extension AppSession {
   func importNsec(_ nsec: String) {
     guard !isRestoringBackup, restoreRecoveryError == nil else { return }
     contactMutations.cancel()
+    reactionMutations.cancel()
     do {
       try identityService.importNsec(nsec)
       pendingCreatedAccountNsec = nil
@@ -239,7 +240,7 @@ extension AppSession {
     }
   }
 
-  func clearableStorageUsage() -> ManagedStorageUsage {
-    (try? messageStore.managedStorageUsage()) ?? .zero
+  func clearableStorageUsage() async -> ManagedStorageUsage {
+    (try? await messageStore.managedStorageUsage()) ?? .zero
   }
 }

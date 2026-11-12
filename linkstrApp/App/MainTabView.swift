@@ -91,16 +91,14 @@ struct MainTabView: View {
 
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    .toolbarVisibility(.hidden, for: .navigationBar)
 
     .navigationDestination(for: AppRoute.self) { route in
       switch route {
       case .session(let sessionID, let postID):
-        SessionPostsView(ownerPubkey: ownerPubkey, sessionID: sessionID, scrollToPostID: postID) { postID in
-          watchPositions[sessionID] = postID
-        }
-      case .watch(let sessionID, let postID):
         SessionPostsView(
-          ownerPubkey: ownerPubkey, sessionID: sessionID, startingWatchPostID: postID, opensInWatch: true
+          ownerPubkey: ownerPubkey, sessionID: sessionID, scrollToPostID: postID,
+          startingWatchPostID: watchPositions[sessionID]
         ) { postID in
           watchPositions[sessionID] = postID
         }
@@ -109,9 +107,10 @@ struct MainTabView: View {
           isPresentingAddContact = true
         }
         .background(LinkstrBackgroundView())
+        .toolbarVisibility(.hidden, for: .navigationBar)
       case .settings(let section):
         SettingsView(initialSection: section)
-          .toolbarVisibility(.hidden, for: .tabBar)
+          .toolbarVisibility(.hidden, for: .navigationBar, .tabBar)
       }
     }
     .linkstrBarChrome()
@@ -157,7 +156,7 @@ struct MainTabView: View {
 
   private func openSession(_ sessionID: String) {
     selectedTab = .sessions
-    navigationPath = [.watch(sessionID, startingPostID: watchPositions[sessionID])]
+    navigationPath = [.session(sessionID)]
   }
 
   private func navigateToPendingSessionIfNeeded() {

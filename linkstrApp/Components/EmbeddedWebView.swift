@@ -5,6 +5,20 @@ enum EmbeddedWebSource: Equatable {
   case url(URL)
   case html(document: String, baseURL: URL?)
 
+  static let fallbackMessage = "couldn’t load the official embed. open the original link in your browser."
+  static let fallbackCSS = """
+    .linkstr-embed-fallback {
+      box-sizing: border-box;
+      min-height: 220px;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      color: \(LinkstrTheme.secondaryTextCSS);
+      text-align: center;
+      font: -apple-system-body;
+    }
+    """
+
   var usesManagedHTMLDocument: Bool {
     if case .html = self {
       return true
@@ -12,13 +26,13 @@ enum EmbeddedWebSource: Equatable {
     return false
   }
 
+  var isFacebookVideoDocument: Bool {
+    guard case .html(_, let baseURL) = self else { return false }
+    return baseURL.map(SocialURLHeuristics.isFacebookHost) == true
+  }
+
   var customUserAgent: String? {
-    guard case .html(_, let baseURL) = self,
-      baseURL.map(SocialURLHeuristics.isFacebookHost) == true
-    else {
-      return nil
-    }
-    return SocialVideoExtractionService.mobileUserAgent
+    isFacebookVideoDocument ? SocialVideoExtractionService.mobileUserAgent : nil
   }
 }
 
@@ -42,14 +56,40 @@ private let socialEmbedViewportScript = """
   })();
   """
 
+let tiktokPlayerDiagnosticsScript = """
+  (() => {
+    if (location.origin !== 'https://www.tiktok.com' || !location.pathname.startsWith('/player/v1/')) return;
+    // The standalone player posts its host messages back to the top-level window.
+    window.addEventListener('message', event => {
+      if (event.source !== window || event.origin !== location.origin) return;
+      const data = event.data;
+      if (data?.['x-tiktok-player'] !== true) return;
+      // Autoplay rejection (3002) still permits a user-initiated play.
+      const playbackError = data.type === 'onPlayerError' && [1001, 2001, 3001].includes(data.value?.errorCode);
+      if (playbackError) {
+        window.webkit?.messageHandlers?.linkstrEmbedMetrics?.postMessage({ tiktokPlayerFailure: playbackError });
+      }
+    });
+  })();
+  """
+
 struct EmbeddedWebView: UIViewRepresentable {
+  enum LoadFailure {
+    case unavailable
+    case tiktokRateLimited
+  }
+
   let source: EmbeddedWebSource
   var onIntrinsicHeightChange: ((CGFloat) -> Void)?
   var onContentReadyChange: ((Bool) -> Void)?
-  var onLoadFailure: (() -> Void)?
+  var onRenderedPostChange: ((Bool) -> Void)?
+  var onProviderFailure: (() -> Void)?
+  var onLoadFailure: ((LoadFailure) -> Void)?
   var isPlaybackSuspended = false
   var allowsVerticalScroll = false
+}
 
+extension EmbeddedWebView {
   final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler, WKUIDelegate {
     static let metricsHandlerName = "linkstrEmbedMetrics"
 
@@ -57,18 +97,49 @@ struct EmbeddedWebView: UIViewRepresentable {
     var isPlaybackSuspended = false
     var onIntrinsicHeightChange: ((CGFloat) -> Void)?
     var onContentReadyChange: ((Bool) -> Void)?
-    var onLoadFailure: (() -> Void)?
+    var onRenderedPostChange: ((Bool) -> Void)?
+    var onProviderFailure: (() -> Void)?
+    var onLoadFailure: ((LoadFailure) -> Void)?
 
     private var pendingMetricPolls: [DispatchWorkItem] = []
+    private var metricPollingID = UUID()
     private var lastReportedHeight: CGFloat = 0
     private var lastReportedReadyState = false
+    private var lastReportedRenderedPost = false
+
+    private var isLoadingTikTokPlayer: Bool {
+      guard case .url(let url) = source else { return false }
+      return url.scheme == "https" && url.host == "www.tiktok.com" && URLClassifier.isDedicatedEmbedURL(url)
+    }
 
     func userContentController(
       _ userContentController: WKUserContentController,
       didReceive message: WKScriptMessage
     ) {
-      guard message.name == Self.metricsHandlerName else { return }
-      applyMetrics(from: message.body)
+      guard message.name == Self.metricsHandlerName, message.frameInfo.isMainFrame else { return }
+      if source?.usesManagedHTMLDocument == true {
+        applyMetrics(from: message.body)
+      } else if isLoadingTikTokPlayer,
+        message.frameInfo.securityOrigin.protocol == "https",
+        message.frameInfo.securityOrigin.host == "www.tiktok.com",
+        let payload = message.body as? [String: Any], payload["tiktokPlayerFailure"] as? Bool == true {
+        onProviderFailure?()
+      }
+    }
+
+    func webView(
+      _ webView: WKWebView,
+      decidePolicyFor response: WKNavigationResponse,
+      decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void
+    ) {
+      if isLoadingTikTokPlayer, response.isForMainFrame,
+        let http = response.response as? HTTPURLResponse, http.url?.host == "www.tiktok.com",
+        http.statusCode == 429, http.expectedContentLength == 0 {
+        decisionHandler(.cancel)
+        onLoadFailure?(.tiktokRateLimited)
+      } else {
+        decisionHandler(.allow)
+      }
     }
 
     func webView(
@@ -102,12 +173,13 @@ struct EmbeddedWebView: UIViewRepresentable {
       return nil
     }
 
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+      if case .url = source { onContentReadyChange?(true) }
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-      if source?.usesManagedHTMLDocument == true {
-        scheduleMetricPolling(for: webView)
-      } else {
-        onContentReadyChange?(true)
-      }
+      guard source?.usesManagedHTMLDocument == true else { return }
+      scheduleMetricPolling(for: webView)
     }
 
     func webView(
@@ -126,17 +198,26 @@ struct EmbeddedWebView: UIViewRepresentable {
       reportLoadFailure(error)
     }
 
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+      cancelPendingMetricPolls()
+      onLoadFailure?(.unavailable)
+    }
+
     func prepareForNewLoad() {
       cancelPendingMetricPolls()
       lastReportedHeight = 0
       lastReportedReadyState = false
+      lastReportedRenderedPost = false
       onContentReadyChange?(false)
+      onRenderedPostChange?(false)
     }
 
     func clearHandlers() {
       cancelPendingMetricPolls()
       onIntrinsicHeightChange = nil
       onContentReadyChange = nil
+      onRenderedPostChange = nil
+      onProviderFailure = nil
       onLoadFailure = nil
     }
 
@@ -146,7 +227,7 @@ struct EmbeddedWebView: UIViewRepresentable {
         || (nsError.domain == "WebKitErrorDomain" && nsError.code == 102) {
         return
       }
-      onLoadFailure?()
+      onLoadFailure?(.unavailable)
     }
 
     private func scheduleMetricPolling(for webView: WKWebView) {
@@ -163,16 +244,21 @@ struct EmbeddedWebView: UIViewRepresentable {
     }
 
     private func cancelPendingMetricPolls() {
+      metricPollingID = UUID()
       pendingMetricPolls.forEach { $0.cancel() }
       pendingMetricPolls.removeAll()
     }
 
     private func pollMetrics(from webView: WKWebView) {
+      let pollingID = metricPollingID
       let script = """
           (() => {
             const root = document.documentElement;
             const body = document.body;
-            const height = Math.max(
+            const embed = document.querySelector('#tweet-container, #facebook-container');
+            const height = embed ? Math.max(
+              embed.scrollHeight, embed.offsetHeight, embed.clientHeight
+            ) : Math.max(
               root?.scrollHeight ?? 0,
               body?.scrollHeight ?? 0,
               root?.offsetHeight ?? 0,
@@ -181,54 +267,38 @@ struct EmbeddedWebView: UIViewRepresentable {
               body?.clientHeight ?? 0
             );
             const ready = body?.classList.contains('linkstr-embed-ready') ?? false;
-            return JSON.stringify({ height: Math.ceil(height), ready });
+            return { height: Math.ceil(height), ready };
           })();
         """
 
       webView.evaluateJavaScript(script) { [weak self] result, _ in
-        guard let self else { return }
+        guard let self, self.metricPollingID == pollingID else { return }
         self.applyMetrics(from: result)
       }
     }
 
     private func applyMetrics(from payload: Any?) {
-      let metrics = decodeMetrics(from: payload)
-      if let height = metrics.height, height > 0, abs(height - lastReportedHeight) > 1 {
+      guard let metrics = payload as? [String: Any] else { return }
+      if let height = metrics["height"] as? CGFloat, height > 0, abs(height - lastReportedHeight) > 1 {
         lastReportedHeight = height
         onIntrinsicHeightChange?(height)
       }
 
-      if let ready = metrics.ready, ready != lastReportedReadyState {
+      if let ready = metrics["ready"] as? Bool, ready != lastReportedReadyState {
         lastReportedReadyState = ready
         onContentReadyChange?(ready)
       }
-    }
 
-    private func decodeMetrics(from payload: Any?) -> (height: CGFloat?, ready: Bool?) {
-      if let dictionary = payload as? [String: Any] {
-        return (
-          height: CGFloat((dictionary["height"] as? NSNumber)?.doubleValue ?? 0),
-          ready: dictionary["ready"] as? Bool
-        )
+      if let hasRenderedPost = metrics["hasRenderedPost"] as? Bool,
+        hasRenderedPost != lastReportedRenderedPost {
+        lastReportedRenderedPost = hasRenderedPost
+        onRenderedPostChange?(hasRenderedPost)
       }
-
-      if let json = payload as? String,
-        let data = json.data(using: .utf8),
-        let dictionary = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-        return (
-          height: CGFloat((dictionary["height"] as? NSNumber)?.doubleValue ?? 0),
-          ready: dictionary["ready"] as? Bool
-        )
-      }
-
-      if let number = payload as? NSNumber {
-        return (height: CGFloat(number.doubleValue), ready: nil)
-      }
-
-      return (height: nil, ready: nil)
     }
   }
+}
 
+extension EmbeddedWebView {
   func makeCoordinator() -> Coordinator { Coordinator() }
 
   func makeUIView(context: Context) -> WKWebView {
@@ -245,6 +315,9 @@ struct EmbeddedWebView: UIViewRepresentable {
         injectionTime: .atDocumentStart,
         forMainFrameOnly: true
       )
+    )
+    config.userContentController.addUserScript(
+      WKUserScript(source: tiktokPlayerDiagnosticsScript, injectionTime: .atDocumentStart, forMainFrameOnly: true)
     )
     if #available(iOS 16.4, *) {
       config.preferences.isElementFullscreenEnabled = true
@@ -268,6 +341,8 @@ struct EmbeddedWebView: UIViewRepresentable {
     context.coordinator.source = source
     context.coordinator.onIntrinsicHeightChange = onIntrinsicHeightChange
     context.coordinator.onContentReadyChange = onContentReadyChange
+    context.coordinator.onRenderedPostChange = onRenderedPostChange
+    context.coordinator.onProviderFailure = onProviderFailure
     context.coordinator.onLoadFailure = onLoadFailure
     uiView.scrollView.isScrollEnabled = allowsVerticalScroll
     uiView.scrollView.showsVerticalScrollIndicator = allowsVerticalScroll
@@ -320,7 +395,6 @@ extension EmbeddedWebView {
       let url = URL(string: "https://\(bundleID)") {
       return url
     }
-
     return URL(string: "https://localhost")!
   }
 }

@@ -26,7 +26,7 @@ struct RootView: View {
 
   private var sharedLinkDetailBinding: Binding<Bool> {
     Binding(
-      get: { canPresentMediaSave && deepLinkHandler.pendingURLString != nil },
+      get: { canPresentMediaSave && deepLinkHandler.pendingSharedURL != nil },
       set: { isPresented in
         if !isPresented {
           deepLinkHandler.clearSharedLinkDetail()
@@ -79,7 +79,9 @@ struct RootView: View {
       Group {
         if let error = session.restoreRecoveryError {
           LinkstrStorageRecoveryView(
-            title: "restore paused", message: error, primaryActionTitle: "retry restore",
+            title: "restore paused",
+            message: "linkstr couldn’t finish restoring your account. retry to continue.",
+            diagnostics: error, primaryActionTitle: "retry restore",
             onPrimaryAction: { Task { await session.boot() } },
             secondaryActionTitle: nil, onSecondaryAction: nil)
         } else if session.didRestoreBackup {
@@ -116,9 +118,12 @@ struct RootView: View {
     .overlay(alignment: .top) {
       if let toastMessage {
         Button(action: handleToastTap) {
-          LinkstrErrorToast(message: toastMessage, isSuccess: toastIsSuccess)
+          LinkstrErrorToast(
+            message: toastMessage, isSuccess: toastIsSuccess, opensRelaySettings: toastOpensRelaySettings
+          )
         }
         .buttonStyle(.plain)
+        .frame(maxWidth: LinkstrTheme.readableContentMaxWidth)
         .padding(.top, LinkstrTheme.toastTopPadding)
         .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
         .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
@@ -129,13 +134,10 @@ struct RootView: View {
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .preferredColorScheme(.dark)
     .tint(LinkstrTheme.accent)
     .onChange(of: pushNotifications.pendingNavigation?.id, initial: true) { _, _ in
       guard let request = pushNotifications.pendingNavigation else { return }
-      deepLinkHandler.clearSharedLinkDetail()
-      deepLinkHandler.clearShareDraft()
-      deepLinkHandler.clearMediaSaveDraft()
+      deepLinkHandler.clearPendingRoutes()
       session.pendingSessionNavigationRequest = request
       pushNotifications.clearPendingNavigation(id: request.id)
     }
@@ -167,24 +169,19 @@ struct RootView: View {
     .fullScreenCover(
       isPresented: sharedLinkDetailBinding
     ) {
-      if let urlString = deepLinkHandler.pendingURLString {
+      if let sourceURL = deepLinkHandler.pendingSharedURL {
         NavigationStack {
-          DeepLinkDetailView(urlString: urlString)
+          DeepLinkDetailView(sourceURL: sourceURL)
             .linkstrBarChrome()
             .toolbar {
               ToolbarItem(placement: .topBarLeading) {
-                Button {
+                LinkstrHeaderButton(title: "close shared link", icon: "xmark") {
                   deepLinkHandler.clearSharedLinkDetail()
-                } label: {
-                  Image(systemName: "xmark")
-                    .linkstrToolbarIconLabel()
                 }
-                .accessibilityLabel("close shared link")
-                .tint(LinkstrTheme.textSecondary)
               }
+              .linkstrFlatToolbarItem()
             }
         }
-        .preferredColorScheme(.dark)
       } else {
         EmptyView()
       }
@@ -238,7 +235,7 @@ private struct LinkstrBootLoadingView: View {
     VStack(spacing: 18) {
       LinkstrAppIconBadge(size: 72)
 
-      VStack(spacing: 8) {
+      VStack(spacing: LinkstrTheme.compactSpacing) {
         Text("loading linkstr")
           .font(LinkstrTheme.font(.title3, weight: .semibold))
           .foregroundStyle(LinkstrTheme.textPrimary)

@@ -7,90 +7,93 @@ struct WatchVideoSurface: View {
   let player: AVPlayer
   let aspectRatio: CGFloat
   let bottomInset: CGFloat
+  let videoInsets: EdgeInsets?
   @Binding var isMuted: Bool
+  let hasAudio: Bool
+  let onControlsHeightChange: (CGFloat) -> Void
+  let openSystemPlayer: () -> Void
 
   var body: some View {
     GeometryReader { proxy in
-      let fillsPortrait = aspectRatio < 0.72 && proxy.size.height > proxy.size.width
+      let fillsPortrait = videoInsets == nil && aspectRatio < 0.72 && proxy.size.height > proxy.size.width
       WatchPlayerLayer(player: player, fillsPortrait: fillsPortrait)
+        .padding(videoInsets ?? EdgeInsets())
         .contentShape(Rectangle())
         .onTapGesture { player.toggleWatchPlayback() }
         .accessibilityHidden(true)
     }
-    .background(.black)
+    .background(LinkstrTheme.background)
     .overlay(alignment: .bottom) {
-      WatchPlaybackControls(player: player, bottomInset: bottomInset, isMuted: $isMuted)
+      WatchPlaybackControls(
+        player: player, bottomInset: bottomInset, isMuted: $isMuted, hasAudio: hasAudio,
+        openSystemPlayer: openSystemPlayer
+      )
         .id(ObjectIdentifier(player))
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+          onControlsHeightChange(max(0, height - bottomInset))
+        }
     }
   }
 }
 
 private struct WatchPlaybackControls: View {
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+  @Environment(\.verticalSizeClass) private var verticalSizeClass
   let player: AVPlayer
   let bottomInset: CGFloat
   @Binding var isMuted: Bool
-  @State private var isPlaying = true
+  let hasAudio: Bool
+  let openSystemPlayer: () -> Void
+  @State private var playbackStatus: AVPlayer.TimeControlStatus = .paused
   @State private var duration: Double = 0
   @State private var elapsed: Double = 0
   @State private var scrubbing = false
   @State private var timeObserver: Any?
 
+  private var isBuffering: Bool { playbackStatus == .waitingToPlayAtSpecifiedRate }
+  private var isPlaying: Bool { playbackStatus != .paused }
+
   var body: some View {
-    HStack(spacing: 7) {
-      Button {
-        player.toggleWatchPlayback()
-      } label: {
-        Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-          .frame(width: 44, height: 44)
-      }
-      .accessibilityLabel(isPlaying ? "pause video" : "play video")
-
-      Slider(
-        value: $elapsed, in: 0...max(0.001, duration),
-        onEditingChanged: { editing in
-          scrubbing = editing
-          if !editing {
-            player.seek(to: CMTime(seconds: elapsed, preferredTimescale: 600))
+    Group {
+      if dynamicTypeSize.isAccessibilitySize, verticalSizeClass != .compact {
+        VStack(spacing: 0) {
+          HStack(spacing: LinkstrTheme.compactSpacing) {
+            playButton
+            Spacer(minLength: 0)
+            timeLabel
+            Spacer(minLength: 0)
+            muteButton
+            fullscreenButton
           }
+          positionSlider
         }
-      )
-      .controlSize(.small)
-      .tint(LinkstrTheme.accent)
-      .disabled(duration <= 0)
-      .accessibilityLabel("video position")
-      .accessibilityValue("\(timestamp(elapsed)) of \(timestamp(duration))")
-      .accessibilityAdjustableAction { direction in
-        switch direction {
-        case .increment: seek(by: 10)
-        case .decrement: seek(by: -10)
-        @unknown default: break
+      } else {
+        HStack(spacing: LinkstrTheme.compactSpacing) {
+          playButton
+          positionSlider
+          timeLabel
+          muteButton
+          fullscreenButton
         }
       }
-
-      if duration > 0 {
-        Text("\(timestamp(elapsed)) / \(timestamp(duration))")
-          .font(LinkstrTheme.font(.caption2, weight: .medium).monospacedDigit())
-          .lineLimit(1)
-          .accessibilityHidden(true)
-      }
-
-      Button {
-        isMuted.toggle()
-      } label: {
-        Image(systemName: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-          .frame(width: 44, height: 44)
-      }
-      .accessibilityLabel(isMuted ? "unmute video" : "mute video")
     }
     .font(LinkstrTheme.font(.subheadline, weight: .semibold))
     .foregroundStyle(LinkstrTheme.textPrimary)
     .buttonStyle(.plain)
-    .padding(.horizontal, 8)
-    .padding(.vertical, 4)
+    .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+    .padding(.vertical, LinkstrTheme.metaSpacing)
+    .linkstrReadableContent()
     .padding(.bottom, bottomInset)
-    .background(.black.opacity(0.75))
+    .background {
+      LinearGradient(
+        colors: [LinkstrTheme.background.opacity(0.68), LinkstrTheme.background.opacity(0.74)],
+        startPoint: .top, endPoint: .bottom
+      )
+      .allowsHitTesting(false)
+      .accessibilityHidden(true)
+    }
     .onReceive(player.publisher(for: \.timeControlStatus).receive(on: DispatchQueue.main)) { status in
-      isPlaying = status != .paused
+      playbackStatus = status
       updatePosition()
     }
     .onAppear(perform: observeTime)
@@ -98,6 +101,84 @@ private struct WatchPlaybackControls: View {
       if let timeObserver { player.removeTimeObserver(timeObserver) }
       timeObserver = nil
     }
+  }
+
+  private var playButton: some View {
+    Button {
+      player.toggleWatchPlayback()
+    } label: {
+      Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+        .linkstrToolbarIconLabel()
+    }
+    .accessibilityLabel(isPlaying ? "pause video" : "play video")
+    .accessibilityValue(isBuffering ? "buffering" : "")
+  }
+
+  private var fullscreenButton: some View {
+    Button(action: openSystemPlayer) {
+      Image(systemName: "arrow.up.left.and.arrow.down.right")
+        .linkstrToolbarIconLabel()
+    }
+    .accessibilityLabel("open system player")
+    .accessibilityHint("view the full video without post details")
+  }
+
+  private var positionSlider: some View {
+    Slider(
+      value: Binding(get: { min(duration, elapsed) }, set: { elapsed = $0 }),
+      in: 0...max(0.001, duration),
+      onEditingChanged: { editing in
+        scrubbing = editing
+        if !editing {
+          seek(to: elapsed)
+        }
+      }
+    )
+    .controlSize(.small)
+    .frame(minHeight: LinkstrTheme.minimumInteractiveDimension)
+    .tint(LinkstrTheme.accent)
+    .disabled(duration <= 0)
+    .accessibilityLabel("video position")
+    .accessibilityValue(
+      duration > 0
+        ? "\(timestamp(displayedPosition)) of \(timestamp(duration))"
+        : "\(timestamp(elapsed)), duration unavailable"
+    )
+    .accessibilityAdjustableAction { direction in
+      switch direction {
+      case .increment: seek(by: 10)
+      case .decrement: seek(by: -10)
+      @unknown default: break
+      }
+    }
+  }
+
+  @ViewBuilder
+  private var timeLabel: some View {
+    if isBuffering {
+      ProgressView()
+        .controlSize(.small)
+        .tint(LinkstrTheme.accent)
+        .accessibilityHidden(true)
+    } else if duration > 0 || elapsed > 0 {
+      Text(duration > 0 ? "\(timestamp(displayedPosition)) / \(timestamp(duration))" : timestamp(elapsed))
+        .font(LinkstrTheme.font(.caption2, weight: .medium).monospacedDigit())
+        .lineLimit(1)
+        .minimumScaleFactor(0.65)
+        .accessibilityHidden(true)
+    }
+  }
+
+  private var muteButton: some View {
+    Button {
+      isMuted.toggle()
+    } label: {
+      Image(systemName: isMuted || !hasAudio ? "speaker.slash.fill" : "speaker.wave.2.fill")
+        .linkstrToolbarIconLabel()
+        .foregroundStyle(hasAudio ? LinkstrTheme.textPrimary : LinkstrTheme.textTertiary)
+    }
+    .disabled(!hasAudio)
+    .accessibilityLabel(hasAudio ? (isMuted ? "unmute video" : "mute video") : "video has no audio")
   }
 
   private func observeTime() {
@@ -112,16 +193,26 @@ private struct WatchPlaybackControls: View {
     duration = player.watchDuration
     guard !scrubbing else { return }
     let position = player.currentTime().seconds
-    elapsed = position.isFinite ? min(duration, max(0, position)) : 0
+    elapsed = position.isFinite ? max(0, position) : 0
   }
 
+  private var displayedPosition: Double { min(duration, elapsed) }
+
   private func seek(by delta: Double) {
-    elapsed = min(duration, max(0, elapsed + delta))
+    seek(to: displayedPosition + delta)
+  }
+
+  private func seek(to position: Double) {
+    guard duration > 0 else { return }
+    elapsed = min(duration, max(0, position))
     player.seek(to: CMTime(seconds: elapsed, preferredTimescale: 600))
   }
 
   private func timestamp(_ seconds: Double) -> String {
-    let rounded = Int(seconds.rounded(.down))
+    let rounded = Int(exactly: seconds.rounded(.down)) ?? 0
+    if rounded >= 3_600 {
+      return "\(rounded / 3_600):\(String(format: "%02d:%02d", rounded / 60 % 60, rounded % 60))"
+    }
     return "\(rounded / 60):\(String(format: "%02d", rounded % 60))"
   }
 }

@@ -204,10 +204,8 @@ class AppSessionTestCase: XCTestCase {
   }
 
   func makeManagedVideoURL() -> URL {
-    ManagedLocalFileScope.shared.cachedVideoFileURL(
-      for: URL(string: "https://example.com/video-\(UUID().uuidString).mp4")!,
-      preferredExtension: "mp4"
-    )
+    ManagedLocalFileScope.shared.videoDirectory
+      .appendingPathComponent("test-video-\(UUID().uuidString).mp4")
   }
 
   func makeUnmanagedTempURL(prefix: String, fileExtension: String) -> URL {

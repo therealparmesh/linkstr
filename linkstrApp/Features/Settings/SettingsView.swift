@@ -10,7 +10,7 @@ struct LinkstrAdaptiveButtonRow<Content: View>: View {
   }
 
   var body: some View {
-    let layout = dynamicTypeSize.isAccessibilitySize
+    let layout = dynamicTypeSize >= .xLarge
       ? AnyLayout(VStackLayout(spacing: LinkstrTheme.buttonRowSpacing))
       : AnyLayout(HStackLayout(spacing: LinkstrTheme.buttonRowSpacing))
 
@@ -37,20 +37,24 @@ enum SettingsSection: String, Hashable {
 struct SettingsView: View {
   let initialSection: SettingsSection?
   @Environment(\.scenePhase) private var scenePhase
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   @EnvironmentObject var session: AppSession
 
   @AppStorage("loopLocalVideos") private var loopLocalVideos = true
+  @AppStorage("watchMuted") private var watchMuted = false
 
   @State private var relayURL = ""
+  @State private var showsRelayAddressError = false
   @State var revealedNsec = ""
   @State var isNsecVisible = false
   @State var isPresentingLogoutOptions = false
   @State var isPresentingDeleteAccountConfirm = false
-  @State var isPresentingDeleteAccountFinalConfirm = false
+  @State private var isConfirmingAccountDeletion = false
   @State var isDeletingAccount = false
   @State var clearableStorageBytes: Int64?
   @State var clearableMetadataBytes: Int64?
   @State var isRefreshingStorageUsage = false
+  @State var storageUsageRefreshID = 0
 
   var body: some View {
     ZStack {
@@ -58,7 +62,9 @@ struct SettingsView: View {
       content
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-    .onAppear(perform: refreshStorageUsage)
+    .task(id: storageUsageRefreshID) {
+      await loadStorageUsage()
+    }
     .onChange(of: scenePhase) { _, newValue in
       switch newValue {
       case .active:
@@ -76,7 +82,6 @@ struct SettingsView: View {
     ScrollViewReader { proxy in
       ScrollView {
         VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
-          LinkstrScreenTitle(title: "settings")
           playbackSection.id(SettingsSection.playback)
           relaysSection.id(SettingsSection.relays)
           storageSection.id(SettingsSection.storage)
@@ -85,17 +90,22 @@ struct SettingsView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-        .padding(.top, LinkstrTheme.screenTopPadding)
+        .padding(.top, LinkstrTheme.pinnedPageContentTopPadding)
         .padding(.bottom, LinkstrTheme.screenBottomPadding)
         .linkstrReadableContent()
       }
       .onAppear {
-        if let initialSection { proxy.scrollTo(initialSection, anchor: .top) }
+        guard let initialSection else { return }
+        // Resolve section frames after the first layout pass.
+        DispatchQueue.main.async { proxy.scrollTo(initialSection, anchor: .top) }
       }
+    }
+    .linkstrPinnedPageHeader {
+      LinkstrPageHeader(title: "settings", backLabel: "back to you") { EmptyView() }
     }
     .linkstrKeyboardDismissal()
     .alert("log out", isPresented: $isPresentingLogoutOptions) {
-      Button("log out (keep local data)") {
+      Button("log out and keep local data") {
         session.logOut(clearLocalData: false)
       }
       Button("log out and clear local data", role: .destructive) {
@@ -104,56 +114,39 @@ struct SettingsView: View {
       Button("cancel", role: .cancel) {}
     } message: {
       Text(
-        "choose whether to keep this account's local sessions, posts, and "
-          + "contacts on this device or remove them before logging out."
+        "choose whether to keep this account’s sessions, posts, and contacts on this device."
       )
     }
-    .alert("delete account", isPresented: $isPresentingDeleteAccountConfirm) {
-      Button("continue", role: .destructive) {
-        isPresentingDeleteAccountFinalConfirm = true
+    .sheet(
+      isPresented: $isPresentingDeleteAccountConfirm,
+      onDismiss: { isConfirmingAccountDeletion = false },
+      content: {
+        LinkstrConfirmationSheet(
+          title: isConfirmingAccountDeletion ? "confirm account deletion" : "delete account",
+          message: accountDeletionMessage,
+          actionTitle: isConfirmingAccountDeletion ? "delete account" : "continue",
+          isDestructive: isConfirmingAccountDeletion,
+          dismissOnConfirm: isConfirmingAccountDeletion,
+          onConfirm: confirmAccountDeletion
+        )
+        .id(isConfirmingAccountDeletion)
       }
-      Button("cancel", role: .cancel) {}
-    } message: {
-      Text(
-        "this asks your active relays to delete this account, clears this "
-          + "account's local data on this device, and logs you out. if you keep "
-          + "the secret key, you can still sign in again."
-      )
-    }
-    .alert("are you absolutely sure?", isPresented: $isPresentingDeleteAccountFinalConfirm) {
-      Button("delete account permanently", role: .destructive) {
-        guard !isDeletingAccount else { return }
-        isDeletingAccount = true
-        Task {
-          let didDelete = await session.deleteAccountAwaitingRelay()
-          await MainActor.run {
-            isDeletingAccount = false
-            if didDelete == false {
-              isPresentingDeleteAccountFinalConfirm = false
-            }
-          }
-        }
-      }
-      Button("cancel", role: .cancel) {}
-    } message: {
-      Text(
-        "this removes contacts, sessions, posts, reactions, cached media, "
-          + "and local encryption keys for this account after the relay "
-          + "deletion request succeeds."
-      )
-    }
+    )
   }
 
   private var playbackSection: some View {
     LinkstrInsetSection(
       title: "playback",
-      footer: "repeat local videos when they end. embedded videos follow the provider's settings."
+      footer: "mute applies to the session viewer. official embeds use their own sound and loop controls."
     ) {
-      Toggle("loop local videos", isOn: $loopLocalVideos)
-        .font(LinkstrTheme.font(.subheadline))
-        .foregroundStyle(LinkstrTheme.textPrimary)
-        .toggleStyle(.switch)
-        .tint(LinkstrTheme.accent)
+      Group {
+        Toggle("loop local videos", isOn: $loopLocalVideos)
+        Toggle("mute session videos", isOn: $watchMuted)
+      }
+      .font(LinkstrTheme.font(.subheadline))
+      .foregroundStyle(LinkstrTheme.textPrimary)
+      .toggleStyle(.switch)
+      .tint(LinkstrTheme.accent)
     }
   }
 
@@ -180,7 +173,7 @@ struct SettingsView: View {
         }
       }
 
-      TextField("wss://relay.example.com", text: $relayURL)
+      TextField("relay address", text: $relayURL, prompt: Text("wss://relay.example.com"))
         .font(LinkstrTheme.font(.subheadline))
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled(true)
@@ -188,15 +181,24 @@ struct SettingsView: View {
         .lineLimit(1)
         .submitLabel(.done)
         .onSubmit(addRelayFromDraft)
+        .onChange(of: relayURL) { _, _ in showsRelayAddressError = false }
+        .accessibilityLabel("relay address")
         .linkstrInputField()
+
+      if showsRelayAddressError {
+        Text("enter a relay address starting with wss:// or ws://.")
+          .font(LinkstrTheme.font(.footnote))
+          .foregroundStyle(LinkstrTheme.destructive)
+      }
 
       LinkstrAdaptiveButtonRow {
         Button {
           addRelayFromDraft()
         } label: {
-          LinkstrActionButtonLabel(title: "add relay")
+          LinkstrActionButtonLabel(title: "add relay", systemImage: "plus")
         }
         .linkstrPrimaryButton()
+        .disabled(relayURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
         Button {
           session.restoreDefaultRelays()
@@ -209,23 +211,28 @@ struct SettingsView: View {
   }
 
   private func relayRow(_ relay: RelayEntity) -> some View {
-    VStack(alignment: .leading, spacing: LinkstrTheme.buttonRowSpacing) {
-      HStack(alignment: .top, spacing: LinkstrTheme.buttonRowSpacing) {
-        relayDetails(relay)
+    let layout = dynamicTypeSize.isAccessibilitySize
+      ? AnyLayout(VStackLayout(alignment: .leading, spacing: LinkstrTheme.compactSpacing))
+      : AnyLayout(HStackLayout(alignment: .top, spacing: LinkstrTheme.buttonRowSpacing))
 
-        Spacer(minLength: 8)
+    return VStack(alignment: .leading, spacing: LinkstrTheme.buttonRowSpacing) {
+      layout {
+        relayDetails(relay)
+          .frame(maxWidth: .infinity, alignment: .leading)
 
         Toggle(
-          "relay enabled",
+          "enable relay",
           isOn: Binding(
             get: { relay.isEnabled },
             set: { _ in session.toggleRelay(relay) }
           )
         )
-        .labelsHidden()
+        .labelsVisibility(dynamicTypeSize.isAccessibilitySize ? .visible : .hidden)
+        .font(LinkstrTheme.font(.footnote))
+        .foregroundStyle(LinkstrTheme.textPrimary)
         .toggleStyle(.switch)
         .tint(LinkstrTheme.accent)
-        .accessibilityLabel("\(relay.url) enabled")
+        .accessibilityLabel("relay \(relay.url)")
       }
 
       HStack(alignment: .center, spacing: LinkstrTheme.rowSpacing) {
@@ -241,6 +248,7 @@ struct SettingsView: View {
         .buttonStyle(.plain)
         .foregroundStyle(LinkstrTheme.destructive)
         .frame(minHeight: LinkstrTheme.minimumInteractiveDimension)
+        .accessibilityLabel("remove relay \(relay.url)")
       }
     }
     .padding(.vertical, LinkstrTheme.listRowVerticalPadding)
@@ -251,9 +259,10 @@ struct SettingsView: View {
       Text(relay.url)
         .font(LinkstrTheme.font(.footnote, weight: .medium))
         .foregroundStyle(LinkstrTheme.textPrimary)
-        .lineLimit(2)
+        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+        .textSelection(.enabled)
 
-      HStack(spacing: 6) {
+      HStack(spacing: LinkstrTheme.tightSpacing) {
         Circle()
           .fill(statusDotColor(for: relay))
           .frame(width: 8, height: 8)
@@ -264,24 +273,46 @@ struct SettingsView: View {
           .foregroundStyle(LinkstrTheme.textSecondary)
       }
 
-      let relayErrorText =
-        session.relayErrorMessage(for: relay)?
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-        ?? ""
-      if !relayErrorText.isEmpty {
-        Text(relayErrorText)
-          .font(LinkstrTheme.font(.caption))
-          .foregroundStyle(LinkstrTheme.textSecondary)
-          .fixedSize(horizontal: false, vertical: true)
+      if let diagnostics = session.relayErrorMessage(for: relay) {
+        LinkstrDiagnosticDisclosure(details: diagnostics)
       }
     }
   }
 
   private func addRelayFromDraft() {
+    guard !relayURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+    guard session.normalizedRelayURL(from: relayURL) != nil else {
+      showsRelayAddressError = true
+      return
+    }
     if session.addRelay(url: relayURL) {
       UIImpactFeedbackGenerator(style: .light).impactOccurred()
       relayURL = ""
     }
   }
 
+}
+
+private extension SettingsView {
+  var accountDeletionMessage: String {
+    if isConfirmingAccountDeletion {
+      return "this removes this account’s contacts, sessions, posts, reactions, cached media, "
+        + "and local encryption keys from this device. you can still sign in with your secret key."
+    }
+    return "linkstr sends a deletion request to your relays. once a relay accepts it, "
+      + "linkstr clears this account’s data on this device and logs you out."
+  }
+
+  func confirmAccountDeletion() {
+    guard isConfirmingAccountDeletion else {
+      isConfirmingAccountDeletion = true
+      return
+    }
+    guard !isDeletingAccount else { return }
+    isDeletingAccount = true
+    Task { @MainActor in
+      await session.deleteAccountAwaitingRelay()
+      isDeletingAccount = false
+    }
+  }
 }

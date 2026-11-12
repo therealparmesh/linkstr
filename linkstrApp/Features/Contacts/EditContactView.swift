@@ -20,20 +20,15 @@ struct EditContactView: View {
       LinkstrBackgroundView()
       ScrollView {
         VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
-          LinkstrScreenTitle(title: "edit contact")
-
-          LinkstrInsetSection(
-            title: "contact",
-            footer: "only you see this alias. the public key (npub) stays the real identity."
-          ) {
+          LinkstrInsetSection(title: "contact") {
             HStack(spacing: LinkstrTheme.rowSpacing) {
-              LinkstrContactAvatar(name: identity.displayName, size: 54)
+              LinkstrContactAvatar(name: identity.displayName, size: LinkstrTheme.contactAvatarSize)
               LinkstrContactIdentityView(identity: identity, nameLineLimit: 2)
             }
           }
 
-          LinkstrInsetSection(title: "alias") {
-            TextField("alias", text: $alias)
+          LinkstrInsetSection(title: "alias", footer: "only you see this alias.") {
+            TextField("optional alias", text: $alias)
               .font(LinkstrTheme.font(.subheadline))
               .textInputAutocapitalization(.words)
               .submitLabel(.done)
@@ -71,38 +66,20 @@ struct EditContactView: View {
           .linkstrDestructiveButton()
         }
         .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-        .padding(.top, LinkstrTheme.screenTopPadding)
+        .padding(.top, LinkstrTheme.pinnedPageContentTopPadding)
         .padding(.bottom, LinkstrTheme.screenBottomPadding)
         .linkstrReadableContent()
       }
       .linkstrKeyboardDismissal()
     }
     .contactRemoval(pending: $pendingRemoval) { dismiss() }
-    .navigationBarBackButtonHidden(true)
-    .linkstrBarChrome()
-    .toolbar {
-      ToolbarItem(placement: .topBarLeading) {
-        Button {
-          dismiss()
-        } label: {
-          Image(systemName: "chevron.left")
-            .linkstrToolbarIconLabel()
-        }
-        .accessibilityLabel("back")
-        .tint(LinkstrTheme.accent)
-      }
-      ToolbarItem(placement: .topBarTrailing) {
-        Button {
-          saveAlias()
-        } label: {
-          Image(systemName: "checkmark")
-            .linkstrToolbarIconLabel()
-        }
-        .accessibilityLabel("save contact")
-        .tint(LinkstrTheme.accent)
-        .disabled(canSaveAlias == false)
+    .linkstrPinnedPageHeader {
+      LinkstrPageHeader(title: "edit contact", backLabel: "back to contacts") {
+        LinkstrHeaderButton(title: "save alias", icon: "checkmark", action: saveAlias)
+          .disabled(!canSaveAlias)
       }
     }
+    .toolbarVisibility(.hidden, for: .navigationBar)
   }
 
   private func saveAlias() {

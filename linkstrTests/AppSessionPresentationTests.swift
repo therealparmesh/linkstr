@@ -1,8 +1,133 @@
+import CoreImage
+import Observation
+import UIKit
 import XCTest
 
 @testable import linkstr
 
+extension AppSessionPresentationTests {
+  @MainActor
+  func testCancelledPhotoSaveStopsBeforeRequestingLibraryAccess() async {
+    let save = Task { @MainActor in
+      withUnsafeCurrentTask { $0?.cancel() }
+      do {
+        try await LocalMediaExportTarget(fileURL: URL(fileURLWithPath: "/missing-video.mp4")).saveToPhotos()
+        XCTFail("a cancelled save must not reach Photos")
+      } catch is CancellationError {
+        // Cancellation takes precedence over permission and missing-file errors.
+      } catch {
+        XCTFail("expected cancellation, received \(error)")
+      }
+    }
+    await save.value
+  }
+
+  @MainActor
+  func testCachedDisplayValuesNotifyObserversWhenEdited() async throws {
+    let owner = try TestKeyMaterialFactory.makePubkeyHex()
+    defer { try? LocalDataCrypto.shared.clearKey(ownerPubkey: owner) }
+    let post = try SessionMessageEntity(
+      eventID: "preview", ownerPubkey: owner, conversationID: "session", rootID: "preview",
+      kind: .root, senderPubkey: owner, url: "https://example.org", note: nil,
+      timestamp: .now, linkType: .generic
+    )
+    let session = try SessionEntity(ownerPubkey: owner, sessionID: "session", name: "", createdByPubkey: owner)
+    let contact = try ContactEntity(ownerPubkey: owner, targetPubkey: owner)
+    let fields: [(String, () -> String?)] = [
+      ("preview title", { post.metadataTitle }), ("thumbnail", { post.thumbnailURL }),
+      ("session name", { session.name }), ("contact alias", { contact.localAlias })
+    ]
+    for value in ["updated", "", "updated again"] {
+      let notifications = fields.map { name, read in
+        _ = read() // Warm the cache before SwiftUI subscribes on a later render.
+        let notification = expectation(description: "\(name) changed to \(value)")
+        withObservationTracking { _ = read() } onChange: { notification.fulfill() }
+        return notification
+      }
+      let optionalValue = value.isEmpty ? nil : value
+      try post.setMetadata(title: optionalValue, thumbnailURL: optionalValue)
+      try session.updateName(value, updatedAt: .now)
+      try contact.updateAlias(optionalValue)
+      await fulfillment(of: notifications, timeout: 0.1)
+      XCTAssertEqual(post.metadataTitle, optionalValue)
+      XCTAssertEqual(post.thumbnailURL, optionalValue)
+      XCTAssertEqual(session.name, value)
+      XCTAssertEqual(contact.localAlias, optionalValue)
+    }
+  }
+}
+
 final class AppSessionPresentationTests: XCTestCase {
+  @MainActor
+  func testThumbnailCacheKeepsDistinctSizesAndEvictsBoth() async throws {
+    let url = FileManager.default.temporaryDirectory
+      .appendingPathComponent(UUID().uuidString).appendingPathExtension("png")
+    let cache = ThumbnailImageCache.shared
+    defer {
+      try? FileManager.default.removeItem(at: url)
+      cache.removeImage(at: url.path)
+    }
+    let renderer = UIGraphicsImageRenderer(size: CGSize(width: 640, height: 360))
+    let data = renderer.pngData { context in
+      UIColor.blue.setFill()
+      context.fill(CGRect(x: 0, y: 0, width: 640, height: 360))
+    }
+    try data.write(to: url)
+
+    async let firstRow = cache.loadImageAsync(at: url.path, size: .listRow)
+    async let secondRow = cache.loadImageAsync(at: url.path, size: .listRow)
+    let (row, duplicateRow) = await (firstRow, secondRow)
+    XCTAssertTrue(row === duplicateRow)
+    let preview = await cache.loadImageAsync(at: url.path)
+    XCTAssertEqual(row?.cgImage?.width, 256)
+    XCTAssertEqual(preview?.cgImage?.width, 512)
+
+    try FileManager.default.removeItem(at: url)
+    cache.removeImage(at: url.path)
+    let removedRow = await cache.loadImageAsync(at: url.path, size: .listRow)
+    let removedPreview = await cache.loadImageAsync(at: url.path)
+    XCTAssertNil(removedRow)
+    XCTAssertNil(removedPreview)
+  }
+
+  func testPreviewTitleOmitsSourcePlaceholdersAndPreservesRealTitles() {
+    let youtube = "https://youtu.be/aqz-KE-bpKQ"
+    XCTAssertNil(LinkstrPostPreview.displayTitle("- YouTube", for: youtube))
+    XCTAssertNil(LinkstrPostPreview.displayTitle(youtube, for: youtube))
+    XCTAssertNil(LinkstrPostPreview.displayTitle("  |  ", for: youtube))
+    XCTAssertEqual(
+      LinkstrPostPreview.displayTitle("Big Buck Bunny - YouTube", for: youtube), "Big Buck Bunny - YouTube"
+    )
+    XCTAssertNil(LinkstrPostPreview.displayTitle("X", for: "https://x.com/jack/status/20"))
+    let tiktok = "https://www.tiktok.com/@scout2015/video/6718335390845095173"
+    XCTAssertEqual(
+      LinkstrPostPreview.displayTitle("TikTok · Scout, Suki & Stella", for: tiktok), "Scout, Suki & Stella"
+    )
+    XCTAssertNil(LinkstrPostPreview.displayTitle("TikTok · ", for: tiktok))
+    XCTAssertEqual(LinkstrPostPreview.displayTitle("Scout · Stella", for: tiktok), "Scout · Stella")
+    XCTAssertNil(LinkstrPostPreview.displayTitle("Example.org", for: "https://example.org"))
+    XCTAssertEqual(LinkstrPostPreview.displayTitle("Example Domain", for: "https://example.org"), "Example Domain")
+  }
+
+  func testPreviewSourceOnlyLabelsSupportedWebLinks() {
+    XCTAssertNil(LinkstrPostPreview.source(for: "ftp://example.org/legacy"))
+    XCTAssertNil(LinkstrPostPreview.kind(for: "ftp://x.com/jack/status/20"))
+    XCTAssertEqual(LinkstrPostPreview.source(for: "example.org/article"), "example.org")
+    XCTAssertEqual(LinkstrPostPreview.source(for: "https://x.com/jack/status/20"), "x post")
+  }
+
+  @MainActor
+  func testThemedQRCodePreservesItsPayload() throws {
+    let payload = "npub1example"
+    let image = try XCTUnwrap(QRCodeGenerator.image(for: payload)?.cgImage)
+    let detector = try XCTUnwrap(
+      CIDetector(ofType: CIDetectorTypeQRCode, context: nil, options: [CIDetectorAccuracy: CIDetectorAccuracyHigh])
+    )
+    let codes = detector.features(in: CIImage(cgImage: image)).compactMap { $0 as? CIQRCodeFeature }
+
+    XCTAssertEqual(codes.first?.messageString, payload)
+  }
+
   func testReactionSummaryBadgeTextCapsAtTenPlus() {
     XCTAssertEqual(
       ReactionSummary(emoji: "🔥", count: 1, includesCurrentUser: false).badgeText,

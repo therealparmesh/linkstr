@@ -18,17 +18,16 @@ extension AppSession {
       return false
     }
 
+    let sourceService = nostrService
     do {
       let normalizedProfileName = try NostrProfileMetadata.validatedOwnChosenName(profileName)
       try await prepareRelayMutationIfNeeded(
         timeoutSeconds: timeoutSeconds, pollIntervalSeconds: pollIntervalSeconds)
-      guard !Task.isCancelled, identityService.pubkeyHex == ownerPubkey else { return false }
-      let sourceService = nostrService
+      try checkMutationContext(ownerPubkey: ownerPubkey, sourceService: sourceService)
       let timestamp = try await nextPublicationTimestamp(
         after: latestAppliedProfileMetadataCreatedAt, subject: "profile",
         publicationOverridden: testingOverrides.publishRelayEvent != nil)
-      guard !Task.isCancelled, identityService.pubkeyHex == ownerPubkey, nostrService === sourceService
-      else { return false }
+      try checkMutationContext(ownerPubkey: ownerPubkey, sourceService: sourceService)
       let content = try NostrProfileMetadata.mergedContent(
         existingContent: currentProfileMetadataContent, chosenName: normalizedProfileName)
       let event = try NostrEvent.Builder<NostrEvent>(kind: .metadata)
@@ -36,8 +35,7 @@ extension AppSession {
       if isRelayPublicationEnabledForCurrentProcess() {
         _ = try await publishEventAwaitingRelayAcceptance(event)
       }
-      guard !Task.isCancelled, identityService.pubkeyHex == ownerPubkey, nostrService === sourceService
-      else { return false }
+      try checkMutationContext(ownerPubkey: ownerPubkey, sourceService: sourceService)
       guard event.id == latestAppliedProfileMetadataEventID
         || shouldApplyOwnProfileMetadata(createdAt: event.createdDate, eventID: event.id) else {
         throw NostrServiceError.publishRejected("profile changed on another device. try again.")
@@ -49,11 +47,13 @@ extension AppSession {
       composeError = nil
       return true
     } catch MutationPreparationError.relayBlocked {
-      guard identityService.pubkeyHex == ownerPubkey, !Task.isCancelled else { return false }
+      guard identityService.pubkeyHex == ownerPubkey, nostrService === sourceService,
+        !Task.isCancelled else { return false }
       profileNameErrorMessage = composeError
       return false
     } catch {
-      guard identityService.pubkeyHex == ownerPubkey, !Task.isCancelled else { return false }
+      guard identityService.pubkeyHex == ownerPubkey, nostrService === sourceService,
+        !Task.isCancelled, !(error is CancellationError) else { return false }
       profileNameErrorMessage = error.localizedDescription
       report(error: error)
       return false
@@ -91,16 +91,16 @@ extension AppSession {
       enqueuedMetadataStorageIDs = [activeMetadataRefreshStorageID]
     } else {
       enqueuedMetadataStorageIDs.removeAll()
-      isProcessingMetadataQueue = false
+      metadataRefreshTask?.cancel()
+      metadataRefreshTask = nil
     }
   }
 
   func processMetadataQueueIfNeeded() {
-    guard !isProcessingMetadataQueue else { return }
-    isProcessingMetadataQueue = true
+    guard metadataRefreshTask == nil else { return }
     let generation = metadataRefreshQueueGeneration
 
-    Task { @MainActor in
+    metadataRefreshTask = Task { @MainActor in
       var hasPendingSave = false
       while generation == metadataRefreshQueueGeneration,
         pendingMetadataRefreshHead < pendingMetadataRefreshes.count {
@@ -108,21 +108,14 @@ extension AppSession {
         pendingMetadataRefreshHead += 1
         activeMetadataRefreshStorageID = request.storageID
 
-        do {
-          guard let message = try messageStore.message(storageID: request.storageID) else {
-            enqueuedMetadataStorageIDs.remove(request.storageID)
-            activeMetadataRefreshStorageID = nil
-            continue
-          }
-          let didChange = try await refreshMetadata(for: message)
-          if didChange { hasPendingSave = true }
-        } catch {
-          report(error: error)
-        }
+        let didUpdate = await refreshQueuedMetadata(storageID: request.storageID)
+        guard !Task.isCancelled else { return }
+        hasPendingSave = hasPendingSave || didUpdate
         enqueuedMetadataStorageIDs.remove(request.storageID)
         activeMetadataRefreshStorageID = nil
       }
 
+      guard !Task.isCancelled else { return }
       if hasPendingSave {
         try? modelContext.save()
       }
@@ -131,19 +124,37 @@ extension AppSession {
         pendingMetadataRefreshes.removeAll(keepingCapacity: true)
         pendingMetadataRefreshHead = 0
       }
-      isProcessingMetadataQueue = false
+      metadataRefreshTask = nil
       if generation != metadataRefreshQueueGeneration, !pendingMetadataRefreshes.isEmpty {
         processMetadataQueueIfNeeded()
       }
     }
   }
 
+  private func refreshQueuedMetadata(storageID: String) async -> Bool {
+    do {
+      guard let message = try messageStore.message(storageID: storageID) else { return false }
+      return try await refreshMetadata(for: message) == .updated
+    } catch {
+      guard !Task.isCancelled else { return false }
+      report(error: error)
+      return false
+    }
+  }
+
+  enum PostPreviewRefreshResult {
+    case updated
+    case unchanged
+    case unavailable
+    case interrupted
+  }
+
   func refreshMetadata(for message: SessionMessageEntity, force: Bool = false) async throws
-    -> Bool {
-    guard let url = message.url else { return false }
+    -> PostPreviewRefreshResult {
+    guard let url = message.url else { return .unavailable }
     guard force || needsMetadataRefresh(message) else {
       metadataRefreshRetryAfterByStorageID.removeValue(forKey: message.storageID)
-      return false
+      return .interrupted
     }
     let storageID = message.storageID
     let owner = message.ownerPubkey
@@ -155,9 +166,9 @@ extension AppSession {
       preview = await URLMetadataService.shared.fetchPreview(for: url)
     }
     guard !Task.isCancelled, identityService.pubkeyHex == owner,
-      let message = try messageStore.message(storageID: storageID) else { return false }
+      let message = try messageStore.message(storageID: storageID) else { return .interrupted }
     defer { updateMetadataRefreshCooldown(for: message) }
-    guard let preview else { return false }
+    guard let preview else { return .unavailable }
 
     let currentTitle = LinkMetadataRefreshPolicy.normalizedTitle(message.metadataTitle)
     let previewTitle = LinkMetadataRefreshPolicy.normalizedTitle(preview.title)
@@ -174,12 +185,13 @@ extension AppSession {
       resolvedThumbnail = nil
     }
 
-    guard resolvedTitle != currentTitle || resolvedThumbnail != currentThumbnail else {
-      return false
+    // Fresh artwork can replace the file at the same path; notify thumbnail views to reload it.
+    guard resolvedTitle != currentTitle || resolvedThumbnail != currentThumbnail || previewThumbnail != nil else {
+      return .unchanged
     }
 
     try message.setMetadata(title: resolvedTitle, thumbnailURL: resolvedThumbnail)
-    return true
+    return .updated
   }
 
   private func isMetadataRefreshCoolingDown(storageID: String) -> Bool {
@@ -223,6 +235,7 @@ extension AppSession {
   }
 
   func invalidateTransientMediaCaches(for url: URL) async {
+    await URLMetadataService.shared.invalidate(for: url)
     await URLCanonicalizationService.shared.invalidate(for: url)
 
     switch URLClassifier.classify(url) {
@@ -236,27 +249,29 @@ extension AppSession {
   }
 
   @discardableResult
-  func refreshPostMetadata(_ message: SessionMessageEntity) async -> Bool {
+  func refreshPostMetadata(_ message: SessionMessageEntity) async -> PostPreviewRefreshResult {
     let owner = message.ownerPubkey
     let storageID = message.storageID
-    guard identityService.pubkeyHex == owner else { return false }
+    guard identityService.pubkeyHex == owner else { return .interrupted }
     do {
       if let urlString = message.url, let url = URL(string: urlString) {
         await invalidateTransientMediaCaches(for: url)
       }
       guard !Task.isCancelled, identityService.pubkeyHex == owner,
-        let message = try messageStore.message(storageID: storageID) else { return false }
-      let didRefreshMetadata = try await refreshMetadata(for: message, force: true)
-      guard !Task.isCancelled, identityService.pubkeyHex == owner else { return false }
-      if didRefreshMetadata {
+        let message = try messageStore.message(storageID: storageID) else { return .interrupted }
+      let result = try await refreshMetadata(for: message, force: true)
+      guard !Task.isCancelled, identityService.pubkeyHex == owner, result != .interrupted else {
+        return .interrupted
+      }
+      if result == .updated {
         try modelContext.save()
       }
       composeError = nil
-      return didRefreshMetadata
+      return result
     } catch {
-      guard !Task.isCancelled, identityService.pubkeyHex == owner else { return false }
+      guard !Task.isCancelled, identityService.pubkeyHex == owner else { return .interrupted }
       report(error: error)
-      return false
+      return .interrupted
     }
   }
 

@@ -208,7 +208,8 @@ final class AppSession: ObservableObject {
   @Published var isRestoringBackup = false
   @Published var restoreRecoveryError: String?
   @Published var didRestoreBackup = false
-  let contactMutations = ContactMutationQueue()
+  let contactMutations = MutationQueue()
+  let reactionMutations = MutationQueue()
   var pendingNoteEdits = Set<String>()
   let contactDiscovery: ContactDiscovery
   let contactStore: ContactStore
@@ -218,17 +219,17 @@ final class AppSession: ObservableObject {
   let testingOverrides: TestingOverrides
   @Published var nostrService: NostrDMService
   let noEnabledRelaysMessage =
-    "no relays are enabled. enable at least one relay in settings."
-  let relayOfflineMessage = "you're offline. waiting for a relay connection."
+    "enable a relay in settings to continue."
+  let relayOfflineMessage = NostrServiceError.relayUnavailable.localizedDescription
   let relayReadOnlyMessage =
-    "connected relays are read-only. add a writable relay to send."
-  let relaySendTimeoutMessage = "couldn't reconnect to relays in time. try again."
+    "your connected relays are read-only. enable a writable relay to send."
+  let relaySendTimeoutMessage = "couldn’t reconnect to relays in time. try again."
   var hasShownOfflineToastForCurrentOutage = false
   var isForeground = false
   var pendingMetadataRefreshes: [PendingMetadataRefresh] = []
   var pendingMetadataRefreshHead = 0
   var enqueuedMetadataStorageIDs = Set<String>()
-  var isProcessingMetadataQueue = false
+  var metadataRefreshTask: Task<Void, Never>?
   var activeMetadataRefreshStorageID: String?
   var metadataRefreshQueueGeneration = 0
   var metadataRefreshRetryAfterByStorageID: [String: Date] = [:]
@@ -236,7 +237,7 @@ final class AppSession: ObservableObject {
   var pendingOfflineToastTask: Task<Void, Never>?
   var nostrStartupTask: Task<Void, Never>?
   var observedHealthyRelayThisForeground = false
-  var suppressedComposeErrorPresentationCount = 0
+  var formMutationContexts: [UUID: (ownerPubkey: String?, serviceID: ObjectIdentifier)] = [:]
   var nostrStartupGeneration = 0
   var passiveOfflineToastGraceUntil: Date?
   var latestAppliedFollowListCreatedAt: Date?

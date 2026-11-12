@@ -3,6 +3,19 @@ import XCTest
 @testable import linkstr
 
 final class SocialVideoExtractionServiceTests: XCTestCase {
+  func testLocalCachingRejectsUnreadableMediaWithoutDeletingUnmanagedFiles() async throws {
+    let file = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).mp4")
+    let contents = Data("damaged-video".utf8)
+    try contents.write(to: file)
+    defer { try? FileManager.default.removeItem(at: file) }
+
+    let media = PlayableMedia(playbackURL: file, headers: [:], isLocalFile: true)
+    let result = await SocialVideoExtractionService.shared.cachePlayableMediaLocally(media)
+
+    XCTAssertNil(result)
+    XCTAssertEqual(try Data(contentsOf: file), contents)
+  }
+
   func testGenericMediaDoesNotUseProviderIdentityRules() throws {
     let sourceURL = try XCTUnwrap(URL(string: "https://example.com/video/12345678"))
     let candidateURL = try XCTUnwrap(

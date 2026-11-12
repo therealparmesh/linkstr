@@ -27,6 +27,7 @@ final class URLClassifierTests: XCTestCase {
     XCTAssertEqual(
       URLClassifier.classify("https://reallytiktok.com/video/7596114833477537054"), .generic)
     XCTAssertEqual(URLClassifier.classify("https://twitter.com.evil.org/jack/status/20"), .generic)
+    XCTAssertFalse(SocialURLHeuristics.isTwitterStatusURL(URL(string: "https://example.org/status/20")!))
   }
 
   func testFacebookVideoUsesLocalPlaybackWithMobileWebFallback() {
@@ -66,16 +67,20 @@ final class URLClassifierTests: XCTestCase {
     )
   }
 
-  func testTwitterEmbedOnlyFallbackUsesTweetCardAspectRatio() {
-    let sourceURL = URL(string: "https://x.com/jack/status/20")!
-    let strategy = URLClassifier.MediaStrategy.embedOnly(
-      embedURL: URL(string: "https://x.com/i/status/20")!)
-
-    XCTAssertEqual(
-      URLClassifier.preferredMediaAspectRatio(for: sourceURL, strategy: strategy),
-      4.0 / 5.0,
-      accuracy: 0.0001
-    )
+  func testOfficialEmbedAspectRatios() throws {
+    let cases: [(String, CGFloat)] = [
+      ("https://x.com/jack/status/20", 4.0 / 5.0),
+      ("https://www.youtube.com/shorts/aqz-KE-bpKQ", 9.0 / 16.0),
+      ("https://www.youtube.com/watch?v=aqz-KE-bpKQ", 16.0 / 9.0)
+    ]
+    for (address, expected) in cases {
+      let sourceURL = try XCTUnwrap(URL(string: address))
+      let strategy = URLClassifier.MediaStrategy.embedOnly(embedURL: sourceURL)
+      XCTAssertEqual(
+        URLClassifier.preferredMediaAspectRatio(for: sourceURL, strategy: strategy),
+        expected, accuracy: 0.0001, address
+      )
+    }
   }
 
   func testTikTokQueryVideoIDUsesCanonicalEmbedURL() {
@@ -121,7 +126,7 @@ final class URLClassifierTests: XCTestCase {
           embedURL: URL(string: "https://www.tiktok.com/player/v1/7596114833477537054")!
         )
       ),
-      "in-app playback and saving when available"
+      "play or save this video when available"
     )
     XCTAssertEqual(
       LinkstrDraftPreview.availabilityHint(
@@ -129,7 +134,7 @@ final class URLClassifierTests: XCTestCase {
           embedURL: URL(string: "https://www.youtube.com/embed/dQw4w9WgXcQ")!
         )
       ),
-      "in-app playback when available"
+      "view the official embed when available"
     )
     XCTAssertNil(LinkstrDraftPreview.availabilityHint(for: .link))
   }
@@ -293,7 +298,7 @@ extension URLClassifierTests {
   }
 }
 
-private extension URLClassifierTests {
+extension URLClassifierTests {
   func assertURLClassificationAndStrategy(
     _ expectation: MediaURLFixtures.StrategyExpectation
   ) {
@@ -342,5 +347,15 @@ private extension URLClassifierTests {
         "Unexpected embed URL prefix for \(name): \(actualURL.absoluteString)"
       )
     }
+  }
+}
+
+extension URLClassifierTests {
+  func testDirectVideoPathsUseNativePlayback() {
+    for path in ["clip.mp4?token=example", "clip.MOV", "clip.m4v"] {
+      XCTAssertEqual(URLClassifier.mediaStrategy(for: "https://example.com/\(path)"), .directVideo)
+    }
+    XCTAssertEqual(URLClassifier.mediaStrategy(for: "https://example.com/post?file=clip.mp4"), .link)
+    XCTAssertEqual(URLClassifier.mediaStrategy(for: "http://example.com/clip.mp4"), .link)
   }
 }

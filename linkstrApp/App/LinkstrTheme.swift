@@ -1,60 +1,6 @@
 import SwiftUI
 import UIKit
 
-enum LinkstrTheme {
-  static let background = Color(red: 0.09, green: 0.10, blue: 0.16)
-  static let chrome = background
-  static let panel = Color(red: 0.13, green: 0.15, blue: 0.22)
-  static let panelElevated = Color(red: 0.16, green: 0.18, blue: 0.26)
-  static let panelMuted = Color(red: 0.11, green: 0.13, blue: 0.20)
-  static let separator = Color.white.opacity(0.06)
-  static let accent = Color(red: 0.49, green: 0.67, blue: 0.99)
-  static let accentSoft = Color(red: 0.31, green: 0.44, blue: 0.67)
-  static let accentPink = Color(red: 0.72, green: 0.60, blue: 0.93)
-  static let amber = Color(red: 0.90, green: 0.74, blue: 0.47)
-  static let destructive = Color(red: 0.96, green: 0.42, blue: 0.48)
-  static let statusSuccess = Color(red: 0.55, green: 0.79, blue: 0.45)
-  static let textPrimary = Color(red: 0.92, green: 0.94, blue: 0.99)
-  static let textSecondary = Color(red: 0.66, green: 0.71, blue: 0.84)
-  static let textTertiary = Color(red: 0.48, green: 0.53, blue: 0.67)
-
-  static let sectionStackSpacing: CGFloat = 22
-  static let listBlockSpacing: CGFloat = 14
-  static let compactSpacing: CGFloat = 8
-  static let metaSpacing: CGFloat = 4
-  static let rowSpacing: CGFloat = 12
-  static let buttonRowSpacing: CGFloat = 10
-  static let listRowVerticalPadding: CGFloat = 10
-  static let inputControlMinHeight: CGFloat = 44
-  static let screenHorizontalPadding: CGFloat = 18
-  static let screenTopPadding: CGFloat = 16
-  static let screenBottomPadding: CGFloat = 24
-  static let panelPadding: CGFloat = 18
-  static let toastTopPadding: CGFloat = 10
-  static let fieldHorizontalPadding: CGFloat = 14
-  static let fieldVerticalPadding: CGFloat = 12
-  static let inputAssistButtonSpacing: CGFloat = 14
-  static let inputAssistIconSpacing: CGFloat = 6
-  static let inputAssistBottomSpacing: CGFloat = 6
-  static let fieldCornerRadius: CGFloat = 14
-  static let minimumInteractiveDimension: CGFloat = 44
-  static let searchClearButtonTextInset = minimumInteractiveDimension - fieldHorizontalPadding
-  static let readableContentMaxWidth: CGFloat = 680
-
-  static func font(_ style: Font.TextStyle, weight: Font.Weight = .regular) -> Font {
-    .system(style, design: .default, weight: weight)
-  }
-}
-
-struct LinkstrBackgroundView: View {
-  var body: some View {
-    Rectangle()
-      .fill(LinkstrTheme.background)
-      .frame(maxWidth: .infinity, maxHeight: .infinity)
-      .ignoresSafeArea()
-  }
-}
-
 private struct LinkstrFieldChrome: ViewModifier {
   func body(content: Content) -> some View {
     content
@@ -76,11 +22,12 @@ private struct LinkstrFieldChrome: ViewModifier {
 }
 
 private struct LinkstrInputField: ViewModifier {
-  var minHeight: CGFloat? = LinkstrTheme.inputControlMinHeight
+  var minHeight: CGFloat? = LinkstrTheme.minimumInteractiveDimension
   var alignment: Alignment = .leading
 
   func body(content: Content) -> some View {
     content
+      .font(LinkstrTheme.font(.subheadline))
       .padding(.horizontal, LinkstrTheme.fieldHorizontalPadding)
       .padding(.vertical, LinkstrTheme.fieldVerticalPadding)
       .frame(maxWidth: .infinity, minHeight: minHeight, alignment: alignment)
@@ -111,60 +58,24 @@ private struct LinkstrKeyboardDismissal: ViewModifier {
   }
 }
 
-private enum LinkstrActionButtonTone {
-  case primary
-  case secondary
-  case caution
-  case cautionProminent
-  case destructive
-  case destructiveProminent
-}
+private struct LinkstrActionButtonStyle: ButtonStyle {
+  @Environment(\.isEnabled) private var isEnabled
+  let tint: Color
+  var prominent = false
 
-private struct LinkstrActionButtonChrome: ViewModifier {
-  let tone: LinkstrActionButtonTone
-
-  func body(content: Content) -> some View {
-    switch tone {
-    case .primary:
-      content
-        .font(LinkstrTheme.font(.subheadline, weight: .semibold))
-        .buttonStyle(.borderedProminent)
-        .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
-        .tint(LinkstrTheme.accent)
-        .foregroundStyle(LinkstrTheme.background)
-    case .secondary:
-      content
-        .font(LinkstrTheme.font(.subheadline, weight: .semibold))
-        .buttonStyle(.bordered)
-        .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
-        .tint(LinkstrTheme.textSecondary)
-    case .caution:
-      content
-        .font(LinkstrTheme.font(.subheadline, weight: .semibold))
-        .buttonStyle(.bordered)
-        .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
-        .tint(LinkstrTheme.amber)
-    case .cautionProminent:
-      content
-        .font(LinkstrTheme.font(.subheadline, weight: .semibold))
-        .buttonStyle(.borderedProminent)
-        .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
-        .tint(LinkstrTheme.amber)
-        .foregroundStyle(LinkstrTheme.background)
-    case .destructive:
-      content
-        .font(LinkstrTheme.font(.subheadline, weight: .semibold))
-        .buttonStyle(.bordered)
-        .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
-        .tint(LinkstrTheme.destructive)
-    case .destructiveProminent:
-      content
-        .font(LinkstrTheme.font(.subheadline, weight: .semibold))
-        .buttonStyle(.borderedProminent)
-        .buttonBorderShape(.roundedRectangle(radius: LinkstrTheme.fieldCornerRadius))
-        .tint(LinkstrTheme.destructive)
-        .foregroundStyle(LinkstrTheme.background)
-    }
+  func makeBody(configuration: Configuration) -> some View {
+    let shape = RoundedRectangle(cornerRadius: LinkstrTheme.fieldCornerRadius)
+    let foreground = prominent ? LinkstrTheme.background : tint
+    let fill = prominent ? tint : tint.opacity(0.18)
+    return configuration.label
+      .font(LinkstrTheme.font(.subheadline, weight: .semibold))
+      .foregroundStyle(isEnabled ? foreground : LinkstrTheme.textSecondary)
+      .padding(.horizontal, LinkstrTheme.fieldHorizontalPadding)
+      .padding(.vertical, LinkstrTheme.fieldVerticalPadding)
+      .frame(minHeight: LinkstrTheme.actionButtonMinHeight)
+      .background(isEnabled ? fill : LinkstrTheme.panelElevated, in: shape)
+      .contentShape(shape)
+      .opacity(configuration.isPressed ? 0.8 : 1)
   }
 }
 
@@ -174,7 +85,7 @@ extension View {
   }
 
   func linkstrInputField(
-    minHeight: CGFloat? = LinkstrTheme.inputControlMinHeight,
+    minHeight: CGFloat? = LinkstrTheme.minimumInteractiveDimension,
     alignment: Alignment = .leading
   ) -> some View {
     modifier(LinkstrInputField(minHeight: minHeight, alignment: alignment))
@@ -185,72 +96,94 @@ extension View {
   }
 
   func linkstrPrimaryButton() -> some View {
-    modifier(LinkstrActionButtonChrome(tone: .primary))
+    buttonStyle(LinkstrActionButtonStyle(tint: LinkstrTheme.accent, prominent: true))
   }
 
   func linkstrSecondaryButton() -> some View {
-    modifier(LinkstrActionButtonChrome(tone: .secondary))
+    buttonStyle(LinkstrActionButtonStyle(tint: LinkstrTheme.textSecondary))
   }
 
   func linkstrCautionButton(prominent: Bool = false) -> some View {
-    modifier(LinkstrActionButtonChrome(tone: prominent ? .cautionProminent : .caution))
+    buttonStyle(LinkstrActionButtonStyle(tint: LinkstrTheme.amber, prominent: prominent))
   }
 
   func linkstrDestructiveButton(prominent: Bool = false) -> some View {
-    modifier(LinkstrActionButtonChrome(tone: prominent ? .destructiveProminent : .destructive))
+    buttonStyle(LinkstrActionButtonStyle(tint: LinkstrTheme.destructive, prominent: prominent))
   }
 
-  func linkstrToolbarIconLabel() -> some View {
-    font(LinkstrTheme.font(.body, weight: .semibold))
-      .frame(width: 30, height: 30, alignment: .center)
-  }
-
-  func linkstrReadableContent() -> some View {
-    frame(maxWidth: LinkstrTheme.readableContentMaxWidth, alignment: .leading)
-      .frame(maxWidth: .infinity, alignment: .center)
+  func linkstrPinnedPageHeader<Header: View>(@ViewBuilder _ header: () -> Header) -> some View {
+    safeAreaInset(edge: .top, spacing: 0) {
+      header()
+        .linkstrPageHeaderLayout()
+        .background(LinkstrTheme.chrome)
+    }
+    .modifier(LinkstrEdgeBackGesture())
   }
 
   func linkstrBarChrome() -> some View {
-    toolbarBackground(.hidden, for: .navigationBar)
+    linkstrNavigationBarChrome()
       .toolbarBackground(.visible, for: .tabBar)
-      .toolbarBackground(LinkstrTheme.chrome.opacity(0.88), for: .tabBar)
-      .toolbarColorScheme(.dark, for: .navigationBar)
+      .toolbarBackground(LinkstrTheme.chrome, for: .tabBar)
       .toolbarColorScheme(.dark, for: .tabBar)
   }
 }
 
-struct LinkstrActionButtonLabel: View {
-  let title: String
-  var systemImage: String?
+private struct LinkstrEdgeBackGesture: ViewModifier {
+  @Environment(\.dismiss) private var dismiss
+  @Environment(\.layoutDirection) private var layoutDirection
 
-  var body: some View {
-    if let systemImage {
-      Label(title, systemImage: systemImage)
-        .lineLimit(2)
-        .multilineTextAlignment(.center)
-        .frame(maxWidth: .infinity)
-    } else {
-      Text(title)
-        .lineLimit(2)
-        .multilineTextAlignment(.center)
-        .frame(maxWidth: .infinity)
+  func body(content: Content) -> some View {
+    content.overlay(alignment: .leading) {
+      Color.clear
+        .frame(width: 16)
+        .contentShape(Rectangle())
+        .gesture(
+          DragGesture(minimumDistance: 18).onEnded { value in
+            let direction: CGFloat = layoutDirection == .leftToRight ? 1 : -1
+            let horizontal = direction * value.translation.width
+            if horizontal >= 55, horizontal > abs(value.translation.height) {
+              dismiss()
+            }
+          }
+        )
+        .accessibilityHidden(true)
     }
   }
 }
 
-struct LinkstrSessionAvatar: View {
-  let seed: String
-  var size: CGFloat = 42
+struct LinkstrActionButtonLabel: View {
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+  let title: String
+  var systemImage: String?
 
   var body: some View {
-    Circle()
-      .fill(LinkstrAvatarStyleResolver.sessionColor(for: seed))
-      .frame(width: size, height: size)
-      .overlay {
-        Circle()
-          .stroke(Color.white.opacity(0.12), lineWidth: 1)
+    Group {
+      if let systemImage {
+        Label(title, systemImage: systemImage)
+      } else {
+        Text(title)
       }
-      .accessibilityHidden(true)
+    }
+    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+    .multilineTextAlignment(.center)
+    .frame(maxWidth: .infinity)
+  }
+}
+
+enum LinkstrBrowserAction {
+  static let title = "open in browser"
+  static let icon = "arrow.up.right.square"
+}
+
+struct LinkstrBrowserButton: View {
+  let action: () -> Void
+
+  var body: some View {
+    Button(action: action) {
+      LinkstrActionButtonLabel(title: LinkstrBrowserAction.title, systemImage: LinkstrBrowserAction.icon)
+    }
+    .linkstrSecondaryButton()
   }
 }
 
@@ -289,5 +222,38 @@ struct LinkstrAppIconBadge: View {
         Circle()
           .stroke(LinkstrTheme.separator.opacity(2), lineWidth: 1)
       }
+  }
+}
+
+struct LinkstrLoadingStateView: View {
+  let title: String
+
+  var body: some View {
+    ProgressView {
+      Text(title)
+        .font(LinkstrTheme.font(.subheadline))
+        .foregroundStyle(LinkstrTheme.textSecondary)
+    }
+    .tint(LinkstrTheme.accent)
+    .frame(maxWidth: .infinity, minHeight: 220)
+  }
+}
+
+struct LinkstrDiagnosticDisclosure: View {
+  let details: String
+
+  var body: some View {
+    DisclosureGroup("technical details") {
+      Text(details)
+        .font(LinkstrTheme.font(.footnote))
+        .foregroundStyle(LinkstrTheme.textSecondary)
+        .fixedSize(horizontal: false, vertical: true)
+        .textSelection(.enabled)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, LinkstrTheme.compactSpacing)
+    }
+    .font(LinkstrTheme.font(.subheadline, weight: .medium))
+    .foregroundStyle(LinkstrTheme.textPrimary)
+    .tint(LinkstrTheme.accent)
   }
 }

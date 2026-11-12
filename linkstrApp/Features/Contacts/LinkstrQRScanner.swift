@@ -3,6 +3,8 @@ import SwiftUI
 
 struct LinkstrQRScannerSheet: View {
   @Environment(\.dismiss) private var dismiss
+  @Environment(\.scenePhase) private var scenePhase
+  @Environment(\.openURL) private var openURL
 
   let onScanned: (String) -> Void
 
@@ -10,64 +12,70 @@ struct LinkstrQRScannerSheet: View {
 
   var body: some View {
     ZStack {
-      Color.black.ignoresSafeArea()
+      LinkstrBackgroundView()
 
       switch cameraAccessState {
       case .checking:
         ProgressView()
-          .tint(.white)
-          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+          .tint(LinkstrTheme.accent)
+          .accessibilityLabel("checking camera access")
       case .authorized:
         LinkstrQRScannerRepresentable(
           onScanned: { value in
             onScanned(value)
             dismiss()
           },
-          onFailure: {
-            cameraAccessState = .failed(unavailableCameraMessage)
-          }
+          onFailure: { cameraAccessState = .failed }
         )
-        .ignoresSafeArea()
       case .denied:
-        LinkstrQRScannerAccessDeniedView()
-      case .failed(let message):
-        VStack(spacing: 12) {
-          Text("scanner error")
-            .font(LinkstrTheme.font(.title3, weight: .semibold))
-            .foregroundStyle(.white)
-          Text(message)
-            .font(LinkstrTheme.font(.footnote))
-            .foregroundStyle(LinkstrTheme.textSecondary)
-            .multilineTextAlignment(.center)
-            .padding(.horizontal, 24)
-        }
-      }
-
-      VStack {
-        HStack {
-          Button {
-            dismiss()
-          } label: {
-            Image(systemName: "xmark")
-              .font(LinkstrTheme.font(.subheadline, weight: .semibold))
-              .foregroundStyle(.white)
-              .frame(
-                width: LinkstrTheme.minimumInteractiveDimension,
-                height: LinkstrTheme.minimumInteractiveDimension
-              )
-              .background(.black.opacity(0.45), in: Circle())
+        scannerStatus(
+          title: "camera access required",
+          description: "allow camera access in settings to scan a public key.",
+          actionTitle: "open settings"
+        ) {
+          if let url = URL(string: UIApplication.openSettingsURLString) {
+            openURL(url)
           }
-          .accessibilityLabel("close")
-          Spacer()
         }
-        .padding(.top, LinkstrTheme.screenTopPadding)
-        .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-        Spacer()
+      case .failed:
+        scannerStatus(
+          title: "camera unavailable",
+          description: "close the scanner and paste the public key to add this contact."
+        )
       }
+    }
+    .safeAreaInset(edge: .top, spacing: 0) {
+      LinkstrSheetHeader(title: "scan public key", closeLabel: "close scanner") { dismiss() }
     }
     .task {
       await requestCameraAccessIfNeeded()
     }
+    .onChange(of: scenePhase) { _, phase in
+      if phase == .active, cameraAccessState == .denied,
+        AVCaptureDevice.authorizationStatus(for: .video) == .authorized {
+        cameraAccessState = .authorized
+      }
+    }
+  }
+
+  private func scannerStatus(
+    title: String,
+    description: String,
+    actionTitle: String? = nil,
+    action: (() -> Void)? = nil
+  ) -> some View {
+    ScrollView {
+      LinkstrCenteredEmptyStateView(
+        title: title,
+        systemImage: "camera",
+        description: description,
+        actionTitle: actionTitle,
+        actionSystemImage: "gearshape",
+        action: action
+      )
+      .padding(.vertical, LinkstrTheme.screenBottomPadding)
+    }
+    .linkstrReadableContent()
   }
 
   private func requestCameraAccessIfNeeded() async {
@@ -88,41 +96,7 @@ struct LinkstrQRScannerSheet: View {
     case checking
     case authorized
     case denied
-    case failed(String)
-  }
-
-  private var unavailableCameraMessage: String {
-    #if targetEnvironment(simulator)
-      return
-        "camera capture is unavailable in this simulator. use a physical iphone to scan qr codes."
-    #else
-      return "unable to read qr codes from the camera."
-    #endif
-  }
-}
-
-struct LinkstrQRScannerAccessDeniedView: View {
-  var body: some View {
-    VStack(spacing: 12) {
-      Image(systemName: "camera.fill")
-        .font(LinkstrTheme.font(.title))
-        .foregroundStyle(.white)
-      Text("camera access required")
-        .font(LinkstrTheme.font(.title3, weight: .semibold))
-        .foregroundStyle(.white)
-      Text("enable camera access in settings to scan a public key (npub) qr code.")
-        .font(LinkstrTheme.font(.footnote))
-        .foregroundStyle(LinkstrTheme.textSecondary)
-        .multilineTextAlignment(.center)
-        .padding(.horizontal, 24)
-      Button("open settings") {
-        guard let settingsURL = URL(string: UIApplication.openSettingsURLString) else { return }
-        UIApplication.shared.open(settingsURL)
-      }
-      .linkstrPrimaryButton()
-      .padding(.top, 8)
-    }
-    .padding(.horizontal, 16)
+    case failed
   }
 }
 
@@ -148,6 +122,7 @@ struct LinkstrQRScannerRepresentable: UIViewRepresentable {
 
   final class Coordinator: NSObject, AVCaptureMetadataOutputObjectsDelegate {
     private var session: AVCaptureSession?
+    private let sessionQueue = DispatchQueue(label: "com.parmscript.linkstr.qr-camera", qos: .userInitiated)
     private var didEmitValue = false
     private let onScanned: (String) -> Void
     private let onFailure: () -> Void
@@ -184,15 +159,18 @@ struct LinkstrQRScannerRepresentable: UIViewRepresentable {
       view.previewLayer.session = session
       view.previewLayer.videoGravity = .resizeAspectFill
 
+      start(session)
+    }
+
+    func start(_ session: AVCaptureSession) {
       self.session = session
-      DispatchQueue.global(qos: .userInitiated).async {
-        session.startRunning()
-      }
+      sessionQueue.async { session.startRunning() }
     }
 
     func stop() {
-      session?.stopRunning()
-      session = nil
+      guard let session else { return }
+      self.session = nil
+      sessionQueue.async { session.stopRunning() }
     }
 
     func metadataOutput(
@@ -200,7 +178,7 @@ struct LinkstrQRScannerRepresentable: UIViewRepresentable {
       didOutput metadataObjects: [AVMetadataObject],
       from connection: AVCaptureConnection
     ) {
-      guard !didEmitValue else { return }
+      guard session != nil, !didEmitValue else { return }
       guard
         let object = metadataObjects.first as? AVMetadataMachineReadableCodeObject,
         let value = object.stringValue
