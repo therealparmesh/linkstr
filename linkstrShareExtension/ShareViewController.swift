@@ -1,3 +1,4 @@
+import SwiftUI
 import UIKit
 
 final class ShareViewController: UIViewController {
@@ -6,44 +7,30 @@ final class ShareViewController: UIViewController {
     case saveMedia
   }
 
-  private enum Style {
-    static let background = UIColor(red: 0.09, green: 0.10, blue: 0.16, alpha: 1)
-    static let panel = UIColor(red: 0.13, green: 0.15, blue: 0.22, alpha: 1)
-    static let panelMuted = UIColor(red: 0.11, green: 0.13, blue: 0.20, alpha: 1)
-    static let separator = UIColor.white.withAlphaComponent(0.06)
-    static let accent = UIColor(red: 0.49, green: 0.67, blue: 0.99, alpha: 1)
-    static let textPrimary = UIColor(red: 0.92, green: 0.94, blue: 0.99, alpha: 1)
-    static let textSecondary = UIColor(red: 0.66, green: 0.71, blue: 0.84, alpha: 1)
-    static let screenHorizontalPadding: CGFloat = 16
-    static let sectionSpacing: CGFloat = 18
-    static let compactSpacing: CGFloat = 8
-    static let fieldHorizontalPadding: CGFloat = 14
-    static let fieldVerticalPadding: CGFloat = 12
-    static let rowSpacing: CGFloat = 12
-    static let rowHeight: CGFloat = 62
-    static let fieldCornerRadius: CGFloat = 14
-  }
-
-  static let separatorColor = UIColor.white.withAlphaComponent(0.06)
-
-  let activityIndicator = UIActivityIndicatorView(style: .medium)
-  let titleLabel = UILabel()
-  let statusLabel = UILabel()
-  let loadingStack = UIStackView()
-  let linkSectionLabel = UILabel()
-  let linkLabel = UILabel()
-  let linkFieldView = UIView()
-  let actionListView = UIStackView()
-  let shareButton = UIButton(type: .system)
-  let saveButton = UIButton(type: .system)
-  let closeButton = UIButton(type: .system)
-
   var extractedShare: ExtractedShare?
+  var isOpening = false
+  var isClosed = false
+  var extractionTimeout: DispatchWorkItem?
   private var didStart = false
+  private var host: UIHostingController<ShareExtensionScreen>?
 
   override func viewDidLoad() {
     super.viewDidLoad()
-    configureView()
+    overrideUserInterfaceStyle = .dark
+    view.backgroundColor = UIColor(LinkstrTheme.background)
+    view.tintColor = UIColor(LinkstrTheme.accent)
+    let host = UIHostingController(rootView: screen(.loading("checking link…")))
+    self.host = host
+    addChild(host)
+    host.view.translatesAutoresizingMaskIntoConstraints = false
+    view.addSubview(host.view)
+    NSLayoutConstraint.activate([
+      host.view.topAnchor.constraint(equalTo: view.topAnchor),
+      host.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+      host.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+      host.view.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+    ])
+    host.didMove(toParent: self)
   }
 
   override func viewDidAppear(_ animated: Bool) {
@@ -53,204 +40,151 @@ final class ShareViewController: UIViewController {
     beginShareHandoff()
   }
 
-  private func configureView() {
-    view.backgroundColor = Style.background
-    configureCloseButton()
-    configureTitleLabel()
-    configureLoadingStack()
-    configureLinkField()
-    configureActionList()
-    configureLayout()
-    setLoading(message: "preparing share...")
+  func setLoading(message: String) {
+    host?.rootView = screen(.loading(message))
   }
 
-  private func configureCloseButton() {
-    closeButton.setImage(UIImage(systemName: "xmark"), for: .normal)
-    closeButton.tintColor = Style.textSecondary
-    closeButton.addTarget(self, action: #selector(cancelShare), for: .touchUpInside)
-    closeButton.translatesAutoresizingMaskIntoConstraints = false
-    closeButton.accessibilityLabel = "close"
+  func presentActions(for share: ExtractedShare, error: String? = nil) {
+    extractedShare = share
+    host?.rootView = screen(.ready(share, error: error))
   }
 
-  private func configureTitleLabel() {
-    titleLabel.text = "share"
-    titleLabel.textColor = Style.textPrimary
-    titleLabel.font = .preferredFont(forTextStyle: .title1)
-    titleLabel.adjustsFontForContentSizeCategory = true
-    titleLabel.numberOfLines = 0
-    titleLabel.accessibilityTraits.insert(.header)
-    titleLabel.translatesAutoresizingMaskIntoConstraints = false
+  func presentUnavailable(_ message: String) {
+    host?.rootView = screen(.unavailable(message))
   }
 
-  private func configureLoadingStack() {
-    activityIndicator.color = Style.accent
-    activityIndicator.startAnimating()
-    activityIndicator.translatesAutoresizingMaskIntoConstraints = false
-
-    statusLabel.text = "preparing share..."
-    statusLabel.textColor = Style.textSecondary
-    statusLabel.font = .systemFont(ofSize: 14, weight: .regular)
-    statusLabel.numberOfLines = 0
-    statusLabel.textAlignment = .left
-    statusLabel.translatesAutoresizingMaskIntoConstraints = false
-
-    loadingStack.axis = .horizontal
-    loadingStack.alignment = .center
-    loadingStack.spacing = Style.rowSpacing
-    loadingStack.translatesAutoresizingMaskIntoConstraints = false
-    loadingStack.addArrangedSubview(activityIndicator)
-    loadingStack.addArrangedSubview(statusLabel)
-  }
-
-  private func configureLinkField() {
-    linkSectionLabel.text = "link"
-    configureSectionLabel(linkSectionLabel)
-
-    linkLabel.textColor = Style.textPrimary
-    linkLabel.font = .preferredFont(forTextStyle: .subheadline)
-    linkLabel.adjustsFontForContentSizeCategory = true
-    linkLabel.numberOfLines = 3
-    linkLabel.textAlignment = .left
-    linkLabel.translatesAutoresizingMaskIntoConstraints = false
-
-    linkFieldView.backgroundColor = Style.panelMuted
-    linkFieldView.layer.cornerRadius = Style.fieldCornerRadius
-    linkFieldView.layer.cornerCurve = .continuous
-    linkFieldView.layer.borderColor = Style.separator.cgColor
-    linkFieldView.layer.borderWidth = 1
-    linkFieldView.translatesAutoresizingMaskIntoConstraints = false
-    linkFieldView.addSubview(linkLabel)
-  }
-
-  private func configureActionList() {
-    configureActionRow(
-      shareButton,
-      title: "share to a session",
-      subtitle: "choose who sees this link",
-      systemImage: "paperplane",
-      action: #selector(performShareLink)
+  private func screen(_ state: ShareExtensionScreen.State) -> ShareExtensionScreen {
+    ShareExtensionScreen(
+      state: state,
+      close: { [weak self] in self?.cancelShare() },
+      choose: { [weak self] action in self?.openContainingApp(for: action) }
     )
-    configureActionRow(
-      saveButton,
-      title: "save media",
-      subtitle: "save to photos or files",
-      systemImage: "arrow.down.circle",
-      action: #selector(performSaveMedia)
-    )
+  }
+}
 
-    actionListView.axis = .vertical
-    actionListView.alignment = .fill
-    actionListView.spacing = 0
-    actionListView.backgroundColor = Style.panel
-    actionListView.layer.cornerRadius = Style.fieldCornerRadius
-    actionListView.layer.cornerCurve = .continuous
-    actionListView.layer.borderColor = Style.separator.cgColor
-    actionListView.layer.borderWidth = 1
-    actionListView.clipsToBounds = true
-    actionListView.translatesAutoresizingMaskIntoConstraints = false
-    actionListView.addArrangedSubview(shareButton)
-    actionListView.addArrangedSubview(makeDivider())
-    actionListView.addArrangedSubview(saveButton)
+private struct ShareExtensionScreen: View {
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+  enum State {
+    case loading(String)
+    case ready(ExtractedShare, error: String?)
+    case unavailable(String)
   }
 
-  private func configureLayout() {
-    let stack = UIStackView(
-      arrangedSubviews: [
-        titleLabel,
-        loadingStack,
-        linkSectionLabel,
-        linkFieldView,
-        actionListView
-      ])
-    stack.axis = .vertical
-    stack.alignment = .fill
-    stack.spacing = Style.compactSpacing
-    stack.translatesAutoresizingMaskIntoConstraints = false
-    stack.setCustomSpacing(Style.sectionSpacing, after: titleLabel)
-    stack.setCustomSpacing(Style.sectionSpacing, after: loadingStack)
-    stack.setCustomSpacing(Style.sectionSpacing, after: linkFieldView)
+  let state: State
+  let close: () -> Void
+  let choose: (ShareViewController.ShareAction) -> Void
 
-    view.addSubview(closeButton)
-    let scrollView = UIScrollView()
-    scrollView.translatesAutoresizingMaskIntoConstraints = false
-    scrollView.addSubview(stack)
-    view.addSubview(scrollView)
-    NSLayoutConstraint.activate([
-      closeButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
-      closeButton.leadingAnchor.constraint(
-        equalTo: view.leadingAnchor, constant: Style.screenHorizontalPadding),
-      closeButton.widthAnchor.constraint(equalToConstant: 44),
-      closeButton.heightAnchor.constraint(equalToConstant: 44),
-
-      scrollView.topAnchor.constraint(equalTo: closeButton.bottomAnchor, constant: 8),
-      scrollView.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
-      scrollView.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
-      scrollView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
-      stack.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor),
-      stack.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor, constant: -18),
-      stack.leadingAnchor.constraint(
-        equalTo: scrollView.contentLayoutGuide.leadingAnchor, constant: Style.screenHorizontalPadding),
-      stack.trailingAnchor.constraint(
-        equalTo: scrollView.contentLayoutGuide.trailingAnchor, constant: -Style.screenHorizontalPadding),
-      stack.widthAnchor.constraint(
-        equalTo: scrollView.frameLayoutGuide.widthAnchor, constant: -2 * Style.screenHorizontalPadding),
-
-      linkLabel.topAnchor.constraint(
-        equalTo: linkFieldView.topAnchor, constant: Style.fieldVerticalPadding),
-      linkLabel.leadingAnchor.constraint(
-        equalTo: linkFieldView.leadingAnchor, constant: Style.fieldHorizontalPadding),
-      linkLabel.trailingAnchor.constraint(
-        equalTo: linkFieldView.trailingAnchor, constant: -Style.fieldHorizontalPadding),
-      linkLabel.bottomAnchor.constraint(
-        equalTo: linkFieldView.bottomAnchor, constant: -Style.fieldVerticalPadding),
-
-      shareButton.heightAnchor.constraint(greaterThanOrEqualToConstant: Style.rowHeight),
-      saveButton.heightAnchor.constraint(greaterThanOrEqualToConstant: Style.rowHeight)
-    ])
-  }
-
-  private func configureSectionLabel(_ label: UILabel) {
-    label.textColor = Style.textSecondary
-    label.font = .preferredFont(forTextStyle: .footnote)
-    label.adjustsFontForContentSizeCategory = true
-    label.translatesAutoresizingMaskIntoConstraints = false
-  }
-
-  private func configureActionRow(
-    _ button: UIButton,
-    title: String,
-    subtitle: String,
-    systemImage: String,
-    action: Selector
-  ) {
-    var configuration = UIButton.Configuration.plain()
-    configuration.title = title
-    configuration.subtitle = subtitle
-    configuration.image = UIImage(systemName: systemImage)
-    configuration.imagePadding = Style.rowSpacing
-    configuration.contentInsets = NSDirectionalEdgeInsets(
-      top: 0,
-      leading: Style.fieldHorizontalPadding,
-      bottom: 0,
-      trailing: Style.fieldHorizontalPadding
-    )
-    configuration.baseForegroundColor = Style.textPrimary
-    configuration.titleTextAttributesTransformer =
-      UIConfigurationTextAttributesTransformer { attributes in
-        var attributes = attributes
-        attributes.font = .systemFont(ofSize: 15, weight: .semibold)
-        return attributes
+  var body: some View {
+    NavigationStack {
+      ScrollView {
+        VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
+          LinkstrSheetTitle(title: "share with linkstr")
+          switch state {
+          case .loading(let message):
+            HStack(spacing: LinkstrTheme.rowSpacing) {
+              ProgressView()
+                .tint(LinkstrTheme.accent)
+                .accessibilityHidden(true)
+              Text(message)
+                .font(LinkstrTheme.font(.subheadline))
+                .foregroundStyle(LinkstrTheme.textSecondary)
+            }
+          case .ready(let share, let error):
+            if let error { statusCard(title: "couldn’t open linkstr", message: error) }
+            linkPreview(share.url)
+            VStack(spacing: 0) {
+              actionRow("share to session", subtitle: "choose a session, with an optional note",
+                        icon: "paperplane", action: .shareLink)
+              Rectangle().fill(LinkstrTheme.separator).frame(height: 1)
+                .accessibilityHidden(true)
+              actionRow("save video", subtitle: "look for a downloadable video",
+                        icon: "square.and.arrow.down", action: .saveMedia)
+            }
+            .linkstrCardSurface()
+          case .unavailable(let message):
+            statusCard(title: "link unavailable", message: message)
+          }
+        }
+        .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+        .padding(.top, LinkstrTheme.screenTopPadding)
+        .padding(.bottom, LinkstrTheme.screenBottomPadding)
+        .linkstrReadableContent()
       }
-    configuration.subtitleTextAttributesTransformer =
-      UIConfigurationTextAttributesTransformer { attributes in
-        var attributes = attributes
-        attributes.font = .systemFont(ofSize: 12, weight: .regular)
-        attributes.foregroundColor = Style.textSecondary
-        return attributes
+      .background(LinkstrBackgroundView())
+      .linkstrNavigationBarChrome()
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) {
+          LinkstrHeaderButton(title: "close", icon: "xmark", action: close)
+        }
+        .linkstrFlatToolbarItem()
       }
-    button.configuration = configuration
-    button.contentHorizontalAlignment = .leading
-    button.addTarget(self, action: action, for: .touchUpInside)
-    button.translatesAutoresizingMaskIntoConstraints = false
+    }
+    .preferredColorScheme(.dark)
+    .tint(LinkstrTheme.accent)
+  }
+
+  private func statusCard(title: String, message: String) -> some View {
+    VStack(alignment: .leading, spacing: LinkstrTheme.compactSpacing) {
+      Label(title, systemImage: "exclamationmark.circle")
+        .font(LinkstrTheme.font(.headline))
+        .foregroundStyle(LinkstrTheme.textPrimary)
+        .accessibilityAddTraits(.isHeader)
+      Text(message)
+        .font(LinkstrTheme.font(.subheadline))
+        .foregroundStyle(LinkstrTheme.textSecondary)
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(LinkstrTheme.panelPadding)
+    .linkstrCardSurface()
+  }
+
+  private func linkPreview(_ url: String) -> some View {
+    VStack(alignment: .leading, spacing: LinkstrTheme.compactSpacing) {
+      Label(URL(string: url)?.host ?? "link", systemImage: "link")
+        .font(LinkstrTheme.font(.subheadline, weight: .semibold))
+        .foregroundStyle(LinkstrTheme.accent)
+      LinkstrURLText(address: url, lineLimit: 3)
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(LinkstrTheme.panelPadding)
+    .linkstrCardSurface()
+    .accessibilityElement(children: .combine)
+  }
+
+  private func actionRow(
+    _ title: String, subtitle: String, icon: String, action: ShareViewController.ShareAction
+  ) -> some View {
+    Button { choose(action) } label: {
+      HStack(
+        alignment: dynamicTypeSize.isAccessibilitySize ? .firstTextBaseline : .center,
+        spacing: LinkstrTheme.rowSpacing
+      ) {
+        Image(systemName: icon)
+          .font(LinkstrTheme.font(.title3, weight: .semibold))
+          .dynamicTypeSize(...DynamicTypeSize.xLarge)
+          .frame(width: 24)
+          .foregroundStyle(LinkstrTheme.accent)
+          .accessibilityHidden(true)
+        VStack(alignment: .leading, spacing: LinkstrTheme.metaSpacing) {
+          Text(title)
+            .font(LinkstrTheme.font(.subheadline, weight: .semibold))
+            .foregroundStyle(LinkstrTheme.textPrimary)
+          Text(subtitle)
+            .font(LinkstrTheme.font(.caption))
+            .foregroundStyle(LinkstrTheme.textSecondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        if !dynamicTypeSize.isAccessibilitySize {
+          LinkstrDisclosureIndicator()
+        }
+      }
+      .padding(.horizontal, LinkstrTheme.panelPadding)
+      .padding(.vertical, LinkstrTheme.fieldVerticalPadding)
+      .frame(minHeight: LinkstrTheme.minimumInteractiveDimension)
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .accessibilityElement(children: .combine)
   }
 }

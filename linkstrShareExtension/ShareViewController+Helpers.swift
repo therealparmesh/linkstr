@@ -3,62 +3,38 @@ import UIKit
 
 private enum ShareViewControllerTimingDefaults {
   static let appHandoffCompletionDelay: TimeInterval = 0.5
+  static let extractionTimeout: TimeInterval = 15
 }
 
 // MARK: - ShareViewController Action Helpers
 
 extension ShareViewController {
-  func makeDivider() -> UIView {
-    let divider = UIView()
-    divider.backgroundColor = Self.separatorColor
-    divider.translatesAutoresizingMaskIntoConstraints = false
-    NSLayoutConstraint.activate([
-      divider.heightAnchor.constraint(equalToConstant: 1)
-    ])
-    return divider
-  }
-
-  func setLoading(message: String) {
-    titleLabel.text = "share"
-    statusLabel.text = message
-    loadingStack.isHidden = false
-    activityIndicator.isHidden = false
-    activityIndicator.startAnimating()
-    linkSectionLabel.isHidden = true
-    linkFieldView.isHidden = true
-    actionListView.isHidden = true
-  }
-
   func beginShareHandoff() {
-    SharedLinkExtractor.extract(from: extensionContext) { [weak self] result in
+    let timeout = DispatchWorkItem { [weak self] in
+      guard let self, !self.isClosed else { return }
+      self.extractionTimeout = nil
+      self.presentUnavailable("the source app hasn’t provided a link. close this sheet and try sharing again.")
+    }
+    extractionTimeout = timeout
+    DispatchQueue.main.asyncAfter(
+      deadline: .now() + ShareViewControllerTimingDefaults.extractionTimeout, execute: timeout
+    )
+    SharedLinkExtractor.extract(from: extensionContext) { [weak self] share in
       DispatchQueue.main.async {
-        guard let self else { return }
-        switch result {
-        case .success(let share):
+        guard let self, !self.isClosed else { return }
+        self.extractionTimeout?.cancel()
+        self.extractionTimeout = nil
+        if let share {
           self.presentActions(for: share)
-        case .failure:
-          self.completeGracefully()
+        } else {
+          self.presentUnavailable("share a web link from the original app and try again.")
         }
       }
     }
   }
 
-  func presentActions(for share: ExtractedShare) {
-    extractedShare = share
-    activityIndicator.stopAnimating()
-    loadingStack.isHidden = true
-    titleLabel.text = "share with linkstr"
-    linkSectionLabel.isHidden = false
-    linkFieldView.isHidden = false
-    actionListView.isHidden = false
-    linkLabel.text = share.url
-  }
-
   func openContainingApp(for action: ShareAction) {
-    guard let share = extractedShare else {
-      completeGracefully()
-      return
-    }
+    guard !isOpening, !isClosed, let share = extractedShare else { return }
 
     let deepLink: URL?
     switch action {
@@ -68,38 +44,49 @@ extension ShareViewController {
       deepLink = LinkstrDeepLinkCodec.makeMediaSaveAppDeepLink(url: share.url)
     }
 
-    guard let deepLink else {
-      completeGracefully()
+    guard let deepLink, let extensionContext else {
+      presentUnavailable("this link couldn’t be opened. try sharing it again from the original app.")
       return
     }
 
-    guard let extensionContext else {
-      completeGracefully()
-      return
-    }
-
-    setLoading(message: "opening linkstr...")
+    isOpening = true
+    setLoading(message: "opening linkstr…")
 
     extensionContext.open(deepLink) { [weak self, weak extensionContext] didOpen in
       DispatchQueue.main.async {
-        guard let self, let extensionContext else { return }
-        guard didOpen || self.openURLUsingResponderChain(deepLink) else {
-          self.completeGracefully()
-          return
-        }
-
-        DispatchQueue.main.asyncAfter(
-          deadline: .now() + ShareViewControllerTimingDefaults.appHandoffCompletionDelay
-        ) {
-          extensionContext.completeRequest(returningItems: nil)
+        guard let self, let extensionContext, !self.isClosed else { return }
+        if didOpen {
+          self.finishOpening(success: true, share: share, context: extensionContext)
+        } else {
+          self.openURLUsingResponderChain(deepLink) { [weak self, weak extensionContext] success in
+            guard let extensionContext else { return }
+            self?.finishOpening(success: success, share: share, context: extensionContext)
+          }
         }
       }
     }
   }
 
-  func openURLUsingResponderChain(_ url: URL) -> Bool {
+  private func finishOpening(success: Bool, share: ExtractedShare, context: NSExtensionContext) {
+    guard !isClosed else { return }
+    if success {
+      DispatchQueue.main.asyncAfter(
+        deadline: .now() + ShareViewControllerTimingDefaults.appHandoffCompletionDelay
+      ) { [weak self] in
+        guard let self, !self.isClosed else { return }
+        self.isClosed = true
+        context.completeRequest(returningItems: nil)
+      }
+    } else {
+      isOpening = false
+      presentActions(for: share, error: "try again, or copy the link from the original app and paste it in linkstr.")
+    }
+  }
+
+  private func openURLUsingResponderChain(_ url: URL, completion: @escaping (Bool) -> Void) {
     guard let applicationClass = NSClassFromString("UIApplication") else {
-      return false
+      completion(false)
+      return
     }
 
     let openURLSelector = NSSelectorFromString("openURL:options:completionHandler:")
@@ -121,31 +108,24 @@ extension ShareViewController {
           AnyObject?
         ) -> Void
       let method = currentResponder.method(for: openURLSelector)
+      let completionBlock: @convention(block) (Bool) -> Void = completion
       unsafeBitCast(method, to: OpenURLFunction.self)(
         currentResponder,
         openURLSelector,
         url as NSURL,
         NSDictionary(),
-        nil
+        completionBlock as AnyObject
       )
-      return true
+      return
     }
-    return false
+    completion(false)
   }
 
-  func completeGracefully() {
-    extensionContext?.completeRequest(returningItems: nil)
-  }
-
-  @objc func performShareLink() {
-    openContainingApp(for: .shareLink)
-  }
-
-  @objc func performSaveMedia() {
-    openContainingApp(for: .saveMedia)
-  }
-
-  @objc func cancelShare() {
+  func cancelShare() {
+    guard !isClosed else { return }
+    isClosed = true
+    extractionTimeout?.cancel()
+    extractionTimeout = nil
     let error = NSError(
       domain: "com.parmscript.linkstr.share-extension",
       code: 1,
