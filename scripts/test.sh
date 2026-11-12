@@ -63,7 +63,7 @@ derive_destination() {
       }
       name = trim(substr($0, RSTART + 5, RLENGTH - 5))
 
-      if (name !~ /^iPhone/) {
+      if (requested_name == "" && name !~ /^iPhone/) {
         next
       }
       if (requested_name != "" && name != requested_name) {
@@ -93,7 +93,7 @@ if [ -z "$SIMULATOR_DESTINATION" ]; then
 fi
 
 if [ -z "$SIMULATOR_DESTINATION" ]; then
-  echo -e "\n${RED}✖ No available iPhone simulator found${RESET}"
+  echo -e "\n${RED}✖ No matching iOS simulator found${RESET}"
   fail=1
 else
   echo "Using iOS simulator: $SIMULATOR_DESTINATION"

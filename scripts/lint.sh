@@ -9,6 +9,6 @@ if ! command -v swiftlint &>/dev/null; then
 fi
 
 echo "▸ Linting Swift sources…"
-swiftlint
+swiftlint --strict
 
 echo "✔ No lint violations"
