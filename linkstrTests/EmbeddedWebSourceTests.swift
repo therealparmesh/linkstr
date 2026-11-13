@@ -228,6 +228,7 @@ extension EmbeddedWebSourceTests {
     let config = WKWebViewConfiguration()
     let handlerName = EmbeddedWebView.Coordinator.metricsHandlerName
     config.userContentController.add(coordinator, name: handlerName)
+    installManualFacebookFallbackTimer(in: config)
     config.userContentController.addUserScript(WKUserScript(
       source: "window.fetch = () => new Promise(resolve => { window.resolveEmbed = resolve; });",
       injectionTime: .atDocumentStart, forMainFrameOnly: true
@@ -241,8 +242,9 @@ extension EmbeddedWebSourceTests {
     }
     let ready = expectation(description: "stalled request presents recovery guidance")
     coordinator.onContentReadyChange = { if $0 { ready.fulfill() } }
-    webView.loadHTMLString(document, baseURL: nil)
-    await fulfillment(of: [ready], timeout: 8)
+    await loadFacebookFixture(document, in: webView)
+    _ = try await webView.evaluateJavaScript("window.runFallbackTimer()")
+    await fulfillment(of: [ready], timeout: 5)
     let fallback = try await webView.evaluateJavaScript(
       "document.querySelector('.linkstr-embed-fallback')?.textContent ?? ''"
     )
@@ -295,6 +297,7 @@ extension EmbeddedWebSourceTests {
     let config = WKWebViewConfiguration()
     let handlerName = EmbeddedWebView.Coordinator.metricsHandlerName
     config.userContentController.add(coordinator, name: handlerName)
+    installManualFacebookFallbackTimer(in: config)
     config.userContentController.addUserScript(WKUserScript(
       source: """
         window.fetch = async () => ({ ok: true, json: async () => ({
@@ -312,8 +315,11 @@ extension EmbeddedWebSourceTests {
     }
     let ready = expectation(description: "SDK stall presents recovery guidance")
     coordinator.onContentReadyChange = { if $0 { ready.fulfill() } }
-    webView.loadHTMLString(document, baseURL: nil)
-    await fulfillment(of: [ready], timeout: 8)
+    await loadFacebookFixture(document, in: webView)
+    let sdkPlaceholder = try await webView.evaluateJavaScript("!!document.querySelector('#sdk-placeholder')")
+    XCTAssertEqual(sdkPlaceholder as? Bool, true)
+    _ = try await webView.evaluateJavaScript("window.runFallbackTimer()")
+    await fulfillment(of: [ready], timeout: 5)
     let fallback = try await webView.evaluateJavaScript(
       "document.querySelector('.linkstr-embed-fallback')?.textContent ?? ''"
     )
@@ -327,5 +333,43 @@ extension EmbeddedWebSourceTests {
         !document.querySelector('.linkstr-embed-fallback');
       """, arguments: [:], in: nil, contentWorld: .page)
     XCTAssertEqual(recovered as? Bool, true)
+  }
+
+  private func installManualFacebookFallbackTimer(in config: WKWebViewConfiguration) {
+    config.userContentController.addUserScript(WKUserScript(
+      source: """
+        (() => {
+          const setTimeout = window.setTimeout;
+          window.setTimeout = callback => {
+            window.setTimeout = setTimeout;
+            window.runFallbackTimer = () => { callback(); return true; };
+          };
+        })();
+        """,
+      injectionTime: .atDocumentStart, forMainFrameOnly: true
+    ))
+  }
+
+  @MainActor
+  private func loadFacebookFixture(_ document: String, in webView: WKWebView) async {
+    let loaded = expectation(description: "Facebook fixture finished loading")
+    let navigation = FacebookFixtureNavigation(loaded: loaded)
+    webView.navigationDelegate = navigation
+    defer { webView.navigationDelegate = nil }
+    webView.loadHTMLString(document, baseURL: nil)
+    await fulfillment(of: [loaded], timeout: 8)
+    withExtendedLifetime(navigation) {}
+  }
+}
+
+private final class FacebookFixtureNavigation: NSObject, WKNavigationDelegate {
+  let loaded: XCTestExpectation
+
+  init(loaded: XCTestExpectation) {
+    self.loaded = loaded
+  }
+
+  func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+    loaded.fulfill()
   }
 }
