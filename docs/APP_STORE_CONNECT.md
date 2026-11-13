@@ -2,6 +2,10 @@
 
 copy/paste-ready fields for app store connect.
 
+## what’s new in 1.6.1
+
+various bug fixes and improvements
+
 ## what’s new in 1.6.0
 
 - a new look for sessions, posts, contacts, settings, and the share extension.
@@ -12,7 +16,7 @@ copy/paste-ready fields for app store connect.
 
 ## promotional text
 
-collect links in private sessions, swipe through posts, and save supported videos for offline viewing.
+save social media videos and links in one place — extract tiktoks, reels, and more for in-app and offline playback.
 
 ## description
 
