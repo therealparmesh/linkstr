@@ -52,6 +52,7 @@ final class EmbeddedWebLifetimeTests: XCTestCase {
     let handlerName = EmbeddedWebView.Coordinator.metricsHandlerName
     let config = WKWebViewConfiguration()
     config.userContentController.add(coordinator, name: handlerName)
+    installManualTwitterFallbackTimer(in: config)
     let document = twitterDocument(stalledWidget: stalledWidget)
     let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 390, height: 600), configuration: config)
     coordinator.source = .html(document: document, baseURL: nil)
@@ -70,8 +71,9 @@ final class EmbeddedWebLifetimeTests: XCTestCase {
       hasRenderedPost = $0
       if $0 { postRendered.fulfill() }
     }
-    webView.loadHTMLString(document, baseURL: nil)
-    await fulfillment(of: [fallbackReady], timeout: 8)
+    await loadEmbedFixture(document, in: webView)
+    _ = try await webView.evaluateJavaScript("window.runFallbackTimer()")
+    await fulfillment(of: [fallbackReady], timeout: 5)
     XCTAssertFalse(hasRenderedPost)
 
     let fallbackText = try await webView.evaluateJavaScript(
@@ -89,16 +91,30 @@ final class EmbeddedWebLifetimeTests: XCTestCase {
       """)
     await fulfillment(of: [postRendered], timeout: 5)
     XCTAssertTrue(hasRenderedPost)
-    let fallbackCount = try await webView.evaluateJavaScript(
-      "document.querySelectorAll('.linkstr-embed-fallback').length"
-    )
-    XCTAssertEqual(fallbackCount as? Int, 0, "Late success must remove recovery guidance")
+    let fallback = try await webView.evaluateJavaScript("!!document.querySelector('.linkstr-embed-fallback')")
+    XCTAssertEqual(fallback as? Bool, false, "Late success must remove recovery guidance")
     if stalledWidget {
       let placeholderSurvived = try await webView.evaluateJavaScript(
         "document.getElementById('pending-widget') != null"
       )
       XCTAssertEqual(placeholderSurvived as? Bool, true, "Do not destroy nodes owned by the provider")
     }
+  }
+
+  private func installManualTwitterFallbackTimer(in config: WKWebViewConfiguration) {
+    config.userContentController.addUserScript(WKUserScript(
+      source: """
+        const schedule = window.setTimeout;
+        window.setTimeout = function(callback, delay, ...args) {
+          if (delay === \(TwitterEmbedTimingDefaults.fallbackDelayMilliseconds)) {
+            window.runFallbackTimer = () => { callback(...args); return true; };
+            return 0;
+          }
+          return schedule.call(window, callback, delay, ...args);
+        };
+        """,
+      injectionTime: .atDocumentStart, forMainFrameOnly: true
+    ))
   }
 
   private func twitterDocument(stalledWidget: Bool) -> String {

@@ -242,7 +242,7 @@ extension EmbeddedWebSourceTests {
     }
     let ready = expectation(description: "stalled request presents recovery guidance")
     coordinator.onContentReadyChange = { if $0 { ready.fulfill() } }
-    await loadFacebookFixture(document, in: webView)
+    await loadEmbedFixture(document, in: webView)
     _ = try await webView.evaluateJavaScript("window.runFallbackTimer()")
     await fulfillment(of: [ready], timeout: 5)
     let fallback = try await webView.evaluateJavaScript(
@@ -315,7 +315,7 @@ extension EmbeddedWebSourceTests {
     }
     let ready = expectation(description: "SDK stall presents recovery guidance")
     coordinator.onContentReadyChange = { if $0 { ready.fulfill() } }
-    await loadFacebookFixture(document, in: webView)
+    await loadEmbedFixture(document, in: webView)
     let sdkPlaceholder = try await webView.evaluateJavaScript("!!document.querySelector('#sdk-placeholder')")
     XCTAssertEqual(sdkPlaceholder as? Bool, true)
     _ = try await webView.evaluateJavaScript("window.runFallbackTimer()")
@@ -349,20 +349,23 @@ extension EmbeddedWebSourceTests {
       injectionTime: .atDocumentStart, forMainFrameOnly: true
     ))
   }
+}
 
+extension XCTestCase {
   @MainActor
-  private func loadFacebookFixture(_ document: String, in webView: WKWebView) async {
-    let loaded = expectation(description: "Facebook fixture finished loading")
-    let navigation = FacebookFixtureNavigation(loaded: loaded)
+  func loadEmbedFixture(_ document: String, in webView: WKWebView) async {
+    let loaded = expectation(description: "embed fixture finished loading")
+    let navigation = EmbedFixtureNavigation(loaded: loaded)
+    let previousDelegate = webView.navigationDelegate
     webView.navigationDelegate = navigation
-    defer { webView.navigationDelegate = nil }
+    defer { webView.navigationDelegate = previousDelegate }
     webView.loadHTMLString(document, baseURL: nil)
     await fulfillment(of: [loaded], timeout: 8)
     withExtendedLifetime(navigation) {}
   }
 }
 
-private final class FacebookFixtureNavigation: NSObject, WKNavigationDelegate {
+private final class EmbedFixtureNavigation: NSObject, WKNavigationDelegate {
   let loaded: XCTestExpectation
 
   init(loaded: XCTestExpectation) {
