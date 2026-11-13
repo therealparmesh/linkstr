@@ -63,8 +63,8 @@ targets:
       path: linkstrApp/Info.plist
       properties:
         CFBundleDisplayName: linkstr
-        CFBundleShortVersionString: "1.6.0"
-        CFBundleVersion: "47"
+        CFBundleShortVersionString: "1.6.1"
+        CFBundleVersion: "48"
         LinkstrPushServiceBaseURL: $(LINKSTR_PUSH_SERVICE_BASE_URL)
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
@@ -124,8 +124,8 @@ targets:
       path: linkstrShareExtension/Info.plist
       properties:
         CFBundleDisplayName: linkstr
-        CFBundleShortVersionString: "1.6.0"
-        CFBundleVersion: "47"
+        CFBundleShortVersionString: "1.6.1"
+        CFBundleVersion: "48"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.share-services
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
