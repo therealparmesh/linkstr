@@ -44,6 +44,7 @@ struct WatchPostControls<Content: View>: View {
           }
         }
       }
+      .padding(.bottom, playbackControlsHeight == 0 ? LinkstrTheme.metaSpacing : 0)
       .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
         if !isExpanded || reservesExpandedSpace { onReservedHeightChange(height) }
       }
@@ -90,10 +91,11 @@ struct WatchPostControls<Content: View>: View {
   }
 
   private var handle: some View {
-    let caption = isExpanded ? nil : showsLinkPreview ? summary.note : summary.caption
+    let preview = showsLinkPreview ? summary.note : summary.caption
+    let caption = isExpanded ? nil : preview.map { $0.split(whereSeparator: \.isWhitespace).joined(separator: " ") }
     let textLayout = verticalSizeClass == .compact
       ? AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: LinkstrTheme.rowSpacing))
-      : AnyLayout(VStackLayout(alignment: .leading, spacing: LinkstrTheme.metaSpacing))
+      : AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
     return Button { setExpanded(!isExpanded) } label: {
       HStack(spacing: LinkstrTheme.rowSpacing) {
         textLayout {
@@ -106,6 +108,7 @@ struct WatchPostControls<Content: View>: View {
               .font(LinkstrTheme.font(.subheadline))
               .foregroundStyle(LinkstrTheme.textPrimary)
               .lineLimit(verticalSizeClass == .compact ? 1 : 2)
+              .fixedSize(horizontal: false, vertical: true)
           } else if dynamicTypeSize.isAccessibilitySize {
             Text(summary.timestamp)
               .font(LinkstrTheme.font(.caption))
@@ -128,7 +131,7 @@ struct WatchPostControls<Content: View>: View {
           .accessibilityHidden(true)
       }
       .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-      .padding(.vertical, LinkstrTheme.tightSpacing)
+      .padding(.vertical, LinkstrTheme.metaSpacing)
       .frame(maxWidth: .infinity, minHeight: LinkstrTheme.minimumInteractiveDimension)
       .contentShape(Rectangle())
     }
@@ -214,7 +217,9 @@ struct WatchPostControls<Content: View>: View {
         .accessibilityLabel("share link")
       }
     }
-    .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+    // The emoji hit targets already inset their glyphs. Keep the trailing actions aligned with the toolbar.
+    .padding(.leading, LinkstrTheme.tightSpacing)
+    .padding(.trailing, LinkstrTheme.screenHorizontalPadding)
   }
 
   private func postActionIcon(_ systemName: String, size: CGFloat, offset: CGSize) -> some View {

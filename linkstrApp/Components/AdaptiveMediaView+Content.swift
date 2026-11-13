@@ -111,10 +111,7 @@ extension AdaptiveMediaView {
   private func localPlaybackLoading(offersEmbed: Bool) -> some View {
     if immersive {
       watchContentArea { _ in
-        VStack(spacing: LinkstrTheme.rowSpacing) {
-          loadingIndicator("getting video ready")
-          localPlaybackActions(exportFileURL: nil, offersEmbed: offersEmbed)
-        }
+        loadingIndicator("getting video ready")
       }
     } else {
       VStack(alignment: .leading, spacing: LinkstrTheme.compactSpacing) {

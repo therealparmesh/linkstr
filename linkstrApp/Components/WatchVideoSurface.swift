@@ -81,14 +81,19 @@ private struct WatchPlaybackControls: View {
     .foregroundStyle(LinkstrTheme.textPrimary)
     .buttonStyle(.plain)
     .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-    .padding(.vertical, LinkstrTheme.metaSpacing)
+    .padding(.top, LinkstrTheme.compactSpacing)
+    .padding(.bottom, LinkstrTheme.metaSpacing)
     .linkstrReadableContent()
     .padding(.bottom, bottomInset)
     .background {
-      LinearGradient(
-        colors: [LinkstrTheme.background.opacity(0.68), LinkstrTheme.background.opacity(0.74)],
-        startPoint: .top, endPoint: .bottom
-      )
+      let scrim = LinkstrTheme.background.opacity(0.82)
+      VStack(spacing: 0) {
+        scrim
+        LinearGradient(
+          colors: [scrim, LinkstrTheme.background.opacity(0.94)], startPoint: .top, endPoint: .bottom
+        )
+          .frame(height: bottomInset)
+      }
       .allowsHitTesting(false)
       .accessibilityHidden(true)
     }

@@ -129,6 +129,12 @@ extension AdaptiveMediaView {
     !isResolvingPresentation && localPlaybackMode == .localPreferred && readyPlaybackMedia != nil
   }
 
+  var reservesNativeControlsSpace: Bool {
+    guard localPlaybackMode == .localPreferred else { return false }
+    return isShowingNativePlayer || (extractionState == nil
+      && (effectiveMediaStrategy == .directVideo || effectiveMediaStrategy.allowsLocalPlaybackToggle))
+  }
+
   var saveVideoAction: (() -> Void)? {
     guard let media = cachedLocalMedia ?? readyPlaybackMedia,
       let fileURL = exportableLocalMediaURL(for: media) else { return nil }

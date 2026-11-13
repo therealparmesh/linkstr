@@ -32,7 +32,8 @@ struct AdaptiveMediaView<LinkContent: View, OverlayContent: View>: View {
   let linkContent: LinkContent
   let overlayContent: ((() -> Void)?) -> OverlayContent
   @State var postControlsReservedHeight = LinkstrTheme.minimumInteractiveDimension
-  @State var watchControlsHeight: CGFloat = 52
+  @State var watchControlsHeight =
+    LinkstrTheme.minimumInteractiveDimension + LinkstrTheme.compactSpacing + LinkstrTheme.metaSpacing
 
   @State var resolvedPresentation: ResolvedPresentation?
   @State var extractionState: ExtractionState?
@@ -95,7 +96,7 @@ struct AdaptiveMediaView<LinkContent: View, OverlayContent: View>: View {
             summary: postControlsSummary,
             topInset: watchInsets.top,
             bottomInset: watchInsets.bottom,
-            playbackControlsHeight: isShowingNativePlayer ? watchControlsHeight : 0,
+            playbackControlsHeight: reservesNativeControlsSpace ? watchControlsHeight : 0,
             showsLinkPreview: !isResolvingPresentation && (effectiveMediaStrategy == .link || showsEmbeddedPost),
             reservesExpandedSpace: effectiveMediaStrategy == .link,
             onReservedHeightChange: { postControlsReservedHeight = $0 },

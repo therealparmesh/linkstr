@@ -76,19 +76,15 @@ struct LinkstrReactionRow: View {
     summaries.filter { !quickEmojis.contains($0.emoji) }
   }
 
-  private var readOnlyVisibleSummaries: [ReactionSummary] {
-    Array(summaries.prefix(readOnlyMaxEmojiCount))
-  }
-
   private var readOnlyOverflowCount: Int {
     max(0, summaries.count - readOnlyMaxEmojiCount)
   }
 
   var body: some View {
     ScrollView(.horizontal) {
-      HStack(alignment: .center, spacing: mode == .watch ? 0 : LinkstrTheme.tightSpacing) {
+      HStack(alignment: .center, spacing: mode == .watch ? LinkstrTheme.metaSpacing : LinkstrTheme.tightSpacing) {
         if mode == .readOnly {
-          ForEach(readOnlyVisibleSummaries) { summary in
+          ForEach(summaries.prefix(readOnlyMaxEmojiCount)) { summary in
             readOnlySummaryText(summary)
           }
 
@@ -112,29 +108,17 @@ struct LinkstrReactionRow: View {
           }
         }
       }
-      .frame(minHeight: mode == .readOnly ? 18 : nil, alignment: .leading)
     }
     .scrollIndicators(mode == .watch ? .visible : .hidden)
+    .scrollBounceBehavior(.basedOnSize)
     .frame(maxWidth: .infinity, alignment: .leading)
   }
 
   private func readOnlySummaryText(_ summary: ReactionSummary) -> some View {
-    HStack(spacing: LinkstrTheme.metaSpacing) {
-      Text(summary.emoji)
-        .font(LinkstrTheme.font(.body))
-        .foregroundStyle(LinkstrTheme.textPrimary.opacity(0.95))
-
-      if let badgeText = summary.readOnlyBadgeText {
-        Text(badgeText)
-          .font(LinkstrTheme.font(.caption2, weight: .medium).monospacedDigit())
-          .foregroundStyle(LinkstrTheme.textSecondary)
-      }
-    }
-    .fixedSize(horizontal: true, vertical: false)
-    .padding(.vertical, LinkstrTheme.metaSpacing)
-    .accessibilityElement(children: .ignore)
-    .accessibilityLabel(
-      "\(summary.count) \(summary.emoji) reaction\(summary.count == 1 ? "" : "s")")
+    ReactionChipLabel(emoji: summary.emoji, count: summary.readOnlyBadgeText)
+      .accessibilityElement(children: .ignore)
+      .accessibilityLabel(
+        "\(summary.count) \(summary.emoji) reaction\(summary.count == 1 ? "" : "s")")
   }
 
   private func summaryChip(_ summary: ReactionSummary) -> some View {
@@ -172,17 +156,28 @@ struct LinkstrReactionRow: View {
     emoji: String,
     summary: ReactionSummary?
   ) -> some View {
+    ReactionChipLabel(emoji: emoji, count: summary.map { String($0.count) })
+      .linkstrReactionChip(isSelected: summary?.includesCurrentUser == true, compact: mode == .watch)
+  }
+}
+
+private struct ReactionChipLabel: View {
+  let emoji: String
+  let count: String?
+
+  var body: some View {
     HStack(spacing: LinkstrTheme.metaSpacing) {
       Text(emoji)
-        .font(LinkstrTheme.font(mode == .watch ? .footnote : .subheadline))
+        .font(LinkstrTheme.font(.subheadline))
+        .foregroundStyle(LinkstrTheme.textPrimary)
 
-      if let count = summary?.count, count > 0 {
-        Text("\(count)")
+      if let count {
+        Text(count)
           .font(LinkstrTheme.font(.caption, weight: .medium).monospacedDigit())
           .foregroundStyle(LinkstrTheme.textSecondary)
       }
     }
-    .linkstrReactionChip(isSelected: summary?.includesCurrentUser == true, compact: mode == .watch)
+    .fixedSize(horizontal: true, vertical: false)
   }
 }
 
@@ -329,7 +324,7 @@ extension PostDetailView {
               .truncationMode(.middle)
               .accessibilityLabel(entry.displayName)
             let emojis = Text(selectedReactionEmoji ?? entry.emojis.joined(separator: " "))
-              .font(LinkstrTheme.font(.body))
+              .font(LinkstrTheme.font(.subheadline))
               .foregroundStyle(LinkstrTheme.textPrimary)
 
             ViewThatFits(in: .horizontal) {
@@ -354,22 +349,24 @@ extension PostDetailView {
 
   private var reactionFilters: some View {
     HStack(spacing: LinkstrTheme.compactSpacing) {
-      reactionFilter("all", accessibilityTitle: "show all reactions", emoji: nil)
-        .fixedSize(horizontal: true, vertical: false)
+      reactionFilter(accessibilityTitle: "show all reactions", emoji: nil) {
+        Text("all")
+          .font(LinkstrTheme.font(.subheadline, weight: .medium))
+          .fixedSize(horizontal: true, vertical: false)
+      }
       ScrollViewReader { proxy in
         ScrollView(.horizontal) {
           HStack(spacing: LinkstrTheme.compactSpacing) {
             ForEach(reactionSummaries) { summary in
               let count = summary.count == 1 ? "1 reaction" : "\(summary.count) reactions"
-              reactionFilter(
-                "\(summary.emoji) \(summary.count)",
-                accessibilityTitle: "filter by \(summary.emoji), \(count)",
-                emoji: summary.emoji
-              )
+              reactionFilter(accessibilityTitle: "filter by \(summary.emoji), \(count)", emoji: summary.emoji) {
+                ReactionChipLabel(emoji: summary.emoji, count: String(summary.count))
+              }
               .id(summary.emoji)
             }
           }
         }
+        .scrollBounceBehavior(.basedOnSize)
         .onChange(of: selectedReactionEmoji, initial: true) { _, emoji in
           if let emoji { proxy.scrollTo(emoji, anchor: .center) }
         }
@@ -382,13 +379,16 @@ extension PostDetailView {
     }
   }
 
-  private func reactionFilter(_ title: String, accessibilityTitle: String, emoji: String?) -> some View {
+  private func reactionFilter(
+    accessibilityTitle: String,
+    emoji: String?,
+    @ViewBuilder label: () -> some View
+  ) -> some View {
     let isSelected = selectedReactionEmoji == emoji
     return Button {
       selectedReactionEmoji = emoji
     } label: {
-      Text(title)
-        .font(LinkstrTheme.font(.subheadline, weight: .medium))
+      label()
         .foregroundStyle(isSelected ? LinkstrTheme.textPrimary : LinkstrTheme.textSecondary)
         .linkstrReactionChip(isSelected: isSelected)
     }

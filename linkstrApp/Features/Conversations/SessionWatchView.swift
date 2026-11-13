@@ -85,8 +85,9 @@ extension SessionPostsView {
   }
 
   private func watchPage(_ post: SessionMessageEntity, insets: EdgeInsets) -> some View {
-    Group {
-      if post.rootID == activeWatchPostID {
+    let selectedPostID = activeWatchPostID ?? watchPostID ?? rootPosts.first?.rootID
+    return Group {
+      if post.rootID == selectedPostID {
         PostDetailView(
           ownerPubkey: ownerPubkey,
           sessionID: sessionID,
