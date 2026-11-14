@@ -149,9 +149,7 @@ linkstr accepts normal web URLs, but in-app playback is provider-dependent.
 
 **Browser fallback** covers everything else, plus any provider URL that blocks extraction or embed playback at runtime.
 
-Local video playback loops without a repeat limit by default, inline and fullscreen. Turn off **loop local videos** under **you** → **playback** to stop at the end of each video. Your choice is saved on this device and applies across accounts. Embedded playback behavior is controlled by the provider.
-
-**mute session videos** under **playback** and the speaker button in the session viewer change the same setting. Official embeds have their own sound controls.
+Local video playback loops by default, inline and fullscreen. Turn off **loop local videos** under **you** → **settings** → **playback** to stop at the end of each video. Your choice is saved on this device and applies across accounts. Embedded playback behavior is controlled by the provider.
 
 When local extraction succeeds, linkstr can cache the media on-device and offer **save to photos** or **save to files**. Embed-only playback stays network-backed and does not offer local export controls.
 

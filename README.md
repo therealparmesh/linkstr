@@ -76,7 +76,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 - New account creation can optionally set a profile name visible to others before leaving onboarding.
 - The active identity is keychain-backed.
 - The You tab exposes a profile card, QR code, current public key (`npub`), and editing for the account's published Nostr profile name.
-- Settings has sections for playback, relays, storage, backup, and identity. The **you** tab also links directly to playback, storage, and backup.
+- Open **settings** from the **you** tab to manage playback, relays, storage, backup, and identity.
 - Settings storage controls can clear downloaded videos separately from saved link metadata and thumbnails.
 - The `nsec` is hidden by default and only revealed on explicit action. The revealed value is cleared again when the settings identity view disappears or the app moves to the inactive or background state.
 
@@ -306,7 +306,7 @@ URL classification drives playback mode: extraction, embed, or link fallback. Mo
 
 **Extraction** resolves direct video media for native playback and local caching:
 
-- The watch view has play, pause, seek, mute, and fullscreen controls. The expand icon at the right of the playback bar opens the system player in one tap. Shared links opened outside a session use inline system video controls. **open system player** opens a separate fullscreen player when available. Tap the video to reveal its native controls, including close.
+- The session viewer has play, pause, and seek controls. The expand button opens the fullscreen system player. Shared links opened outside a session use inline system video controls. Tap the video in the fullscreen player to reveal its native controls, including close.
 - Extracted media can be saved to Photos or Files.
 - Works offline once cached.
 - Video cache auto-trims at approximately 1 GB with least-recently-used eviction.
@@ -358,7 +358,7 @@ Non-video provider URLs (channel pages, profiles, etc.) fall back to open-in-bro
 - Facebook video embeds preserve the SDK player’s aspect ratio when resized. The watch view fits the full managed document into the available height; this can make portrait videos small in landscape. If the oEmbed request or SDK has not produced a player after five seconds, the document shows recovery guidance. A late player replaces that guidance without requiring a reload. Facebook Reels retain their existing URL-based player path.
 - Playback diagnostics use Apple's unified log with subsystem `com.parmscript.linkstr` and category `playback`. They record cache use, extraction results, candidate failures, mode changes, embed failures, retries, and audio session failures. Post URLs and content are not logged; error details are private. Debug-level entries include cache use and candidate counts. Audio session changes run serially off the UI thread and remain active until the last player releases ownership.
 - Audio plays even when the iPhone silent switch is enabled.
-- Local video playback loops without a repeat limit by default, inline and fullscreen. **you** → **playback** → **loop local videos** turns looping off or on. The preference is saved on this device and applies across accounts; turning it off lets the current video finish without restarting.
+- Local video playback loops by default, inline and fullscreen. Open **you** → **settings** → **playback** to change **loop local videos**. The preference is saved on this device and applies across accounts.
 - When a local file is cached, use **more** → **save video** in a session or **save video** on a shared link to export to Photos or Files. The shared download service checks local copies before exposing them to either save flow and retries once if a copy is unreadable.
 - Playback pauses during a Photos save and its feedback. Changing or closing the video prevents the old save result from appearing over another post. Cancelling before Photos authorization completes prevents the library write from starting; a write already submitted to Photos may still finish. Changing or refreshing the source also clears its save chooser, Files picker, and feedback. Files export completion is checked against the current playback presentation because iOS may dismiss the picker before reporting its result.
 
