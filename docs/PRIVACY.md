@@ -62,7 +62,7 @@ If you allow notifications, linkstr sends limited routing data to a developer-op
 - Archive updates send session IDs with explicit archive/unarchive choices, including clearing archived filtering for deleted sessions. The service processes these updates but retains only archived IDs for this purpose.
 - Push requests carry the notification type, event and conversation IDs, recipient pubkeys, and reaction emoji when applicable. Reaction notifications may also include the reacted-to post ID so a tap can scroll to that post in the session list. These routing fields are not encrypted session content.
 
-The push service is used for notification routing, not message transport. Encrypted session content still travels through Nostr relays, not through the push service. Pending delivery jobs store the routing fields listed above until delivery, cancellation, or their 15-minute expiry. Push-dedupe records older than 30 days are removed when the service starts or handles a push request, and authentication nonces expire after five minutes.
+The push service is used for notification routing, not message transport. Encrypted session content still travels through Nostr relays, not through the push service. Pending delivery jobs store the routing fields listed above until delivery, cancellation, or their 15-minute expiry. Push-dedupe records older than 30 days are removed when the service starts or handles a push request. Authentication nonces are retained for ten minutes to prevent replay across the full signed-request window.
 
 The push service does not store decrypted post text, reaction text, or session payload plaintext. Push banners use generic notification text. Historical relay restore does not replay old push notifications.
 
