@@ -170,10 +170,12 @@ linkstr is built around private sessions, not one-off direct messages. A session
 
 **Watching posts:**
 
+- The author and description stay above reactions in both collapsed and expanded details. The chevron toggles details; there is no decorative drag handle.
+
 - In the viewer, swipe up for older posts or down for newer posts. **back to posts** returns to the post you were viewing. **all session posts** opens the list at the newest post.
 - Native portrait video can fill the watch view. Official video players fit between the session header and the post controls while keeping their aspect ratio. HTTPS links to MP4, MOV, or M4V files can play directly. Regular links show a readable card with a title, thumbnail, source, and available social post text. Use **open in browser** to visit the original.
 - Tap the caption row or swipe up on it to show the description, note, original URL, and post actions. Tap the row again or pull down from the top of the details to close them. Swipe on the viewer background to page between posts. Scrollable link cards and embedded posts keep their own scrolling; provider players also retain their controls. The controls overlay does not resize or reload the player. Ordinary link previews reserve space above expanded details. When space is too short for the preview card, the details retain its text and browser action; collapsing details restores the card.
-- Tap a quick emoji to add or remove your reaction, or tap the smiley with a plus for the emoji picker. Swipe the emoji row sideways for more counts. The picker, **view reactions**, and **share link** stay in place. The caption shows the extracted description or saved title when available. When the main card already shows the post text, the caption row shows the note if there is one.
+- Tap an emoji to add or remove your reaction, or tap the smiley with a plus for the emoji picker. Existing reactions appear first, followed by unused ❤️ and 👀 suggestions. **+N** opens reactions that do not fit. The picker and **share link** stay available; **view reactions** appears when details are expanded. The caption shows the extracted description or saved title when available. When the main card already shows the post text, the caption row shows the note if there is one.
 - In **more post actions**, choose **refresh post** to refresh the preview and retry playback from local extraction. On your own posts, use **add a note** or **edit note**, or choose **delete post**. Clear the note and choose **remove note** to keep the post without its note.
 - Deleting a post opens a confirmation sheet with a scrollable warning and a persistent close control, including at large text sizes.
 - Note edits sync after relay acceptance to active members who were eligible for the original post. They keep the original link, timestamp, read state, and reactions. Older versions of linkstr still show the original note.
@@ -201,10 +203,10 @@ linkstr is built around private sessions, not one-off direct messages. A session
 
 - Reactions are emoji-only toggles tied to a post.
 - Reaction send is blocked when the sender is not an active member of the target session.
-- Default quick options: 👍, 👎, 👀. The smiley with a plus opens the full emoji picker. In landscape, focusing search places the search field and close button on one row to leave room for results above the keyboard.
+- ❤️ and 👀 remain quick suggestions after existing reactions. A suggestion disappears when that emoji already has a reaction count, avoiding duplicates. The smiley with a plus opens the full emoji picker. In landscape, focusing search places the search field and close button on one row to leave room for results above the keyboard.
 - Session post lists show compact read-only reaction summaries with no interactive controls; single reactions show emoji-only, and higher counts appear beside the emoji. Read-only count badges cap visually at `10+`.
-- The watch view keeps quick emojis and exact counts in one horizontally scrollable row. The people button opens the participant list. Tap a count for an emoji outside the quick set to open its filter directly. If the selected emoji has no remaining reactions, the filter returns to **all**.
-- Tap a selected quick emoji again to remove it. For other emoji, open the picker and tap your selected reaction in its top row. Selecting an emoji in the grid also toggles your reaction.
+- The watch view shows actual reactions with exact counts before the quick suggestions. Overflow uses a visible **+N** button instead of horizontal scrolling. The people button in expanded details opens the participant list. Tap any reaction to add or remove your own reaction. The participant list provides wrapping filters for each emoji. If the selected emoji has no remaining reactions, the filter returns to **all**.
+- Tap any selected reaction again to remove it. You can also open the picker and tap your selected reaction in its top row. Selecting an emoji in the grid also toggles your reaction.
 
 **State and ordering:**
 
@@ -351,7 +353,7 @@ Non-video provider URLs (channel pages, profiles, etc.) fall back to open-in-bro
 - Switching playback modes, refreshing or changing the source, and leaving the screen cancel superseded playback preparation and caching work.
 - URL-based official players show a loading indicator while connecting, without blocking provider controls.
 - The watch view puts **use official embed**, **try extracted video**, and **fit entire video** below the post details when available. **fit entire video** shows the full local video above the collapsed post and playback controls; **fill screen** restores the immersive view. The panel groups **open in browser** with playback actions. **more post actions** contains **refresh post**, saving a cached video, and author-only note editing and deletion.
-- On iPhone, the app uses portrait, with upside-down portrait where the device supports it. iPad also supports landscape. In landscape, expanded post details scroll together with the author and reactions so playback options remain reachable at larger text sizes. Pull down from the top or tap the chevron to collapse the panel. Expanded details temporarily cover the video, including in **fit entire video** mode.
+- On iPhone, the app uses portrait, with upside-down portrait where the device supports it. iPad also supports landscape. In landscape, expanded post details scroll between the author row and reaction controls so both remain reachable at larger text sizes. Pull down from the top or tap the chevron to collapse the panel. Expanded details temporarily cover the video, including in **fit entire video** mode.
 - While an embed loads, you can open the original link in your browser. Expand the post controls for **retry embed**, including when the provider is stuck without reporting an error. Detected load failures also offer retry directly on the recovery card. A switch to extracted playback appears when the post supports it.
 - In compact layouts, portrait embeds scale to fit after the provider lays out its controls, keeping the full player visible.
 - TikTok uses its [Embed Player](https://developers.tiktok.com/docs/en/embed-player) with a portrait viewport and provider controls. Local extraction remains first. The direct player request sends Linkstr’s public project URL as its referrer. Player errors 1001, 2001, and 3001 are logged without removing TikTok’s document. Autoplay rejection leaves tap-to-play available. **retry embed** is available in the watch view’s expanded controls and below the post information on shared links. An empty HTTP 429 response shows the recovery card.
@@ -528,6 +530,10 @@ The fork changes one source file from upstream revision `e5855cb`. Address Sanit
 reproduced a stack read past a `Data` value during signing. The fix passes the
 32-byte random buffer to the same signer. Keep the fix when updating the pin and
 run the test suite with Address Sanitizer enabled.
+
+### UI conventions
+
+Use `LinkstrTheme` for Tokyo Night colors, typography, spacing, and corner radii. Main screens share the branded toolbar and page title; sheets use the compact close/title/action header. Toolbar symbols are 20 points inside 44-point touch targets. Text uses an 18-point horizontal inset; icon rows account for the touch target inset so their visible edges align with that text. Fields have a subtle outline, cards use the quieter separator, and toolbar buttons have no decorative border. Preserve Dynamic Type wrapping, scrollable content, and reachable actions when changing layouts.
 
 ### Generate the Xcode project
 
