@@ -187,7 +187,8 @@ func (s *store) claimAuthNonce(ctx context.Context, pubkey, nonce string, now ti
 		if _, err := tx.ExecContext(
 			ctx,
 			`DELETE FROM auth_nonces WHERE created_at < ?`,
-			now.Add(-authTTL).Unix(),
+			// Future-dated signatures can remain valid for two auth windows.
+			now.Add(-2*authTTL).Unix(),
 		); err != nil {
 			return err
 		}

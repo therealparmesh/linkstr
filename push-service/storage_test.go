@@ -8,6 +8,26 @@ import (
 	"time"
 )
 
+func TestAuthNonceSurvivesFullClockSkewWindow(t *testing.T) {
+	store, _ := newTestStore(t)
+	ctx := context.Background()
+	now := time.Unix(1_800_000_000, 0)
+	for _, step := range []struct {
+		elapsed time.Duration
+		want    bool
+	}{
+		{0, true},
+		{authTTL + time.Second, false},
+		{2 * authTTL, false},
+		{2*authTTL + time.Second, true},
+	} {
+		claimed, err := store.claimAuthNonce(ctx, "sender", "nonce", now.Add(step.elapsed))
+		if err != nil || claimed != step.want {
+			t.Fatalf("claim after %s = (%t, %v), want (%t, nil)", step.elapsed, claimed, err, step.want)
+		}
+	}
+}
+
 func TestEnqueuePushPrunesExpiredDedupeRows(t *testing.T) {
 	store, db := newTestStore(t)
 	insertExpiredDedupe(t, db)

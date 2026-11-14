@@ -199,7 +199,7 @@ Pushing `master` deploys this service through the Fly.io GitHub integration. The
 
 ## Stored-data cleanup
 
-- Authentication nonces expire after five minutes.
+- Authentication nonces are retained for ten minutes to cover the full signed-request window, including clock skew.
 - Push-dedupe records older than 30 days are pruned on service startup and during push requests.
 - Pending delivery metadata is removed after delivery, cancellation, or its 15-minute expiry.
 - APNs tokens are deleted when Apple permanently rejects them.
