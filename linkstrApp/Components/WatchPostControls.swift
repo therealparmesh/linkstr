@@ -1,6 +1,9 @@
 import SwiftUI
 
 struct WatchPostSummary {
+  let author: String
+  let timestamp: String
+  let editNote: (() -> Void)?
   let caption: String?
   let note: String?
   let reactions: [ReactionSummary]
@@ -13,6 +16,7 @@ struct WatchPostSummary {
 /// Post details and actions stay separate from playback and post paging.
 struct WatchPostControls<Content: View>: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   @Environment(\.verticalSizeClass) private var verticalSizeClass
   let summary: WatchPostSummary
   let topInset: CGFloat
@@ -106,12 +110,25 @@ struct WatchPostControls<Content: View>: View {
       setExpanded(!isExpanded)
     } label: {
       HStack(spacing: LinkstrTheme.rowSpacing) {
-        Text(caption ?? "post details")
-          .font(LinkstrTheme.font(.subheadline))
-          .foregroundStyle(LinkstrTheme.textPrimary)
-          .lineLimit(verticalSizeClass == .compact ? 1 : 2)
-          .fixedSize(horizontal: false, vertical: true)
-          .frame(maxWidth: .infinity, alignment: .leading)
+        VStack(alignment: .leading, spacing: LinkstrTheme.metaSpacing) {
+          let layout =
+            dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: LinkstrTheme.compactSpacing))
+          layout {
+            Text(summary.author).font(LinkstrTheme.font(.caption, weight: .semibold)).lineLimit(1)
+            Text(summary.timestamp).font(LinkstrTheme.font(.caption)).lineLimit(1)
+          }
+          .foregroundStyle(LinkstrTheme.textSecondary)
+          if let caption {
+            Text(caption)
+              .font(LinkstrTheme.font(.subheadline))
+              .foregroundStyle(LinkstrTheme.textPrimary)
+              .lineLimit(verticalSizeClass == .compact ? 1 : 2)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
         Image(systemName: isExpanded ? "chevron.down" : "chevron.up")
           .font(LinkstrTheme.font(.caption, weight: .semibold))
           .dynamicTypeSize(...DynamicTypeSize.xxLarge)
@@ -127,10 +144,15 @@ struct WatchPostControls<Content: View>: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
-    .accessibilityLabel(caption ?? "post details")
+    .accessibilityLabel("\(summary.author), \(summary.timestamp), \(caption ?? "post details")")
     .accessibilityIdentifier("post details")
     .accessibilityValue(isExpanded ? "expanded" : "collapsed")
     .accessibilityHint(isExpanded ? "hide post details" : "show post details")
+    .contextMenu {
+      if !isExpanded, summary.note != nil, let editNote = summary.editNote {
+        Button("edit note", systemImage: "pencil", action: editNote)
+      }
+    }
     .highPriorityGesture(expansionGesture)
     .accessibilityAction(.escape) { setExpanded(false) }
   }

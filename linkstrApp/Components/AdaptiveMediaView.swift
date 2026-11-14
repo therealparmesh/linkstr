@@ -9,7 +9,7 @@ extension EnvironmentValues {
   @Entry var isUnderlyingMediaCovered = false
 }
 
-struct AdaptiveMediaView<LinkContent: View, OverlayContent: View>: View {
+struct AdaptiveMediaView<LinkContent: View, OverlayContent: View, HeaderContent: View>: View {
   @Environment(\.scenePhase) var scenePhase
   @Environment(\.isUnderlyingMediaCovered) var isUnderlyingMediaCovered
   enum LocalPlaybackMode {
@@ -30,7 +30,8 @@ struct AdaptiveMediaView<LinkContent: View, OverlayContent: View>: View {
   let postControlsSummary: WatchPostSummary?
   let onResolvedSource: ((URL) -> Void)?
   let linkContent: LinkContent
-  let overlayContent: ((() -> Void)?) -> OverlayContent
+  let overlayContent: () -> OverlayContent
+  let headerContent: ((() -> Void)?) -> HeaderContent
   @State var postControlsReservedHeight = LinkstrTheme.minimumInteractiveDimension
   @State var watchControlsHeight =
     LinkstrTheme.minimumInteractiveDimension + LinkstrTheme.compactSpacing + LinkstrTheme.metaSpacing
@@ -68,7 +69,8 @@ struct AdaptiveMediaView<LinkContent: View, OverlayContent: View>: View {
     postControlsSummary: WatchPostSummary? = nil,
     onResolvedSource: ((URL) -> Void)? = nil,
     @ViewBuilder linkContent: () -> LinkContent = { EmptyView() },
-    @ViewBuilder overlayContent: @escaping ((() -> Void)?) -> OverlayContent = { _ in EmptyView() }
+    @ViewBuilder overlayContent: @escaping () -> OverlayContent = { EmptyView() },
+    @ViewBuilder headerContent: @escaping ((() -> Void)?) -> HeaderContent = { _ in EmptyView() }
   ) {
     self.sourceURL = sourceURL
     self.reloadID = reloadID
@@ -84,6 +86,7 @@ struct AdaptiveMediaView<LinkContent: View, OverlayContent: View>: View {
     self.onResolvedSource = onResolvedSource
     self.linkContent = linkContent()
     self.overlayContent = overlayContent
+    self.headerContent = headerContent
   }
 
   var body: some View {
@@ -102,7 +105,7 @@ struct AdaptiveMediaView<LinkContent: View, OverlayContent: View>: View {
             onReservedHeightChange: { postControlsReservedHeight = $0 },
             content: {
               VStack(alignment: .leading, spacing: LinkstrTheme.rowSpacing) {
-                overlayContent(saveVideoAction)
+                overlayContent()
                 watchPlaybackOptions
                   .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
               }
@@ -110,6 +113,7 @@ struct AdaptiveMediaView<LinkContent: View, OverlayContent: View>: View {
           )
         }
       }
+      .overlay(alignment: .top) { headerContent(saveVideoAction) }
       .task(id: playbackReloadTaskID) {
         await reloadPlaybackPresentation()
       }

@@ -11,6 +11,8 @@ struct PostDetailView: View {
 
   let ownerPubkey: String
   let sessionID: String
+  let sender: String
+  let back: () -> Void
   let canDelete: Bool
   let watchInsets: EdgeInsets
   let isCovered: Bool
@@ -25,6 +27,7 @@ struct PostDetailView: View {
     var id: Self { self }
   }
 
+  @State private var headerHeight: CGFloat = 60
   @State var missingLinkControlsHeight: CGFloat = 120
   @State var activeSheet: Sheet?
   @State var selectedReactionEmoji: String?
@@ -42,6 +45,8 @@ struct PostDetailView: View {
     ownerPubkey: String,
     sessionID: String,
     postID: String,
+    sender: String,
+    back: @escaping () -> Void,
     canDelete: Bool,
     watchInsets: EdgeInsets,
     isCovered: Bool,
@@ -50,6 +55,8 @@ struct PostDetailView: View {
   ) {
     self.ownerPubkey = ownerPubkey
     self.sessionID = sessionID
+    self.sender = sender
+    self.back = back
     self.canDelete = canDelete
     self.watchInsets = watchInsets
     self.isCovered = isCovered
@@ -78,6 +85,52 @@ struct PostDetailView: View {
 
   var post: SessionMessageEntity? {
     posts.first
+  }
+
+  var contentInsets: EdgeInsets {
+    EdgeInsets(
+      top: watchInsets.top + headerHeight, leading: watchInsets.leading,
+      bottom: watchInsets.bottom, trailing: watchInsets.trailing)
+  }
+
+  func postHeader(saveAction: (() -> Void)?) -> some View {
+    LinkstrPageTopBar(hasBackButton: true) {
+      LinkstrHeaderButton(
+        title: "back to posts", icon: "chevron.backward", foreground: LinkstrTheme.textPrimary, action: back)
+    } actions: {
+      if let saveAction {
+        LinkstrHeaderButton(
+          title: "save video", icon: "square.and.arrow.down", foreground: LinkstrTheme.textPrimary, action: saveAction)
+      }
+      if LinkstrPostPreview.webURL(for: post?.url) != nil {
+        LinkstrHeaderButton(
+          title: isRefreshingMetadata ? "refreshing post…" : "refresh post", icon: "arrow.clockwise",
+          foreground: LinkstrTheme.textPrimary
+        ) {
+          metadataRefreshRequest = UUID()
+        }
+        .disabled(isRefreshingMetadata)
+        .accessibilityHint("reloads the preview and retries playback")
+      }
+    }
+    .linkstrPageHeaderLayout()
+    .onGeometryChange(for: CGFloat.self) {
+      $0.size.height
+    } action: {
+      headerHeight = $0
+    }
+    .padding(.top, watchInsets.top)
+    .background {
+      LinearGradient(
+        stops: [
+          .init(color: LinkstrTheme.background.opacity(0.72), location: 0),
+          .init(color: LinkstrTheme.background.opacity(0.52), location: 0.72),
+          .init(color: LinkstrTheme.background.opacity(0), location: 1)
+        ], startPoint: .top, endPoint: .bottom
+      )
+      .padding(.bottom, -22)
+      .allowsHitTesting(false)
+    }
   }
 
   var isRefreshingMetadata: Bool { metadataRefreshRequest != nil }

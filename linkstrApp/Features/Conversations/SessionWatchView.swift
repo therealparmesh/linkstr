@@ -15,21 +15,8 @@ extension SessionPostsView {
 
   func watchView() -> some View {
     GeometryReader { proxy in
-      ZStack(alignment: .top) {
-        let safeArea = proxy.safeAreaInsets
-        let contentInsets = EdgeInsets(
-          top: safeArea.top + watchHeaderHeight, leading: safeArea.leading,
-          bottom: safeArea.bottom, trailing: safeArea.trailing
-        )
-        watchPager(insets: contentInsets)
-          .ignoresSafeArea(.container, edges: [.top, .bottom])
-        watchHeader(topInset: safeArea.top)
-          .onGeometryChange(for: CGFloat.self) {
-            $0.size.height
-          } action: {
-            watchHeaderHeight = $0
-          }
-      }
+      watchPager(insets: proxy.safeAreaInsets)
+        .ignoresSafeArea(.container, edges: [.top, .bottom])
     }
   }
 
@@ -98,15 +85,18 @@ extension SessionPostsView {
           ownerPubkey: ownerPubkey,
           sessionID: sessionID,
           postID: post.rootID,
+          sender: senderLabel(for: post, myPubkey: ownerPubkey, contactsByPubkey: contactsByPubkey),
+          back: { browsePosts(around: post.rootID) },
           canDelete: post.senderPubkey == ownerPubkey,
           watchInsets: insets,
           isCovered: isPaging || isPresentingMembers || isPresentingNewPost || isPresentingDeleteConfirmation,
-          showsReactions: reactionShortcutPostID == post.rootID
-        ) {
-          guard !isDeletingPost else { return }
-          postPendingDelete = post
-          isPresentingDeleteConfirmation = true
-        }
+          showsReactions: reactionShortcutPostID == post.rootID,
+          delete: {
+            guard !isDeletingPost else { return }
+            postPendingDelete = post
+            isPresentingDeleteConfirmation = true
+          }
+        )
         .onAppear {
           if reactionShortcutPostID == post.rootID { reactionShortcutPostID = nil }
         }
@@ -118,109 +108,10 @@ extension SessionPostsView {
     .containerRelativeFrame([.horizontal, .vertical])
   }
 
-  private func watchHeader(topInset: CGFloat) -> some View {
-    VStack(alignment: .leading, spacing: LinkstrTheme.tightSpacing) {
-      LinkstrPageTopBar(hasBackButton: true) {
-        watchBackButton
-      } actions: {
-        watchHeaderActions
-      }
-      watchPostAttribution
-    }
-    .font(LinkstrTheme.font(.body, weight: .semibold))
-    .buttonStyle(.plain)
-    .foregroundStyle(LinkstrTheme.textPrimary)
-    .linkstrPageHeaderLayout()
-    .background(alignment: .top) {
-      LinearGradient(
-        stops: [
-          .init(color: LinkstrTheme.background.opacity(0.72), location: 0),
-          .init(color: LinkstrTheme.background.opacity(0.52), location: 0.72),
-          .init(color: LinkstrTheme.background.opacity(0), location: 1)
-        ], startPoint: .top, endPoint: .bottom
-      )
-      .padding(.top, -topInset)
-      .padding(.bottom, -22)
-      .allowsHitTesting(false)
-      .accessibilityHidden(true)
-    }
-  }
-
-  @ViewBuilder
-  private var watchPostAttribution: some View {
-    let selectedPostID = activeWatchPostID ?? watchPostID ?? rootPosts.first?.rootID
-    if let post = rootPosts.first(where: { $0.rootID == selectedPostID }) {
-      let layout =
-        dynamicTypeSize.isAccessibilitySize
-        ? AnyLayout(VStackLayout(alignment: .leading, spacing: LinkstrTheme.tightSpacing))
-        : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: LinkstrTheme.compactSpacing))
-      layout {
-        Text(senderLabel(for: post, myPubkey: ownerPubkey, contactsByPubkey: contactsByPubkey))
-          .font(LinkstrTheme.font(.subheadline, weight: .semibold))
-          .lineLimit(1)
-        Text(post.timestamp.linkstrMessageTimestampLabel)
-          .font(LinkstrTheme.font(.caption))
-          .foregroundStyle(LinkstrTheme.textSecondary)
-          .lineLimit(1)
-      }
-    }
-  }
-
-  @ViewBuilder
-  private var watchHeaderActions: some View {
-    watchPostsButton
-
-    if canShareLinks {
-      LinkstrHeaderButton(title: "share a link", icon: "plus", foreground: LinkstrTheme.textPrimary) {
-        isPresentingNewPost = true
-      }
-    }
-  }
-
-  private var watchBackButton: some View {
-    LinkstrHeaderButton(
-      title: "back to posts", icon: "chevron.backward", foreground: LinkstrTheme.textPrimary
-    ) {
-      browsePosts(around: watchPostID)
-    }
-    .accessibilityHint("return to the post you were viewing")
-  }
-
-  private var watchPostsButton: some View {
-    LinkstrHeaderButton(
-      title: "all session posts", icon: "list.bullet", foreground: LinkstrTheme.textPrimary
-    ) {
-      browsePosts(around: nil)
-    }
-    .accessibilityHint("start at the newest posts")
-    .contextMenu { watchNavigationActions }
-    .accessibilityActions { watchNavigationActions }
-  }
-
-  @ViewBuilder
-  private var watchNavigationActions: some View {
-    if canMoveWatch(by: -1) {
-      Button("previous post", systemImage: "chevron.up") { advanceWatch(by: -1) }
-    }
-    if canMoveWatch(by: 1) {
-      Button("next post", systemImage: "chevron.down") { advanceWatch(by: 1) }
-    }
-    if hasUnreadLinks {
-      Button("mark all as read", systemImage: "checkmark.circle") {
-        session.markSessionRead(sessionID: sessionID, ownerPubkey: ownerPubkey)
-      }
-    }
-  }
-
   private func activateWatchPost(_ postID: String) {
     guard activeWatchPostID != postID else { return }
     activeWatchPostID = postID
     onWatchPositionChange(postID)
-  }
-
-  private func canMoveWatch(by delta: Int) -> Bool {
-    guard let index = rootPosts.firstIndex(where: { $0.rootID == watchPostID }) else { return false }
-    return rootPosts.indices.contains(index + delta)
   }
 
   private func advanceWatch(by delta: Int) {

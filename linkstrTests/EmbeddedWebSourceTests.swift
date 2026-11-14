@@ -11,7 +11,7 @@ final class EmbeddedWebSourceTests: XCTestCase {
     let shortURL = try XCTUnwrap(URL(string: "https://www.tiktok.com/t/offline-test/"))
     let canonicalURL = try XCTUnwrap(URL(string: "https://www.tiktok.com/@example/video/123456789"))
     let officialPlayer = try XCTUnwrap(URL(string: "https://www.tiktok.com/player/v1/123456789"))
-    let view = AdaptiveMediaView<EmptyView, EmptyView>(
+    let view = AdaptiveMediaView<EmptyView, EmptyView, EmptyView>(
       sourceURL: shortURL,
       openSourceAction: {},
       cachedCanonicalSourceURL: canonicalURL,

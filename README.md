@@ -100,7 +100,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 - Users create sessions from the compose action in the top-right corner of the sessions tab.
 - Search covers session names and recent post text. A session row shows the sender's note or linked title when available, plus the source, timestamp, and unread count.
 - Group rows show up to three member initials. A session with one other member shows their initials, and a solo session shows a bookmark.
-- Opening a session shows the post list. Tap a row to view that post, or use **watch posts** to resume the last viewed post while the app is running. In the viewer, hold **all session posts** for previous and next controls and **mark all as read**. If the final post disappears, the viewer returns to the empty list. Later arrivals stay in the list until you open them.
+- Opening a session shows the post list. Tap a row to view that post, or use **watch posts** to resume the last viewed post while the app is running. Swipe in the viewer to move between posts. **mark all as read** is available beside the post count in the session list. If the final post disappears, the viewer returns to the empty list. Later arrivals stay in the list until you open them.
 - Open **manage session** or **view members** in the post list, or tap the session name in the viewer. Notifications open the post list without playing a post.
 
 **Session creation:**
@@ -142,7 +142,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 
 - Session member management is available inside a session.
 - The session members button opens the same sheet for everyone. Creators manage the session there; non-creators see the session name read-only and can review current members.
-- The **all session posts** list uses chat-like link cards with grouped consecutive posts and membership timeline markers.
+- The session’s post list uses chat-like link cards with grouped consecutive posts and membership timeline markers.
 - Members can be added only from existing contacts. Members can be removed from active membership.
 - Long-press a current member to copy their public key (`npub`).
 - Only the session creator can rename, delete, or change session membership. Non-creator membership and delete mutations are ignored on ingest.
@@ -170,13 +170,13 @@ linkstr is built around private sessions, not one-off direct messages. A session
 
 **Watching posts:**
 
-- The viewer header shows the post author and timestamp. Session information remains in the post list. Collapsed details show the saved note first, otherwise the description or title; expanded details show the full post text and note above reactions. The chevron toggles details; there is no decorative drag handle.
+- The post overlay shows the author and timestamp above the caption. Session information remains in the post list. Collapsed details show the saved note first, otherwise the description or title; expanded details show the full post text and note above reactions. The chevron toggles details; there is no decorative drag handle.
 
-- In the viewer, swipe up for older posts or down for newer posts. **back to posts** returns to the post you were viewing. **all session posts** opens the list at the newest post.
+- In the viewer, swipe up for older posts or down for newer posts. **back to posts** returns to the post you were viewing.
 - Native portrait video can fill the watch view. Official video players fit between the post header and the post controls while keeping their aspect ratio. HTTPS links to MP4, MOV, or M4V files can play directly. Regular links show a readable card with a title, thumbnail, source, and available social post text. Use **open in browser** to visit the original.
 - Tap the caption row or swipe up on it to show the description, note, original URL, and post actions. Tap the row again or pull down from the top of the details to close them. Swipe on the viewer background to page between posts. Scrollable link cards and embedded posts keep their own scrolling; provider players also retain their controls. The controls overlay does not resize or reload the player. Ordinary link previews reserve space above expanded details. When space is too short for the preview card, the details retain its text and browser action; collapsing details restores the card.
 - Tap an emoji to add or remove your reaction, or tap the smiley with a plus for the emoji picker. Existing reactions appear first, followed by unused ❤️ and 👀 suggestions. **+N** opens reactions that do not fit. The picker and **share link** stay available; **view reactions** appears when details are expanded. The caption prioritizes the saved note, then the extracted description or saved title when available. When the main card already shows the post text, the caption row shows the note if there is one.
-- In **more post actions**, choose **refresh post** to refresh the preview and retry playback from local extraction. On your own posts, use **add a note** or **edit note**, or choose **delete post**. Clear the note and choose **remove note** to keep the post without its note.
+- In the top-right toolbar, choose **refresh post** to refresh the preview and retry playback from local extraction. The toolbar shows **save video** to the left of refresh when available. On your own posts, **more post actions** contains **add a note** or **edit note** and **delete post**. You can also long-press your own note to edit it. Clear the note and choose **remove note** to keep the post without its note.
 - Deleting a post opens a confirmation sheet with a scrollable warning and a persistent close control, including at large text sizes.
 - Note edits sync after relay acceptance to active members who were eligible for the original post. They keep the original link, timestamp, read state, and reactions. Older versions of linkstr still show the original note.
 
@@ -352,7 +352,7 @@ Non-video provider URLs (channel pages, profiles, etc.) fall back to open-in-bro
 - Use **open in browser** to open the provider's page.
 - Switching playback modes, refreshing or changing the source, and leaving the screen cancel superseded playback preparation and caching work.
 - URL-based official players show a loading indicator while connecting, without blocking provider controls.
-- The watch view puts **use official embed**, **try extracted video**, and **fit entire video** below the post details when available. **fit entire video** shows the full local video above the collapsed post and playback controls; **fill screen** restores the immersive view. The panel groups **open in browser** with playback actions. **more post actions** contains **refresh post**, saving a cached video, and author-only note editing and deletion.
+- The watch view puts **use official embed**, **try extracted video**, and **fit entire video** below the post details when available. **fit entire video** shows the full local video above the collapsed post and playback controls; **fill screen** restores the immersive view. The panel groups **open in browser** with playback actions. The top-right toolbar contains **save video** when available, followed by **refresh post**. **more post actions** contains author-only note editing and deletion.
 - On iPhone, the app uses portrait, with upside-down portrait where the device supports it. iPad also supports landscape. In landscape, expanded post details scroll between the details toggle and reaction controls so both remain reachable at larger text sizes. Pull down from the top or tap the chevron to collapse the panel. Expanded details temporarily cover the video, including in **fit entire video** mode.
 - While an embed loads, you can open the original link in your browser. Expand the post controls for **retry embed**, including when the provider is stuck without reporting an error. Detected load failures also offer retry directly on the recovery card. A switch to extracted playback appears when the post supports it.
 - In compact layouts, portrait embeds scale to fit after the provider lays out its controls, keeping the full player visible.
@@ -389,7 +389,7 @@ Embedded web playback allows provider-element fullscreen when supported.
 - Twitter/X, Instagram, TikTok, Facebook, and Rumble use provider-specific metadata paths before falling back to generic `LinkPresentation`.
 - Missing metadata is retried when timeline rows come into view or a post becomes active in the watch view.
 - Resetting the account session cancels the active preview worker. Its late response cannot update posts or take over the new preview queue.
-- **refresh post** in the watch view’s **more post actions** menu clears cached playback, reloads the media with local extraction first, and fetches fresh metadata. Refresh invalidates any older in-flight preview request; obsolete thumbnail writes are cancelled. **retry embed** reloads only the current official player.
+- **refresh post** in the watch view’s top-right toolbar clears cached playback, reloads the media with local extraction first, and fetches fresh metadata. Refresh invalidates any older in-flight preview request; obsolete thumbnail writes are cancelled. **retry embed** reloads only the current official player.
 - Refresh clears only that post’s saved playback reference. A downloaded file remains available while another stored post references it.
 - Leaving the post cancels its pending manual refresh, so an old response cannot reset playback or show an error on the next screen. A response for a deleted post is also ignored and does not clear the current error.
 - Missing local thumbnail files are treated as stale and re-fetched.

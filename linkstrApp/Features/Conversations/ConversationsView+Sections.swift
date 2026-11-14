@@ -34,7 +34,6 @@ struct SessionPostsView: View {
   @State var activeWatchPostID: String?
   @State var reactionShortcutPostID: String?
   @State var isPaging = false
-  @State var watchHeaderHeight: CGFloat = 54
 
   init(
     ownerPubkey: String, sessionID: String, scrollToPostID: String? = nil,

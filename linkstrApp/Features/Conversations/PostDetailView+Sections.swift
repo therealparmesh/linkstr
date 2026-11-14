@@ -76,6 +76,11 @@ extension PostDetailView {
         }
         if let noteText {
           accentTextBlock(label: "note", text: noteText)
+            .contextMenu {
+              if canDelete && canReactToPost {
+                Button("edit note", systemImage: "pencil") { activeSheet = .editNote }
+              }
+            }
         }
       }
     }
@@ -121,14 +126,13 @@ extension PostDetailView {
           clearPersistedLocalMedia(for: post)
         },
         immersive: true, isCovered: isCovered,
-        watchInsets: watchInsets,
+        watchInsets: contentInsets,
         postControlsSummary: controlsSummary(for: post),
         linkContent: {
           WatchLinkPreview(post: post, postText: remotePostText)
         },
-        overlayContent: { saveAction in
-          watchPostOverlay(post, saveAction: saveAction)
-        }
+        overlayContent: { watchPostOverlay(post) },
+        headerContent: { postHeader(saveAction: $0) }
       )
     } else {
       missingLinkPost(post)
@@ -136,7 +140,9 @@ extension PostDetailView {
   }
   private func controlsSummary(for post: SessionMessageEntity) -> WatchPostSummary {
     WatchPostSummary(
-      caption: remotePostText ?? LinkstrPostPreview.title(for: post) ?? noteText,
+      author: sender, timestamp: post.timestamp.linkstrMessageTimestampLabel,
+      editNote: canDelete && canReactToPost ? { activeSheet = .editNote } : nil,
+      caption: remotePostText ?? LinkstrPostPreview.title(for: post),
       note: noteText,
       reactions: reactionSummaries,
       toggleReaction: canReactToPost ? toggleReaction : nil,
@@ -161,15 +167,16 @@ extension PostDetailView {
           .scrollBounceBehavior(.basedOnSize)
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
-      .padding(.top, watchInsets.top + 10)
+      .padding(.top, contentInsets.top + 10)
       .padding(.bottom, watchInsets.bottom + missingLinkControlsHeight)
       WatchPostControls(
         summary: controlsSummary(for: post),
-        topInset: watchInsets.top, bottomInset: watchInsets.bottom, playbackControlsHeight: 0,
+        topInset: contentInsets.top, bottomInset: watchInsets.bottom, playbackControlsHeight: 0,
         onReservedHeightChange: { missingLinkControlsHeight = $0 },
-        content: { watchPostOverlay(post, saveAction: nil) }
+        content: { watchPostOverlay(post) }
       )
     }
+    .overlay(alignment: .top) { postHeader(saveAction: nil) }
   }
 
   private func missingLinkNotice(icon: String?) -> some View {
@@ -294,41 +301,19 @@ extension PostDetailView {
       .clipped()
   }
 
-  private func watchPostOverlay(
-    _ post: SessionMessageEntity, saveAction: (() -> Void)?
-  ) -> some View {
+  private func watchPostOverlay(_ post: SessionMessageEntity) -> some View {
     HStack(alignment: .top, spacing: LinkstrTheme.compactSpacing) {
       watchDetails(post)
-      let canRefresh = LinkstrPostPreview.webURL(for: post.url) != nil
-      if canRefresh || canDelete || saveAction != nil {
+      if canDelete {
         Menu {
-          if canRefresh {
-            Button(isRefreshingMetadata ? "refreshing post…" : "refresh post", systemImage: "arrow.clockwise") {
-              metadataRefreshRequest = UUID()
-            }
-            .disabled(isRefreshingMetadata)
-            .accessibilityHint("reloads the preview and retries playback")
-          }
-          if canDelete && canReactToPost {
+          if canReactToPost {
             Button(noteText == nil ? "add a note" : "edit note", systemImage: "pencil") {
               activeSheet = .editNote
             }
           }
-          if let saveAction {
-            Button("save video", systemImage: "square.and.arrow.down", action: saveAction)
-          }
-          if canDelete {
-            Button("delete post", systemImage: "trash", role: .destructive, action: delete)
-          }
+          Button("delete post", systemImage: "trash", role: .destructive, action: delete)
         } label: {
-          Group {
-            if isRefreshingMetadata {
-              ProgressView().controlSize(.small)
-            } else {
-              Image(systemName: "ellipsis")
-            }
-          }
-          .linkstrToolbarIconLabel()
+          Image(systemName: "ellipsis").linkstrToolbarIconLabel()
         }
         .accessibilityLabel("more post actions")
       }
