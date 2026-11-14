@@ -31,10 +31,7 @@ struct OnboardingView: View {
       .linkstrKeyboardDismissal()
     }
     .safeAreaInset(edge: .bottom, spacing: 0) {
-      if session.pendingCreatedAccountNsec != nil,
-        let status = accountFeedback.footerStatus(
-          isRunning: isSavingCreatedProfileName, progressMessage: "saving profile name…"
-        ) {
+      if session.pendingCreatedAccountNsec != nil, let status = footerStatus {
         LinkstrSheetStatusFooter(message: status.message, messageColor: status.color)
       }
     }
@@ -43,6 +40,10 @@ struct OnboardingView: View {
       session.clearProfileNameError()
       accountFeedback.clear()
     }
+  }
+
+  private var footerStatus: LinkstrSheetFooterStatus? {
+    accountFeedback.footerStatus(isRunning: isSavingCreatedProfileName, progressMessage: "saving profile name…")
   }
 
   private var header: some View {
@@ -56,11 +57,13 @@ struct OnboardingView: View {
         showsBrand: false
       )
 
-      Text(session.pendingCreatedAccountNsec == nil
-        ? "share and watch links with people you trust."
-        : "keep a copy so you can sign in on another device.")
-        .font(LinkstrTheme.font(.subheadline))
-        .foregroundStyle(LinkstrTheme.textSecondary)
+      Text(
+        session.pendingCreatedAccountNsec == nil
+          ? "share and watch links with people you trust."
+          : "keep a copy so you can sign in on another device."
+      )
+      .font(LinkstrTheme.font(.subheadline))
+      .foregroundStyle(LinkstrTheme.textSecondary)
     }
     .padding(.vertical, LinkstrTheme.fieldVerticalPadding)
   }
@@ -71,9 +74,9 @@ struct OnboardingView: View {
         HStack(spacing: LinkstrTheme.metaSpacing) {
           Group {
             if isSecretKeyVisible {
-              TextField("secret key (nsec)", text: $secretKey)
+              TextField("secret key (nsec)", text: $secretKey, prompt: LinkstrTheme.placeholder("secret key (nsec)"))
             } else {
-              SecureField("secret key (nsec)", text: $secretKey)
+              SecureField("secret key (nsec)", text: $secretKey, prompt: LinkstrTheme.placeholder("secret key (nsec)"))
             }
           }
           .font(LinkstrTheme.font(.subheadline))
@@ -172,7 +175,7 @@ struct OnboardingView: View {
         title: "profile name",
         footer: "optional. others can see this name."
       ) {
-        TextField("name others see", text: $createdProfileName)
+        TextField("name others see", text: $createdProfileName, prompt: LinkstrTheme.placeholder("name others see"))
           .font(LinkstrTheme.font(.subheadline))
           .textInputAutocapitalization(.words)
           .autocorrectionDisabled(true)

@@ -24,7 +24,8 @@ extension PostDetailView {
       grouped.compactMap { senderPubkeyHash, reactions in
         guard let firstReaction = reactions.first else { return nil }
         let isCurrentUser = myPubkeyHash.map(firstReaction.senderMatchesHash) ?? false
-        let displayName = isCurrentUser
+        let displayName =
+          isCurrentUser
           ? "you" : session.displayName(for: firstReaction.senderPubkey, contacts: contacts)
         let emojis = Array(Set(reactions.map(\.emoji))).sorted {
           $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
@@ -224,7 +225,8 @@ extension PostDetailView {
 
   var remotePostTextRequest: PostTextRequest? {
     guard let url = LinkstrPostPreview.webURL(for: post?.url),
-      SocialPostResolutionService.supportsRemotePostText(for: url) else { return nil }
+      SocialPostResolutionService.supportsRemotePostText(for: url)
+    else { return nil }
     return PostTextRequest(url: url, revision: previewRefreshID)
   }
 
@@ -234,7 +236,8 @@ extension PostDetailView {
     guard !Task.isCancelled, request == remotePostTextRequest else { return }
     let result = await SocialPostResolutionService.resolveRemotePostText(for: sourceURL)
     guard !Task.isCancelled, request == remotePostTextRequest,
-      let body = LinkstrPostPreview.text(result) else { return }
+      let body = LinkstrPostPreview.text(result)
+    else { return }
     loadedPostText = (request, body)
   }
 
@@ -332,7 +335,8 @@ extension PostDetailView {
         .accessibilityLabel("more post actions")
       }
     }
-    .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+    .padding(.leading, LinkstrTheme.screenHorizontalPadding)
+    .padding(.trailing, LinkstrTheme.controlHorizontalPadding)
     .foregroundStyle(LinkstrTheme.textPrimary)
     .buttonStyle(.plain)
   }

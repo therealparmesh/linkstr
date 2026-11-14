@@ -61,10 +61,9 @@ struct SessionManagementSheet: View {
         LinkstrBackgroundView()
         ScrollView {
           VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
-            LinkstrSheetTitle(title: canManageSession ? "manage session" : "session members")
             LinkstrInsetSection(title: "session details") {
               if canManageSession {
-                TextField("session name", text: $sessionName)
+                TextField("session name", text: $sessionName, prompt: LinkstrTheme.placeholder("session name"))
                   .font(LinkstrTheme.font(.subheadline))
                   .focused($focusedField, equals: .sessionName)
                   .textInputAutocapitalization(.words)
@@ -160,22 +159,17 @@ struct SessionManagementSheet: View {
         .linkstrKeyboardDismissal()
       }
       .linkstrBarChrome()
-      .toolbar {
-        ToolbarItem(placement: .cancellationAction) {
-          LinkstrHeaderButton(
-            title: canManageSession ? "cancel" : "close", icon: "xmark"
-          ) {
-            dismiss()
-          }
-          .disabled(isSaving || isDeletingSession)
+      .linkstrSheetHeader(title: canManageSession ? "manage session" : "session members") {
+        LinkstrHeaderButton(
+          title: canManageSession ? "cancel" : "close", icon: "xmark"
+        ) {
+          dismiss()
         }
-        .linkstrFlatToolbarItem()
+        .disabled(isSaving || isDeletingSession)
+      } actions: {
         if canManageSession {
-          ToolbarItem(placement: .confirmationAction) {
-            LinkstrHeaderButton(title: "save session", icon: "checkmark", action: saveSession)
-              .disabled(isSaving || isDeletingSession || !canSave)
-          }
-          .linkstrFlatToolbarItem()
+          LinkstrHeaderButton(title: "save session", icon: "checkmark", action: saveSession)
+            .disabled(isSaving || isDeletingSession || !canSave)
         }
       }
       .contactAddition(pending: $pendingContactAddition)
@@ -201,7 +195,7 @@ struct SessionManagementSheet: View {
           title: "delete session",
           message:
             "linkstr notifies known members and removes this session from this device. "
-              + "older copies may remain on relays.",
+            + "older copies may remain on relays.",
           onConfirm: {
             guard !isDeletingSession else { return }
             UINotificationFeedbackGenerator().notificationOccurred(.warning)

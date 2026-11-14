@@ -60,9 +60,10 @@ struct PostDetailView: View {
     _activeSheet = State(initialValue: showsReactions ? .reactions : nil)
     let storageID = SessionMessageEntity.storageID(ownerPubkey: ownerPubkey, eventID: postID)
     let rootKind = SessionMessageKind.root.rawValue
-    _posts = Query(filter: #Predicate<SessionMessageEntity> {
-      $0.storageID == storageID && $0.conversationID == sessionID && $0.kindRaw == rootKind
-    })
+    _posts = Query(
+      filter: #Predicate<SessionMessageEntity> {
+        $0.storageID == storageID && $0.conversationID == sessionID && $0.kindRaw == rootKind
+      })
     _reactions = Query(
       filter: #Predicate<SessionReactionEntity> {
         $0.ownerPubkey == ownerPubkey && $0.sessionID == sessionID

@@ -103,12 +103,11 @@ extension SessionManagementSheet {
     hasContacts: Bool,
     filteredContacts: [ContactEntity]
   ) -> some View {
-    addContactsSection(
-      hasContacts: hasContacts,
-      filteredContacts: filteredContacts
-    )
-    archiveSection
-    dangerZoneSection
+    VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
+      addContactsSection(hasContacts: hasContacts, filteredContacts: filteredContacts)
+      archiveSection
+      dangerZoneSection
+    }
   }
 
   @ViewBuilder
@@ -129,10 +128,12 @@ extension SessionManagementSheet {
             .padding(.top, LinkstrTheme.compactSpacing)
 
           if filteredContacts.isEmpty {
-            Text(query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-              ? "all your contacts are already in this session." : "no contacts match.")
-              .font(LinkstrTheme.font(.footnote))
-              .foregroundStyle(LinkstrTheme.textSecondary)
+            Text(
+              query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? "all your contacts are already in this session." : "no contacts match."
+            )
+            .font(LinkstrTheme.font(.footnote))
+            .foregroundStyle(LinkstrTheme.textSecondary)
           } else {
             VStack(spacing: 0) {
               ForEach(filteredContacts) { contact in
@@ -204,12 +205,13 @@ extension SessionManagementSheet {
 
   @ViewBuilder
   var readOnlySections: some View {
-    archiveSection
-
-    LinkstrInsetSection(title: "permissions") {
-      Text("only the session creator can rename, delete, or change membership.")
-        .font(LinkstrTheme.font(.footnote))
-        .foregroundStyle(LinkstrTheme.textSecondary)
+    VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
+      archiveSection
+      LinkstrInsetSection(title: "permissions") {
+        Text("only the session creator can rename, delete, or change membership.")
+          .font(LinkstrTheme.font(.footnote))
+          .foregroundStyle(LinkstrTheme.textSecondary)
+      }
     }
   }
 

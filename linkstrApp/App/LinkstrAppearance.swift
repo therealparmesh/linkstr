@@ -46,12 +46,19 @@ enum LinkstrTheme {
   static let fieldCornerRadius: CGFloat = 14
   static let cardCornerRadius: CGFloat = 20
   static let thumbnailCornerRadius: CGFloat = 10
+  static let toolbarSymbolSize: CGFloat = 20
   static let minimumInteractiveDimension: CGFloat = 44
+  static let toolbarOpticalInset = (minimumInteractiveDimension - toolbarSymbolSize) / 2
+  static let controlHorizontalPadding = screenHorizontalPadding - toolbarOpticalInset
   static let actionButtonMinHeight: CGFloat = 48
   static let contactAvatarSize: CGFloat = 48
   static let memberAvatarSize: CGFloat = 38
   static let searchClearButtonTextInset = minimumInteractiveDimension - fieldHorizontalPadding
   static let readableContentMaxWidth: CGFloat = 680
+
+  static func placeholder(_ title: String) -> Text {
+    Text(title).foregroundStyle(textSecondary.opacity(0.85))
+  }
 
   static func font(_ style: Font.TextStyle, weight: Font.Weight = .regular) -> Font {
     .system(style, design: .default, weight: weight)

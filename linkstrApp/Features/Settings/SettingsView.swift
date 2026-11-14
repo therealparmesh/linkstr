@@ -10,7 +10,8 @@ struct LinkstrAdaptiveButtonRow<Content: View>: View {
   }
 
   var body: some View {
-    let layout = dynamicTypeSize >= .xLarge
+    let layout =
+      dynamicTypeSize >= .xLarge
       ? AnyLayout(VStackLayout(spacing: LinkstrTheme.buttonRowSpacing))
       : AnyLayout(HStackLayout(spacing: LinkstrTheme.buttonRowSpacing))
 
@@ -148,7 +149,7 @@ struct SettingsView: View {
         }
       }
 
-      TextField("relay address", text: $relayURL, prompt: Text("wss://relay.example.com"))
+      TextField("relay address", text: $relayURL, prompt: LinkstrTheme.placeholder("wss://relay.example.com"))
         .font(LinkstrTheme.font(.subheadline))
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled(true)
@@ -186,7 +187,8 @@ struct SettingsView: View {
   }
 
   private func relayRow(_ relay: RelayEntity) -> some View {
-    let layout = dynamicTypeSize.isAccessibilitySize
+    let layout =
+      dynamicTypeSize.isAccessibilitySize
       ? AnyLayout(VStackLayout(alignment: .leading, spacing: LinkstrTheme.compactSpacing))
       : AnyLayout(HStackLayout(alignment: .top, spacing: LinkstrTheme.buttonRowSpacing))
 
@@ -265,7 +267,6 @@ struct SettingsView: View {
       relayURL = ""
     }
   }
-
 }
 
 private extension SettingsView {

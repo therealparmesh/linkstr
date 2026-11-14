@@ -124,7 +124,6 @@ private struct RestoreBackupSheet: View {
         LinkstrBackgroundView()
         ScrollView {
           VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
-            LinkstrSheetTitle(title: "restore backup")
             LinkstrInsetSection(title: "account") {
               Text(PublicKey(hex: backup.owner)?.npub ?? backup.owner)
                 .typesettingLanguage(.init(languageCode: .unavailable))
@@ -137,10 +136,18 @@ private struct RestoreBackupSheet: View {
                 .foregroundStyle(LinkstrTheme.textSecondary)
             }
             LinkstrInsetSection(title: "saved data") {
-              LabeledContent("sessions", value: backup.sessions.count.formatted())
-              LabeledContent("posts", value: backup.posts.count.formatted())
-              LabeledContent("contacts", value: backup.contacts.count.formatted())
+              LabeledContent("sessions") {
+                Text(backup.sessions.count.formatted()).foregroundStyle(LinkstrTheme.textSecondary)
+              }
+              LabeledContent("posts") {
+                Text(backup.posts.count.formatted()).foregroundStyle(LinkstrTheme.textSecondary)
+              }
+              LabeledContent("contacts") {
+                Text(backup.contacts.count.formatted()).foregroundStyle(LinkstrTheme.textSecondary)
+              }
             }
+            .font(LinkstrTheme.font(.subheadline))
+            .foregroundStyle(LinkstrTheme.textPrimary)
             Text("restores this account and app settings. newer saved changes are kept.")
               .font(LinkstrTheme.font(.footnote))
               .foregroundStyle(LinkstrTheme.textSecondary)
@@ -164,12 +171,11 @@ private struct RestoreBackupSheet: View {
         }
       }
       .linkstrBarChrome()
-      .toolbar {
-        ToolbarItem(placement: .cancellationAction) {
-          LinkstrHeaderButton(title: "cancel", icon: "xmark") { dismiss() }
-            .disabled(session.isRestoringBackup)
-        }
-        .linkstrFlatToolbarItem()
+      .linkstrSheetHeader(title: "restore backup") {
+        LinkstrHeaderButton(title: "cancel", icon: "xmark") { dismiss() }
+          .disabled(session.isRestoringBackup)
+      } actions: {
+        EmptyView()
       }
       .interactiveDismissDisabled(session.isRestoringBackup)
     }

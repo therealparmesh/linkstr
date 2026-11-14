@@ -173,13 +173,12 @@ struct RootView: View {
         NavigationStack {
           DeepLinkDetailView(sourceURL: sourceURL)
             .linkstrBarChrome()
-            .toolbar {
-              ToolbarItem(placement: .cancellationAction) {
-                LinkstrHeaderButton(title: "close shared link", icon: "xmark") {
-                  deepLinkHandler.clearSharedLinkDetail()
-                }
+            .linkstrSheetHeader(title: "shared link") {
+              LinkstrHeaderButton(title: "close shared link", icon: "xmark") {
+                deepLinkHandler.clearSharedLinkDetail()
               }
-              .linkstrFlatToolbarItem()
+            } actions: {
+              EmptyView()
             }
         }
       } else {

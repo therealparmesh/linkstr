@@ -23,8 +23,6 @@ struct NewPostSheet: View {
         LinkstrBackgroundView()
         ScrollView {
           VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
-            LinkstrSheetTitle(title: "share a link")
-
             LinkstrInsetSection(title: "to") {
               ShareSelectedSessionRow(session: sessionEntity, memberAvatars: memberAvatars)
             }
@@ -46,12 +44,11 @@ struct NewPostSheet: View {
 
       .linkstrBarChrome()
       .navigationBarTitleDisplayMode(.inline)
-      .toolbar {
-        ToolbarItem(placement: .cancellationAction) {
-          LinkstrHeaderButton(title: "cancel", icon: "xmark") { dismiss() }
-            .disabled(isSending)
-        }
-        .linkstrFlatToolbarItem()
+      .linkstrSheetHeader(title: "share a link") {
+        LinkstrHeaderButton(title: "cancel", icon: "xmark") { dismiss() }
+          .disabled(isSending)
+      } actions: {
+        EmptyView()
       }
       .interactiveDismissDisabled(isSending)
       .safeAreaInset(edge: .bottom, spacing: 0) {

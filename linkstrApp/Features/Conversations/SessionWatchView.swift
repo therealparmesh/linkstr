@@ -24,7 +24,11 @@ extension SessionPostsView {
         watchPager(insets: contentInsets)
           .ignoresSafeArea(.container, edges: [.top, .bottom])
         watchHeader(group, topInset: safeArea.top)
-          .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { watchHeaderHeight = $0 }
+          .onGeometryChange(for: CGFloat.self) {
+            $0.size.height
+          } action: {
+            watchHeaderHeight = $0
+          }
       }
     }
   }
@@ -32,7 +36,9 @@ extension SessionPostsView {
   private func watchPager(insets: EdgeInsets) -> some View {
     ScrollViewReader { proxy in
       watchPages(insets: insets)
-        .onGeometryChange(for: CGSize.self) { $0.size } action: { previous, current in
+        .onGeometryChange(for: CGSize.self) {
+          $0.size
+        } action: { previous, current in
           guard previous != .zero, previous != current, let watchPostID else { return }
           proxy.scrollTo(WatchPageID(postID: watchPostID), anchor: .top)
         }
@@ -48,7 +54,7 @@ extension SessionPostsView {
       LazyVStack(spacing: 0) {
         ForEach(rootPosts, id: \.rootID) { post in
           watchPage(post, insets: insets)
-          .id(WatchPageID(postID: post.rootID))
+            .id(WatchPageID(postID: post.rootID))
         }
       }
       .scrollTargetLayout()
@@ -115,7 +121,7 @@ extension SessionPostsView {
 
   private func watchHeader(_ group: SessionEntity, topInset: CGFloat) -> some View {
     VStack(alignment: .leading, spacing: LinkstrTheme.tightSpacing) {
-      LinkstrPageTopBar {
+      LinkstrPageTopBar(hasBackButton: true) {
         watchBackButton
       } actions: {
         watchHeaderActions

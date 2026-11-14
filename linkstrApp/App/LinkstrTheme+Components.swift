@@ -77,7 +77,7 @@ struct LinkstrSearchField: View {
         .foregroundStyle(LinkstrTheme.textTertiary)
         .accessibilityHidden(true)
 
-      TextField(prompt, text: $text, prompt: Text(prompt).foregroundStyle(LinkstrTheme.textSecondary.opacity(0.85)))
+      TextField(prompt, text: $text, prompt: LinkstrTheme.placeholder(prompt))
         .accessibilityLabel(prompt)
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled(true)

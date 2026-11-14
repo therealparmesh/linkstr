@@ -79,7 +79,6 @@ private struct ShareExtensionScreen: View {
     NavigationStack {
       ScrollView {
         VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
-          LinkstrSheetTitle(title: "share with linkstr")
           switch state {
           case .loading(let message):
             HStack(spacing: LinkstrTheme.rowSpacing) {
@@ -94,12 +93,14 @@ private struct ShareExtensionScreen: View {
             if let error { statusCard(title: "couldn’t open linkstr", message: error) }
             linkPreview(share.url)
             VStack(spacing: 0) {
-              actionRow("share to session", subtitle: "choose a session, with an optional note",
-                        icon: "paperplane", action: .shareLink)
+              actionRow(
+                "share to session", subtitle: "choose a session, with an optional note",
+                icon: "paperplane", action: .shareLink)
               Rectangle().fill(LinkstrTheme.separator).frame(height: 1)
                 .accessibilityHidden(true)
-              actionRow("save video", subtitle: "look for a downloadable video",
-                        icon: "square.and.arrow.down", action: .saveMedia)
+              actionRow(
+                "save video", subtitle: "look for a downloadable video",
+                icon: "square.and.arrow.down", action: .saveMedia)
             }
             .linkstrCardSurface()
           case .unavailable(let message):
@@ -110,11 +111,10 @@ private struct ShareExtensionScreen: View {
       }
       .background(LinkstrBackgroundView())
       .linkstrNavigationBarChrome()
-      .toolbar {
-        ToolbarItem(placement: .cancellationAction) {
-          LinkstrHeaderButton(title: "close", icon: "xmark", action: close)
-        }
-        .linkstrFlatToolbarItem()
+      .linkstrSheetHeader(title: "share with linkstr") {
+        LinkstrHeaderButton(title: "close", icon: "xmark", action: close)
+      } actions: {
+        EmptyView()
       }
     }
     .preferredColorScheme(.dark)
@@ -123,10 +123,14 @@ private struct ShareExtensionScreen: View {
 
   private func statusCard(title: String, message: String) -> some View {
     VStack(alignment: .leading, spacing: LinkstrTheme.compactSpacing) {
-      Label(title, systemImage: "exclamationmark.circle")
-        .font(LinkstrTheme.font(.headline))
-        .foregroundStyle(LinkstrTheme.textPrimary)
-        .accessibilityAddTraits(.isHeader)
+      Label {
+        Text(title)
+      } icon: {
+        Image(systemName: "exclamationmark.triangle").foregroundStyle(LinkstrTheme.amber)
+      }
+      .font(LinkstrTheme.font(.headline))
+      .foregroundStyle(LinkstrTheme.textPrimary)
+      .accessibilityAddTraits(.isHeader)
       Text(message)
         .font(LinkstrTheme.font(.subheadline))
         .foregroundStyle(LinkstrTheme.textSecondary)
@@ -152,7 +156,9 @@ private struct ShareExtensionScreen: View {
   private func actionRow(
     _ title: String, subtitle: String, icon: String, action: ShareViewController.ShareAction
   ) -> some View {
-    Button { choose(action) } label: {
+    Button {
+      choose(action)
+    } label: {
       HStack(
         alignment: dynamicTypeSize.isAccessibilitySize ? .firstTextBaseline : .center,
         spacing: LinkstrTheme.rowSpacing

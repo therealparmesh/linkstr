@@ -28,7 +28,7 @@ struct EditContactView: View {
           }
 
           LinkstrInsetSection(title: "alias", footer: "only you see this alias.") {
-            TextField("optional alias", text: $alias)
+            TextField("optional alias", text: $alias, prompt: LinkstrTheme.placeholder("optional alias"))
               .font(LinkstrTheme.font(.subheadline))
               .textInputAutocapitalization(.words)
               .submitLabel(.done)
@@ -60,7 +60,9 @@ struct EditContactView: View {
               .linkstrInputField()
           }
 
-          Button(role: .destructive) { pendingRemoval = contact } label: {
+          Button(role: .destructive) {
+            pendingRemoval = contact
+          } label: {
             LinkstrActionButtonLabel(title: "remove contact", systemImage: "person.crop.circle.badge.minus")
           }
           .linkstrDestructiveButton()

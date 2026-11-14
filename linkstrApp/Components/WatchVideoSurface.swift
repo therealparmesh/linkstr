@@ -25,10 +25,12 @@ struct WatchVideoSurface: View {
       WatchPlaybackControls(
         player: player, bottomInset: bottomInset, openSystemPlayer: openSystemPlayer
       )
-        .id(ObjectIdentifier(player))
-        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
-          onControlsHeightChange(max(0, height - bottomInset))
-        }
+      .id(ObjectIdentifier(player))
+      .onGeometryChange(for: CGFloat.self) {
+        $0.size.height
+      } action: { height in
+        onControlsHeightChange(max(0, height - bottomInset))
+      }
     }
   }
 }
@@ -76,7 +78,7 @@ private struct WatchPlaybackControls: View {
     .font(LinkstrTheme.font(.subheadline, weight: .semibold))
     .foregroundStyle(LinkstrTheme.textPrimary)
     .buttonStyle(.plain)
-    .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+    .padding(.horizontal, LinkstrTheme.controlHorizontalPadding)
     .padding(.top, LinkstrTheme.compactSpacing)
     .padding(.bottom, LinkstrTheme.metaSpacing)
     .linkstrReadableContent()
@@ -88,7 +90,7 @@ private struct WatchPlaybackControls: View {
         LinearGradient(
           colors: [scrim, LinkstrTheme.background.opacity(0.94)], startPoint: .top, endPoint: .bottom
         )
-          .frame(height: bottomInset)
+        .frame(height: bottomInset)
       }
       .allowsHitTesting(false)
       .accessibilityHidden(true)

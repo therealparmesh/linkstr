@@ -15,7 +15,7 @@ struct LinkstrShareDraftFields: View {
 
   var body: some View {
     LinkstrInsetSection(title: "link") {
-      TextField("link", text: $link, prompt: Text("example.com"))
+      TextField("link", text: $link, prompt: LinkstrTheme.placeholder("example.com"))
         .textInputAutocapitalization(.never)
         .keyboardType(.URL)
         .autocorrectionDisabled(true)
@@ -130,7 +130,8 @@ struct LinkstrDraftPreview: View {
   private func previewStrategy(for address: String) -> URLClassifier.MediaStrategy {
     guard let sourceURL = URL(string: address),
       !SocialURLHeuristics.isTwitterStatusURL(sourceURL),
-      !SocialURLHeuristics.isTikTokShortURL(sourceURL) else {
+      !SocialURLHeuristics.isTikTokShortURL(sourceURL)
+    else {
       return .link
     }
     return URLClassifier.mediaStrategy(for: sourceURL)
@@ -197,7 +198,8 @@ struct LinkstrDraftPreview: View {
   private func loadPreview() async {
     guard loadsRichPreview, let sourceURL = URL(string: url) else { return }
     do { try await Task.sleep(for: .milliseconds(350)) } catch { return }
-    let destination = SocialURLHeuristics.isTikTokShortURL(sourceURL)
+    let destination =
+      SocialURLHeuristics.isTikTokShortURL(sourceURL)
       ? await URLCanonicalizationService.shared.canonicalPlaybackURL(for: sourceURL)
       : sourceURL
     guard !Task.isCancelled else { return }

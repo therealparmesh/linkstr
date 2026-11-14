@@ -27,10 +27,8 @@ struct AddContactSheet: View {
         LinkstrBackgroundView()
         ScrollView {
           VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
-            LinkstrSheetTitle(title: "add contact")
-
             LinkstrInsetSection(title: "public key (npub)") {
-              TextField("public key (npub)", text: $npub)
+              TextField("public key (npub)", text: $npub, prompt: LinkstrTheme.placeholder("public key (npub)"))
                 .font(LinkstrTheme.font(.subheadline))
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled(true)
@@ -76,7 +74,7 @@ struct AddContactSheet: View {
             }
 
             LinkstrInsetSection(title: "alias", footer: "only you see this alias.") {
-              TextField("optional alias", text: $alias)
+              TextField("optional alias", text: $alias, prompt: LinkstrTheme.placeholder("optional alias"))
                 .font(LinkstrTheme.font(.subheadline))
                 .textInputAutocapitalization(.words)
                 .focused($focusedField, equals: .alias)
@@ -95,29 +93,23 @@ struct AddContactSheet: View {
         session.requestRemoteProfilesIfNeeded(pubkeyHexes: [previewPubkeyHex])
       }
       .linkstrBarChrome()
-      .toolbar {
-        ToolbarItem(placement: .cancellationAction) {
-          LinkstrHeaderButton(title: "cancel", icon: "xmark") { dismiss() }
-            .disabled(isSubmitting)
+      .linkstrSheetHeader(title: "add contact") {
+        LinkstrHeaderButton(title: "cancel", icon: "xmark") { dismiss() }
+          .disabled(isSubmitting)
+      } actions: {
+        if isSubmitting {
+          ProgressView()
+            .tint(LinkstrTheme.accent)
+            .frame(width: LinkstrTheme.minimumInteractiveDimension, height: LinkstrTheme.minimumInteractiveDimension)
+            .accessibilityLabel("saving contact")
+        } else {
+          LinkstrHeaderButton(
+            title: actionTitle,
+            icon: existingContact == nil ? "person.crop.circle.badge.plus" : "checkmark",
+            action: confirmFollow
+          )
+          .disabled(!canSubmit)
         }
-        .linkstrFlatToolbarItem()
-
-        ToolbarItem(placement: .confirmationAction) {
-          if isSubmitting {
-            ProgressView()
-              .tint(LinkstrTheme.accent)
-              .frame(width: LinkstrTheme.minimumInteractiveDimension, height: LinkstrTheme.minimumInteractiveDimension)
-              .accessibilityLabel("saving contact")
-          } else {
-            LinkstrHeaderButton(
-              title: actionTitle,
-              icon: existingContact == nil ? "person.crop.circle.badge.plus" : "checkmark",
-              action: confirmFollow
-            )
-            .disabled(!canSubmit)
-          }
-        }
-        .linkstrFlatToolbarItem()
       }
       .sheet(isPresented: $isPresentingConfirmation) {
         LinkstrConfirmationSheet(

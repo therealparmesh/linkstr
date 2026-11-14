@@ -81,8 +81,6 @@ struct ShareSessionPickerSheet: View {
 
         ScrollView {
           VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
-            LinkstrSheetTitle(title: "choose a session")
-
             LinkstrInsetSection(title: "sessions") {
               LinkstrSearchField(
                 prompt: "search sessions",
@@ -98,11 +96,10 @@ struct ShareSessionPickerSheet: View {
         .linkstrKeyboardDismissal()
       }
       .linkstrBarChrome()
-      .toolbar {
-        ToolbarItem(placement: .cancellationAction) {
-          LinkstrHeaderButton(title: "close session picker", icon: "xmark") { dismiss() }
-        }
-        .linkstrFlatToolbarItem()
+      .linkstrSheetHeader(title: "choose a session") {
+        LinkstrHeaderButton(title: "close session picker", icon: "xmark") { dismiss() }
+      } actions: {
+        EmptyView()
       }
     }
     .preferredColorScheme(.dark)

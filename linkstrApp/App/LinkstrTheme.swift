@@ -28,6 +28,7 @@ private struct LinkstrInputField: ViewModifier {
   func body(content: Content) -> some View {
     content
       .font(LinkstrTheme.font(.subheadline))
+      .foregroundStyle(LinkstrTheme.textPrimary)
       .padding(.horizontal, LinkstrTheme.fieldHorizontalPadding)
       .padding(.vertical, LinkstrTheme.fieldVerticalPadding)
       .frame(maxWidth: .infinity, minHeight: minHeight, alignment: alignment)
@@ -131,23 +132,25 @@ extension View {
 private struct LinkstrEdgeBackGesture: ViewModifier {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.layoutDirection) private var layoutDirection
+  @State private var contentWidth: CGFloat = 0
 
   func body(content: Content) -> some View {
-    content.overlay(alignment: .leading) {
-      Color.clear
-        .frame(width: 16)
-        .contentShape(Rectangle())
-        .gesture(
-          DragGesture(minimumDistance: 18).onEnded { value in
-            let direction: CGFloat = layoutDirection == .leftToRight ? 1 : -1
-            let horizontal = direction * value.translation.width
-            if horizontal >= 55, horizontal > abs(value.translation.height) {
-              dismiss()
-            }
+    content
+      .onGeometryChange(for: CGFloat.self) {
+        $0.size.width
+      } action: {
+        contentWidth = $0
+      }
+      .simultaneousGesture(
+        DragGesture(minimumDistance: 18).onEnded { value in
+          let isLeftToRight = layoutDirection == .leftToRight
+          let startInset = isLeftToRight ? value.startLocation.x : contentWidth - value.startLocation.x
+          let horizontal = (isLeftToRight ? 1.0 : -1.0) * value.translation.width
+          if (0...16).contains(startInset), horizontal >= 55, horizontal > abs(value.translation.height) {
+            dismiss()
           }
-        )
-        .accessibilityHidden(true)
-    }
+        }
+      )
   }
 }
 

@@ -39,9 +39,8 @@ struct NewSessionSheet: View {
         LinkstrBackgroundView()
         ScrollView {
           VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
-            LinkstrSheetTitle(title: "new session")
             LinkstrInsetSection(title: "session details") {
-              TextField("session name", text: $sessionName)
+              TextField("session name", text: $sessionName, prompt: LinkstrTheme.placeholder("session name"))
                 .font(LinkstrTheme.font(.subheadline))
                 .focused($focusedField, equals: .sessionName)
                 .textInputAutocapitalization(.words)
@@ -134,20 +133,14 @@ struct NewSessionSheet: View {
       }
 
       .linkstrBarChrome()
-      .toolbar {
-        ToolbarItem(placement: .cancellationAction) {
-          LinkstrHeaderButton(title: "cancel", icon: "xmark") {
-            dismiss()
-          }
-          .disabled(isCreating)
+      .linkstrSheetHeader(title: "new session") {
+        LinkstrHeaderButton(title: "cancel", icon: "xmark") {
+          dismiss()
         }
-        .linkstrFlatToolbarItem()
-
-        ToolbarItem(placement: .confirmationAction) {
-          LinkstrHeaderButton(title: "create session", icon: "checkmark", action: createSession)
-            .disabled(isCreating || !canCreateSession)
-        }
-        .linkstrFlatToolbarItem()
+        .disabled(isCreating)
+      } actions: {
+        LinkstrHeaderButton(title: "create session", icon: "checkmark", action: createSession)
+          .disabled(isCreating || !canCreateSession)
       }
       .safeAreaInset(edge: .bottom, spacing: 0) {
         if let footerStatus {

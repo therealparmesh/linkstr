@@ -45,8 +45,6 @@ struct DeepLinkDetailView: View {
       .linkstrPageContentLayout()
     }
     .background(LinkstrBackgroundView())
-    .navigationTitle("shared link")
-    .navigationBarTitleDisplayMode(.inline)
     .task(id: previewURL) { await loadPreviewIfNeeded() }
     .task(id: previewURL) { await loadRemotePostText() }
   }

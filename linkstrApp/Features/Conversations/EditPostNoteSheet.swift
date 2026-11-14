@@ -32,8 +32,6 @@ struct EditPostNoteSheet: View {
     NavigationStack {
       ScrollView {
         VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
-          LinkstrSheetTitle(title: originalNote == nil ? "add a note" : "edit note")
-
           LinkstrInsetSection(title: "note", footer: noteFooter) {
             LinkstrNoteEditor(note: $draft, isDisabled: isSaving, focusedField: $focusedField, field: .note)
               .id(Field.note)
@@ -53,22 +51,17 @@ struct EditPostNoteSheet: View {
       .background(LinkstrBackgroundView())
       .linkstrBarChrome()
       .navigationBarTitleDisplayMode(.inline)
-      .toolbar {
-        ToolbarItem(placement: .cancellationAction) {
-          LinkstrHeaderButton(title: "cancel", icon: "xmark") { dismiss() }
-            .disabled(isSaving)
-        }
-        .linkstrFlatToolbarItem()
-        ToolbarItem(placement: .confirmationAction) {
-          LinkstrHeaderButton(
-            title: isRemovingNote ? "remove note" : "save note",
-            icon: isRemovingNote ? "trash" : "checkmark",
-            foreground: isRemovingNote ? LinkstrTheme.destructive : LinkstrTheme.accent,
-            action: save
-          )
-          .disabled(!canSave)
-        }
-        .linkstrFlatToolbarItem()
+      .linkstrSheetHeader(title: originalNote == nil ? "add a note" : "edit note") {
+        LinkstrHeaderButton(title: "cancel", icon: "xmark") { dismiss() }
+          .disabled(isSaving)
+      } actions: {
+        LinkstrHeaderButton(
+          title: isRemovingNote ? "remove note" : "save note",
+          icon: isRemovingNote ? "trash" : "checkmark",
+          foreground: isRemovingNote ? LinkstrTheme.destructive : LinkstrTheme.accent,
+          action: save
+        )
+        .disabled(!canSave)
       }
       .safeAreaInset(edge: .bottom, spacing: 0) {
         if let status {

@@ -53,29 +53,23 @@ struct YouView: View {
         NavigationStack {
           ScrollView {
             VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
-              LinkstrSheetTitle(title: "edit profile")
               profileNameSection
             }
             .linkstrPageContentLayout()
           }
           .background(LinkstrBackgroundView())
           .navigationBarTitleDisplayMode(.inline)
-          .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-              LinkstrHeaderButton(title: "cancel", icon: "xmark") { isEditingProfile = false }
-                .disabled(isSavingProfileName)
-            }
-            .linkstrFlatToolbarItem()
-            ToolbarItem(placement: .confirmationAction) {
-              LinkstrHeaderButton(
-                title: profileNameButtonTitle,
-                icon: isClearingProfileName ? "trash" : "checkmark",
-                foreground: isClearingProfileName ? LinkstrTheme.destructive : LinkstrTheme.accent,
-                action: submitProfileName
-              )
-              .disabled(!canSaveProfileName || isSavingProfileName)
-            }
-            .linkstrFlatToolbarItem()
+          .linkstrSheetHeader(title: "edit profile") {
+            LinkstrHeaderButton(title: "cancel", icon: "xmark") { isEditingProfile = false }
+              .disabled(isSavingProfileName)
+          } actions: {
+            LinkstrHeaderButton(
+              title: profileNameButtonTitle,
+              icon: isClearingProfileName ? "trash" : "checkmark",
+              foreground: isClearingProfileName ? LinkstrTheme.destructive : LinkstrTheme.accent,
+              action: submitProfileName
+            )
+            .disabled(!canSaveProfileName || isSavingProfileName)
           }
           .safeAreaInset(edge: .bottom, spacing: 0) {
             if let status = profileNameStatus {
@@ -111,7 +105,7 @@ struct YouView: View {
       footer: isClearingProfileName
         ? "confirm to remove your profile name." : "optional. others can see this name."
     ) {
-      TextField("name others see", text: $profileNameDraft)
+      TextField("name others see", text: $profileNameDraft, prompt: LinkstrTheme.placeholder("name others see"))
         .font(LinkstrTheme.font(.subheadline))
         .textInputAutocapitalization(.words)
         .autocorrectionDisabled(true)
@@ -144,7 +138,9 @@ struct YouView: View {
           .foregroundStyle(LinkstrTheme.textPrimary)
           .fixedSize(horizontal: false, vertical: true)
 
-        Button { isEditingProfile = true } label: {
+        Button {
+          isEditingProfile = true
+        } label: {
           Text("edit profile")
             .font(LinkstrTheme.font(.subheadline, weight: .semibold))
             .foregroundStyle(LinkstrTheme.accent)

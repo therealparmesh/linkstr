@@ -27,8 +27,6 @@ struct ShareMediaSaveView: View {
 
         ScrollView {
           VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
-            LinkstrSheetTitle(title: "save video")
-
             LinkstrInsetSection {
               HStack(alignment: .top, spacing: LinkstrTheme.rowSpacing) {
                 statusIndicator
@@ -87,13 +85,12 @@ struct ShareMediaSaveView: View {
         }
       }
       .linkstrBarChrome()
-      .toolbar {
-        ToolbarItem(placement: .cancellationAction) {
-          LinkstrHeaderButton(title: "close video save", icon: "xmark") {
-            deepLinkHandler.clearMediaSaveDraft(matching: draft)
-          }
+      .linkstrSheetHeader(title: "save video") {
+        LinkstrHeaderButton(title: "close video save", icon: "xmark") {
+          deepLinkHandler.clearMediaSaveDraft(matching: draft)
         }
-        .linkstrFlatToolbarItem()
+      } actions: {
+        EmptyView()
       }
       .linkstrVideoSaveDialog(
         isPresented: $showingSaveDialog,

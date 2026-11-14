@@ -9,9 +9,11 @@ struct LinkstrPageHeader<Actions: View>: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: LinkstrTheme.tightSpacing) {
-      LinkstrPageTopBar {
+      LinkstrPageTopBar(hasBackButton: backLabel != nil) {
         if let backLabel {
-          LinkstrHeaderButton(title: backLabel, icon: "chevron.backward") { dismiss() }
+          LinkstrHeaderButton(title: backLabel, icon: "chevron.backward") {
+            dismiss()
+          }
         }
       } actions: {
         actions
@@ -23,16 +25,18 @@ struct LinkstrPageHeader<Actions: View>: View {
 }
 
 struct LinkstrPageTopBar<Leading: View, Actions: View>: View {
+  var hasBackButton = false
   @ViewBuilder let leading: Leading
   @ViewBuilder let actions: Actions
 
   var body: some View {
     HStack(spacing: LinkstrTheme.metaSpacing) {
-      leading
+      leading.padding(.leading, hasBackButton ? -LinkstrTheme.toolbarOpticalInset : 0)
       LinkstrBrandLabel()
         .dynamicTypeSize(...DynamicTypeSize.large)
       Spacer(minLength: 0)
       HStack(spacing: 0) { actions }
+        .padding(.trailing, -LinkstrTheme.toolbarOpticalInset)
     }
     .frame(minHeight: LinkstrTheme.minimumInteractiveDimension)
   }
@@ -49,6 +53,11 @@ struct LinkstrHeaderButton: View {
   var body: some View {
     Button(action: action) {
       Image(systemName: icon)
+        .font(.system(size: LinkstrTheme.toolbarSymbolSize, weight: .semibold))
+        .frame(
+          width: LinkstrTheme.toolbarSymbolSize, height: LinkstrTheme.toolbarSymbolSize,
+          alignment: icon == "chevron.backward" ? .leading : .center
+        )
         .linkstrToolbarIconLabel()
         .foregroundStyle(foreground)
         .opacity(isEnabled ? 1 : 0.45)
@@ -132,10 +141,26 @@ struct LinkstrSheetHeader: View {
   let close: () -> Void
 
   var body: some View {
-    HStack(spacing: LinkstrTheme.compactSpacing) {
+    LinkstrSheetBar(title: title) {
       LinkstrHeaderButton(title: closeLabel, icon: "xmark", action: close)
-      LinkstrSheetTitle(title: title)
+    } actions: {
+      EmptyView()
     }
+  }
+}
+
+private struct LinkstrSheetBar<Leading: View, Actions: View>: View {
+  let title: String
+  @ViewBuilder let leading: Leading
+  @ViewBuilder let actions: Actions
+
+  var body: some View {
+    HStack(spacing: LinkstrTheme.compactSpacing) {
+      leading
+      LinkstrSheetTitle(title: title)
+      actions
+    }
+    .padding(.horizontal, -LinkstrTheme.toolbarOpticalInset)
     .linkstrPageHeaderLayout()
     .background(LinkstrTheme.chrome)
   }
@@ -151,6 +176,17 @@ private struct LinkstrBrandLabel: View {
 }
 
 extension View {
+  func linkstrSheetHeader<Leading: View, Actions: View>(
+    title: String,
+    @ViewBuilder leading: () -> Leading,
+    @ViewBuilder actions: () -> Actions
+  ) -> some View {
+    toolbarVisibility(.hidden, for: .navigationBar)
+      .safeAreaInset(edge: .top, spacing: 0) {
+        LinkstrSheetBar(title: title, leading: leading, actions: actions)
+      }
+  }
+
   func linkstrPageHeaderLayout() -> some View {
     padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
       .padding(.top, LinkstrTheme.pageHeaderTopPadding)
@@ -165,8 +201,7 @@ extension View {
   }
 
   func linkstrToolbarIconLabel() -> some View {
-    font(LinkstrTheme.font(.title3, weight: .semibold))
-      .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+    font(.system(size: LinkstrTheme.toolbarSymbolSize, weight: .semibold))
       .frame(width: LinkstrTheme.minimumInteractiveDimension, height: LinkstrTheme.minimumInteractiveDimension)
       .contentShape(Rectangle())
   }
@@ -175,16 +210,5 @@ extension View {
     linkstrToolbarIconLabel()
       .foregroundStyle(LinkstrTheme.textPrimary)
       .background(LinkstrTheme.mediaButtonBackground, in: Circle())
-  }
-}
-
-extension ToolbarContent {
-  @ToolbarContentBuilder
-  func linkstrFlatToolbarItem() -> some ToolbarContent {
-    if #available(iOS 26, *) {
-      sharedBackgroundVisibility(.hidden)
-    } else {
-      self
-    }
   }
 }
