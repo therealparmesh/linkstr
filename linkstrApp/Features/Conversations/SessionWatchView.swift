@@ -13,7 +13,7 @@ extension SessionPostsView {
     )
   }
 
-  func watchView(for group: SessionEntity) -> some View {
+  func watchView() -> some View {
     GeometryReader { proxy in
       ZStack(alignment: .top) {
         let safeArea = proxy.safeAreaInsets
@@ -23,7 +23,7 @@ extension SessionPostsView {
         )
         watchPager(insets: contentInsets)
           .ignoresSafeArea(.container, edges: [.top, .bottom])
-        watchHeader(group, topInset: safeArea.top)
+        watchHeader(topInset: safeArea.top)
           .onGeometryChange(for: CGFloat.self) {
             $0.size.height
           } action: {
@@ -98,7 +98,6 @@ extension SessionPostsView {
           ownerPubkey: ownerPubkey,
           sessionID: sessionID,
           postID: post.rootID,
-          sender: senderLabel(for: post, myPubkey: ownerPubkey, contactsByPubkey: contactsByPubkey),
           canDelete: post.senderPubkey == ownerPubkey,
           watchInsets: insets,
           isCovered: isPaging || isPresentingMembers || isPresentingNewPost || isPresentingDeleteConfirmation,
@@ -119,14 +118,14 @@ extension SessionPostsView {
     .containerRelativeFrame([.horizontal, .vertical])
   }
 
-  private func watchHeader(_ group: SessionEntity, topInset: CGFloat) -> some View {
+  private func watchHeader(topInset: CGFloat) -> some View {
     VStack(alignment: .leading, spacing: LinkstrTheme.tightSpacing) {
       LinkstrPageTopBar(hasBackButton: true) {
         watchBackButton
       } actions: {
         watchHeaderActions
       }
-      watchSessionTitle(group)
+      watchPostAttribution
     }
     .font(LinkstrTheme.font(.body, weight: .semibold))
     .buttonStyle(.plain)
@@ -147,27 +146,24 @@ extension SessionPostsView {
     }
   }
 
-  private func watchSessionTitle(_ group: SessionEntity) -> some View {
-    Button {
-      isPresentingMembers = true
-    } label: {
-      VStack(alignment: .leading, spacing: 2) {
-        Text(group.name)
-          .font(LinkstrTheme.font(verticalSizeClass == .compact ? .headline : .title2, weight: .bold))
-          .lineLimit(dynamicTypeSize.isAccessibilitySize && verticalSizeClass != .compact ? 2 : 1)
-        HStack(spacing: LinkstrTheme.metaSpacing) {
-          Text(canShareLinks ? memberCountLabel : "read-only session")
-            .font(LinkstrTheme.font(.caption))
-            .foregroundStyle(LinkstrTheme.textSecondary)
-            .lineLimit(1)
-          LinkstrDisclosureIndicator()
-        }
+  @ViewBuilder
+  private var watchPostAttribution: some View {
+    let selectedPostID = activeWatchPostID ?? watchPostID ?? rootPosts.first?.rootID
+    if let post = rootPosts.first(where: { $0.rootID == selectedPostID }) {
+      let layout =
+        dynamicTypeSize.isAccessibilitySize
+        ? AnyLayout(VStackLayout(alignment: .leading, spacing: LinkstrTheme.tightSpacing))
+        : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: LinkstrTheme.compactSpacing))
+      layout {
+        Text(senderLabel(for: post, myPubkey: ownerPubkey, contactsByPubkey: contactsByPubkey))
+          .font(LinkstrTheme.font(.subheadline, weight: .semibold))
+          .lineLimit(1)
+        Text(post.timestamp.linkstrMessageTimestampLabel)
+          .font(LinkstrTheme.font(.caption))
+          .foregroundStyle(LinkstrTheme.textSecondary)
+          .lineLimit(1)
       }
-      .multilineTextAlignment(.leading)
-      .frame(minHeight: LinkstrTheme.minimumInteractiveDimension, alignment: .leading)
-      .contentShape(Rectangle())
     }
-    .accessibilityHint(canManageSession ? "manage session" : "view members")
   }
 
   @ViewBuilder
@@ -220,10 +216,6 @@ extension SessionPostsView {
     guard activeWatchPostID != postID else { return }
     activeWatchPostID = postID
     onWatchPositionChange(postID)
-  }
-
-  private var memberCountLabel: String {
-    members.count == 1 ? "1 member" : "\(members.count) members"
   }
 
   private func canMoveWatch(by delta: Int) -> Bool {

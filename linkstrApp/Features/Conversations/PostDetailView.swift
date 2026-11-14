@@ -11,7 +11,6 @@ struct PostDetailView: View {
 
   let ownerPubkey: String
   let sessionID: String
-  let sender: String
   let canDelete: Bool
   let watchInsets: EdgeInsets
   let isCovered: Bool
@@ -43,7 +42,6 @@ struct PostDetailView: View {
     ownerPubkey: String,
     sessionID: String,
     postID: String,
-    sender: String,
     canDelete: Bool,
     watchInsets: EdgeInsets,
     isCovered: Bool,
@@ -52,7 +50,6 @@ struct PostDetailView: View {
   ) {
     self.ownerPubkey = ownerPubkey
     self.sessionID = sessionID
-    self.sender = sender
     self.canDelete = canDelete
     self.watchInsets = watchInsets
     self.isCovered = isCovered

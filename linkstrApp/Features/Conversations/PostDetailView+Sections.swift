@@ -136,8 +136,6 @@ extension PostDetailView {
   }
   private func controlsSummary(for post: SessionMessageEntity) -> WatchPostSummary {
     WatchPostSummary(
-      author: sender,
-      timestamp: post.timestamp.linkstrMessageTimestampLabel,
       caption: remotePostText ?? LinkstrPostPreview.title(for: post) ?? noteText,
       note: noteText,
       reactions: reactionSummaries,

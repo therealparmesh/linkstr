@@ -1,6 +1,7 @@
 import SwiftData
 import SwiftUI
 import UIKit
+
 struct SessionPostsView: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.dynamicTypeSize) var dynamicTypeSize
@@ -161,8 +162,8 @@ struct SessionPostsView: View {
     let sessionEntity = sessionEntity
     let isShowingWatch = sessionEntity != nil && showsWatch && !rootPosts.isEmpty
     ZStack {
-      if let sessionEntity, isShowingWatch {
-        watchView(for: sessionEntity)
+      if isShowingWatch {
+        watchView()
           .transition(.opacity)
       } else if let sessionEntity {
         timelineView(for: sessionEntity)
@@ -199,23 +200,26 @@ struct SessionPostsView: View {
     .sheet(item: $postPendingNoteEdit) { post in
       EditPostNoteSheet(post: post)
     }
-    .sheet(isPresented: $isPresentingDeleteConfirmation, onDismiss: { postPendingDelete = nil }, content: {
-      LinkstrConfirmationSheet(
-        title: "delete post",
-        message: "linkstr sends a deletion request and removes this post from the session on this device.",
-        onConfirm: {
-          guard let postPendingDelete, !isDeletingPost else { return }
-          UINotificationFeedbackGenerator().notificationOccurred(.warning)
-          isDeletingPost = true
-          Task {
-            await session.deletePostAwaitingRelay(postPendingDelete)
-            await MainActor.run {
-              isDeletingPost = false
+    .sheet(
+      isPresented: $isPresentingDeleteConfirmation, onDismiss: { postPendingDelete = nil },
+      content: {
+        LinkstrConfirmationSheet(
+          title: "delete post",
+          message: "linkstr sends a deletion request and removes this post from the session on this device.",
+          onConfirm: {
+            guard let postPendingDelete, !isDeletingPost else { return }
+            UINotificationFeedbackGenerator().notificationOccurred(.warning)
+            isDeletingPost = true
+            Task {
+              await session.deletePostAwaitingRelay(postPendingDelete)
+              await MainActor.run {
+                isDeletingPost = false
+              }
             }
           }
-        }
-      )
-    })
+        )
+      }
+    )
     .task(id: profileLookupPubkeys.stableTaskID) {
       session.requestRemoteProfilesIfNeeded(pubkeyHexes: profileLookupPubkeys)
     }
