@@ -328,7 +328,8 @@ extension EmbeddedWebSourceTests {
       const placeholder = document.querySelector('#sdk-placeholder');
       if (!placeholder) return false;
       placeholder.innerHTML = '<iframe title="video"></iframe>';
-      await new Promise(resolve => setTimeout(resolve, 50));
+      // Let the embed's mutation observer remove the fallback.
+      await Promise.resolve();
       return !!document.querySelector('#sdk-placeholder iframe') &&
         !document.querySelector('.linkstr-embed-fallback');
       """, arguments: [:], in: nil, contentWorld: .page)
