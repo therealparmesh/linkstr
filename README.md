@@ -306,7 +306,7 @@ URL classification drives playback mode: extraction, embed, or link fallback. Mo
 
 **Extraction** resolves direct video media for native playback and local caching:
 
-- The session viewer has play, pause, and seek controls. The expand button opens the fullscreen system player. Shared links opened outside a session use inline system video controls. Tap the video in the fullscreen player to reveal its native controls, including close.
+- The session viewer has play, pause, and seek controls. The speaker button mutes the current player. The expand button opens the fullscreen system player. Shared links opened outside a session use inline system video controls. Tap the video in the fullscreen player to reveal its native controls, including close.
 - Extracted media can be saved to Photos or Files.
 - Works offline once cached.
 - Video cache auto-trims at approximately 1 GB with least-recently-used eviction.

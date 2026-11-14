@@ -43,6 +43,7 @@ private struct WatchPlaybackControls: View {
   @State private var duration: Double = 0
   @State private var elapsed: Double = 0
   @State private var scrubbing = false
+  @State private var isMuted = false
   @State private var timeObserver: Any?
 
   private var isBuffering: Bool { playbackStatus == .waitingToPlayAtSpecifiedRate }
@@ -57,6 +58,7 @@ private struct WatchPlaybackControls: View {
             Spacer(minLength: 0)
             timeLabel
             Spacer(minLength: 0)
+            muteButton
             fullscreenButton
           }
           positionSlider
@@ -66,6 +68,7 @@ private struct WatchPlaybackControls: View {
           playButton
           positionSlider
           timeLabel
+          muteButton
           fullscreenButton
         }
       }
@@ -94,6 +97,9 @@ private struct WatchPlaybackControls: View {
       playbackStatus = status
       updatePosition()
     }
+    .onReceive(player.publisher(for: \.isMuted).receive(on: DispatchQueue.main)) { muted in
+      isMuted = muted
+    }
     .onAppear(perform: observeTime)
     .onDisappear {
       if let timeObserver { player.removeTimeObserver(timeObserver) }
@@ -119,6 +125,16 @@ private struct WatchPlaybackControls: View {
     }
     .accessibilityLabel("open system player")
     .accessibilityHint("view the full video without post details")
+  }
+
+  private var muteButton: some View {
+    Button {
+      player.isMuted.toggle()
+    } label: {
+      Image(systemName: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+        .linkstrToolbarIconLabel()
+    }
+    .accessibilityLabel(isMuted ? "unmute video" : "mute video")
   }
 
   private var positionSlider: some View {
