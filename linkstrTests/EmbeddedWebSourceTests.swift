@@ -29,7 +29,8 @@ final class EmbeddedWebSourceTests: XCTestCase {
 
   func testTikTokReportsDocumentedPlaybackErrorsWithoutInterceptingAutoplayOrUntrustedMessages() throws {
     let context = try XCTUnwrap(JSContext())
-    context.evaluateScript("""
+    context.evaluateScript(
+      """
       const location = { origin: 'https://www.tiktok.com', pathname: '/player/v1/123456789' };
       const states = [];
       let handler;
@@ -44,12 +45,14 @@ final class EmbeddedWebSourceTests: XCTestCase {
       });
       """)
     context.evaluateScript(tiktokPlayerDiagnosticsScript)
-    context.evaluateScript("""
+    context.evaluateScript(
+      """
       emit(3002); emit(9999); emit(2001, 'https://example.org'); emit(2001, location.origin, {});
       """)
     XCTAssertEqual(context.evaluateScript("states.length")?.toInt32(), 0)
     context.evaluateScript("emit(1001); emit(2001); emit(3001);")
-    context.evaluateScript("""
+    context.evaluateScript(
+      """
       handler({ origin: location.origin, source: window,
         data: { 'x-tiktok-player': true, type: 'onStateChange', value: 1 } });
       """)
@@ -65,9 +68,10 @@ final class EmbeddedWebSourceTests: XCTestCase {
     let config = WKWebViewConfiguration()
     let handlerName = EmbeddedWebView.Coordinator.metricsHandlerName
     config.userContentController.add(coordinator, name: handlerName)
-    config.userContentController.addUserScript(WKUserScript(
-      source: tiktokPlayerDiagnosticsScript, injectionTime: .atDocumentStart, forMainFrameOnly: true
-    ))
+    config.userContentController.addUserScript(
+      WKUserScript(
+        source: tiktokPlayerDiagnosticsScript, injectionTime: .atDocumentStart, forMainFrameOnly: true
+      ))
     let webView = WKWebView(frame: .zero, configuration: config)
     defer {
       config.userContentController.removeScriptMessageHandler(forName: handlerName)
@@ -77,7 +81,8 @@ final class EmbeddedWebSourceTests: XCTestCase {
     errorsReported.expectedFulfillmentCount = 3
     coordinator.onProviderFailure = { errorsReported.fulfill() }
     coordinator.onLoadFailure = { _ in XCTFail("A TikTok player error must not discard the web document") }
-    webView.loadHTMLString("""
+    webView.loadHTMLString(
+      """
       <script>
         for (const errorCode of [1001, 2001, 3001]) {
           window.postMessage({
@@ -184,7 +189,8 @@ private extension EmbeddedWebSourceTests {
     let coordinator = EmbeddedWebView.Coordinator()
     let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 390, height: 900))
     // Keep the shipped layout, replacing provider scripts with deterministic content.
-    let document = document
+    let document =
+      document
       .replacingOccurrences(of: "<script[\\s\\S]*?</script>", with: "", options: .regularExpression)
       .replacingOccurrences(
         of: "<div id=\"\(containerID)\"></div>",
@@ -206,7 +212,8 @@ private extension EmbeddedWebSourceTests {
     webView.loadHTMLString(document, baseURL: nil)
     await fulfillment(of: [measured], timeout: 5)
     webView.frame.size.height = 120
-    let allowsVerticalOverflow = try await webView.evaluateJavaScript("""
+    let allowsVerticalOverflow = try await webView.evaluateJavaScript(
+      """
       (() => {
         const root = document.documentElement;
         return root.scrollHeight > root.clientHeight && [root, document.body].every(element =>
@@ -229,10 +236,11 @@ extension EmbeddedWebSourceTests {
     let handlerName = EmbeddedWebView.Coordinator.metricsHandlerName
     config.userContentController.add(coordinator, name: handlerName)
     installManualFacebookFallbackTimer(in: config)
-    config.userContentController.addUserScript(WKUserScript(
-      source: "window.fetch = () => new Promise(resolve => { window.resolveEmbed = resolve; });",
-      injectionTime: .atDocumentStart, forMainFrameOnly: true
-    ))
+    config.userContentController.addUserScript(
+      WKUserScript(
+        source: "window.fetch = () => new Promise(resolve => { window.resolveEmbed = resolve; });",
+        injectionTime: .atDocumentStart, forMainFrameOnly: true
+      ))
     let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 390, height: 600), configuration: config)
     coordinator.source = .html(document: document, baseURL: nil)
     defer {
@@ -249,7 +257,8 @@ extension EmbeddedWebSourceTests {
       "document.querySelector('.linkstr-embed-fallback')?.textContent ?? ''"
     )
     XCTAssertEqual(fallback as? String, EmbeddedWebSource.fallbackMessage)
-    let recovered = try await webView.callAsyncJavaScript("""
+    let recovered = try await webView.callAsyncJavaScript(
+      """
       await new Promise(resolve => {
         const observer = new MutationObserver(() => {
           if (document.querySelector('#facebook-container iframe')) {
@@ -274,7 +283,8 @@ extension EmbeddedWebSourceTests {
   private func assertFacebookPlayerResizesWithoutCropping(_ webView: WKWebView) async throws {
     for width in [390.0, 700.0] {
       webView.frame.size.width = width
-      let dimensions = try await webView.callAsyncJavaScript("""
+      let dimensions = try await webView.callAsyncJavaScript(
+        """
         await new Promise(resolve => setTimeout(resolve, 50));
         const frame = document.querySelector('#facebook-container iframe').getBoundingClientRect();
         return [frame.width, frame.height];
@@ -298,14 +308,15 @@ extension EmbeddedWebSourceTests {
     let handlerName = EmbeddedWebView.Coordinator.metricsHandlerName
     config.userContentController.add(coordinator, name: handlerName)
     installManualFacebookFallbackTimer(in: config)
-    config.userContentController.addUserScript(WKUserScript(
-      source: """
-        window.fetch = async () => ({ ok: true, json: async () => ({
-          html: '<div id="sdk-placeholder"></div>'
-        }) });
-        """,
-      injectionTime: .atDocumentStart, forMainFrameOnly: true
-    ))
+    config.userContentController.addUserScript(
+      WKUserScript(
+        source: """
+          window.fetch = async () => ({ ok: true, json: async () => ({
+            html: '<div id="sdk-placeholder"></div>'
+          }) });
+          """,
+        injectionTime: .atDocumentStart, forMainFrameOnly: true
+      ))
     let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 390, height: 600), configuration: config)
     coordinator.source = .html(document: document, baseURL: nil)
     defer {
@@ -324,7 +335,8 @@ extension EmbeddedWebSourceTests {
       "document.querySelector('.linkstr-embed-fallback')?.textContent ?? ''"
     )
     XCTAssertEqual(fallback as? String, EmbeddedWebSource.fallbackMessage)
-    let recovered = try await webView.callAsyncJavaScript("""
+    let recovered = try await webView.callAsyncJavaScript(
+      """
       const placeholder = document.querySelector('#sdk-placeholder');
       if (!placeholder) return false;
       placeholder.innerHTML = '<iframe title="video"></iframe>';
@@ -337,18 +349,19 @@ extension EmbeddedWebSourceTests {
   }
 
   private func installManualFacebookFallbackTimer(in config: WKWebViewConfiguration) {
-    config.userContentController.addUserScript(WKUserScript(
-      source: """
-        (() => {
-          const setTimeout = window.setTimeout;
-          window.setTimeout = callback => {
-            window.setTimeout = setTimeout;
-            window.runFallbackTimer = () => { callback(); return true; };
-          };
-        })();
-        """,
-      injectionTime: .atDocumentStart, forMainFrameOnly: true
-    ))
+    config.userContentController.addUserScript(
+      WKUserScript(
+        source: """
+          (() => {
+            const setTimeout = window.setTimeout;
+            window.setTimeout = callback => {
+              window.setTimeout = setTimeout;
+              window.runFallbackTimer = () => { callback(); return true; };
+            };
+          })();
+          """,
+        injectionTime: .atDocumentStart, forMainFrameOnly: true
+      ))
   }
 }
 
