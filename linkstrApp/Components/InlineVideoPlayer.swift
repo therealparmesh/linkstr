@@ -8,7 +8,6 @@ import SwiftUI
 
 struct InlineVideoPlayer: View {
   @AppStorage("loopLocalVideos") private var loopLocalVideos = true
-  @AppStorage("watchMuted") private var watchMuted = false
   @Environment(\.scenePhase) private var scenePhase
 
   let media: PlayableMedia
@@ -26,7 +25,6 @@ struct InlineVideoPlayer: View {
   @State private var statusObservation: NSKeyValueObservation?
   @State private var presentationSizeObservation: NSKeyValueObservation?
   @State private var resumeAfterCover = false
-  @State private var hasAudio = true
 
   private var shouldSuspend: Bool { isCovered || (immersive && scenePhase != .active) }
 
@@ -38,8 +36,7 @@ struct InlineVideoPlayer: View {
             if immersive {
               WatchVideoSurface(
                 player: player, aspectRatio: aspectRatio, bottomInset: watchBottomInset,
-                videoInsets: watchVideoInsets,
-                isMuted: $watchMuted, hasAudio: hasAudio, onControlsHeightChange: onWatchControlsHeightChange,
+                videoInsets: watchVideoInsets, onControlsHeightChange: onWatchControlsHeightChange,
                 openSystemPlayer: { isShowingFullscreenPlayer = true }
               )
             } else {
@@ -92,7 +89,6 @@ struct InlineVideoPlayer: View {
       presentationSizeObservation = nil
       player?.pause()
       player = nil
-      hasAudio = true
 
       guard let asset = await media.loadVideoAsset() else {
         guard !Task.isCancelled else { return }
@@ -103,7 +99,7 @@ struct InlineVideoPlayer: View {
       onPlaybackReady?()
 
       let item = AVPlayerItem(asset: asset)
-      statusObservation = item.observe(\.status, options: [.new]) { observed, _ in
+      statusObservation = item.observe(\.status, options: [.initial, .new]) { observed, _ in
         if observed.status == .failed {
           Task { @MainActor in
             guard player?.currentItem === observed else { return }
@@ -124,15 +120,9 @@ struct InlineVideoPlayer: View {
         }
       }
       let newPlayer = AVPlayer(playerItem: item)
-      newPlayer.isMuted = immersive && watchMuted
       player = newPlayer
       resumeAfterCover = shouldSuspend
       if !shouldSuspend { newPlayer.play() }
-      if immersive, media.isLocalFile, asset.assetCache == nil,
-        let tracks = try? await asset.loadTracks(withMediaType: .audio),
-        !Task.isCancelled, player === newPlayer {
-        hasAudio = !tracks.isEmpty
-      }
     }
     .onChange(of: shouldSuspend) { _, shouldSuspend in
       guard let player else { return }
@@ -143,9 +133,6 @@ struct InlineVideoPlayer: View {
         resumeAfterCover = false
         player.play()
       }
-    }
-    .onChange(of: watchMuted) { _, isMuted in
-      if immersive { player?.isMuted = isMuted }
     }
     .onDisappear {
       guard !isShowingFullscreenPlayer else { return }

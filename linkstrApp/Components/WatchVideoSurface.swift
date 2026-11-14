@@ -8,8 +8,6 @@ struct WatchVideoSurface: View {
   let aspectRatio: CGFloat
   let bottomInset: CGFloat
   let videoInsets: EdgeInsets?
-  @Binding var isMuted: Bool
-  let hasAudio: Bool
   let onControlsHeightChange: (CGFloat) -> Void
   let openSystemPlayer: () -> Void
 
@@ -25,8 +23,7 @@ struct WatchVideoSurface: View {
     .background(LinkstrTheme.background)
     .overlay(alignment: .bottom) {
       WatchPlaybackControls(
-        player: player, bottomInset: bottomInset, isMuted: $isMuted, hasAudio: hasAudio,
-        openSystemPlayer: openSystemPlayer
+        player: player, bottomInset: bottomInset, openSystemPlayer: openSystemPlayer
       )
         .id(ObjectIdentifier(player))
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
@@ -41,8 +38,6 @@ private struct WatchPlaybackControls: View {
   @Environment(\.verticalSizeClass) private var verticalSizeClass
   let player: AVPlayer
   let bottomInset: CGFloat
-  @Binding var isMuted: Bool
-  let hasAudio: Bool
   let openSystemPlayer: () -> Void
   @State private var playbackStatus: AVPlayer.TimeControlStatus = .paused
   @State private var duration: Double = 0
@@ -62,7 +57,6 @@ private struct WatchPlaybackControls: View {
             Spacer(minLength: 0)
             timeLabel
             Spacer(minLength: 0)
-            muteButton
             fullscreenButton
           }
           positionSlider
@@ -72,7 +66,6 @@ private struct WatchPlaybackControls: View {
           playButton
           positionSlider
           timeLabel
-          muteButton
           fullscreenButton
         }
       }
@@ -172,18 +165,6 @@ private struct WatchPlaybackControls: View {
         .minimumScaleFactor(0.65)
         .accessibilityHidden(true)
     }
-  }
-
-  private var muteButton: some View {
-    Button {
-      isMuted.toggle()
-    } label: {
-      Image(systemName: isMuted || !hasAudio ? "speaker.slash.fill" : "speaker.wave.2.fill")
-        .linkstrToolbarIconLabel()
-        .foregroundStyle(hasAudio ? LinkstrTheme.textPrimary : LinkstrTheme.textTertiary)
-    }
-    .disabled(!hasAudio)
-    .accessibilityLabel(hasAudio ? (isMuted ? "unmute video" : "mute video") : "video has no audio")
   }
 
   private func observeTime() {

@@ -25,7 +25,6 @@ struct SettingsView: View {
   @EnvironmentObject var session: AppSession
 
   @AppStorage("loopLocalVideos") private var loopLocalVideos = true
-  @AppStorage("watchMuted") private var watchMuted = false
 
   @State private var relayURL = ""
   @State private var showsRelayAddressError = false
@@ -117,18 +116,12 @@ struct SettingsView: View {
   }
 
   private var playbackSection: some View {
-    LinkstrInsetSection(
-      title: "playback",
-      footer: "mute applies to the session viewer. official embeds use their own sound and loop controls."
-    ) {
-      Group {
-        Toggle("loop local videos", isOn: $loopLocalVideos)
-        Toggle("mute session videos", isOn: $watchMuted)
-      }
-      .font(LinkstrTheme.font(.subheadline))
-      .foregroundStyle(LinkstrTheme.textPrimary)
-      .toggleStyle(.switch)
-      .tint(LinkstrTheme.accent)
+    LinkstrInsetSection(title: "playback") {
+      Toggle("loop local videos", isOn: $loopLocalVideos)
+        .font(LinkstrTheme.font(.subheadline))
+        .foregroundStyle(LinkstrTheme.textPrimary)
+        .toggleStyle(.switch)
+        .tint(LinkstrTheme.accent)
     }
   }
 
