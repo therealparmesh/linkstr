@@ -12,7 +12,7 @@ struct WatchPostSummary {
   let shareLink: (() -> Void)?
 }
 
-/// A separate handle keeps post actions out of the player's tap and paging gestures.
+/// Post details and actions stay separate from playback and post paging.
 struct WatchPostControls<Content: View>: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -26,7 +26,8 @@ struct WatchPostControls<Content: View>: View {
   var onReservedHeightChange: (CGFloat) -> Void = { _ in }
   @ViewBuilder let content: () -> Content
   @State private var isExpanded = false
-  @State private var handleHeight = LinkstrTheme.minimumInteractiveDimension
+  @State private var headerHeight = LinkstrTheme.minimumInteractiveDimension
+  @State private var actionsHeight = LinkstrTheme.minimumInteractiveDimension
   @State private var contentHeight: CGFloat = 240
   @State private var pullStartedAtTop = true
 
@@ -35,47 +36,58 @@ struct WatchPostControls<Content: View>: View {
       let bottom = bottomInset + playbackControlsHeight
       let availableHeight = max(1, proxy.size.height - topInset - bottom - LinkstrTheme.screenTopPadding)
       VStack(spacing: 0) {
-        if isExpanded, verticalSizeClass == .compact {
-          detailsScrollView(availableHeight: availableHeight, includesHeader: true)
-        } else {
-          controlsHeader
-          if isExpanded {
-            detailsScrollView(availableHeight: max(1, availableHeight - handleHeight), includesHeader: false)
+        handle
+          .onGeometryChange(for: CGFloat.self) {
+            $0.size.height
+          } action: {
+            headerHeight = $0
           }
+        if isExpanded {
+          detailsScrollView(availableHeight: max(1, availableHeight - headerHeight - actionsHeight))
         }
+        quickActions
+          .highPriorityGesture(expansionGesture)
+          .onGeometryChange(for: CGFloat.self) {
+            $0.size.height
+          } action: {
+            actionsHeight = $0
+          }
       }
       .padding(.bottom, playbackControlsHeight == 0 ? LinkstrTheme.metaSpacing : 0)
-      .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+      .onGeometryChange(for: CGFloat.self) {
+        $0.size.height
+      } action: { height in
         if !isExpanded || reservesExpandedSpace { onReservedHeightChange(height) }
       }
       .linkstrReadableContent()
       .background(LinkstrTheme.background.opacity(isExpanded ? 0.98 : 0.82))
-      .clipShape(.rect(
-        topLeadingRadius: LinkstrTheme.cardCornerRadius, topTrailingRadius: LinkstrTheme.cardCornerRadius
-      ))
+      .clipShape(
+        .rect(
+          topLeadingRadius: LinkstrTheme.cardCornerRadius, topTrailingRadius: LinkstrTheme.cardCornerRadius
+        )
+      )
       .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
       .padding(.bottom, bottom)
+    }
+    .background(alignment: .bottom) {
+      if playbackControlsHeight == 0 {
+        LinkstrTheme.background.opacity(isExpanded ? 0.98 : 0.82)
+          .frame(height: bottomInset)
+          .allowsHitTesting(false)
+      }
     }
     .accessibilityAction(.escape) { setExpanded(false) }
   }
 
-  private var controlsHeader: some View {
-    VStack(spacing: 0) {
-      handle
-      quickActions
-    }
-    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
-      handleHeight = height
-    }
-  }
-
-  private func detailsScrollView(availableHeight: CGFloat, includesHeader: Bool) -> some View {
+  private func detailsScrollView(availableHeight: CGFloat) -> some View {
     ScrollView {
-      VStack(spacing: 0) {
-        if includesHeader { controlsHeader }
-        content().padding(.vertical, LinkstrTheme.compactSpacing)
-      }
-      .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
+      content()
+        .padding(.bottom, LinkstrTheme.compactSpacing)
+        .onGeometryChange(for: CGFloat.self) {
+          $0.size.height
+        } action: {
+          contentHeight = $0
+        }
     }
     .scrollBounceBehavior(.basedOnSize)
     .onScrollPhaseChange { _, phase, context in
@@ -93,10 +105,13 @@ struct WatchPostControls<Content: View>: View {
   private var handle: some View {
     let preview = showsLinkPreview ? summary.note : summary.caption
     let caption = isExpanded ? nil : preview.map { $0.split(whereSeparator: \.isWhitespace).joined(separator: " ") }
-    let textLayout = verticalSizeClass == .compact
+    let textLayout =
+      verticalSizeClass == .compact
       ? AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: LinkstrTheme.rowSpacing))
       : AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
-    return Button { setExpanded(!isExpanded) } label: {
+    return Button {
+      setExpanded(!isExpanded)
+    } label: {
       HStack(spacing: LinkstrTheme.rowSpacing) {
         textLayout {
           Text(summary.author)
@@ -130,28 +145,18 @@ struct WatchPostControls<Content: View>: View {
           .frame(width: LinkstrTheme.minimumInteractiveDimension)
           .accessibilityHidden(true)
       }
-      .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-      .padding(.vertical, LinkstrTheme.metaSpacing)
+      .padding(.leading, LinkstrTheme.screenHorizontalPadding)
+      .padding(.trailing, LinkstrTheme.controlHorizontalPadding)
+      .padding(.top, LinkstrTheme.rowSpacing)
+      .padding(.bottom, LinkstrTheme.compactSpacing)
       .frame(maxWidth: .infinity, minHeight: LinkstrTheme.minimumInteractiveDimension)
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
-    .overlay(alignment: .top) {
-      if isExpanded {
-        Capsule()
-          .fill(LinkstrTheme.textSecondary.opacity(0.45))
-          .frame(width: 24, height: 3)
-          .padding(.top, 4)
-          .allowsHitTesting(false)
-          .accessibilityHidden(true)
-      }
-    }
     .accessibilityLabel("\(summary.author), \(caption ?? summary.timestamp)")
     .accessibilityValue(isExpanded ? "expanded" : "collapsed")
     .accessibilityHint(isExpanded ? "hide post details" : "show post details")
-    .highPriorityGesture(
-      expansionGesture, including: isExpanded && verticalSizeClass == .compact ? .subviews : .all
-    )
+    .highPriorityGesture(expansionGesture)
     .accessibilityAction(.escape) { setExpanded(false) }
   }
 
@@ -179,7 +184,8 @@ struct WatchPostControls<Content: View>: View {
           summaries: summary.reactions,
           mode: .watch,
           onToggleEmoji: summary.toggleReaction,
-          onOpenReaction: { summary.openReactions($0) }
+          onOpenReaction: { summary.openReactions($0) },
+          onOpenAllReactions: { summary.openReactions(nil) }
         )
         .padding(.trailing, LinkstrTheme.metaSpacing)
       }
@@ -200,37 +206,25 @@ struct WatchPostControls<Content: View>: View {
         .buttonStyle(.plain)
         .accessibilityLabel("add reaction")
       }
-      if !summary.reactions.isEmpty {
+      if isExpanded, !summary.reactions.isEmpty {
         Button {
           summary.openReactions(nil)
         } label: {
-          postActionIcon("person.2", size: 23, offset: CGSize(width: 0.75, height: 0.5))
+          Image(systemName: "person.2").linkstrToolbarIconLabel()
         }
         .buttonStyle(.plain)
         .accessibilityLabel("view reactions")
       }
       if let shareLink = summary.shareLink {
         Button(action: shareLink) {
-          postActionIcon("square.and.arrow.up", size: 21, offset: CGSize(width: 0.25, height: -0.75))
+          Image(systemName: "square.and.arrow.up").linkstrToolbarIconLabel()
         }
         .buttonStyle(.plain)
         .accessibilityLabel("share link")
       }
     }
-    // The emoji hit targets already inset their glyphs. Keep the trailing actions aligned with the toolbar.
-    .padding(.leading, LinkstrTheme.tightSpacing)
-    .padding(.trailing, LinkstrTheme.screenHorizontalPadding)
-  }
-
-  private func postActionIcon(_ systemName: String, size: CGFloat, offset: CGSize) -> some View {
-    Image(systemName: systemName)
-      .resizable()
-      .scaledToFit()
-      .frame(width: size, height: size)
-      // Center the visible symbol within the hit target despite its built-in padding.
-      .offset(offset)
-      .linkstrToolbarIconLabel()
-      .foregroundStyle(LinkstrTheme.textPrimary)
+    .foregroundStyle(LinkstrTheme.textPrimary)
+    .padding(.horizontal, LinkstrTheme.controlHorizontalPadding)
   }
 
   private func setExpanded(_ expanded: Bool) {

@@ -1,5 +1,5 @@
-import EmojiKit
 import SwiftUI
+
 struct ReactionSummary: Identifiable, Hashable {
   let emoji: String
   let count: Int
@@ -16,8 +16,7 @@ struct ReactionSummary: Identifiable, Hashable {
     return badgeText
   }
 
-  static func summaries(from reactions: [SessionReactionEntity], myPubkey: String?)
-    -> [ReactionSummary] {
+  static func summaries(from reactions: [SessionReactionEntity], myPubkey: String?) -> [ReactionSummary] {
     guard !reactions.isEmpty else { return [] }
 
     let myPubkeyHash = myPubkey.map { LocalDataCrypto.shared.digestHex($0) }
@@ -59,30 +58,52 @@ struct LinkstrReactionRow: View {
   var mode: Mode = .interactive
   let onToggleEmoji: ((String) -> Void)?
   var onOpenReaction: ((String) -> Void)?
+  var onOpenAllReactions: (() -> Void)?
 
-  private let quickEmojis = ["👍", "👎", "👀"]
+  private let quickEmojis = ["❤️", "👀"]
   private let readOnlyMaxEmojiCount = 10
-
-  private var quickSummariesByEmoji: [String: ReactionSummary] {
-    Dictionary(
-      uniqueKeysWithValues:
-        summaries
-        .filter { quickEmojis.contains($0.emoji) }
-        .map { ($0.emoji, $0) }
-    )
-  }
-
-  private var extraSummaries: [ReactionSummary] {
-    summaries.filter { !quickEmojis.contains($0.emoji) }
-  }
 
   private var readOnlyOverflowCount: Int {
     max(0, summaries.count - readOnlyMaxEmojiCount)
   }
 
   var body: some View {
+    if mode == .watch {
+      ViewThatFits(in: .horizontal) {
+        watchReactions(limit: 3)
+        watchReactions(limit: 2)
+        watchReactions(limit: 1)
+        watchReactions(limit: 0)
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+    } else {
+      scrollingReactions
+    }
+  }
+
+  private func watchReactions(limit: Int) -> some View {
+    HStack(spacing: LinkstrTheme.metaSpacing) {
+      ForEach(summaries.prefix(limit)) { summaryChip($0) }
+      suggestions
+      if summaries.count > limit, let onOpenAllReactions {
+        Button(action: onOpenAllReactions) {
+          Text("+\(summaries.count - limit)")
+            .font(LinkstrTheme.font(.caption, weight: .medium).monospacedDigit())
+            .linkstrReactionChip(compact: true)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("view all reactions, \(summaries.count - limit) more emoji types")
+      }
+    }
+    .fixedSize(horizontal: true, vertical: false)
+  }
+
+  private var scrollingReactions: some View {
     ScrollView(.horizontal) {
-      HStack(alignment: .center, spacing: mode == .watch ? LinkstrTheme.metaSpacing : LinkstrTheme.tightSpacing) {
+      HStack(
+        alignment: .center,
+        spacing: LinkstrTheme.tightSpacing
+      ) {
         if mode == .readOnly {
           ForEach(summaries.prefix(readOnlyMaxEmojiCount)) { summary in
             readOnlySummaryText(summary)
@@ -93,25 +114,28 @@ struct LinkstrReactionRow: View {
               .font(LinkstrTheme.font(.caption))
               .foregroundStyle(LinkstrTheme.textSecondary)
               .accessibilityLabel(
-                readOnlyOverflowCount == 1 ? "1 more emoji type" : "\(readOnlyOverflowCount) more emoji types"
+                readOnlyOverflowCount == 1
+                  ? "1 more emoji type" : "\(readOnlyOverflowCount) more emoji types"
               )
           }
         } else {
-          if onToggleEmoji != nil {
-            ForEach(quickEmojis, id: \.self) { emoji in
-              quickEmojiButton(emoji)
-            }
-          }
-
-          ForEach(onToggleEmoji == nil ? summaries : extraSummaries) { summary in
-            summaryChip(summary)
-          }
+          ForEach(summaries) { summaryChip($0) }
+          suggestions
         }
       }
     }
-    .scrollIndicators(mode == .watch ? .visible : .hidden)
+    .scrollIndicators(.hidden)
     .scrollBounceBehavior(.basedOnSize)
     .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  @ViewBuilder
+  private var suggestions: some View {
+    if onToggleEmoji != nil {
+      ForEach(quickEmojis.filter { emoji in !summaries.contains { $0.emoji == emoji } }, id: \.self) {
+        quickEmojiButton($0)
+      }
+    }
   }
 
   private func readOnlySummaryText(_ summary: ReactionSummary) -> some View {
@@ -123,33 +147,33 @@ struct LinkstrReactionRow: View {
 
   private func summaryChip(_ summary: ReactionSummary) -> some View {
     Button {
-      (onOpenReaction ?? onToggleEmoji)?(summary.emoji)
+      (onToggleEmoji ?? onOpenReaction)?(summary.emoji)
     } label: {
       quickEmojiButtonLabel(emoji: summary.emoji, summary: summary)
     }
     .buttonStyle(.plain)
-    .accessibilityLabel("\(summary.emoji), \(summary.count) reaction\(summary.count == 1 ? "" : "s")")
+    .accessibilityLabel(
+      "\(summary.emoji), \(summary.count) reaction\(summary.count == 1 ? "" : "s")"
+    )
     .accessibilityValue(summary.includesCurrentUser ? "you reacted" : "")
-    .accessibilityHint(onOpenReaction == nil ? "select emoji" : "view people who reacted")
+    .accessibilityHint(
+      onToggleEmoji == nil ? "view people who reacted" : "add or remove your reaction"
+    )
+    .accessibilityActions {
+      if let onOpenReaction {
+        Button("view people who reacted") { onOpenReaction(summary.emoji) }
+      }
+    }
   }
 
   private func quickEmojiButton(_ emoji: String) -> some View {
-    let summary = quickSummariesByEmoji[emoji]
-    return Button {
+    Button {
       onToggleEmoji?(emoji)
     } label: {
-      quickEmojiButtonLabel(emoji: emoji, summary: summary)
+      quickEmojiButtonLabel(emoji: emoji, summary: nil)
     }
     .buttonStyle(.plain)
-    .accessibilityLabel(
-      "react with \(emoji), \(summary?.count ?? 0) reaction\((summary?.count ?? 0) == 1 ? "" : "s")"
-    )
-    .accessibilityValue(summary?.includesCurrentUser == true ? "you reacted" : "")
-    .accessibilityActions {
-      if summary != nil, let onOpenReaction {
-        Button("view people who reacted") { onOpenReaction(emoji) }
-      }
-    }
+    .accessibilityLabel("react with \(emoji)")
   }
 
   private func quickEmojiButtonLabel(
@@ -157,7 +181,8 @@ struct LinkstrReactionRow: View {
     summary: ReactionSummary?
   ) -> some View {
     ReactionChipLabel(emoji: emoji, count: summary.map { String($0.count) })
-      .linkstrReactionChip(isSelected: summary?.includesCurrentUser == true, compact: mode == .watch)
+      .linkstrReactionChip(
+        isSelected: summary?.includesCurrentUser == true, compact: mode == .watch)
   }
 }
 
@@ -185,7 +210,12 @@ private extension View {
   func linkstrReactionChip(isSelected: Bool = false, compact: Bool = false) -> some View {
     padding(.horizontal, compact ? LinkstrTheme.tightSpacing : 10)
       .padding(.vertical, LinkstrTheme.metaSpacing)
-      .background(isSelected && compact ? LinkstrTheme.accent.opacity(0.17) : .clear, in: Capsule())
+      .frame(minWidth: LinkstrTheme.minimumInteractiveDimension)
+      .background {
+        if compact {
+          Capsule().fill(isSelected ? LinkstrTheme.accent.opacity(0.17) : LinkstrTheme.panel.opacity(0.8))
+        }
+      }
       .frame(
         minWidth: LinkstrTheme.minimumInteractiveDimension,
         minHeight: LinkstrTheme.minimumInteractiveDimension
@@ -204,111 +234,12 @@ private extension View {
   }
 }
 
-struct LinkstrEmojiPickerSheet: View {
-  @Environment(\.dismiss) private var dismiss
-  @Environment(\.verticalSizeClass) private var verticalSizeClass
-  @ScaledMetric(relativeTo: .body) private var scaledEmojiSize = 30.0
-
-  let summaries: [ReactionSummary]
-  let onPick: (String) -> Void
-
-  @FocusState private var isSearchFocused: Bool
-  @State private var query = ""
-  @State private var category: EmojiCategory?
-  @State private var selection: Emoji.GridSelection?
-
-  var body: some View {
-    let searchTerm = query.trimmingCharacters(in: .whitespacesAndNewlines)
-    let searchCategory = searchTerm.isEmpty ? nil : EmojiCategory.search(query: searchTerm)
-    let compactSearch = isSearchFocused && verticalSizeClass == .compact
-    NavigationStack {
-      ZStack {
-        LinkstrBackgroundView()
-        VStack(spacing: 0) {
-          if !compactSearch {
-            LinkstrSheetHeader(title: "add reaction", closeLabel: "close emoji picker") { dismiss() }
-          }
-          VStack(spacing: LinkstrTheme.compactSpacing) {
-            if searchTerm.isEmpty && !compactSearch {
-              LinkstrReactionRow(summaries: summaries, onToggleEmoji: pickEmoji)
-            }
-            HStack(spacing: LinkstrTheme.compactSpacing) {
-              if compactSearch {
-                LinkstrHeaderButton(title: "close emoji picker", icon: "xmark") { dismiss() }
-              }
-              LinkstrSearchField(prompt: "search emoji", text: $query) { isSearchFocused = false }
-                .focused($isSearchFocused)
-            }
-          }
-          .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-          .padding(.top, compactSearch ? LinkstrTheme.pageHeaderTopPadding : 0)
-          .padding(.bottom, LinkstrTheme.compactSpacing)
-          .linkstrReadableContent()
-
-          if let searchCategory, searchCategory.emojis.isEmpty {
-            ScrollView {
-              Text("no emoji found. try another search.")
-                .font(LinkstrTheme.font(.subheadline))
-                .foregroundStyle(LinkstrTheme.textSecondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-                .padding(.vertical, LinkstrTheme.compactSpacing)
-                .linkstrReadableContent()
-            }
-            .scrollBounceBehavior(.basedOnSize)
-          } else {
-            emojiGrid(categories: searchCategory.map { [$0] })
-          }
-        }
-      }
-      .toolbarVisibility(.hidden, for: .navigationBar)
-      .scrollDismissesKeyboard(.immediately)
-    }
-  }
-
-  private func emojiGrid(categories: [EmojiCategory]?) -> some View {
-    let emojiSize = min(48, scaledEmojiSize)
-    return EmojiGridScrollView(
-      axis: .vertical,
-      categories: categories,
-      category: $category,
-      selection: $selection,
-      action: { pickEmoji($0.char) },
-      sectionTitle: {
-        let title = $0.category.id == EmojiCategory.Persisted.frequent.id
-          ? "frequently used"
-          : $0.category.labelText.lowercased(with: .current)
-        Text(title)
-          .font(LinkstrTheme.font(.subheadline, weight: .semibold))
-          .foregroundStyle(LinkstrTheme.textSecondary)
-          .accessibilityAddTraits(.isHeader)
-      },
-      gridItem: {
-        $0.view
-          .contentShape(Rectangle())
-          .accessibilityAddTraits(.isButton)
-      }
-    )
-    .emojiGridStyle(.init(
-      font: .system(size: emojiSize), itemSize: max(LinkstrTheme.minimumInteractiveDimension, emojiSize + 14),
-      itemSpacing: LinkstrTheme.compactSpacing, padding: 0, sectionSpacing: LinkstrTheme.listBlockSpacing
-    ))
-    .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-    .padding(.vertical, LinkstrTheme.compactSpacing)
-    .linkstrReadableContent()
-  }
-
-  private func pickEmoji(_ emoji: String) {
-    onPick(emoji)
-    dismiss()
-  }
-}
-
 extension PostDetailView {
   func postCardReactionBreakdown(_ participants: [ReactionParticipantBreakdown]) -> some View {
-    let visibleParticipants = selectedReactionEmoji.map { emoji in
-      participants.filter { $0.emojis.contains(emoji) }
-    } ?? participants
+    let visibleParticipants =
+      selectedReactionEmoji.map { emoji in
+        participants.filter { $0.emojis.contains(emoji) }
+      } ?? participants
     return VStack(alignment: .leading, spacing: LinkstrTheme.compactSpacing) {
       reactionFilters
       LazyVStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
@@ -348,27 +279,15 @@ extension PostDetailView {
   }
 
   private var reactionFilters: some View {
-    HStack(spacing: LinkstrTheme.compactSpacing) {
+    ReactionFlowLayout(spacing: LinkstrTheme.compactSpacing) {
       reactionFilter(accessibilityTitle: "show all reactions", emoji: nil) {
         Text("all")
           .font(LinkstrTheme.font(.subheadline, weight: .medium))
-          .fixedSize(horizontal: true, vertical: false)
       }
-      ScrollViewReader { proxy in
-        ScrollView(.horizontal) {
-          HStack(spacing: LinkstrTheme.compactSpacing) {
-            ForEach(reactionSummaries) { summary in
-              let count = summary.count == 1 ? "1 reaction" : "\(summary.count) reactions"
-              reactionFilter(accessibilityTitle: "filter by \(summary.emoji), \(count)", emoji: summary.emoji) {
-                ReactionChipLabel(emoji: summary.emoji, count: String(summary.count))
-              }
-              .id(summary.emoji)
-            }
-          }
-        }
-        .scrollBounceBehavior(.basedOnSize)
-        .onChange(of: selectedReactionEmoji, initial: true) { _, emoji in
-          if let emoji { proxy.scrollTo(emoji, anchor: .center) }
+      ForEach(reactionSummaries) { summary in
+        let count = summary.count == 1 ? "1 reaction" : "\(summary.count) reactions"
+        reactionFilter(accessibilityTitle: "filter by \(summary.emoji), \(count)", emoji: summary.emoji) {
+          ReactionChipLabel(emoji: summary.emoji, count: String(summary.count))
         }
       }
     }
@@ -395,5 +314,42 @@ extension PostDetailView {
     .buttonStyle(.plain)
     .accessibilityLabel(accessibilityTitle)
     .accessibilityAddTraits(isSelected ? .isSelected : [])
+  }
+}
+
+/// Keeps reaction filters together without horizontal scrolling or stretched column gaps.
+private struct ReactionFlowLayout: Layout {
+  let spacing: CGFloat
+
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    arrangement(width: proposal.width, subviews: subviews).size
+  }
+
+  func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+    let layout = arrangement(width: bounds.width, subviews: subviews)
+    for (index, subview) in subviews.enumerated() {
+      let origin = layout.origins[index]
+      subview.place(at: CGPoint(x: bounds.minX + origin.x, y: bounds.minY + origin.y), proposal: .unspecified)
+    }
+  }
+
+  private func arrangement(width: CGFloat?, subviews: Subviews) -> (size: CGSize, origins: [CGPoint]) {
+    let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+    let availableWidth = width ?? sizes.reduce(0) { $0 + $1.width + spacing }
+    var origins: [CGPoint] = []
+    var cursorX: CGFloat = 0
+    var cursorY: CGFloat = 0
+    var rowHeight: CGFloat = 0
+    for size in sizes {
+      if cursorX > 0, cursorX + size.width > availableWidth {
+        cursorX = 0
+        cursorY += rowHeight + spacing
+        rowHeight = 0
+      }
+      origins.append(CGPoint(x: cursorX, y: cursorY))
+      cursorX += size.width + spacing
+      rowHeight = max(rowHeight, size.height)
+    }
+    return (CGSize(width: availableWidth, height: cursorY + rowHeight), origins)
   }
 }

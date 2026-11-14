@@ -206,6 +206,7 @@
 		E18C45BA7EC37F7EBA100C99 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A53C12395D9526655996C351 /* MainTabView.swift */; };
 		E1E1AE490B968CA36FA22E2B /* SessionNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC9A4EF6F9EAD84D661D46E9 /* SessionNavigation.swift */; };
 		E53937C382ED8AA58D1351A1 /* AppSessionMutationTests+Membership.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99341F3C7EC70858F472E4DD /* AppSessionMutationTests+Membership.swift */; };
+		E58D6B24CEEAD66190BD3EC9 /* LinkstrEmojiPickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51D22759B15F10BC71019415 /* LinkstrEmojiPickerSheet.swift */; };
 		E713F1DD9B435D8DBED0AF27 /* BackupFiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2541DC38A50901553DCF315 /* BackupFiles.swift */; };
 		E7EF6C2EE6939C035928BC94 /* SocialPostParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A148936C12349188DD4390CF /* SocialPostParserTests.swift */; };
 		E967FB1B884E06319559D4D6 /* SessionManagementSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDA3537E4C67756A2C2E201B /* SessionManagementSheet.swift */; };
@@ -341,6 +342,7 @@
 		4F87769B0E580C05D19DC6BA /* HLSDownloadManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HLSDownloadManagerTests.swift; sourceTree = "<group>"; };
 		4FB978506A86E0E6416B3FDA /* AddedYouView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddedYouView.swift; sourceTree = "<group>"; };
 		4FBCB838B5C8AA8899B5733C /* AdaptiveMediaView+Presentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AdaptiveMediaView+Presentation.swift"; sourceTree = "<group>"; };
+		51D22759B15F10BC71019415 /* LinkstrEmojiPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkstrEmojiPickerSheet.swift; sourceTree = "<group>"; };
 		51FEEF04D8001BBF96F01FBB /* AppSession+Backup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppSession+Backup.swift"; sourceTree = "<group>"; };
 		534C61A47169A3D9565A8709 /* ManagedLocalFileScopeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedLocalFileScopeTests.swift; sourceTree = "<group>"; };
 		569D4B12174F9BA837F6A3AE /* LinkstrPostPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkstrPostPreview.swift; sourceTree = "<group>"; };
@@ -580,6 +582,7 @@
 				68870DE67263FD1E71276FFD /* ConversationsView+SessionRow.swift */,
 				7892F937BF2BAD2F4F1EC893 /* ConversationsView+SessionRowHelpers.swift */,
 				DF0629005E0E94C784D2095C /* EditPostNoteSheet.swift */,
+				51D22759B15F10BC71019415 /* LinkstrEmojiPickerSheet.swift */,
 				569D4B12174F9BA837F6A3AE /* LinkstrPostPreview.swift */,
 				B92D99F19E1D194BD68A4776 /* NewPostSheet.swift */,
 				92BD6D05E5DF16FC27ED5440 /* PostDetailView.swift */,
@@ -1093,6 +1096,7 @@
 				95371407AD80F75312F8A23B /* LinkstrConfirmationSheet.swift in Sources */,
 				05672CDC4F47088DE796B652 /* LinkstrContactIdentityView.swift in Sources */,
 				9E83ED5278784E3327FD3CD4 /* LinkstrDeepLinkCodec.swift in Sources */,
+				E58D6B24CEEAD66190BD3EC9 /* LinkstrEmojiPickerSheet.swift in Sources */,
 				20CAA06BDB9CE7ABBE56DC7D /* LinkstrErrorToast.swift in Sources */,
 				2192ABF7CE82A5252A33A415 /* LinkstrPayload.swift in Sources */,
 				714A4B2CCCA05D6E5FC2C8E7 /* LinkstrPostPreview.swift in Sources */,
