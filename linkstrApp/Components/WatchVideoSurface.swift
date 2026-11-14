@@ -9,7 +9,7 @@ struct WatchVideoSurface: View {
   let bottomInset: CGFloat
   let videoInsets: EdgeInsets?
   let onControlsHeightChange: (CGFloat) -> Void
-  let openSystemPlayer: () -> Void
+  let toggleVideoFit: () -> Void
 
   var body: some View {
     GeometryReader { proxy in
@@ -23,7 +23,7 @@ struct WatchVideoSurface: View {
     .background(LinkstrTheme.background)
     .overlay(alignment: .bottom) {
       WatchPlaybackControls(
-        player: player, bottomInset: bottomInset, openSystemPlayer: openSystemPlayer
+        player: player, bottomInset: bottomInset, fitsEntireVideo: videoInsets != nil, toggleVideoFit: toggleVideoFit
       )
       .id(ObjectIdentifier(player))
       .onGeometryChange(for: CGFloat.self) {
@@ -40,7 +40,8 @@ private struct WatchPlaybackControls: View {
   @Environment(\.verticalSizeClass) private var verticalSizeClass
   let player: AVPlayer
   let bottomInset: CGFloat
-  let openSystemPlayer: () -> Void
+  let fitsEntireVideo: Bool
+  let toggleVideoFit: () -> Void
   @State private var playbackStatus: AVPlayer.TimeControlStatus = .paused
   @State private var duration: Double = 0
   @State private var elapsed: Double = 0
@@ -61,7 +62,7 @@ private struct WatchPlaybackControls: View {
             timeLabel
             Spacer(minLength: 0)
             muteButton
-            fullscreenButton
+            videoFitButton
           }
           positionSlider
         }
@@ -71,7 +72,7 @@ private struct WatchPlaybackControls: View {
           positionSlider
           timeLabel
           muteButton
-          fullscreenButton
+          videoFitButton
         }
       }
     }
@@ -120,13 +121,13 @@ private struct WatchPlaybackControls: View {
     .accessibilityValue(isBuffering ? "buffering" : "")
   }
 
-  private var fullscreenButton: some View {
-    Button(action: openSystemPlayer) {
-      Image(systemName: "arrow.up.left.and.arrow.down.right")
+  private var videoFitButton: some View {
+    Button(action: toggleVideoFit) {
+      Image(systemName: fitsEntireVideo ? "arrow.up.left.and.arrow.down.right" : "arrow.down.right.and.arrow.up.left")
         .linkstrToolbarIconLabel()
     }
-    .accessibilityLabel("open system player")
-    .accessibilityHint("view the full video without post details")
+    .accessibilityLabel(fitsEntireVideo ? "fill screen" : "fit entire video")
+    .accessibilityHint(fitsEntireVideo ? "fill the viewer" : "show the full video above the post controls")
   }
 
   private var muteButton: some View {

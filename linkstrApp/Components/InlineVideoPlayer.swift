@@ -11,6 +11,8 @@ struct InlineVideoPlayer: View {
   @Environment(\.scenePhase) private var scenePhase
 
   let media: PlayableMedia
+  @Binding var isShowingFullscreenPlayer: Bool
+  let toggleVideoFit: () -> Void
   var onPlaybackReady: (() -> Void)?
   var onPlaybackFailed: (() -> Void)?
   var onAspectRatioChange: ((CGFloat) -> Void)?
@@ -21,7 +23,6 @@ struct InlineVideoPlayer: View {
   var watchVideoInsets: EdgeInsets?
   var onWatchControlsHeightChange: (CGFloat) -> Void = { _ in }
   @State private var player: AVPlayer?
-  @State private var isShowingFullscreenPlayer = false
   @State private var statusObservation: NSKeyValueObservation?
   @State private var presentationSizeObservation: NSKeyValueObservation?
   @State private var resumeAfterCover = false
@@ -37,7 +38,7 @@ struct InlineVideoPlayer: View {
               WatchVideoSurface(
                 player: player, aspectRatio: aspectRatio, bottomInset: watchBottomInset,
                 videoInsets: watchVideoInsets, onControlsHeightChange: onWatchControlsHeightChange,
-                openSystemPlayer: { isShowingFullscreenPlayer = true }
+                toggleVideoFit: toggleVideoFit
               )
             } else {
               VideoPlayer(player: player)
@@ -111,9 +112,11 @@ struct InlineVideoPlayer: View {
         \.presentationSize,
         options: [.initial, .new]
       ) { observed, _ in
-        guard let aspectRatio = MediaPresentationGeometry.aspectRatio(
-          for: observed.presentationSize
-        ) else { return }
+        guard
+          let aspectRatio = MediaPresentationGeometry.aspectRatio(
+            for: observed.presentationSize
+          )
+        else { return }
         Task { @MainActor in
           guard player?.currentItem === observed else { return }
           onAspectRatioChange?(aspectRatio)
@@ -204,10 +207,10 @@ private final class SystemPlayerPresenter: UIViewController, AVPlayerViewControl
     controller.exitsFullScreenWhenPlaybackEnds = false
     playerController = controller
     present(controller, animated: true) {
-      if let pausedPosition, pausedPosition.isNumeric,
-        player.timeControlStatus == .paused, player.currentTime() != pausedPosition {
-        player.seek(to: pausedPosition, toleranceBefore: .zero, toleranceAfter: .zero)
-      }
+      guard let pausedPosition, pausedPosition.isNumeric,
+        player.timeControlStatus == .paused, player.currentTime() != pausedPosition
+      else { return }
+      player.seek(to: pausedPosition, toleranceBefore: .zero, toleranceAfter: .zero)
     }
   }
 

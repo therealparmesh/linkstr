@@ -68,9 +68,12 @@ extension AdaptiveMediaView {
         let exportFileURL = exportableLocalMediaURL(for: cachedLocalMedia ?? media)
         let player = InlineVideoPlayer(
           media: media,
+          isShowingFullscreenPlayer: $isShowingFullscreenPlayer,
+          toggleVideoFit: { fitsEntireVideo.toggle() },
           onPlaybackReady: {
             guard !media.isLocalFile,
-              isCurrentPlaybackCallback(for: media, taskID: playbackTaskID) else { return }
+              isCurrentPlaybackCallback(for: media, taskID: playbackTaskID)
+            else { return }
             scheduleLocalCachingIfNeeded(sourceURL: effectiveSourceURL, media: media)
           },
           onPlaybackFailed: {
@@ -87,11 +90,12 @@ extension AdaptiveMediaView {
           aspectRatio: effectiveMediaAspectRatio,
           isCovered: isMediaCovered,
           watchBottomInset: watchInsets.bottom,
-          watchVideoInsets: fitsEntireVideo ? EdgeInsets(
-            top: watchInsets.top, leading: watchInsets.leading,
-            bottom: watchInsets.bottom + postControlsReservedHeight + watchControlsHeight,
-            trailing: watchInsets.trailing
-          ) : nil,
+          watchVideoInsets: fitsEntireVideo
+            ? EdgeInsets(
+              top: watchInsets.top, leading: watchInsets.leading,
+              bottom: watchInsets.bottom + postControlsReservedHeight + watchControlsHeight,
+              trailing: watchInsets.trailing
+            ) : nil,
           onWatchControlsHeightChange: { watchControlsHeight = $0 }
         )
         localPlayerBlock(player, exportFileURL: exportFileURL, offersEmbed: embedSource != nil)
@@ -283,11 +287,8 @@ extension AdaptiveMediaView {
         }
       }
       if isShowingNativePlayer {
-        watchPlaybackRow(
-          fitsEntireVideo ? "fill screen" : "fit entire video",
-          icon: fitsEntireVideo ? "arrow.up.left.and.arrow.down.right" : "arrow.down.right.and.arrow.up.left"
-        ) {
-          fitsEntireVideo.toggle()
+        watchPlaybackRow("open system player", icon: "play.rectangle") {
+          isShowingFullscreenPlayer = true
         }
       }
     }

@@ -308,7 +308,7 @@ URL classification drives playback mode: extraction, embed, or link fallback. Mo
 
 **Extraction** resolves direct video media for native playback and local caching:
 
-- The session viewer has play, pause, and seek controls. The speaker button mutes the current player. The expand button opens the fullscreen system player. Shared links opened outside a session use inline system video controls. Tap the video in the fullscreen player to reveal its native controls, including close.
+- The session viewer has play, pause, and seek controls. The speaker button mutes the current player. The bottom-right button toggles **fit entire video** and **fill screen**. **open system player** is available in expanded post details. Shared links opened outside a session use inline system video controls. Tap the video in the fullscreen player to reveal its native controls, including close.
 - Extracted media can be saved to Photos or Files.
 - Works offline once cached.
 - Video cache auto-trims at approximately 1 GB with least-recently-used eviction.
@@ -352,7 +352,7 @@ Non-video provider URLs (channel pages, profiles, etc.) fall back to open-in-bro
 - Use **open in browser** to open the provider's page.
 - Switching playback modes, refreshing or changing the source, and leaving the screen cancel superseded playback preparation and caching work.
 - URL-based official players show a loading indicator while connecting, without blocking provider controls.
-- The watch view puts **use official embed**, **try extracted video**, and **fit entire video** below the post details when available. **fit entire video** shows the full local video above the collapsed post and playback controls; **fill screen** restores the immersive view. The panel groups **open in browser** with playback actions. The top-right toolbar contains **save video** when available, followed by **refresh post**. **more post actions** contains author-only note editing and deletion.
+- The watch view puts **use official embed**, **try extracted video**, and **open system player** below the post details when available. **fit entire video** shows the full local video above the collapsed post and playback controls; **fill screen** restores the immersive view. The panel groups **open in browser** with playback actions. The top-right toolbar contains **save video** when available, followed by **refresh post**. **more post actions** contains author-only note editing and deletion.
 - On iPhone, the app uses portrait, with upside-down portrait where the device supports it. iPad also supports landscape. In landscape, expanded post details scroll between the details toggle and reaction controls so both remain reachable at larger text sizes. Pull down from the top or tap the chevron to collapse the panel. Expanded details temporarily cover the video, including in **fit entire video** mode.
 - While an embed loads, you can open the original link in your browser. Expand the post controls for **retry embed**, including when the provider is stuck without reporting an error. Detected load failures also offer retry directly on the recovery card. A switch to extracted playback appears when the post supports it.
 - In compact layouts, portrait embeds scale to fit after the provider lays out its controls, keeping the full player visible.
