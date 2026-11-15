@@ -1,6 +1,6 @@
 # linkstr support
 
-_Last updated: November 12, 2026_
+_Last updated: November 15, 2026_
 
 linkstr is a private link-sharing app built on [Nostr](https://nostr.com). You create or join private sessions, share links inside those sessions, and react with emoji. This page explains how to use the app.
 
@@ -25,7 +25,7 @@ Your active account is stored in the device keychain. If you use iCloud Keychain
 4. Optionally save a private alias.
 5. Tap the top-right add icon, then confirm **add contact**.
 
-Adding the same contact through this form updates the saved alias instead of creating a duplicate. The top-right button changes to **save contact**, and confirmation says whether the alias will be saved or cleared. To edit an alias later, tap the contact row. Compact identity rows shorten long public keys; contact detail shows the full key in its **public key (npub)** section. Long-press a contact or session-member row to copy its full public key. In the preview and contact detail, you can also long-press the key text to select and copy it.
+Adding the same contact through this form updates the saved alias instead of creating a duplicate. The top-right button changes to **save contact**, and confirmation says whether the alias will be saved or cleared. To edit an alias later, tap the contact row. Public keys wrap in full in identity rows and appear in contact detail’s **public key (npub)** section. Long-press a contact or session-member row to copy its full public key. In the preview and contact detail, you can also long-press the key text to select and copy it.
 
 Contacts keep their last fetched public Nostr name on this device, so names remain available after reopening or offline. Names refresh from relays when available; your private alias always takes priority.
 
@@ -104,7 +104,7 @@ If the selected session becomes unavailable while sharing from another app, link
 | Share a deep link              | Tap the share button beside the quick reactions on the post. The recipient opens the original link in linkstr.                                                                                                              |
 | Edit your own note             | Open **more** on a link you shared, then choose **edit note** or **add a note**. Clear the text, then confirm with **remove note** to remove it.                                                                            |
 | Delete your own post           | Choose **delete post** from **more**, or long-press the post in the timeline.                                                                                                                                               |
-| Archive or unarchive a session | Open **manage session** or **view members** from the post list, or tap the session name in the viewer. Use **archive session** or **unarchive session**.                                                                    |
+| Archive or unarchive a session | Open **manage session** or **view members** from the post list. Use **archive session** or **unarchive session**.                                                                                                           |
 | View archived sessions         | Tap the archive button beside **new session**.                                                                                                                                                                              |
 | Rename a session               | Open **manage session**, edit the name, and save.                                                                                                                                                                           |
 | Delete a session               | Open **manage session** and choose **delete session**.                                                                                                                                                                      |
@@ -115,7 +115,7 @@ Only the session creator can rename sessions, delete them, or change session mem
 
 ### Relay settings
 
-Open **you**, tap the gear, and find **relays**.
+Open **you**, tap **settings**, and find **relays**.
 
 - If you have not changed relays, linkstr uses the current default relay set.
 - You can add your own relay URLs.
@@ -278,7 +278,7 @@ Yes. Long-press the contact row and choose **remove contact**, or tap **remove c
 
 ### Can I save videos?
 
-Yes, for content you have the right to save. In a session, open **more** → **save video**, then choose Photos or Files. On a shared-link screen, use **save video**. Save and export are available only when linkstr can extract and cache a local media file. Embed-only playback is provider-dependent and may not offer save or export even if the post plays in-app.
+Yes, for content you have the right to save. In the post viewer, tap **save video** in the top-right toolbar, then choose Photos or Files. On a shared-link screen, use **save video**. Save and export are available only when linkstr can extract and cache a local media file. Embed-only playback is provider-dependent and may not offer save or export even if the post plays in-app.
 
 ---
 
@@ -298,7 +298,7 @@ If linkstr starts in temporary recovery mode, retry startup successfully before 
 
 ### How do backup and restore work?
 
-Open Settings and tap **backup**. Choose where to save the file in Files. Files remembers the last folder you selected. If it opens in local storage, use **Browse** to select **iCloud Drive** or another enabled provider, such as Google Drive or Dropbox. No linkstr folder is required.
+Open **settings** and tap **create backup**. Choose where to save the file in Files. Files remembers the last folder you selected. If it opens in local storage, use **Browse** to select **iCloud Drive** or another enabled provider, such as Google Drive or Dropbox. No linkstr folder is required.
 
 The file includes your secret key, saved sessions and posts, contacts, membership and deletion history, reactions, read/archive choices, and app settings. It excludes cached videos, thumbnails, and previews. There is no password on the file. Keep it somewhere private: anyone with it can access your account.
 
@@ -338,7 +338,7 @@ Archived sessions do not send notifications.
 ### The app won't connect to relays
 
 1. Confirm your internet connection works.
-2. Open **you**, tap the gear, and check that at least one relay is enabled.
+2. Open **you**, tap **settings**, and check that at least one relay is enabled.
 3. If needed, use **restore defaults** in the relays section to go back to the current default relay set.
 4. Bring the app back to the foreground and leave it open for a few seconds. linkstr reconnects from a disconnected baseline after backgrounding, while retaining message deduplication for the same account. Brief interruptions such as opening Control Center do not restart the relay runtime.
 5. If it still does not recover, force-quit and reopen the app.
@@ -358,7 +358,7 @@ Historical replay depends on relay retention. linkstr can retry out-of-order pos
 1. Check your network connection.
 2. In a session, expand the caption row and try the other player when available.
 3. If a cached copy was auto-trimmed, try local playback again to re-cache it.
-4. Use **try again** on a playback error or **retry embed** to reload the official player. Use **refresh post** in **more post actions** to clear cached playback and retry the whole post.
+4. Use **try again** on a playback error or **retry embed** to reload the official player. Use **refresh post** in the top-right toolbar to clear cached playback and retry the whole post.
 5. Tap **open in browser** if the provider blocks playback.
 
 ### A preview looks stale or wrong

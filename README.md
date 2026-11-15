@@ -1,6 +1,6 @@
 # linkstr
 
-_Last updated: November 11, 2026_
+_Last updated: November 15, 2026_
 
 linkstr is an iOS app for private link sharing on [Nostr](https://nostr.com). You create private sessions, share links with people you trust, react with emojis, and play supported video directly inside the app when a provider allows it.
 
@@ -101,7 +101,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 - Search covers session names and recent post text. A session row shows the sender's note or linked title when available, plus the source, timestamp, and unread count.
 - Group rows show up to three member initials. A session with one other member shows their initials, and a solo session shows a bookmark.
 - Opening a session shows the post list. Tap a row to view that post, or use **watch posts** to resume the last viewed post while the app is running. Swipe in the viewer to move between posts. **mark all as read** is available beside the post count in the session list. If the final post disappears, the viewer returns to the empty list. Later arrivals stay in the list until you open them.
-- Open **manage session** or **view members** in the post list, or tap the session name in the viewer. Notifications open the post list without playing a post.
+- Open **manage session** or **view members** in the post list. Notifications open the post list without playing a post.
 
 **Session creation:**
 
@@ -237,7 +237,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 - Users can add a relay URL (`ws://` or `wss://`, valid host required), enable or disable a relay, remove a relay, or restore the current shipped default relays.
 - The relay header shows `connected_or_readonly / total`.
 - Relay, storage, and identity controls remain visible without disclosure-group expansion.
-- Relay rows show a live status dot (`connecting`, `connected`, `read-only`, `failed`, `disabled`) and optional inline error text. Error rows reserve layout height to avoid jitter when status text appears or disappears.
+- Relay rows show a live status dot and label for connecting, connected, read-only, failed, disconnected, or disabled states. Expand **technical details** to read a failure. The latest failure stays visible through reconnect attempts and clears when the relay connects successfully.
 - Offline relay toast signaling is suppressed during initial connection and only shown after a previously healthy relay drops in the same foreground lifecycle.
 - Tapping a relay connection alert opens relay settings; tapping any other toast dismisses it.
 
@@ -362,7 +362,7 @@ Non-video provider URLs (channel pages, profiles, etc.) fall back to open-in-bro
 - Playback diagnostics use Apple's unified log with subsystem `com.parmscript.linkstr` and category `playback`. They record cache use, extraction results, candidate failures, mode changes, embed failures, retries, and audio session failures. Post URLs and content are not logged; error details are private. Debug-level entries include cache use and candidate counts. Audio session changes run serially off the UI thread and remain active until the last player releases ownership.
 - Audio plays even when the iPhone silent switch is enabled.
 - Local video playback loops by default, inline and fullscreen. Open **you** → **settings** → **playback** to change **loop local videos**. The preference is saved on this device and applies across accounts.
-- When a local file is cached, use **more** → **save video** in a session or **save video** on a shared link to export to Photos or Files. The shared download service checks local copies before exposing them to either save flow and retries once if a copy is unreadable.
+- When a local file is cached, use **save video** in the post viewer’s top-right toolbar or **save video** on a shared link to export to Photos or Files. The shared download service checks local copies before exposing them to either save flow and retries once if a copy is unreadable.
 - Playback pauses during a Photos save and its feedback. Changing or closing the video prevents the old save result from appearing over another post. Cancelling before Photos authorization completes prevents the library write from starting; a write already submitted to Photos may still finish. Changing or refreshing the source also clears its save chooser, Files picker, and feedback. Files export completion is checked against the current playback presentation because iOS may dismiss the picker before reporting its result.
 
 **Twitter/X statuses** are resolved at runtime:
@@ -488,7 +488,7 @@ See [contact synchronization](docs/CONTACTS.md) for persistence and relay behavi
 
 ### Backup and migration expectations
 
-Settings' **backup** action exports a `.linkstrbackup` file through Files. It contains the active account's `nsec`, saved sessions and posts, membership history, reactions and deletion records, contacts and profiles, read/archive state, private preferences, and playback/relay settings. Cached videos, thumbnails, previews, drafts, and other accounts are excluded. The file is unencrypted: anyone with it can access the account. Files chooses the starting location and remembers the last folder selected. You can choose iCloud Drive, local storage, or another enabled provider; no linkstr folder is required.
+Settings’ **create backup** action exports a `.linkstrbackup` file through Files. It contains the active account's `nsec`, saved sessions and posts, membership history, reactions and deletion records, contacts and profiles, read/archive state, private preferences, and playback/relay settings. Cached videos, thumbnails, previews, drafts, and other accounts are excluded. The file is unencrypted: anyone with it can access the account. Files chooses the starting location and remembers the last folder selected. You can choose iCloud Drive, local storage, or another enabled provider; no linkstr folder is required.
 
 **Restore backup** appears only on onboarding. The app validates the file before showing the account, date, and saved counts for confirmation. Invalid keys or data change nothing. Restore works locally and merges retained data for that account: duplicates stay single, read posts stay read, and newer membership, contact, preference, reaction, and deletion state wins. Other accounts are untouched. Playback and relay settings come from the file, including an explicitly empty relay list.
 
