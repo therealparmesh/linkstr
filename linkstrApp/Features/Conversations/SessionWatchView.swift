@@ -17,6 +17,16 @@ extension SessionPostsView {
     GeometryReader { proxy in
       watchPager(insets: proxy.safeAreaInsets)
         .ignoresSafeArea(.container, edges: [.top, .bottom])
+        .simultaneousGesture(
+          DragGesture(minimumDistance: 20)
+            .onEnded { value in
+              guard value.startLocation.x <= 24,
+                value.translation.width >= 80,
+                value.translation.width > abs(value.translation.height) * 2
+              else { return }
+              browsePosts(around: activeWatchPostID ?? watchPostID)
+            }
+        )
     }
   }
 
