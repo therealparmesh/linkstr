@@ -24,12 +24,12 @@ extension AppSessionAccountAndStorageTests {
     _ = container
 
     await session.boot()
+    await session.nostrStartupTask?.value
     XCTAssertFalse(session.hasIdentity)
 
     shouldLoadIdentity = true
     session.handleProtectedDataDidBecomeAvailable()
-    await Task.yield()
-    await Task.yield()
+    await session.nostrStartupTask?.value
 
     XCTAssertTrue(session.hasIdentity)
     XCTAssertGreaterThanOrEqual(loadAttempts, 2)
@@ -54,12 +54,13 @@ extension AppSessionAccountAndStorageTests {
     _ = container
 
     await session.boot()
+    await session.nostrStartupTask?.value
     XCTAssertFalse(session.hasIdentity)
 
+    session.handleAppDidLeaveForeground()
     shouldLoadIdentity = true
     session.handleAppDidBecomeActive()
-    await Task.yield()
-    await Task.yield()
+    await session.nostrStartupTask?.value
 
     XCTAssertTrue(session.hasIdentity)
     XCTAssertGreaterThanOrEqual(loadAttempts, 2)

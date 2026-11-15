@@ -47,3 +47,15 @@ extension AppSessionTestCase {
     )
   }
 }
+
+// Exercise the same status update and alert refresh used by relay callbacks.
+extension AppSession {
+  func simulateRuntimeRelayStatusForTesting(
+    relayURL: String,
+    status: RelayHealthStatus,
+    message: String? = nil
+  ) {
+    updateRuntimeRelayStatus(relayURL: relayURL, status: status, message: message)
+    try? refreshRelayConnectivityAlert()
+  }
+}

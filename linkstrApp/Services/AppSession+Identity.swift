@@ -218,37 +218,6 @@ extension AppSession {
   }
 }
 
-// MARK: - Testing Hooks
-
-#if DEBUG
-  extension AppSession {
-    func ingestForTesting(_ incoming: ReceivedDirectMessage) {
-      persistIncoming(incoming)
-    }
-
-    var testingPendingMetadataRefreshCount: Int {
-      pendingMetadataRefreshes.count
-    }
-
-    func simulateRuntimeRelayStatusForTesting(
-      relayURL: String,
-      status: RelayHealthStatus,
-      message: String? = nil
-    ) {
-      updateRuntimeRelayStatus(relayURL: relayURL, status: status, message: message)
-      try? refreshRelayConnectivityAlert()
-    }
-
-    func ingestFollowListForTesting(_ incoming: ReceivedFollowList) {
-      persistIncomingFollowList(incoming)
-    }
-
-    func ingestProfileMetadataForTesting(_ incoming: ReceivedProfileMetadata) {
-      persistIncomingProfileMetadata(incoming)
-    }
-  }
-#endif
-
 // MARK: - Simulator Bootstrap
 
 #if targetEnvironment(simulator)

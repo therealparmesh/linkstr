@@ -122,7 +122,7 @@ extension AppSessionIngestTests {
       name: "Root ID Guard",
       members: [creatorPubkey, myPubkey, peerPubkey])
 
-    session.ingestForTesting(
+    session.persistIncoming(
       makeIncomingMessage(
         eventID: "root-event-id",
         senderPubkey: peerPubkey,
@@ -180,11 +180,11 @@ extension AppSessionIngestTests {
     let loserPubkey = try TestKeyMaterialFactory.makePubkeyHex()
     let tieDate = Date(timeIntervalSince1970: 1100)
 
-    session.ingestFollowListForTesting(
+    session.persistIncomingFollowList(
       ReceivedFollowList(
         eventID: "follow-a", authorPubkey: myPubkey,
         followedPubkeys: [winnerPubkey], createdAt: tieDate))
-    session.ingestFollowListForTesting(
+    session.persistIncomingFollowList(
       ReceivedFollowList(
         eventID: "follow-z", authorPubkey: myPubkey,
         followedPubkeys: [loserPubkey], createdAt: tieDate))
@@ -204,7 +204,7 @@ extension AppSessionIngestTests {
     let winnerPubkey = try TestKeyMaterialFactory.makePubkeyHex()
     let stalePubkey = try TestKeyMaterialFactory.makePubkeyHex()
 
-    session.ingestFollowListForTesting(
+    session.persistIncomingFollowList(
       ReceivedFollowList(
         eventID: "follow-restart-fresh", authorPubkey: myPubkey,
         followedPubkeys: [winnerPubkey],
@@ -220,7 +220,7 @@ extension AppSessionIngestTests {
       }())
     restartedSession.importNsec(nsec)
 
-    restartedSession.ingestFollowListForTesting(
+    restartedSession.persistIncomingFollowList(
       ReceivedFollowList(
         eventID: "follow-restart-stale", authorPubkey: myPubkey,
         followedPubkeys: [stalePubkey],

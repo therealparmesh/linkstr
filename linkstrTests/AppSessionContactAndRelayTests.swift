@@ -100,7 +100,7 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     XCTAssertTrue(didAdd)
 
     let initialContact = try XCTUnwrap(fetchContacts(in: container.mainContext).first)
-    session.ingestProfileMetadataForTesting(
+    session.persistIncomingProfileMetadata(
       try makeIncomingProfileMetadata(
         eventID: "profile-alice",
         authorPubkey: initialContact.targetPubkey,
@@ -131,7 +131,7 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     XCTAssertTrue(didAdd)
 
     let contact = try XCTUnwrap(fetchContacts(in: container.mainContext).first)
-    session.ingestProfileMetadataForTesting(
+    session.persistIncomingProfileMetadata(
       try makeIncomingProfileMetadata(
         eventID: "profile-new",
         authorPubkey: contact.targetPubkey,
@@ -156,7 +156,7 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
       session.resetRemoteProfileStateInMemory()
       session.requestRemoteProfilesIfNeeded(pubkeyHexes: [contact.targetPubkey])
       XCTAssertTrue(session.inFlightRemoteProfilePubkeys.contains(contact.targetPubkey))
-      session.ingestProfileMetadataForTesting(
+      session.persistIncomingProfileMetadata(
         try makeIncomingProfileMetadata(
           eventID: try XCTUnwrap(profile.eventID),
           authorPubkey: contact.targetPubkey,
@@ -179,7 +179,7 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     try session.identityService.createNewIdentity()
     let participantPubkey = try TestKeyMaterialFactory.makePubkeyHex()
 
-    session.ingestProfileMetadataForTesting(
+    session.persistIncomingProfileMetadata(
       try makeIncomingProfileMetadata(
         eventID: "profile-non-contact",
         authorPubkey: participantPubkey,
@@ -198,7 +198,7 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     try session.identityService.createNewIdentity()
     let keypair = try TestKeyMaterialFactory.makeKeypair()
 
-    session.ingestProfileMetadataForTesting(
+    session.persistIncomingProfileMetadata(
       try makeIncomingProfileMetadata(
         eventID: "profile-before-follow",
         authorPubkey: keypair.publicKey.hex,

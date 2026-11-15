@@ -24,7 +24,7 @@ final class ContactManagementTests: AppSessionTestCase {
     let state = try XCTUnwrap(fetchAccountStates(in: container.mainContext).first)
     state.followListTags = nil
     try container.mainContext.save()
-    session.ingestFollowListForTesting(incoming)
+    session.persistIncomingFollowList(incoming)
 
     let added = await session.ensureContact(pubkey: newKey)
     XCTAssertTrue(added)
@@ -114,7 +114,7 @@ final class ContactManagementTests: AppSessionTestCase {
     let remote = try TestKeyMaterialFactory.makePubkeyHex()
     let add = Task { await session.ensureContact(pubkey: local) }
     await fulfillment(of: [started], timeout: 1)
-    session.ingestFollowListForTesting(
+    session.persistIncomingFollowList(
       ReceivedFollowList(
         eventID: "remote", authorPubkey: owner, followedPubkeys: [remote],
         createdAt: .now.addingTimeInterval(2)

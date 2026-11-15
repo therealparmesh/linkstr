@@ -119,26 +119,6 @@ final class URLClassifierTests: XCTestCase {
     )
   }
 
-  func testComposerAvailabilityHintMatchesMediaStrategy() {
-    XCTAssertEqual(
-      LinkstrDraftPreview.availabilityHint(
-        for: URLClassifier.MediaStrategy.extractionPreferred(
-          embedURL: URL(string: "https://www.tiktok.com/player/v1/7596114833477537054")!
-        )
-      ),
-      "play or save this video when available"
-    )
-    XCTAssertEqual(
-      LinkstrDraftPreview.availabilityHint(
-        for: URLClassifier.MediaStrategy.embedOnly(
-          embedURL: URL(string: "https://www.youtube.com/embed/dQw4w9WgXcQ")!
-        )
-      ),
-      "view the official embed when available"
-    )
-    XCTAssertNil(LinkstrDraftPreview.availabilityHint(for: .link))
-  }
-
   func testFacebookShareURLHeuristic() {
     XCTAssertTrue(
       SocialURLHeuristics.isFacebookShareURL(

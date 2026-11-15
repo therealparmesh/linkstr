@@ -24,7 +24,7 @@ extension AppSessionContactAndRelayTests {
     let publication = Task { await session.updateOwnProfileName("Local") }
     await fulfillment(of: [started], timeout: 1)
     let newerDate = try XCTUnwrap(published?.createdDate).addingTimeInterval(1)
-    session.ingestProfileMetadataForTesting(
+    session.persistIncomingProfileMetadata(
       try makeIncomingProfileMetadata(
         eventID: "newer", authorPubkey: owner, createdAt: newerDate, chosenName: "Remote"))
     release?.resume()
@@ -128,7 +128,7 @@ extension AppSessionContactAndRelayTests {
 
     let existingContent =
       #"{"about":"still here","display_name":"Old Name","name":"Old Name","picture":"https://example.com/picture.png"}"#
-    session.ingestProfileMetadataForTesting(
+    session.persistIncomingProfileMetadata(
       try makeIncomingProfileMetadata(
         eventID: "profile-self-old",
         authorPubkey: ownerPubkey,
@@ -186,12 +186,16 @@ extension AppSessionContactAndRelayTests {
   }
 
   func testCancelPendingMetadataRefreshesForHiddenSessionDropsStaleQueuedWork() async throws {
-    let recorder = MetadataPreviewRecorder()
+    var requestedURLs: [String] = []
+    var finishFirst: CheckedContinuation<Void, Never>?
+    let firstStarted = expectation(description: "first preview started")
     let (session, container) = try makeSession(
       fetchLinkPreview: { url in
-        await recorder.record(url)
+        requestedURLs.append(url)
         if url.contains("first") {
-          try? await Task.sleep(nanoseconds: 50_000_000)
+          await withCheckedContinuation {
+            finishFirst = $0; firstStarted.fulfill()
+          }
         }
         return LinkPreviewData(title: "preview for \(url)", thumbnailPath: nil)
       }
@@ -213,35 +217,27 @@ extension AppSessionContactAndRelayTests {
     session.refreshMetadataForVisiblePostIfNeeded(first)
     session.refreshMetadataForVisiblePostIfNeeded(second)
 
-    let firstRequestDeadline = Date(timeIntervalSinceNow: 1)
-    while (await recorder.snapshot()).isEmpty, Date() < firstRequestDeadline {
-      try? await Task.sleep(nanoseconds: 10_000_000)
-    }
-
-    let firstSnapshot = await recorder.snapshot()
-    XCTAssertEqual(firstSnapshot, ["metadata-test-first"])
-    XCTAssertEqual(session.testingPendingMetadataRefreshCount, 2)
+    await fulfillment(of: [firstStarted], timeout: asyncExpectationTimeoutSeconds)
+    XCTAssertEqual(requestedURLs, ["metadata-test-first"])
 
     session.cancelPendingMetadataRefreshesForHiddenSession()
     session.refreshMetadataForVisiblePostIfNeeded(third)
+    let firstWorker = session.metadataRefreshTask
+    finishFirst?.resume()
+    await firstWorker?.value
+    await session.metadataRefreshTask?.value
 
-    let thirdRequestDeadline = Date(timeIntervalSinceNow: 1)
-    while third.metadataTitle == nil, Date() < thirdRequestDeadline {
-      try? await Task.sleep(nanoseconds: 10_000_000)
-    }
-
-    let finalSnapshot = await recorder.snapshot()
-    XCTAssertEqual(finalSnapshot, ["metadata-test-first", "metadata-test-third"])
+    XCTAssertEqual(requestedURLs, ["metadata-test-first", "metadata-test-third"])
     XCTAssertNil(second.metadataTitle)
     XCTAssertEqual(third.metadataTitle, "preview for metadata-test-third")
   }
 
   func testIncompleteMetadataRefreshWaitsBeforeAutomaticRetry() async throws {
-    let recorder = MetadataPreviewRecorder()
+    var requestCount = 0
     let (session, container) = try makeSession(
-      metadataRefreshRetryInterval: 0.2,
-      fetchLinkPreview: { url in
-        await recorder.record(url)
+      metadataRefreshRetryInterval: 60,
+      fetchLinkPreview: { _ in
+        requestCount += 1
         return LinkPreviewData(title: "Preview", thumbnailPath: nil)
       }
     )
@@ -253,28 +249,20 @@ extension AppSessionContactAndRelayTests {
     try container.mainContext.save()
 
     session.refreshMetadataForVisiblePostIfNeeded(message)
-    let firstRequestDeadline = Date(timeIntervalSinceNow: 1)
-    while session.testingPendingMetadataRefreshCount > 0, Date() < firstRequestDeadline {
-      try await Task.sleep(nanoseconds: 10_000_000)
-    }
+    await session.metadataRefreshTask?.value
+    XCTAssertEqual(requestCount, 1)
+    let retryAfter = try XCTUnwrap(session.metadataRefreshRetryAfterByStorageID[message.storageID])
+    XCTAssertGreaterThan(retryAfter, .now)
 
     session.refreshMetadataForVisiblePostIfNeeded(message)
-    try await Task.sleep(nanoseconds: 20_000_000)
-    let requestCountDuringCooldown = await recorder.snapshot().count
-    XCTAssertEqual(requestCountDuringCooldown, 1)
+    await session.metadataRefreshTask?.value
+    XCTAssertEqual(requestCount, 1)
 
-    try await Task.sleep(nanoseconds: 200_000_000)
+    // Expire the saved deadline instead of depending on wall-clock scheduling.
+    session.metadataRefreshRetryAfterByStorageID[message.storageID] = .distantPast
     session.refreshMetadataForVisiblePostIfNeeded(message)
-    let retryDeadline = Date(timeIntervalSinceNow: 1)
-    while (await recorder.snapshot()).count < 2, Date() < retryDeadline {
-      try await Task.sleep(nanoseconds: 10_000_000)
-    }
-    while session.testingPendingMetadataRefreshCount > 0, Date() < retryDeadline {
-      try await Task.sleep(nanoseconds: 10_000_000)
-    }
-
-    let requestCountAfterCooldown = await recorder.snapshot().count
-    XCTAssertEqual(requestCountAfterCooldown, 2)
+    await session.metadataRefreshTask?.value
+    XCTAssertEqual(requestCount, 2)
   }
 
   func makeMetadataRoot(
@@ -294,17 +282,5 @@ extension AppSessionContactAndRelayTests {
       timestamp: .now,
       linkType: .twitter
     )
-  }
-}
-
-actor MetadataPreviewRecorder {
-  var requestedURLs: [String] = []
-
-  func record(_ url: String) {
-    requestedURLs.append(url)
-  }
-
-  func snapshot() -> [String] {
-    requestedURLs
   }
 }

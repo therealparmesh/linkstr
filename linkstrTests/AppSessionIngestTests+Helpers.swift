@@ -21,7 +21,7 @@ extension AppSessionIngestTests {
     members: [String],
     source: DirectMessageIngestSource = .live
   ) {
-    session.ingestForTesting(
+    session.persistIncoming(
       makeIncomingMessage(
         eventID: event.id,
         senderPubkey: event.sender,
@@ -48,7 +48,7 @@ extension AppSessionIngestTests {
     name: String? = nil,
     source: DirectMessageIngestSource = .live
   ) {
-    session.ingestForTesting(
+    session.persistIncoming(
       makeIncomingMessage(
         eventID: event.id,
         senderPubkey: event.sender,
@@ -75,7 +75,7 @@ extension AppSessionIngestTests {
     transportEventID: String? = nil,
     source: DirectMessageIngestSource = .live
   ) {
-    session.ingestForTesting(
+    session.persistIncoming(
       makeIncomingMessage(
         eventID: event.id,
         transportEventID: transportEventID,
@@ -101,7 +101,7 @@ extension AppSessionIngestTests {
     active: Bool = true,
     source: DirectMessageIngestSource = .live
   ) {
-    session.ingestForTesting(
+    session.persistIncoming(
       makeIncomingMessage(
         eventID: event.id,
         senderPubkey: event.sender,
@@ -126,7 +126,7 @@ extension AppSessionIngestTests {
     rootID: String,
     source: DirectMessageIngestSource = .live
   ) {
-    session.ingestForTesting(
+    session.persistIncoming(
       makeIncomingMessage(
         eventID: event.id,
         senderPubkey: event.sender,
@@ -149,7 +149,7 @@ extension AppSessionIngestTests {
     rootID: String? = nil,
     source: DirectMessageIngestSource = .live
   ) {
-    session.ingestForTesting(
+    session.persistIncoming(
       makeIncomingMessage(
         eventID: event.id,
         senderPubkey: event.sender,

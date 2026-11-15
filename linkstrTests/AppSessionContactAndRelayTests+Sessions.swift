@@ -82,7 +82,7 @@ extension AppSessionContactAndRelayTests {
     let contactKeypair = try TestKeyMaterialFactory.makeKeypair()
     let didAdd = await session.addContact(npub: contactKeypair.publicKey.npub, alias: "")
     XCTAssertTrue(didAdd)
-    session.ingestProfileMetadataForTesting(
+    session.persistIncomingProfileMetadata(
       try makeIncomingProfileMetadata(
         eventID: "profile-restored-contact",
         authorPubkey: contactKeypair.publicKey.hex,
@@ -91,7 +91,7 @@ extension AppSessionContactAndRelayTests {
       )
     )
 
-    session.ingestProfileMetadataForTesting(
+    session.persistIncomingProfileMetadata(
       try makeIncomingProfileMetadata(
         eventID: "profile-restored-non-contact",
         authorPubkey: participantPubkey,
