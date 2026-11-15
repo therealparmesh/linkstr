@@ -4,6 +4,22 @@ import XCTest
 @testable import linkstr
 
 extension AppSessionContactAndRelayTests {
+  func testRelayDiagnosticsSurviveRetriesAndClearOnRecovery() throws {
+    let (session, container) = try makeSession()
+    let relay = RelayEntity(url: "wss://relay.example.com")
+    container.mainContext.insert(relay)
+    session.updateRuntimeRelayStatus(relayURL: relay.url, status: .failed, message: "connection refused")
+    for status in [RelayHealthStatus.connecting, .disconnected, .failed, .connecting] {
+      session.updateRuntimeRelayStatus(relayURL: relay.url, status: status, message: nil)
+      XCTAssertEqual(session.relayStatus(for: relay), status)
+      XCTAssertEqual(session.relayErrorMessage(for: relay), "connection refused")
+    }
+    session.updateRuntimeRelayStatus(relayURL: relay.url, status: .failed, message: "timed out")
+    XCTAssertEqual(session.relayErrorMessage(for: relay), "timed out")
+    session.updateRuntimeRelayStatus(relayURL: relay.url, status: .connected, message: nil)
+    XCTAssertNil(session.relayErrorMessage(for: relay))
+  }
+
   func testBootUsesVirtualDefaultRelaysWhenStoreIsEmpty() async throws {
     let (session, container) = try makeSession()
 

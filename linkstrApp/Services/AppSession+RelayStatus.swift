@@ -146,7 +146,10 @@ extension AppSession {
       retryPendingRemoteProfileRequestsIfNeeded()
     }
 
+    // Keep the last failure readable while a reconnect attempt is in progress.
+    let previousMessage = relayRuntimeStatusByURL[relayURL]?.message
     let normalizedMessage = normalizedRelayStatusMessage(message)
+      ?? (status == .connecting || status == .disconnected || status == .failed ? previousMessage : nil)
     if let existing = relayRuntimeStatusByURL[relayURL],
       existing.status == status,
       existing.message == normalizedMessage {
