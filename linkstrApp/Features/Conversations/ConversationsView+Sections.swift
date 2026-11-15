@@ -179,6 +179,7 @@ struct SessionPostsView: View {
           actionSystemImage: "chevron.backward",
           action: { dismiss() }
         )
+        .linkstrEdgeBack()
       }
     }
     .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: showsWatch)

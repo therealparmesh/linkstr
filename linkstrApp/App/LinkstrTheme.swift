@@ -118,7 +118,11 @@ extension View {
         .linkstrPageHeaderLayout()
         .background(LinkstrTheme.chrome)
     }
-    .modifier(LinkstrEdgeBackGesture())
+    .linkstrEdgeBack()
+  }
+
+  func linkstrEdgeBack(action: (() -> Void)? = nil) -> some View {
+    modifier(LinkstrEdgeBackGesture(action: action))
   }
 
   func linkstrBarChrome() -> some View {
@@ -130,6 +134,7 @@ extension View {
 }
 
 private struct LinkstrEdgeBackGesture: ViewModifier {
+  let action: (() -> Void)?
   @Environment(\.dismiss) private var dismiss
   @Environment(\.layoutDirection) private var layoutDirection
   @State private var contentWidth: CGFloat = 0
@@ -147,7 +152,7 @@ private struct LinkstrEdgeBackGesture: ViewModifier {
           let startInset = isLeftToRight ? value.startLocation.x : contentWidth - value.startLocation.x
           let horizontal = (isLeftToRight ? 1.0 : -1.0) * value.translation.width
           if (0...16).contains(startInset), horizontal >= 55, horizontal > abs(value.translation.height) {
-            dismiss()
+            if let action { action() } else { dismiss() }
           }
         }
       )

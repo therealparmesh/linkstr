@@ -170,6 +170,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 
 **Watching posts:**
 
+- Full-page navigation uses one shared leading-edge back gesture, including the post viewer. The viewer returns to its session list; other pages dismiss their navigation destination. Sheets retain their normal dismissal behavior.
 - The post overlay shows the author and timestamp above the caption. Session information remains in the post list. Collapsed details show the saved note first, otherwise the description or title; expanded details show the full post text and note above reactions. The chevron toggles details; there is no decorative drag handle.
 
 - In the viewer, swipe up for older posts or down for newer posts. **back to posts** or a right swipe from the left edge returns to the post you were viewing.
