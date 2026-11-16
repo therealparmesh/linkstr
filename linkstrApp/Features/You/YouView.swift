@@ -169,9 +169,9 @@ struct YouView: View {
       Text(npub)
         .font(LinkstrTheme.font(.caption).monospaced())
         .foregroundStyle(LinkstrTheme.textSecondary)
-        .lineLimit(1)
-        .truncationMode(.middle)
-        .frame(maxWidth: 260)
+        .fixedSize(horizontal: false, vertical: true)
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity)
         .textSelection(.enabled)
         .accessibilityLabel("public key: \(npub)")
 
