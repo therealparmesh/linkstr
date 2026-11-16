@@ -44,6 +44,7 @@ struct ReactionSummary: Identifiable, Hashable {
 struct ReactionParticipantBreakdown: Identifiable, Hashable {
   let id: String
   let displayName: String
+  let avatarName: String?
   let emojis: [String]
 }
 
@@ -244,7 +245,7 @@ extension PostDetailView {
       LazyVStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
         ForEach(visibleParticipants) { entry in
           HStack(alignment: .center, spacing: LinkstrTheme.compactSpacing) {
-            LinkstrContactAvatar(name: entry.displayName, size: 32, seed: entry.id)
+            LinkstrContactAvatar(name: entry.avatarName, size: 32, seed: entry.id)
               .accessibilityHidden(true)
 
             let name = Text(entry.displayName)

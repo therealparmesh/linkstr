@@ -33,6 +33,7 @@ extension PostDetailView {
         return ReactionParticipantBreakdown(
           id: senderPubkeyHash,
           displayName: displayName,
+          avatarName: isCurrentUser ? session.currentProfileName : displayName,
           emojis: emojis
         )
       }

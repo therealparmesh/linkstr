@@ -371,7 +371,7 @@ enum LinkstrAvatarStyleResolver {
 }
 
 struct LinkstrContactAvatar: View {
-  let name: String
+  let name: String?
   var size: CGFloat = 42
   var seed: String?
 
@@ -380,16 +380,21 @@ struct LinkstrContactAvatar: View {
       .fill(avatarColor)
       .frame(width: size, height: size)
       .overlay {
-        Text(String(LinkstrAvatarStyleResolver.contactInitials(for: name).prefix(size < 32 ? 1 : 2)))
-          .font(.system(size: size * 0.32, weight: .semibold))
-          .foregroundStyle(LinkstrTheme.background)
-          .lineLimit(1)
+        if let name, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+          Text(String(LinkstrAvatarStyleResolver.contactInitials(for: name).prefix(size < 32 ? 1 : 2)))
+            .font(.system(size: size * 0.32, weight: .semibold))
+            .lineLimit(1)
+        } else {
+          Image(systemName: "person.fill")
+            .font(.system(size: size * 0.4, weight: .medium))
+        }
       }
+      .foregroundStyle(LinkstrTheme.background)
       .accessibilityHidden(true)
   }
 
   private var avatarColor: Color {
     let colors = [LinkstrTheme.accent, LinkstrTheme.accentPink, LinkstrTheme.textSecondary]
-    return colors[LinkstrAvatarStyleResolver.colorIndex(for: seed ?? name, paletteSize: colors.count)]
+    return colors[LinkstrAvatarStyleResolver.colorIndex(for: seed ?? name ?? "profile", paletteSize: colors.count)]
   }
 }

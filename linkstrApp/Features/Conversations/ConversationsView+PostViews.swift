@@ -259,6 +259,7 @@ extension SessionPostsView {
 // MARK: - Post Card Views
 
 struct PostListRowView: View {
+  @EnvironmentObject private var session: AppSession
   let post: SessionMessageEntity
   let senderLabel: String
   let isOutgoing: Bool
@@ -275,7 +276,9 @@ struct PostListRowView: View {
     VStack(alignment: .leading, spacing: LinkstrTheme.tightSpacing) {
       if showsSenderHeader {
         HStack(spacing: LinkstrTheme.compactSpacing) {
-          LinkstrContactAvatar(name: senderLabel, size: 24, seed: post.senderPubkeyHash)
+          LinkstrContactAvatar(
+            name: isOutgoing ? session.currentProfileName : senderLabel, size: 24, seed: post.senderPubkeyHash
+          )
             .accessibilityHidden(true)
           Text(senderLabel)
             .font(LinkstrTheme.font(.caption, weight: .semibold))

@@ -129,7 +129,7 @@ struct YouView: View {
 
   private func profileHeader(npub: String) -> some View {
     HStack(spacing: LinkstrTheme.rowSpacing) {
-      LinkstrContactAvatar(name: session.currentProfileName ?? "you", size: 68, seed: npub)
+      LinkstrContactAvatar(name: session.currentProfileName, size: 68, seed: npub)
         .accessibilityHidden(true)
 
       VStack(alignment: .leading, spacing: 0) {
