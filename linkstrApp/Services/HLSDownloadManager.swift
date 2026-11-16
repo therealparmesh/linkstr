@@ -10,7 +10,8 @@ protocol HLSDownloadTask: AnyObject {
 extension URLSessionTask: HLSDownloadTask {}
 
 final class HLSDownloadManager: NSObject {
-  static let shared = HLSDownloadManager()
+  static let shared = HLSDownloadManager(isDiscretionary: false)
+  static let automaticCache = HLSDownloadManager(isDiscretionary: true)
 
   private var session: AVAssetDownloadURLSession!
   private struct Download {
@@ -21,9 +22,13 @@ final class HLSDownloadManager: NSObject {
   private var downloads: [Int: Download] = [:]
   private let lock = NSLock()
 
-  private override init() {
+  private init(isDiscretionary: Bool) {
     super.init()
-    let config = URLSessionConfiguration.background(withIdentifier: "com.parmscript.linkstr.hls")
+    let identifier =
+      isDiscretionary ? "com.parmscript.linkstr.hls-cache" : "com.parmscript.linkstr.hls"
+    let config = URLSessionConfiguration.background(withIdentifier: identifier)
+    // Opportunistic caching must not present the system's download Live Activity.
+    config.isDiscretionary = isDiscretionary
     let delegateQueue = OperationQueue()
     delegateQueue.name = "com.parmscript.linkstr.hls-delegate"
     delegateQueue.maxConcurrentOperationCount = 1
@@ -47,7 +52,7 @@ final class HLSDownloadManager: NSObject {
 
     guard
       let task = session.makeAssetDownloadTask(
-        asset: asset, assetTitle: assetURL.lastPathComponent, assetArtworkData: nil, options: nil)
+        asset: asset, assetTitle: "video", assetArtworkData: nil, options: nil)
     else {
       throw HLSDownloadError.taskCreationFailed
     }
@@ -96,7 +101,8 @@ final class HLSDownloadManager: NSObject {
     }
     Task {
       do {
-        let saved = try ManagedLocalFileScope.shared.hlsRegistry.register(location, for: download.sourceURL)
+        let saved = try ManagedLocalFileScope.shared.hlsRegistry.register(
+          location, for: download.sourceURL)
         await VideoCacheService.shared.registerCachedMedia(at: saved)
         download.continuation.resume(returning: saved)
       } catch {

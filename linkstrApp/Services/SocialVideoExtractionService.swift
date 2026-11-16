@@ -333,9 +333,11 @@ extension SocialVideoExtractionService {
 // MARK: - Local caching
 
 extension SocialVideoExtractionService {
-  func cachePlayableMediaLocally(_ media: PlayableMedia) async -> PlayableMedia? {
+  func cachePlayableMediaLocally(_ media: PlayableMedia, isAutomatic: Bool = false) async -> PlayableMedia? {
     for _ in 0..<2 {
-      guard !Task.isCancelled, let local = await cachedOrDownloadedMedia(media) else { return nil }
+      guard !Task.isCancelled,
+        let local = await cachedOrDownloadedMedia(media, isAutomatic: isAutomatic)
+      else { return nil }
       if await local.loadVideoAsset() != nil { return local }
       guard !Task.isCancelled,
         let fileURL = ManagedLocalFileScope.shared.managedFileURL(fromPath: local.playbackURL.path)
@@ -346,7 +348,7 @@ extension SocialVideoExtractionService {
     return nil
   }
 
-  private func cachedOrDownloadedMedia(_ media: PlayableMedia) async -> PlayableMedia? {
+  private func cachedOrDownloadedMedia(_ media: PlayableMedia, isAutomatic: Bool) async -> PlayableMedia? {
     guard !media.isLocalFile else {
       return media
     }
@@ -356,7 +358,8 @@ extension SocialVideoExtractionService {
 
     do {
       if media.playbackURL.absoluteString.lowercased().contains(".m3u8") {
-        let localURL = try await HLSDownloadManager.shared.download(
+        let downloader = isAutomatic ? HLSDownloadManager.automaticCache : HLSDownloadManager.shared
+        let localURL = try await downloader.download(
           assetURL: media.playbackURL,
           headers: media.headers
         )

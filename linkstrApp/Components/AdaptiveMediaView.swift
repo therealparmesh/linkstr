@@ -202,7 +202,7 @@ extension AdaptiveMediaView {
     cancelLocalCaching()
     localCacheTask = Task {
       guard
-        let localMedia = await SocialVideoExtractionService.shared.cachePlayableMediaLocally(media)
+        let localMedia = await SocialVideoExtractionService.shared.cachePlayableMediaLocally(media, isAutomatic: true)
       else { return }
       guard !Task.isCancelled else { return }
 

@@ -313,7 +313,7 @@ URL classification drives playback mode: extraction, embed, or link fallback. Mo
 - Extracted media can be saved to Photos or Files.
 - Works offline once cached.
 - Video cache auto-trims at approximately 1 GB with least-recently-used eviction.
-- HLS downloads stay at their system-provided location and are saved only after successful completion. Cancellation removes partial packages. Cached HLS video uses the same native player and playback controls as other local videos.
+- HLS downloads stay at their system-provided location and are saved only after successful completion. Cancellation removes partial packages. Cached HLS video uses the same native player and playback controls as other local videos. Automatic HLS caching uses discretionary downloads so scrolling does not show system download activities; iOS may defer caching based on network and battery conditions while streaming playback continues. Explicit saves use immediate downloads.
 
 **Embed** loads the provider's web player in an inline web view:
 

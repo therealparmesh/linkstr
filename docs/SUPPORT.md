@@ -316,7 +316,7 @@ These preferences sync automatically. Once the initial preference history reques
 
 ### Where are videos and previews stored?
 
-Downloaded media and generated previews are stored in app-owned local storage. Video cache is treated as disposable device cache and trims itself automatically. Media saved via the share sheet goes to Photos or a Files location you choose. Settings can clear cached videos or saved preview metadata if you want to free space or force a preview rebuild.
+Downloaded media and generated previews are stored in app-owned local storage. HLS video streams play immediately while automatic caching runs silently when iOS permits it. A streamed video is available offline only after caching finishes. Explicit saves start downloading immediately and may show system download progress. Video cache is treated as disposable device cache and trims itself automatically. Media saved via the share sheet goes to Photos or a Files location you choose. Settings can clear cached videos or saved preview metadata if you want to free space or force a preview rebuild.
 
 If a prepared video is removed from the cache while the shared-save screen is open, **choose where to save** prepares it again before showing the destinations.
 
