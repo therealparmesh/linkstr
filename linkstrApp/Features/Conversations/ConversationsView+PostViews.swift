@@ -169,6 +169,7 @@ extension SessionPostsView {
       PostListRowView(
         post: row.post,
         senderLabel: row.senderLabel,
+        avatarName: resolvedIdentity(for: row.post.senderPubkey, contactsByPubkey: contactsByPubkey).avatarName,
         isOutgoing: row.isOutgoing,
         showsSenderHeader: row.showsSenderHeader,
         isFollowedBySameSender: row.isFollowedBySameSender,
@@ -213,7 +214,7 @@ extension SessionPostsView {
     myPubkey: String?,
     contactsByPubkey: [String: ContactEntity]
   ) -> String {
-    if isOutgoing(message, myPubkey: myPubkey) {
+    if isOutgoing(message, myPubkey: myPubkey), session.currentProfileName != nil {
       return "you"
     }
     return displayName(for: message.senderPubkey, contactsByPubkey: contactsByPubkey)
@@ -223,15 +224,24 @@ extension SessionPostsView {
     for pubkeyHex: String,
     contactsByPubkey: [String: ContactEntity]
   ) -> String {
+    resolvedIdentity(for: pubkeyHex, contactsByPubkey: contactsByPubkey).displayName
+  }
+
+  private func resolvedIdentity(
+    for pubkeyHex: String, contactsByPubkey: [String: ContactEntity]
+  ) -> LinkstrResolvedIdentity {
     let normalizedPubkey = NostrValueNormalizer.normalizedPubkeyHex(pubkeyHex) ?? pubkeyHex
+    if normalizedPubkey == session.identityService.pubkeyHex {
+      return session.resolvedIdentity(for: normalizedPubkey, contacts: [])
+    }
     if let contact = contactsByPubkey[normalizedPubkey] {
-      return session.resolvedIdentity(for: contact).displayName
+      return session.resolvedIdentity(for: contact)
     }
     return LinkstrResolvedIdentity(
       localAlias: nil,
       chosenName: session.remoteProfilesByPubkey[normalizedPubkey]?.chosenName,
       pubkeyHex: normalizedPubkey
-    ).displayName
+    )
   }
 
   func hasUnreadIncomingRootPost(
@@ -259,9 +269,9 @@ extension SessionPostsView {
 // MARK: - Post Card Views
 
 struct PostListRowView: View {
-  @EnvironmentObject private var session: AppSession
   let post: SessionMessageEntity
   let senderLabel: String
+  let avatarName: String?
   let isOutgoing: Bool
   let showsSenderHeader: Bool
   let isFollowedBySameSender: Bool
@@ -277,7 +287,7 @@ struct PostListRowView: View {
       if showsSenderHeader {
         HStack(spacing: LinkstrTheme.compactSpacing) {
           LinkstrContactAvatar(
-            name: isOutgoing ? session.currentProfileName : senderLabel, size: 24, seed: post.senderPubkeyHash
+            name: avatarName, size: 24, seed: post.senderPubkeyHash
           )
             .accessibilityHidden(true)
           Text(senderLabel)

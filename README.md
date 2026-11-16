@@ -148,7 +148,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 - Only the session creator can rename, delete, or change session membership. Non-creator membership and delete mutations are ignored on ingest.
 - The post list inserts centered joined and left markers for membership changes observed after the first local membership snapshot.
 - If the signed-in user is removed, the session stays visible as local history but becomes read-only for new posts and reactions.
-- Member identity resolves as: local alias → remote Nostr profile name → `npub`.
+- Member identity resolves as: local alias → remote Nostr profile name → shortened `npub`. Avatars use name initials, or a person icon when no name or alias is available. Full public keys remain available for copying and sharing.
 - Outbound membership snapshots always include the local sender key.
 - Outbound membership snapshots always include the current session name so other members can apply renames.
 - Inbound membership snapshots from the session creator update the local session name when the snapshot carries a newer name.

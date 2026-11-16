@@ -179,7 +179,7 @@ private struct ContactRowView: View {
 
   var body: some View {
     HStack(spacing: LinkstrTheme.rowSpacing) {
-      LinkstrContactAvatar(name: identity.displayName, size: LinkstrTheme.contactAvatarSize)
+      LinkstrContactAvatar(name: identity.avatarName, size: LinkstrTheme.contactAvatarSize, seed: identity.npub)
         .accessibilityHidden(true)
 
       LinkstrContactIdentityView(

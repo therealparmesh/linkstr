@@ -133,7 +133,7 @@ struct YouView: View {
         .accessibilityHidden(true)
 
       VStack(alignment: .leading, spacing: 0) {
-        Text(session.currentProfileName ?? "your profile")
+        Text(session.currentProfileName ?? LinkstrResolvedIdentity.shortenedNPub(npub))
           .font(LinkstrTheme.font(.title2, weight: .semibold))
           .foregroundStyle(LinkstrTheme.textPrimary)
           .fixedSize(horizontal: false, vertical: true)

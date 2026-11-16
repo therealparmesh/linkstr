@@ -8,6 +8,7 @@ struct KnownProfileSnapshot: Equatable {
 }
 
 struct LinkstrResolvedIdentity: Equatable {
+  let avatarName: String?
   let displayName: String
   let chosenName: String?
   let npub: String
@@ -21,7 +22,7 @@ struct LinkstrResolvedIdentity: Equatable {
   }
 
   var showsNPubLine: Bool {
-    npub.localizedCaseInsensitiveCompare(displayName) != .orderedSame
+    avatarName != nil && npub.localizedCaseInsensitiveCompare(displayName) != .orderedSame
   }
 
   init(localAlias: String?, chosenName: String?, pubkeyHex: String, npub: String? = nil) {
@@ -36,12 +37,12 @@ struct LinkstrResolvedIdentity: Equatable {
     self.npub = resolvedNPub
 
     let aliasValue = normalizedAlias?.isEmpty == false ? normalizedAlias : nil
-    if let aliasValue {
-      displayName = aliasValue
-    } else if let normalizedChosenName {
-      displayName = normalizedChosenName
-    } else {
-      displayName = resolvedNPub
-    }
+    avatarName = aliasValue ?? normalizedChosenName
+    displayName = avatarName ?? Self.shortenedNPub(resolvedNPub)
+  }
+
+  static func shortenedNPub(_ npub: String) -> String {
+    guard npub.count > 24 else { return npub }
+    return "\(npub.prefix(12))…\(npub.suffix(8))"
   }
 }

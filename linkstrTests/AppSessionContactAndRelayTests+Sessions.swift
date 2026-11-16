@@ -116,7 +116,7 @@ extension AppSessionContactAndRelayTests {
     await restoredSession.boot()
 
     let restoredIdentity = restoredSession.resolvedIdentity(for: participantPubkey, contacts: [])
-    XCTAssertEqual(restoredIdentity.displayName, restoredIdentity.npub)
+    XCTAssertEqual(restoredIdentity.displayName, LinkstrResolvedIdentity.shortenedNPub(restoredIdentity.npub))
     let contact = try XCTUnwrap(fetchContacts(in: container.mainContext).first)
     XCTAssertEqual(restoredSession.resolvedIdentity(for: contact).displayName, "Saved Contact Name")
     XCTAssertEqual(restoredSession.searchableNames(for: contact), ["Saved Contact Name"])
@@ -135,8 +135,22 @@ extension AppSessionContactAndRelayTests {
       pubkeyHex: pubkeyHex
     )
 
-    XCTAssertEqual(identity.displayName, identity.npub)
+    XCTAssertNil(identity.avatarName)
+    XCTAssertEqual(identity.displayName, "\(identity.npub.prefix(12))…\(identity.npub.suffix(8))")
     XCTAssertFalse(identity.showsNPubLine)
+  }
+
+  func testIdentityAvatarUsesAliasThenProfileNameWithoutTreatingKeyAsName() throws {
+    let pubkey = try TestKeyMaterialFactory.makePubkeyHex()
+    for (alias, profile, expected) in [
+      (" My friend ", "Alice", "My friend"),
+      ("   ", " Alice ", "Alice"),
+      ("   ", "   ", nil)
+    ] {
+      let identity = LinkstrResolvedIdentity(localAlias: alias, chosenName: profile, pubkeyHex: pubkey)
+      XCTAssertEqual(identity.avatarName, expected)
+      XCTAssertEqual(identity.showsNPubLine, expected != nil)
+    }
   }
 
   func testRemoveContactPublishesUpdatedFollowListBeforeLocalRemoval() async throws {

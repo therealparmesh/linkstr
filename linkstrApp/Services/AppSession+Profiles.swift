@@ -13,6 +13,9 @@ extension AppSession {
 
   func resolvedIdentity(for pubkeyHex: String, contacts: [ContactEntity]) -> LinkstrResolvedIdentity {
     let normalizedPubkey = NostrValueNormalizer.normalizedPubkeyHex(pubkeyHex) ?? pubkeyHex
+    if normalizedPubkey == identityService.pubkeyHex {
+      return LinkstrResolvedIdentity(localAlias: nil, chosenName: currentProfileName, pubkeyHex: normalizedPubkey)
+    }
     if let contact = contacts.first(where: { $0.targetPubkey == normalizedPubkey }) {
       return resolvedIdentity(for: contact)
     }
@@ -21,10 +24,6 @@ extension AppSession {
       chosenName: remoteProfilesByPubkey[normalizedPubkey]?.chosenName,
       pubkeyHex: normalizedPubkey
     )
-  }
-
-  func displayName(for pubkeyHex: String, contacts: [ContactEntity]) -> String {
-    resolvedIdentity(for: pubkeyHex, contacts: contacts).displayName
   }
 
   func searchableNames(for contact: ContactEntity) -> [String] {

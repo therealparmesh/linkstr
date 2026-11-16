@@ -93,7 +93,9 @@ struct SessionManagementSheet: View {
                   ForEach(currentMembers) { member in
                     let identity = member.identity
                     HStack(spacing: LinkstrTheme.rowSpacing) {
-                      LinkstrContactAvatar(name: identity.displayName, size: LinkstrTheme.memberAvatarSize)
+                      LinkstrContactAvatar(
+                        name: identity.avatarName, size: LinkstrTheme.memberAvatarSize, seed: identity.npub
+                      )
                         .accessibilityHidden(true)
 
                       LinkstrContactIdentityView(

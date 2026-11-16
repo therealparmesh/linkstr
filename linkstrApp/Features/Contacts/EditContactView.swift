@@ -22,7 +22,7 @@ struct EditContactView: View {
         VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
           LinkstrInsetSection(title: "contact") {
             HStack(spacing: LinkstrTheme.rowSpacing) {
-              LinkstrContactAvatar(name: identity.displayName, size: LinkstrTheme.contactAvatarSize)
+              LinkstrContactAvatar(name: identity.avatarName, size: LinkstrTheme.contactAvatarSize, seed: identity.npub)
               LinkstrContactIdentityView(identity: identity, nameLineLimit: 2)
             }
           }

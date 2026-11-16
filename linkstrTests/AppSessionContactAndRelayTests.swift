@@ -88,7 +88,7 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
     let didClearAlias = session.updateContactAlias(alice, alias: "   ")
     XCTAssertTrue(didClearAlias)
     XCTAssertNil(alice.localAlias)
-    XCTAssertEqual(session.resolvedIdentity(for: alice).displayName, alice.npub)
+    XCTAssertEqual(session.resolvedIdentity(for: alice).displayName, LinkstrResolvedIdentity.shortenedNPub(alice.npub))
   }
 
   func testIncomingProfileMetadataBecomesFallbackDisplayNameUntilAliased() async throws {
@@ -190,7 +190,7 @@ final class AppSessionContactAndRelayTests: AppSessionTestCase {
 
     XCTAssertEqual(session.remoteProfilesByPubkey.count, 1)
     XCTAssertEqual(session.remoteProfilesByPubkey[participantPubkey]?.chosenName, "Session Peer")
-    XCTAssertEqual(session.displayName(for: participantPubkey, contacts: []), "Session Peer")
+    XCTAssertEqual(session.resolvedIdentity(for: participantPubkey, contacts: []).displayName, "Session Peer")
   }
 
   func testAddContactAppliesCachedKnownProfileMetadataImmediately() async throws {

@@ -15,7 +15,7 @@ private struct SessionSummary: Identifiable {
 @MainActor
 struct SessionMemberAvatar: Identifiable {
   let id: String
-  let name: String
+  let name: String?
 
   static func grouped(
     _ members: [SessionMemberEntity], sessionIDs: Set<String>, ownerHash: String,
@@ -24,7 +24,9 @@ struct SessionMemberAvatar: Identifiable {
     var result: [String: [Self]] = [:]
     for member in members where sessionIDs.contains(member.sessionID) {
       guard result[member.sessionID, default: []].count < 3, !member.memberMatchesHash(ownerHash) else { continue }
-      let name = displayName(member.memberPubkey, contacts: contacts, appSession: appSession)
+      let name =
+        (contacts[member.memberPubkey].map { appSession.resolvedIdentity(for: $0) }
+        ?? appSession.resolvedIdentity(for: member.memberPubkey, contacts: [])).avatarName
       result[member.sessionID, default: []].append(.init(id: member.memberPubkeyHash, name: name))
     }
     return result
@@ -34,7 +36,7 @@ struct SessionMemberAvatar: Identifiable {
     guard !pubkey.isEmpty else { return "member" }
     let identity = contacts[pubkey].map { appSession.resolvedIdentity(for: $0) }
       ?? appSession.resolvedIdentity(for: pubkey, contacts: [])
-    return identity.showsNPubLine ? identity.displayName : "member"
+    return identity.displayName
   }
 }
 

@@ -80,7 +80,9 @@ struct NewSessionSheet: View {
                         toggle(contact.npub)
                       } label: {
                         HStack(spacing: LinkstrTheme.rowSpacing) {
-                          LinkstrContactAvatar(name: identity.displayName, size: LinkstrTheme.memberAvatarSize)
+                          LinkstrContactAvatar(
+                            name: identity.avatarName, size: LinkstrTheme.memberAvatarSize, seed: identity.npub
+                          )
                             .accessibilityHidden(true)
                           LinkstrContactIdentityView(
                             identity: identity,

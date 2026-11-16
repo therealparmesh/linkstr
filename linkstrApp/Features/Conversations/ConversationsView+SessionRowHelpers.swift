@@ -159,7 +159,7 @@ extension SessionManagementSheet {
       pendingMemberChange = ContactPresentation(pubkey: contact.targetPubkey, identity: identity, contact: contact)
     } label: {
       HStack(spacing: LinkstrTheme.rowSpacing) {
-        LinkstrContactAvatar(name: identity.displayName, size: LinkstrTheme.memberAvatarSize)
+        LinkstrContactAvatar(name: identity.avatarName, size: LinkstrTheme.memberAvatarSize, seed: identity.npub)
         LinkstrContactIdentityView(
           identity: identity,
           primaryFont: LinkstrTheme.font(.footnote, weight: .medium)

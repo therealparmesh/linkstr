@@ -30,7 +30,7 @@ struct LinkstrContactIdentityView: View {
           .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : nameLineLimit)
       }
 
-      Text(identity.npub)
+      Text(identity.showsNPubLine ? identity.npub : identity.displayName)
         .typesettingLanguage(.init(languageCode: .unavailable))
         .font(identity.showsNPubLine ? npubFont : primaryFont)
         .foregroundStyle(identity.showsNPubLine ? npubColor : primaryColor)

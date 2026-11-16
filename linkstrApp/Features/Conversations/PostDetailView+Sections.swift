@@ -24,16 +24,15 @@ extension PostDetailView {
       grouped.compactMap { senderPubkeyHash, reactions in
         guard let firstReaction = reactions.first else { return nil }
         let isCurrentUser = myPubkeyHash.map(firstReaction.senderMatchesHash) ?? false
-        let displayName =
-          isCurrentUser
-          ? "you" : session.displayName(for: firstReaction.senderPubkey, contacts: contacts)
+        let identity = session.resolvedIdentity(for: firstReaction.senderPubkey, contacts: contacts)
+        let displayName = isCurrentUser && identity.avatarName != nil ? "you" : identity.displayName
         let emojis = Array(Set(reactions.map(\.emoji))).sorted {
           $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
         }
         return ReactionParticipantBreakdown(
           id: senderPubkeyHash,
           displayName: displayName,
-          avatarName: isCurrentUser ? session.currentProfileName : displayName,
+          avatarName: identity.avatarName,
           emojis: emojis
         )
       }

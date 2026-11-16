@@ -61,7 +61,8 @@ struct AddContactSheet: View {
             if let previewIdentity {
               LinkstrInsetSection(title: "preview") {
                 HStack(spacing: LinkstrTheme.rowSpacing) {
-                  LinkstrContactAvatar(name: previewIdentity.displayName, size: LinkstrTheme.contactAvatarSize)
+                  LinkstrContactAvatar(
+                    name: previewIdentity.avatarName, size: LinkstrTheme.contactAvatarSize, seed: previewIdentity.npub)
                   LinkstrContactIdentityView(
                     identity: previewIdentity,
                     primaryFont: LinkstrTheme.font(.subheadline, weight: .medium),

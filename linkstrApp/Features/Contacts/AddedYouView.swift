@@ -87,7 +87,9 @@ struct AddedYouView: View {
         LazyVStack(spacing: 0) {
           ForEach(visibleRows) { row in
             HStack(spacing: LinkstrTheme.rowSpacing) {
-              LinkstrContactAvatar(name: row.identity.displayName, size: LinkstrTheme.contactAvatarSize)
+              LinkstrContactAvatar(
+                name: row.identity.avatarName, size: LinkstrTheme.contactAvatarSize, seed: row.identity.npub
+              )
                 .accessibilityHidden(true)
               LinkstrContactIdentityView(
                 identity: row.identity,
