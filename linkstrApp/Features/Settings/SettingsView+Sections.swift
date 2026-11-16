@@ -92,6 +92,10 @@ extension SettingsView {
 
         if isNsecVisible {
           Text(revealedNsec.isEmpty ? "couldn’t reveal the secret key." : revealedNsec)
+            .typesettingLanguage(.init(languageCode: .unavailable))
+            .fixedSize(horizontal: false, vertical: true)
+            .multilineTextAlignment(.leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .font(LinkstrTheme.font(.footnote))
             .foregroundStyle(LinkstrTheme.textSecondary)
             .textSelection(.enabled)

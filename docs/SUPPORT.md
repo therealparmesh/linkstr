@@ -27,7 +27,7 @@ Search filters your saved contacts and works offline. If nothing matches, use **
 4. Optionally save a private alias.
 5. Tap the top-right add icon, then confirm **add contact**.
 
-Adding the same contact through this form updates the saved alias instead of creating a duplicate. The top-right button changes to **save contact**, and confirmation says whether the alias will be saved or cleared. To edit an alias later, tap the contact row. Public keys wrap in full in identity rows and appear in contact detail’s **public key (npub)** section. Long-press a contact or session-member row to copy its full public key. In the preview and contact detail, you can also long-press the key text to select and copy it.
+Adding the same contact through this form updates the saved alias instead of creating a duplicate. The top-right button changes to **save contact**, and confirmation says whether the alias will be saved or cleared. To edit an alias later, tap the contact row. Identity rows use compact public-key labels; the full key appears in contact detail’s **public key (npub)** section. Long-press a contact or session-member row to copy its full public key. In contact detail, you can also long-press the full key text to select and copy it.
 
 Contacts keep their last fetched public Nostr name on this device, so names remain available after reopening or offline. Names refresh from relays when available; your private alias always takes priority.
 
@@ -59,7 +59,7 @@ The bottom footer shows validation and relay status only. The keyboard return ke
 
 ### Use the You tab
 
-The **you** tab shows your public key (`npub`), QR code, and published profile name. The full public key is shown below the QR code and wraps onto multiple lines. You can copy or share your public key. Tap **edit profile** to change the name other Nostr apps see. Tap **settings** below the public key. Avatars use initials from a profile name or your saved nickname. Without either, they show a person icon with a shortened npub beside it.
+The **you** tab shows your public key (`npub`), QR code, and published profile name. The full public key is shown below the QR code. This public key and the secret key revealed in settings are left-aligned and wrap without truncation or added hyphens. You can copy or share your public key. Tap **edit profile** to change the name other Nostr apps see. Tap **settings** below the public key. Avatars use initials from a profile name or your saved nickname. Without either, they show a person icon with a shortened npub beside it.
 
 Submit profile name changes with the keyboard return key or the top-right **save profile name** control. To remove the name, clear its text and confirm with **clear profile name**. Validation and save progress appear in the bottom footer.
 

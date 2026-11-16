@@ -167,11 +167,12 @@ struct YouView: View {
       }
 
       Text(npub)
+        .typesettingLanguage(.init(languageCode: .unavailable))
         .font(LinkstrTheme.font(.caption).monospaced())
         .foregroundStyle(LinkstrTheme.textSecondary)
         .fixedSize(horizontal: false, vertical: true)
-        .multilineTextAlignment(.center)
-        .frame(maxWidth: .infinity)
+        .multilineTextAlignment(.leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .textSelection(.enabled)
         .accessibilityLabel("public key: \(npub)")
 
