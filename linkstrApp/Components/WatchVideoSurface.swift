@@ -5,16 +5,14 @@ import UIKit
 
 struct WatchVideoSurface: View {
   let player: AVPlayer
-  let aspectRatio: CGFloat
   let bottomInset: CGFloat
   let videoInsets: EdgeInsets?
   let onControlsHeightChange: (CGFloat) -> Void
   let toggleVideoFit: () -> Void
 
   var body: some View {
-    GeometryReader { proxy in
-      let fillsPortrait = videoInsets == nil && aspectRatio < 0.72 && proxy.size.height > proxy.size.width
-      WatchPlayerLayer(player: player, fillsPortrait: fillsPortrait)
+    GeometryReader { _ in
+      WatchPlayerLayer(player: player)
         .padding(videoInsets ?? EdgeInsets())
         .contentShape(Rectangle())
         .onTapGesture { player.toggleWatchPlayback() }
@@ -240,14 +238,13 @@ private extension AVPlayer {
 
 private struct WatchPlayerLayer: UIViewRepresentable {
   let player: AVPlayer
-  let fillsPortrait: Bool
 
   func makeUIView(context: Context) -> PlayerView {
     PlayerView()
   }
 
   func updateUIView(_ view: PlayerView, context: Context) {
-    view.playerLayer?.videoGravity = fillsPortrait ? .resizeAspectFill : .resizeAspect
+    view.playerLayer?.videoGravity = .resizeAspect
     view.playerLayer?.player = player
   }
 

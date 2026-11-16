@@ -18,12 +18,12 @@ extension AdaptiveMediaView {
   var content: some View {
     if isResolvingPresentation, immersive {
       watchContentArea { _ in
-        loadingIndicator("loading post")
+        LinkstrMediaLoadingView()
       }
     } else if isResolvingPresentation {
       VStack(alignment: .leading, spacing: LinkstrTheme.compactSpacing) {
         mediaSurface(explicitHeight: sharedLinkLoadingHeight) {
-          loadingIndicator("loading post")
+          LinkstrMediaLoadingView()
         }
         linkContent
         LinkstrBrowserButton(action: openSourceAction)
@@ -87,7 +87,6 @@ extension AdaptiveMediaView {
             }
           },
           immersive: immersive,
-          aspectRatio: effectiveMediaAspectRatio,
           isCovered: isMediaCovered,
           watchBottomInset: watchInsets.bottom,
           watchVideoInsets: fitsEntireVideo
@@ -115,11 +114,11 @@ extension AdaptiveMediaView {
   private func localPlaybackLoading(offersEmbed: Bool) -> some View {
     if immersive {
       watchContentArea { _ in
-        loadingIndicator("getting video ready")
+        LinkstrMediaLoadingView()
       }
     } else {
       VStack(alignment: .leading, spacing: LinkstrTheme.compactSpacing) {
-        mediaSurface(explicitHeight: sharedLinkLoadingHeight) { loadingIndicator("getting video ready") }
+        mediaSurface(explicitHeight: sharedLinkLoadingHeight) { LinkstrMediaLoadingView() }
         linkContent
         localPlaybackActions(exportFileURL: nil, offersEmbed: offersEmbed)
       }
@@ -265,7 +264,7 @@ extension AdaptiveMediaView {
         .accessibilityHidden(hidesDocument)
 
         if waitsForEmbed {
-          loadingIndicator("loading embed")
+          LinkstrMediaLoadingView()
             .allowsHitTesting(false)
         }
       }

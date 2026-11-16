@@ -3,7 +3,6 @@ import SwiftUI
 import UIKit
 
 struct SessionPostsView: View {
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.dynamicTypeSize) var dynamicTypeSize
   @Environment(\.verticalSizeClass) var verticalSizeClass
   @Environment(\.dismiss) var dismiss
@@ -11,7 +10,6 @@ struct SessionPostsView: View {
 
   let ownerPubkey: String
   let sessionID: String
-  let onWatchPositionChange: (String) -> Void
 
   @Query var sessionEntities: [SessionEntity]
   @Query var rootPosts: [SessionMessageEntity]
@@ -37,12 +35,10 @@ struct SessionPostsView: View {
 
   init(
     ownerPubkey: String, sessionID: String, scrollToPostID: String? = nil,
-    startingWatchPostID: String? = nil, opensInWatch: Bool = false,
-    onWatchPositionChange: @escaping (String) -> Void
+    startingWatchPostID: String? = nil, opensInWatch: Bool = false
   ) {
     self.ownerPubkey = ownerPubkey
     self.sessionID = sessionID
-    self.onWatchPositionChange = onWatchPositionChange
     _pendingScrollPostID = State(initialValue: scrollToPostID)
     _showsWatch = State(initialValue: opensInWatch)
     _watchPostID = State(initialValue: startingWatchPostID)
@@ -129,6 +125,11 @@ struct SessionPostsView: View {
     )[sessionID, default: []]
   }
 
+  static func firstWatchPost(in newestFirst: [SessionMessageEntity], ownerPubkey: String) -> SessionMessageEntity? {
+    let ownerHash = LocalDataCrypto.shared.digestHex(ownerPubkey)
+    return newestFirst.first { $0.readAt == nil && !$0.senderMatchesHash(ownerHash) } ?? newestFirst.first
+  }
+
   func browsePosts(around postID: String?) {
     pendingScrollPostID = postID
     showsWatch = false
@@ -138,6 +139,8 @@ struct SessionPostsView: View {
     pendingScrollPostID = nil
     reactionShortcutPostID = showsReactions ? postID : nil
     watchPostID = postID
+    activeWatchPostID = postID
+    isPaging = false
     showsWatch = true
   }
 
@@ -145,8 +148,7 @@ struct SessionPostsView: View {
   private var timelineHeaderActions: some View {
     if !rootPosts.isEmpty {
       LinkstrHeaderButton(title: "watch posts", icon: "play.rectangle") {
-        let resumePost = rootPosts.first { $0.rootID == watchPostID }
-        if let postID = (resumePost ?? rootPosts.first)?.rootID { showPost(postID) }
+        if let post = Self.firstWatchPost(in: rootPosts, ownerPubkey: ownerPubkey) { showPost(post.rootID) }
       }
     }
     LinkstrHeaderButton(title: canManageSession ? "manage session" : "view members", icon: "person.2") {
@@ -163,13 +165,11 @@ struct SessionPostsView: View {
     ZStack {
       if isShowingWatch {
         watchView()
-          .transition(.opacity)
       } else if let sessionEntity {
         timelineView(for: sessionEntity)
           .linkstrPinnedPageHeader {
             LinkstrPageHeader(title: sessionEntity.name, backLabel: "back to sessions") { timelineHeaderActions }
           }
-          .transition(.opacity)
       } else {
         LinkstrCenteredEmptyStateView(
           title: "session unavailable",
@@ -182,7 +182,6 @@ struct SessionPostsView: View {
         .linkstrEdgeBack()
       }
     }
-    .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: showsWatch)
     .scrollContentBackground(.hidden)
     .background(LinkstrBackgroundView())
 

@@ -33,7 +33,6 @@ struct MainTabView: View {
   @State private var isPresentingAddContact = false
   @State private var isShowingArchivedSessions = false
   @State private var navigationPath: [AppRoute] = []
-  @State private var watchPositions: [String: String] = [:]
   @State private var navigationID = UUID()
 
   @Query private var sessions: [SessionEntity]
@@ -97,11 +96,8 @@ struct MainTabView: View {
       switch route {
       case .session(let sessionID, let postID):
         SessionPostsView(
-          ownerPubkey: ownerPubkey, sessionID: sessionID, scrollToPostID: postID,
-          startingWatchPostID: watchPositions[sessionID]
-        ) { postID in
-          watchPositions[sessionID] = postID
-        }
+          ownerPubkey: ownerPubkey, sessionID: sessionID, scrollToPostID: postID
+        )
       case .addedYou:
         AddedYouView(ownerPubkey: ownerPubkey, discovery: session.contactDiscovery) {
           isPresentingAddContact = true

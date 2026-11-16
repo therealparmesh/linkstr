@@ -203,15 +203,13 @@ struct WatchPostControls<Content: View>: View {
         .buttonStyle(.plain)
         .accessibilityLabel("add reaction")
       }
-      if isExpanded, !summary.reactions.isEmpty {
-        Button {
-          summary.openReactions(nil)
-        } label: {
-          Image(systemName: "person.2").linkstrToolbarIconLabel()
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("view reactions")
+      Button {
+        summary.openReactions(nil)
+      } label: {
+        Image(systemName: "person.2").linkstrToolbarIconLabel()
       }
+      .buttonStyle(.plain)
+      .accessibilityLabel("view reactions")
       if let shareLink = summary.shareLink {
         Button(action: shareLink) {
           Image(systemName: "square.and.arrow.up").linkstrToolbarIconLabel()

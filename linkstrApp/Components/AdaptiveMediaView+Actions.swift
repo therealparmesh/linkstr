@@ -212,24 +212,6 @@ extension AdaptiveMediaView {
     }
   }
 
-  func loadingIndicator(_ title: String) -> some View {
-    let label = Text(title)
-      .font(LinkstrTheme.font(.caption))
-      .foregroundStyle(LinkstrTheme.textSecondary)
-      .multilineTextAlignment(.center)
-      .fixedSize(horizontal: false, vertical: true)
-    return ViewThatFits(in: .vertical) {
-      VStack(spacing: LinkstrTheme.compactSpacing) {
-        ProgressView()
-          .tint(LinkstrTheme.accent)
-          .accessibilityHidden(true)
-        label
-      }
-      label
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
-  }
-
   func localPlaybackActions(exportFileURL: URL?, offersEmbed: Bool) -> some View {
     VStack(spacing: LinkstrTheme.compactSpacing) {
       if offersEmbed {
@@ -364,3 +346,23 @@ enum LocalFileExportResult {
     ) {}
   }
 #endif
+
+struct LinkstrMediaLoadingView: View {
+  var body: some View {
+    let label = Text("loading post")
+      .font(LinkstrTheme.font(.caption))
+      .foregroundStyle(LinkstrTheme.textSecondary)
+      .multilineTextAlignment(.center)
+      .fixedSize(horizontal: false, vertical: true)
+    return ViewThatFits(in: .vertical) {
+      VStack(spacing: LinkstrTheme.compactSpacing) {
+        ProgressView()
+          .tint(LinkstrTheme.accent)
+          .accessibilityHidden(true)
+        label
+      }
+      label
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+  }
+}

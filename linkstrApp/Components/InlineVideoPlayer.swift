@@ -17,7 +17,6 @@ struct InlineVideoPlayer: View {
   var onPlaybackFailed: (() -> Void)?
   var onAspectRatioChange: ((CGFloat) -> Void)?
   var immersive = false
-  var aspectRatio: CGFloat = 16.0 / 9.0
   var isCovered = false
   var watchBottomInset: CGFloat = 0
   var watchVideoInsets: EdgeInsets?
@@ -26,6 +25,7 @@ struct InlineVideoPlayer: View {
   @State private var statusObservation: NSKeyValueObservation?
   @State private var presentationSizeObservation: NSKeyValueObservation?
   @State private var resumeAfterCover = false
+  @State private var isVisible = false
 
   private var shouldSuspend: Bool { isCovered || (immersive && scenePhase != .active) }
 
@@ -36,7 +36,7 @@ struct InlineVideoPlayer: View {
           Group {
             if immersive {
               WatchVideoSurface(
-                player: player, aspectRatio: aspectRatio, bottomInset: watchBottomInset,
+                player: player, bottomInset: watchBottomInset,
                 videoInsets: watchVideoInsets, onControlsHeightChange: onWatchControlsHeightChange,
                 toggleVideoFit: toggleVideoFit
               )
@@ -46,10 +46,7 @@ struct InlineVideoPlayer: View {
           }
           .scopedPlaybackAudioSession()
         } else {
-          ProgressView()
-            .tint(LinkstrTheme.accent)
-            .accessibilityLabel("loading video")
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+          LinkstrMediaLoadingView()
         }
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
@@ -74,7 +71,7 @@ struct InlineVideoPlayer: View {
     .onReceive(
       NotificationCenter.default.publisher(for: AVPlayerItem.didPlayToEndTimeNotification)
     ) { notification in
-      guard loopLocalVideos, !shouldSuspend,
+      guard isVisible, loopLocalVideos, !shouldSuspend,
         let endedItem = notification.object as? AVPlayerItem,
         let player,
         player.currentItem === endedItem
@@ -83,6 +80,7 @@ struct InlineVideoPlayer: View {
       player.seek(to: .zero)
       player.play()
     }
+    .onAppear { isVisible = true }
     .task(id: media.playbackURL) {
       statusObservation?.invalidate()
       statusObservation = nil
@@ -92,11 +90,11 @@ struct InlineVideoPlayer: View {
       player = nil
 
       guard let asset = await media.loadVideoAsset() else {
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled, isVisible else { return }
         onPlaybackFailed?()
         return
       }
-      guard !Task.isCancelled else { return }
+      guard !Task.isCancelled, isVisible else { return }
       onPlaybackReady?()
 
       let item = AVPlayerItem(asset: asset)
@@ -128,7 +126,7 @@ struct InlineVideoPlayer: View {
       if !shouldSuspend { newPlayer.play() }
     }
     .onChange(of: shouldSuspend) { _, shouldSuspend in
-      guard let player else { return }
+      guard isVisible, let player else { return }
       if shouldSuspend {
         resumeAfterCover = player.timeControlStatus != .paused
         player.pause()
@@ -138,6 +136,8 @@ struct InlineVideoPlayer: View {
       }
     }
     .onDisappear {
+      isVisible = false
+      resumeAfterCover = false
       guard !isShowingFullscreenPlayer else { return }
       player?.pause()
       player = nil

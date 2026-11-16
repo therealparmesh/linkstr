@@ -193,7 +193,7 @@ private struct ReactionChipLabel: View {
   var body: some View {
     HStack(spacing: LinkstrTheme.metaSpacing) {
       Text(emoji)
-        .font(LinkstrTheme.font(.subheadline))
+        .font(LinkstrTheme.font(.title3))
         .foregroundStyle(LinkstrTheme.textPrimary)
 
       if let count {
@@ -210,7 +210,6 @@ private extension View {
   func linkstrReactionChip(isSelected: Bool = false, compact: Bool = false) -> some View {
     padding(.horizontal, compact ? LinkstrTheme.tightSpacing : 10)
       .padding(.vertical, LinkstrTheme.metaSpacing)
-      .frame(minWidth: LinkstrTheme.minimumInteractiveDimension)
       .background {
         if compact {
           Capsule().fill(isSelected ? LinkstrTheme.accent.opacity(0.17) : LinkstrTheme.panel.opacity(0.8))

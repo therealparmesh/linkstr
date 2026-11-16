@@ -61,15 +61,11 @@ extension SessionPostsView {
       watchPostID = current.indices.contains(index) ? current[index] : current.last ?? first
     }
     .onChange(of: watchPostID, initial: true) { _, postID in
-      if !isPaging, let postID { activateWatchPost(postID) }
+      if showsWatch, !isPaging, let postID { activateWatchPost(postID) }
     }
     .onScrollPhaseChange { _, phase in
       isPaging = phase != .idle
-      if !isPaging, let watchPostID { activateWatchPost(watchPostID) }
-    }
-    .onDisappear {
-      isPaging = false
-      activeWatchPostID = nil
+      if showsWatch, !isPaging, let watchPostID { activateWatchPost(watchPostID) }
     }
     .accessibilityScrollAction { edge in
       switch edge {
@@ -92,7 +88,8 @@ extension SessionPostsView {
           back: { browsePosts(around: post.rootID) },
           canDelete: post.senderPubkey == ownerPubkey,
           watchInsets: insets,
-          isCovered: isPaging || isPresentingMembers || isPresentingNewPost || isPresentingDeleteConfirmation,
+          isCovered: !showsWatch || isPaging || isPresentingMembers
+            || isPresentingNewPost || isPresentingDeleteConfirmation,
           showsReactions: reactionShortcutPostID == post.rootID,
           delete: {
             guard !isDeletingPost else { return }
@@ -114,7 +111,6 @@ extension SessionPostsView {
   private func activateWatchPost(_ postID: String) {
     guard activeWatchPostID != postID else { return }
     activeWatchPostID = postID
-    onWatchPositionChange(postID)
   }
 
   private func advanceWatch(by delta: Int) {

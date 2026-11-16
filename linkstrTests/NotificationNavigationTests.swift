@@ -145,6 +145,26 @@ final class NotificationNavigationTests: AppSessionTestCase {
     }
   }
 
+  func testWatchButtonPrefersNewestIncomingUnreadThenNewestPost() throws {
+    let owner = try TestKeyMaterialFactory.makePubkeyHex()
+    let author = try TestKeyMaterialFactory.makePubkeyHex()
+    defer { try? LocalDataCrypto.shared.clearKey(ownerPubkey: owner) }
+    let posts = try (0..<4).map { index in
+      try SessionMessageEntity(
+        eventID: "post-\(index)", ownerPubkey: owner, conversationID: "session", rootID: "post-\(index)",
+        kind: .root, senderPubkey: index == 0 ? owner : author, url: nil, note: nil,
+        timestamp: .now.addingTimeInterval(Double(-index)), linkType: .generic
+      )
+    }
+    posts[1].readAt = .now
+    XCTAssertEqual(SessionPostsView.firstWatchPost(in: posts, ownerPubkey: owner)?.rootID, "post-2")
+    posts[2].readAt = .now
+    XCTAssertEqual(SessionPostsView.firstWatchPost(in: posts, ownerPubkey: owner)?.rootID, "post-3")
+    posts[3].readAt = .now
+    XCTAssertEqual(SessionPostsView.firstWatchPost(in: posts, ownerPubkey: owner)?.rootID, "post-0")
+    XCTAssertNil(SessionPostsView.firstWatchPost(in: [], ownerPubkey: owner))
+  }
+
   func testWatchStartsAtRequestedPostAndLeavesEarlierPostsUnread() async throws {
     let (session, container) = try makeSession()
     try session.identityService.createNewIdentity()
@@ -173,7 +193,7 @@ final class NotificationNavigationTests: AppSessionTestCase {
       rootView: NavigationStack {
         SessionPostsView(
           ownerPubkey: owner, sessionID: "session", startingWatchPostID: "post-3", opensInWatch: true
-        ) { _ in }
+        )
       }
       .environmentObject(session)
       .modelContainer(container)
