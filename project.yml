@@ -63,7 +63,7 @@ targets:
       path: linkstrApp/Info.plist
       properties:
         CFBundleDisplayName: linkstr
-        CFBundleShortVersionString: "1.6.2"
+        CFBundleShortVersionString: "1.6.3"
         CFBundleVersion: "50"
         LinkstrPushServiceBaseURL: $(LINKSTR_PUSH_SERVICE_BASE_URL)
         UIApplicationSceneManifest:
@@ -124,7 +124,7 @@ targets:
       path: linkstrShareExtension/Info.plist
       properties:
         CFBundleDisplayName: linkstr
-        CFBundleShortVersionString: "1.6.2"
+        CFBundleShortVersionString: "1.6.3"
         CFBundleVersion: "50"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.share-services
