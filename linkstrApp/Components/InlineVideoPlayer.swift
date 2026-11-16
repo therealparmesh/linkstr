@@ -17,6 +17,7 @@ struct InlineVideoPlayer: View {
   var onPlaybackFailed: (() -> Void)?
   var onAspectRatioChange: ((CGFloat) -> Void)?
   var immersive = false
+  var aspectRatio: CGFloat = 16 / 9
   var isCovered = false
   var watchBottomInset: CGFloat = 0
   var watchVideoInsets: EdgeInsets?
@@ -36,7 +37,7 @@ struct InlineVideoPlayer: View {
           Group {
             if immersive {
               WatchVideoSurface(
-                player: player, bottomInset: watchBottomInset,
+                player: player, aspectRatio: aspectRatio, bottomInset: watchBottomInset,
                 videoInsets: watchVideoInsets, onControlsHeightChange: onWatchControlsHeightChange,
                 toggleVideoFit: toggleVideoFit
               )
