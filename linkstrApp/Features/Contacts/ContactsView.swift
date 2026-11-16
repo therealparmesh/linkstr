@@ -100,10 +100,7 @@ struct ContactsView: View {
           LinkstrSearchField(prompt: "search contacts", text: $query)
           addedYouShortcut
 
-          if visibleContacts.isEmpty, nostrService.contactListLoadState == .unavailable {
-            retryState
-              .frame(maxWidth: .infinity, minHeight: 220)
-          } else if visibleContacts.isEmpty, nostrService.contactListLoadState == .ready {
+          if visibleContacts.isEmpty {
             LinkstrCenteredEmptyStateView(
               title: "no contacts found",
               systemImage: "magnifyingglass",
@@ -113,8 +110,6 @@ struct ContactsView: View {
               action: { query = "" }
             )
             .frame(maxWidth: .infinity, minHeight: 220)
-          } else if visibleContacts.isEmpty {
-            LinkstrLoadingStateView(title: "loading contacts")
           } else {
             LazyVStack(spacing: 0) {
               ForEach(visibleContacts) { row in

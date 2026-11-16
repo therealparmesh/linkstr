@@ -51,7 +51,7 @@ struct AddedYouView: View {
     ScrollView {
       VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
         LinkstrSearchField(prompt: "search people", text: $query)
-        if visibleRows.isEmpty, discovery.loadState == .unavailable {
+        if rows.isEmpty, discovery.loadState == .unavailable {
           LinkstrCenteredEmptyStateView(
             title: "couldn’t load people",
             systemImage: "wifi.exclamationmark",
@@ -64,7 +64,7 @@ struct AddedYouView: View {
             }
           )
           .frame(maxWidth: .infinity, minHeight: 220)
-        } else if visibleRows.isEmpty, hasSearch, discovery.loadState == .ready {
+        } else if visibleRows.isEmpty, hasSearch, !rows.isEmpty || discovery.loadState == .ready {
           LinkstrCenteredEmptyStateView(
             title: discovery.canLoadMore ? "no matches yet" : "no people found",
             systemImage: "magnifyingglass",
