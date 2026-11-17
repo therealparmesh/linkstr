@@ -59,7 +59,7 @@ The bottom footer shows validation and relay status only. The keyboard return ke
 
 ### Use the You tab
 
-The **you** tab shows your public key (`npub`), QR code, and published profile name. The full public key is shown below the QR code. This public key and the secret key revealed in settings are left-aligned and wrap without truncation or added hyphens. You can copy or share your public key. Tap **edit profile** to change the name other Nostr apps see. Tap **settings** below the public key. Avatars use initials from a profile name or your saved nickname. Without either, they show a person icon with a shortened npub beside it.
+The **you** tab shows your public key (`npub`), QR code, and published profile name. The full public key is shown below the QR code. This public key and the secret key revealed in settings are left-aligned and wrap without truncation or added hyphens. You can copy or share your public key. Tap **edit profile** to change the name other Nostr apps see. Tap **settings** below the public key. Avatars use the same initials at every size: the first and last initials of your saved nickname or the profile name, or the first two characters of a single name. Without either, they show a person icon with a shortened npub beside it.
 
 Submit profile name changes with the keyboard return key or the top-right **save profile name** control. To remove the name, clear its text and confirm with **clear profile name**. Validation and save progress appear in the bottom footer.
 

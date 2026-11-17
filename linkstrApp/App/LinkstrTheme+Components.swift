@@ -345,15 +345,10 @@ enum LinkstrAvatarStyleResolver {
       .split(whereSeparator: \.isWhitespace)
       .filter { $0.contains(where: \.isLetter) || $0.contains(where: \.isNumber) }
 
-    guard let firstPart = parts.first else { return "?" }
-    if parts.count == 1 {
-      let singleWordInitials = String(firstPart.prefix(2))
-      return singleWordInitials.isEmpty ? "?" : singleWordInitials.uppercased()
-    }
-
-    let lastPart = parts[parts.count - 1]
-    let combined = String(firstPart.prefix(1)) + String(lastPart.prefix(1))
-    return combined.isEmpty ? "?" : combined.uppercased()
+    guard let first = parts.first, let last = parts.last else { return "?" }
+    let initials =
+      parts.count == 1 ? String(first.prefix(2)) : String(first.prefix(1) + last.prefix(1))
+    return String(initials.uppercased().prefix(2))
   }
 
   static func colorIndex(for seed: String, paletteSize: Int) -> Int {
@@ -381,7 +376,7 @@ struct LinkstrContactAvatar: View {
       .frame(width: size, height: size)
       .overlay {
         if let name, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-          Text(String(LinkstrAvatarStyleResolver.contactInitials(for: name).prefix(size < 32 ? 1 : 2)))
+          Text(LinkstrAvatarStyleResolver.contactInitials(for: name))
             .font(.system(size: size * 0.32, weight: .semibold))
             .lineLimit(1)
         } else {
@@ -395,6 +390,8 @@ struct LinkstrContactAvatar: View {
 
   private var avatarColor: Color {
     let colors = [LinkstrTheme.accent, LinkstrTheme.accentPink, LinkstrTheme.textSecondary]
-    return colors[LinkstrAvatarStyleResolver.colorIndex(for: seed ?? name ?? "profile", paletteSize: colors.count)]
+    return colors[
+      LinkstrAvatarStyleResolver.colorIndex(
+        for: seed ?? name ?? "profile", paletteSize: colors.count)]
   }
 }
