@@ -18,7 +18,7 @@ extension SessionPostsView {
       watchPager(insets: proxy.safeAreaInsets)
         .ignoresSafeArea(.container, edges: [.top, .bottom])
         .linkstrEdgeBack {
-          browsePosts(around: activeWatchPostID ?? watchPostID)
+          browsePosts()
         }
     }
   }
@@ -85,7 +85,7 @@ extension SessionPostsView {
           sessionID: sessionID,
           postID: post.rootID,
           sender: senderLabel(for: post, myPubkey: ownerPubkey, contactsByPubkey: contactsByPubkey),
-          back: { browsePosts(around: post.rootID) },
+          back: browsePosts,
           canDelete: post.senderPubkey == ownerPubkey,
           watchInsets: insets,
           isCovered: !showsWatch || isPaging || isPresentingMembers

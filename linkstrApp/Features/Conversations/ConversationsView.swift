@@ -34,7 +34,8 @@ struct SessionMemberAvatar: Identifiable {
 
   static func displayName(_ pubkey: String, contacts: [String: ContactEntity], appSession: AppSession) -> String {
     guard !pubkey.isEmpty else { return "member" }
-    let identity = contacts[pubkey].map { appSession.resolvedIdentity(for: $0) }
+    let identity =
+      contacts[pubkey].map { appSession.resolvedIdentity(for: $0) }
       ?? appSession.resolvedIdentity(for: pubkey, contacts: [])
     return identity.displayName
   }
@@ -119,7 +120,8 @@ struct ConversationsView: View {
     let avatars = SessionMemberAvatar.grouped(
       members, sessionIDs: visibleSessionIDs, ownerHash: ownerPubkeyHash, contacts: contactIndex, appSession: appSession
     )
-    return visibleSessions
+    return
+      visibleSessions
       .map { group in
         let post = latestPosts[group.sessionID]
         let source = post.flatMap { LinkstrPostPreview.source(for: $0.url) }
@@ -141,7 +143,8 @@ struct ConversationsView: View {
 
   private func previewText(_ post: SessionMessageEntity?, contacts: [String: ContactEntity]) -> String {
     guard let post else { return "no posts yet" }
-    let sender = post.senderMatchesHash(ownerPubkeyHash)
+    let sender =
+      post.senderMatchesHash(ownerPubkeyHash)
       ? "you" : SessionMemberAvatar.displayName(post.senderPubkey, contacts: contacts, appSession: appSession)
     if let text = LinkstrPostPreview.text(post.note) ?? LinkstrPostPreview.title(for: post) {
       return "\(sender): \(text)"
@@ -190,6 +193,7 @@ private struct ConversationsContentView: View {
     ZStack {
       LinkstrBackgroundView()
       content
+        .linkstrPinnedPageHeader { heading }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     .scrollContentBackground(.hidden)
@@ -216,25 +220,18 @@ private struct ConversationsContentView: View {
   @ViewBuilder
   private var content: some View {
     if !hasSessions {
-      VStack(spacing: LinkstrTheme.listBlockSpacing) {
-        heading
-          .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-          .padding(.top, LinkstrTheme.pageHeaderTopPadding)
-        LinkstrCenteredEmptyStateView(
-          title: "no sessions",
-          systemImage: "rectangle.stack.badge.plus",
-          description: "create a private session to share links with your people.",
-          actionTitle: "new session",
-          actionSystemImage: "square.and.pencil",
-          action: createSession
-        )
-      }
-      .linkstrReadableContent()
+      LinkstrCenteredEmptyStateView(
+        title: "no sessions",
+        systemImage: "rectangle.stack.badge.plus",
+        description: "create a private session to share links with your people.",
+        actionTitle: "new session",
+        actionSystemImage: "square.and.pencil",
+        action: createSession
+      )
+      .linkstrPageContentLayout(topPadding: LinkstrTheme.pinnedPageContentTopPadding)
     } else {
       ScrollView {
         VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
-          heading
-
           if !summaries.isEmpty {
             LinkstrSearchField(
               prompt: isShowingArchivedSessions ? "search archived sessions" : "search sessions",
@@ -277,7 +274,7 @@ private struct ConversationsContentView: View {
             }
           }
         }
-        .linkstrPageContentLayout(topPadding: LinkstrTheme.pageHeaderTopPadding)
+        .linkstrPageContentLayout(topPadding: LinkstrTheme.pinnedPageContentTopPadding)
       }
       .linkstrKeyboardDismissal()
     }

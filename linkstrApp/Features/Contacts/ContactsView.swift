@@ -44,6 +44,9 @@ struct ContactsView: View {
     ZStack {
       LinkstrBackgroundView()
       content
+        .linkstrPinnedPageHeader {
+          heading(showsAddContact: !contacts.isEmpty || nostrService.contactListLoadState != .ready)
+        }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     .contactRemoval(pending: $pendingContactRemoval)
@@ -68,12 +71,9 @@ struct ContactsView: View {
 
     if orderedContacts.isEmpty {
       VStack(spacing: 0) {
-        VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
-          heading(showsAddContact: nostrService.contactListLoadState != .ready)
-          addedYouShortcut
-        }
-        .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-        .padding(.top, LinkstrTheme.pageHeaderTopPadding)
+        addedYouShortcut
+          .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+          .padding(.top, LinkstrTheme.pinnedPageContentTopPadding)
 
         if nostrService.contactListLoadState == .unavailable {
           retryState
@@ -95,8 +95,6 @@ struct ContactsView: View {
     } else {
       ScrollView {
         VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
-          heading()
-
           LinkstrSearchField(prompt: "search contacts", text: $query)
           addedYouShortcut
 
@@ -114,7 +112,11 @@ struct ContactsView: View {
             LazyVStack(spacing: 0) {
               ForEach(visibleContacts) { row in
                 if let contact = row.contact {
-                  Button { selectedContact = contact } label: { ContactRowView(identity: row.identity) }
+                  Button {
+                    selectedContact = contact
+                  } label: {
+                    ContactRowView(identity: row.identity)
+                  }
                   .buttonStyle(.plain)
                   .overlay(alignment: .bottom) { LinkstrListRowDivider(leadingInset: 62) }
                   .contextMenu {
@@ -135,13 +137,13 @@ struct ContactsView: View {
             }
           }
         }
-        .linkstrPageContentLayout(topPadding: LinkstrTheme.pageHeaderTopPadding)
+        .linkstrPageContentLayout(topPadding: LinkstrTheme.pinnedPageContentTopPadding)
       }
       .linkstrKeyboardDismissal()
     }
   }
 
-  private func heading(showsAddContact: Bool = true) -> some View {
+  private func heading(showsAddContact: Bool) -> some View {
     LinkstrPageHeader(title: "contacts") {
       if showsAddContact {
         LinkstrHeaderButton(title: "add contact", icon: "person.badge.plus", action: addContact)

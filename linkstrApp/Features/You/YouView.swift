@@ -15,6 +15,9 @@ struct YouView: View {
     ZStack {
       LinkstrBackgroundView()
       content
+        .linkstrPinnedPageHeader {
+          LinkstrPageHeader(title: "you") { EmptyView() }
+        }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     .onAppear {
@@ -36,15 +39,12 @@ struct YouView: View {
   private var content: some View {
     if let npub = session.identityService.npub {
       ScrollView {
-        VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
-          LinkstrPageHeader(title: "you") { EmptyView() }
-          VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
-            profileHeader(npub: npub)
-            identitySection(npub: npub)
-            LinkstrPageShortcut(title: "settings", icon: "gearshape", action: openSettings)
-          }
+        VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
+          profileHeader(npub: npub)
+          identitySection(npub: npub)
+          LinkstrPageShortcut(title: "settings", icon: "gearshape", action: openSettings)
         }
-        .linkstrPageContentLayout(topPadding: LinkstrTheme.pageHeaderTopPadding)
+        .linkstrPageContentLayout(topPadding: LinkstrTheme.pinnedPageContentTopPadding)
       }
       .task(id: npub) {
         qrImage = QRCodeGenerator.image(for: npub)
@@ -82,20 +82,15 @@ struct YouView: View {
         }
       }
     } else {
-      VStack(spacing: LinkstrTheme.listBlockSpacing) {
-        LinkstrPageHeader(title: "you") { EmptyView() }
-          .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-          .padding(.top, LinkstrTheme.pageHeaderTopPadding)
-        LinkstrCenteredEmptyStateView(
-          title: "no identity",
-          systemImage: "person.crop.circle.badge.exclamationmark",
-          description: "sign in or create an account in settings.",
-          actionTitle: "open settings",
-          actionSystemImage: "gearshape",
-          action: openSettings
-        )
-      }
-      .linkstrReadableContent()
+      LinkstrCenteredEmptyStateView(
+        title: "no identity",
+        systemImage: "person.crop.circle.badge.exclamationmark",
+        description: "sign in or create an account in settings.",
+        actionTitle: "open settings",
+        actionSystemImage: "gearshape",
+        action: openSettings
+      )
+      .linkstrPageContentLayout(topPadding: LinkstrTheme.pinnedPageContentTopPadding)
     }
   }
 

@@ -25,7 +25,8 @@ struct AddedYouView: View {
     _relationships = Query(
       filter: #Predicate<FollowRelationshipEntity> {
         $0.ownerPubkey == ownerPubkey && $0.followsOwner
-      }, sort: [
+      },
+      sort: [
         SortDescriptor(\FollowRelationshipEntity.updatedAt, order: .reverse),
         SortDescriptor(\FollowRelationshipEntity.followerPubkey)
       ])
@@ -90,7 +91,7 @@ struct AddedYouView: View {
               LinkstrContactAvatar(
                 name: row.identity.avatarName, size: LinkstrTheme.contactAvatarSize, seed: row.identity.npub
               )
-                .accessibilityHidden(true)
+              .accessibilityHidden(true)
               LinkstrContactIdentityView(
                 identity: row.identity,
                 primaryFont: LinkstrTheme.font(.subheadline, weight: .medium)
@@ -133,7 +134,9 @@ struct AddedYouView: View {
             .tint(LinkstrTheme.accent)
             .frame(maxWidth: .infinity, minHeight: LinkstrTheme.actionButtonMinHeight)
         } else if discovery.canLoadMore {
-          Button { discovery.loadMore() } label: {
+          Button {
+            discovery.loadMore()
+          } label: {
             LinkstrActionButtonLabel(title: "load more")
           }
           .linkstrSecondaryButton()
@@ -148,6 +151,7 @@ struct AddedYouView: View {
         LinkstrHeaderButton(title: "add contact", icon: "person.badge.plus", action: addContact)
       }
     }
+    .linkstrEdgeBack()
     .linkstrKeyboardDismissal()
     .refreshable { discovery.refresh() }
     .task(id: visibleRows.map(\.pubkey).stableTaskID) {

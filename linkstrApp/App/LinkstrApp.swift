@@ -312,8 +312,6 @@ struct LinkstrStorageRecoveryView: View {
             .background(LinkstrTheme.panelElevated, in: .rect(cornerRadius: LinkstrTheme.fieldCornerRadius))
             .accessibilityHidden(true)
 
-          LinkstrScreenTitle(title: title)
-
           Text(message)
             .font(LinkstrTheme.font(.subheadline))
             .foregroundStyle(LinkstrTheme.textSecondary)
@@ -345,6 +343,9 @@ struct LinkstrStorageRecoveryView: View {
         .frame(maxWidth: .infinity)
       }
       .defaultScrollAnchor(.center, for: .alignment)
+      .linkstrPinnedPageHeader {
+        LinkstrPageHeader(title: title) { EmptyView() }
+      }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }

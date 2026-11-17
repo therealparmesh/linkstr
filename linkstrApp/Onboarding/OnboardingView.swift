@@ -18,7 +18,13 @@ struct OnboardingView: View {
 
       ScrollView {
         VStack(alignment: .leading, spacing: LinkstrTheme.sectionStackSpacing) {
-          header
+          Text(
+            session.pendingCreatedAccountNsec == nil
+              ? "share and watch links with people you trust."
+              : "keep a copy so you can sign in on another device."
+          )
+          .font(LinkstrTheme.font(.subheadline))
+          .foregroundStyle(LinkstrTheme.textSecondary)
 
           if let pendingCreatedAccountNsec = session.pendingCreatedAccountNsec {
             createdAccountStep(nsec: pendingCreatedAccountNsec)
@@ -26,8 +32,9 @@ struct OnboardingView: View {
             signInAndCreateStep
           }
         }
-        .linkstrPageContentLayout()
+        .linkstrPageContentLayout(topPadding: LinkstrTheme.pinnedPageContentTopPadding)
       }
+      .linkstrPinnedPageHeader { header }
       .linkstrKeyboardDismissal()
     }
     .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -47,25 +54,12 @@ struct OnboardingView: View {
   }
 
   private var header: some View {
-    VStack(alignment: .leading, spacing: LinkstrTheme.buttonRowSpacing) {
-      LinkstrAppIconBadge(size: 62)
+    HStack(spacing: LinkstrTheme.rowSpacing) {
+      LinkstrAppIconBadge(size: 44)
         .accessibilityHidden(true)
-        .padding(.bottom, LinkstrTheme.tightSpacing)
-
-      LinkstrScreenTitle(
-        title: session.pendingCreatedAccountNsec == nil ? "welcome to linkstr" : "save your key",
-        showsBrand: false
-      )
-
-      Text(
-        session.pendingCreatedAccountNsec == nil
-          ? "share and watch links with people you trust."
-          : "keep a copy so you can sign in on another device."
-      )
-      .font(LinkstrTheme.font(.subheadline))
-      .foregroundStyle(LinkstrTheme.textSecondary)
+      LinkstrScreenTitle(title: session.pendingCreatedAccountNsec == nil ? "welcome to linkstr" : "save your key")
+        .lineLimit(3)
     }
-    .padding(.vertical, LinkstrTheme.fieldVerticalPadding)
   }
 
   private var signInAndCreateStep: some View {

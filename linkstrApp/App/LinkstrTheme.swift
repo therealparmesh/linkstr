@@ -112,15 +112,6 @@ extension View {
     buttonStyle(LinkstrActionButtonStyle(tint: LinkstrTheme.destructive, prominent: prominent))
   }
 
-  func linkstrPinnedPageHeader<Header: View>(@ViewBuilder _ header: () -> Header) -> some View {
-    safeAreaInset(edge: .top, spacing: 0) {
-      header()
-        .linkstrPageHeaderLayout()
-        .background(LinkstrTheme.chrome)
-    }
-    .linkstrEdgeBack()
-  }
-
   func linkstrEdgeBack(action: (() -> Void)? = nil) -> some View {
     modifier(LinkstrEdgeBackGesture(action: action))
   }

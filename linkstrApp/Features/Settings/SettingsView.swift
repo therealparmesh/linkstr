@@ -85,6 +85,7 @@ struct SettingsView: View {
     .linkstrPinnedPageHeader {
       LinkstrPageHeader(title: "settings", backLabel: "back to you") { EmptyView() }
     }
+    .linkstrEdgeBack()
     .linkstrKeyboardDismissal()
     .alert("log out", isPresented: $isPresentingLogoutOptions) {
       Button("log out and keep local data") {

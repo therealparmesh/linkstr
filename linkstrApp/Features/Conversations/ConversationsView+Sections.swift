@@ -130,8 +130,7 @@ struct SessionPostsView: View {
     return newestFirst.first { $0.readAt == nil && !$0.senderMatchesHash(ownerHash) } ?? newestFirst.first
   }
 
-  func browsePosts(around postID: String?) {
-    pendingScrollPostID = postID
+  func browsePosts() {
     showsWatch = false
   }
 
@@ -163,13 +162,18 @@ struct SessionPostsView: View {
     let sessionEntity = sessionEntity
     let isShowingWatch = sessionEntity != nil && showsWatch && !rootPosts.isEmpty
     ZStack {
-      if isShowingWatch {
-        watchView()
-      } else if let sessionEntity {
+      if let sessionEntity {
         timelineView(for: sessionEntity)
           .linkstrPinnedPageHeader {
             LinkstrPageHeader(title: sessionEntity.name, backLabel: "back to sessions") { timelineHeaderActions }
           }
+          .linkstrEdgeBack()
+          .opacity(isShowingWatch ? 0 : 1)
+          .allowsHitTesting(!isShowingWatch)
+          .accessibilityHidden(isShowingWatch)
+        if isShowingWatch {
+          watchView()
+        }
       } else {
         LinkstrCenteredEmptyStateView(
           title: "session unavailable",

@@ -78,6 +78,7 @@ struct EditContactView: View {
           .disabled(!canSaveAlias)
       }
     }
+    .linkstrEdgeBack()
     .toolbarVisibility(.hidden, for: .navigationBar)
   }
 

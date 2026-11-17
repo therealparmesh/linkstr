@@ -18,7 +18,7 @@ struct LinkstrPageHeader<Actions: View>: View {
       } actions: {
         actions
       }
-      LinkstrScreenTitle(title: title, showsBrand: false)
+      LinkstrScreenTitle(title: title)
         .lineLimit(3)
     }
   }
@@ -107,17 +107,13 @@ struct LinkstrDisclosureIndicator: View {
 
 struct LinkstrScreenTitle: View {
   let title: String
-  var showsBrand = true
 
   var body: some View {
-    VStack(alignment: .leading, spacing: LinkstrTheme.tightSpacing) {
-      if showsBrand { LinkstrBrandLabel() }
-      Text(title)
-        .font(LinkstrTheme.font(.largeTitle, weight: .bold))
-        .foregroundStyle(LinkstrTheme.textPrimary)
-        .accessibilityAddTraits(.isHeader)
-    }
-    .frame(maxWidth: .infinity, alignment: .leading)
+    Text(title)
+      .font(LinkstrTheme.font(.largeTitle, weight: .bold))
+      .foregroundStyle(LinkstrTheme.textPrimary)
+      .accessibilityAddTraits(.isHeader)
+      .frame(maxWidth: .infinity, alignment: .leading)
   }
 }
 
@@ -185,6 +181,14 @@ extension View {
       .safeAreaInset(edge: .top, spacing: 0) {
         LinkstrSheetBar(title: title, leading: leading, actions: actions)
       }
+  }
+
+  func linkstrPinnedPageHeader<Header: View>(@ViewBuilder _ header: () -> Header) -> some View {
+    safeAreaInset(edge: .top, spacing: 0) {
+      header()
+        .linkstrPageHeaderLayout()
+        .background(LinkstrTheme.chrome)
+    }
   }
 
   func linkstrPageHeaderLayout() -> some View {
