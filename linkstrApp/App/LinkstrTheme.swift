@@ -128,25 +128,23 @@ private struct LinkstrEdgeBackGesture: ViewModifier {
   let action: (() -> Void)?
   @Environment(\.dismiss) private var dismiss
   @Environment(\.layoutDirection) private var layoutDirection
-  @State private var contentWidth: CGFloat = 0
-
   func body(content: Content) -> some View {
-    content
-      .onGeometryChange(for: CGFloat.self) {
-        $0.size.width
-      } action: {
-        contentWidth = $0
-      }
-      .simultaneousGesture(
-        DragGesture(minimumDistance: 18).onEnded { value in
-          let isLeftToRight = layoutDirection == .leftToRight
-          let startInset = isLeftToRight ? value.startLocation.x : contentWidth - value.startLocation.x
-          let horizontal = (isLeftToRight ? 1.0 : -1.0) * value.translation.width
-          if (0...16).contains(startInset), horizontal >= 55, horizontal > abs(value.translation.height) {
-            if let action { action() } else { dismiss() }
+    content.overlay(alignment: .leading) {
+      // Own touches at the edge so a back swipe cannot also activate a row beneath it.
+      Color.clear
+        .frame(width: 16)
+        .contentShape(Rectangle())
+        .accessibilityHidden(true)
+        .gesture(
+          DragGesture(minimumDistance: 18).onEnded { value in
+            let horizontal =
+              (layoutDirection == .leftToRight ? 1.0 : -1.0) * value.translation.width
+            if horizontal >= 55, horizontal > abs(value.translation.height) {
+              if let action { action() } else { dismiss() }
+            }
           }
-        }
-      )
+        )
+    }
   }
 }
 
@@ -180,7 +178,8 @@ struct LinkstrBrowserButton: View {
 
   var body: some View {
     Button(action: action) {
-      LinkstrActionButtonLabel(title: LinkstrBrowserAction.title, systemImage: LinkstrBrowserAction.icon)
+      LinkstrActionButtonLabel(
+        title: LinkstrBrowserAction.title, systemImage: LinkstrBrowserAction.icon)
     }
     .linkstrSecondaryButton()
   }
