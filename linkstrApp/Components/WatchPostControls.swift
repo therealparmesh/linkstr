@@ -225,8 +225,9 @@ struct WatchReactionActions: View {
               .background(LinkstrTheme.background, in: Circle())
               .offset(x: 4, y: -3)
           }
-          .linkstrToolbarIconLabel()
+          .font(LinkstrTheme.font(.title3, weight: .semibold))
           .foregroundStyle(LinkstrTheme.accent)
+          .linkstrReactionChip(compact: true)
       }
       .buttonStyle(.plain)
       .accessibilityLabel("add reaction")

@@ -186,33 +186,27 @@ private struct ReactionChipLabel: View {
   }
 }
 
-private extension View {
-  func linkstrReactionChip(isSelected: Bool = false, compact: Bool = false) -> some View {
+extension View {
+  func linkstrReactionChip(isSelected: Bool = false, compact: Bool) -> some View {
     padding(.horizontal, compact ? LinkstrTheme.tightSpacing : 10)
       .padding(.vertical, LinkstrTheme.metaSpacing)
+      .frame(
+        minWidth: LinkstrTheme.minimumInteractiveDimension,
+        minHeight: compact ? nil : LinkstrTheme.minimumInteractiveDimension
+      )
       .background {
         if compact {
           Capsule().fill(.thinMaterial)
-            .overlay {
-              if isSelected { Capsule().strokeBorder(LinkstrTheme.accent, lineWidth: 1) }
-            }
-        }
-      }
-      .frame(
-        minWidth: LinkstrTheme.minimumInteractiveDimension,
-        minHeight: LinkstrTheme.minimumInteractiveDimension,
-        alignment: compact ? .leading : .center
-      )
-      .background {
-        if !compact {
+        } else {
           Capsule().fill(isSelected ? LinkstrTheme.panelElevated : LinkstrTheme.panel)
         }
       }
       .overlay {
-        if !compact {
-          Capsule().stroke(isSelected ? LinkstrTheme.accent : LinkstrTheme.separator, lineWidth: 1)
+        if isSelected || !compact {
+          Capsule().strokeBorder(isSelected ? LinkstrTheme.accent : LinkstrTheme.separator, lineWidth: 1)
         }
       }
+      .frame(minHeight: LinkstrTheme.minimumInteractiveDimension)
       .contentShape(Rectangle())
   }
 }
