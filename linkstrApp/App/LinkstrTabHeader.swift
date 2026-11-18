@@ -213,6 +213,6 @@ extension View {
   func linkstrMediaOverlayIconLabel() -> some View {
     linkstrToolbarIconLabel()
       .foregroundStyle(LinkstrTheme.textPrimary)
-      .background(LinkstrTheme.mediaButtonBackground, in: Circle())
+      .background(.regularMaterial, in: Circle())
   }
 }

@@ -5,6 +5,7 @@ import UIKit
 
 struct PostDetailView: View {
   @EnvironmentObject var session: AppSession
+  @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   @Environment(\.modelContext) var modelContext
   @Environment(\.openURL) var openURL
@@ -121,13 +122,12 @@ struct PostDetailView: View {
     }
     .padding(.top, watchInsets.top)
     .background {
-      LinearGradient(
-        stops: [
-          .init(color: LinkstrTheme.background.opacity(0.72), location: 0),
-          .init(color: LinkstrTheme.background.opacity(0.52), location: 0.72),
-          .init(color: LinkstrTheme.background.opacity(0), location: 1)
-        ], startPoint: .top, endPoint: .bottom
-      )
+      let tint = reduceTransparency ? LinkstrTheme.background : LinkstrTheme.watchHeader
+      VStack(spacing: 0) {
+        tint
+        LinearGradient(colors: [tint, .clear], startPoint: .top, endPoint: .bottom)
+          .frame(height: 22)
+      }
       .padding(.bottom, -22)
       .allowsHitTesting(false)
     }

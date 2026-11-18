@@ -41,8 +41,7 @@ struct LinkstrErrorToast: View {
     .padding(.horizontal, LinkstrTheme.fieldHorizontalPadding)
     .padding(.vertical, LinkstrTheme.fieldVerticalPadding)
     .frame(minHeight: LinkstrTheme.minimumInteractiveDimension)
-    .linkstrCardSurface(fill: LinkstrTheme.panelElevated)
-    .shadow(color: LinkstrTheme.background.opacity(0.32), radius: 18, y: 8)
+    .background(.regularMaterial, in: .rect(cornerRadius: LinkstrTheme.cardCornerRadius))
   }
 }
 

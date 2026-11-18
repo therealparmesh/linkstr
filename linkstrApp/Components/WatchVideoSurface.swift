@@ -34,6 +34,7 @@ struct WatchVideoSurface: View {
 }
 
 private struct WatchPlaybackControls: View {
+  @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   @Environment(\.verticalSizeClass) private var verticalSizeClass
   let player: AVPlayer
@@ -82,18 +83,7 @@ private struct WatchPlaybackControls: View {
     .padding(.bottom, LinkstrTheme.metaSpacing)
     .linkstrReadableContent()
     .padding(.bottom, bottomInset)
-    .background {
-      let scrim = LinkstrTheme.background.opacity(0.82)
-      VStack(spacing: 0) {
-        scrim
-        LinearGradient(
-          colors: [scrim, LinkstrTheme.background.opacity(0.94)], startPoint: .top, endPoint: .bottom
-        )
-        .frame(height: bottomInset)
-      }
-      .allowsHitTesting(false)
-      .accessibilityHidden(true)
-    }
+    .background(reduceTransparency ? LinkstrTheme.background : LinkstrTheme.watchPanel)
     .onReceive(player.publisher(for: \.timeControlStatus).receive(on: DispatchQueue.main)) { status in
       playbackStatus = status
       updatePosition()

@@ -15,6 +15,7 @@ struct WatchPostSummary {
 
 /// Post details and actions stay separate from playback and post paging.
 struct WatchPostControls<Content: View>: View {
+  @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   @Environment(\.verticalSizeClass) private var verticalSizeClass
@@ -31,6 +32,10 @@ struct WatchPostControls<Content: View>: View {
   @State private var actionsHeight = LinkstrTheme.minimumInteractiveDimension
   @State private var contentHeight: CGFloat = 240
   @State private var pullStartedAtTop = true
+
+  private var panelBackground: Color {
+    reduceTransparency ? LinkstrTheme.background : LinkstrTheme.watchPanel
+  }
 
   var body: some View {
     GeometryReader { proxy in
@@ -61,7 +66,7 @@ struct WatchPostControls<Content: View>: View {
         if !isExpanded || reservesExpandedSpace { onReservedHeightChange(height) }
       }
       .linkstrReadableContent()
-      .background(LinkstrTheme.background.opacity(isExpanded ? 0.98 : 0.82))
+      .background(panelBackground)
       .clipShape(
         .rect(
           topLeadingRadius: LinkstrTheme.cardCornerRadius, topTrailingRadius: LinkstrTheme.cardCornerRadius
@@ -72,7 +77,7 @@ struct WatchPostControls<Content: View>: View {
     }
     .background(alignment: .bottom) {
       if playbackControlsHeight == 0 {
-        LinkstrTheme.background.opacity(isExpanded ? 0.98 : 0.82)
+        panelBackground
           .frame(height: bottomInset)
           .allowsHitTesting(false)
       }

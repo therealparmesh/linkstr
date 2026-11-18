@@ -213,7 +213,10 @@ private extension View {
       .padding(.vertical, LinkstrTheme.metaSpacing)
       .background {
         if compact {
-          Capsule().fill(isSelected ? LinkstrTheme.accent.opacity(0.17) : LinkstrTheme.panel.opacity(0.8))
+          Capsule().fill(.thinMaterial)
+            .overlay {
+              if isSelected { Capsule().strokeBorder(LinkstrTheme.accent, lineWidth: 1) }
+            }
         }
       }
       .frame(
