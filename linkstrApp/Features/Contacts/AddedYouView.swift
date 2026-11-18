@@ -56,20 +56,14 @@ struct AddedYouView: View {
           LinkstrCenteredEmptyStateView(
             title: "couldn’t load people",
             systemImage: "wifi.exclamationmark",
-            description: "check your connection and try again.",
-            actionTitle: "try again",
-            actionSystemImage: "arrow.clockwise",
-            action: {
-              session.startNostrIfPossible()
-              discovery.refresh()
-            }
+            description: "check your connection, then tap refresh to try again."
           )
           .frame(maxWidth: .infinity, minHeight: 220)
         } else if visibleRows.isEmpty, hasSearch, !rows.isEmpty || discovery.loadState == .ready {
           LinkstrCenteredEmptyStateView(
-            title: discovery.canLoadMore ? "no matches yet" : "no people found",
+            title: "no people found",
             systemImage: "magnifyingglass",
-            description: discovery.canLoadMore ? "load more people or try another search." : "try another search.",
+            description: "try another search.",
             actionTitle: "clear search",
             actionSystemImage: "xmark.circle",
             action: { query = "" }
@@ -83,7 +77,18 @@ struct AddedYouView: View {
           )
           .frame(maxWidth: .infinity, minHeight: 220)
         } else if visibleRows.isEmpty {
-          LinkstrLoadingStateView(title: "loading people")
+          Text("checking who added you…")
+            .foregroundStyle(LinkstrTheme.textSecondary)
+        }
+        if !rows.isEmpty, discovery.loadState == .unavailable {
+          Text("couldn’t update this list. tap refresh to try again.")
+            .font(LinkstrTheme.font(.footnote))
+            .foregroundStyle(LinkstrTheme.textSecondary)
+        }
+        if !rows.isEmpty, discovery.loadState == .ready, discovery.checksOlderPages {
+          Text("check complete")
+            .font(LinkstrTheme.font(.footnote))
+            .foregroundStyle(LinkstrTheme.textSecondary)
         }
         LazyVStack(spacing: 0) {
           ForEach(visibleRows) { row in
@@ -127,21 +132,6 @@ struct AddedYouView: View {
             .onDisappear { discovery.watch(row.pubkey, visible: false) }
           }
         }
-        if discovery.isLoading, !visibleRows.isEmpty {
-          ProgressView("loading people")
-            .font(LinkstrTheme.font(.subheadline))
-            .foregroundStyle(LinkstrTheme.textSecondary)
-            .tint(LinkstrTheme.accent)
-            .frame(maxWidth: .infinity, minHeight: LinkstrTheme.actionButtonMinHeight)
-        } else if discovery.canLoadMore {
-          Button {
-            discovery.loadMore()
-          } label: {
-            LinkstrActionButtonLabel(title: "load more")
-          }
-          .linkstrSecondaryButton()
-          .disabled(discovery.isLoading)
-        }
       }
       .linkstrPageContentLayout(topPadding: LinkstrTheme.pinnedPageContentTopPadding)
     }
@@ -149,11 +139,21 @@ struct AddedYouView: View {
     .linkstrPinnedPageHeader {
       LinkstrPageHeader(title: "added you", backLabel: "back to contacts") {
         LinkstrHeaderButton(title: "add contact", icon: "person.badge.plus", action: addContact)
+        if discovery.isLoading {
+          ProgressView()
+            .tint(LinkstrTheme.accent)
+            .frame(width: LinkstrTheme.minimumInteractiveDimension, height: LinkstrTheme.minimumInteractiveDimension)
+            .accessibilityLabel("checking who added you")
+        } else {
+          LinkstrHeaderButton(title: "check who added you", icon: "arrow.clockwise") {
+            if discovery.loadState == .unavailable { session.startNostrIfPossible() }
+            discovery.refresh(includingHistory: true)
+          }
+        }
       }
     }
     .linkstrEdgeBack()
     .linkstrKeyboardDismissal()
-    .refreshable { discovery.refresh() }
     .task(id: visibleRows.map(\.pubkey).stableTaskID) {
       session.requestRemoteProfilesIfNeeded(pubkeyHexes: visibleRows.map(\.pubkey))
     }

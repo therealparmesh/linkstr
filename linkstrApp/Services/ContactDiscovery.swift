@@ -16,7 +16,7 @@ final class ContactDiscovery: ObservableObject {
   @Published var loadState: ContactListLoadState = .loading
   var isLoading: Bool { loadState == .loading }
   var queryFailed = false
-  @Published var canLoadMore = false
+  private(set) var checksOlderPages = false
   let context: ModelContext
   var pool: RelayPool?
   weak var receiver: NostrRelayReceiver?
@@ -30,7 +30,6 @@ final class ContactDiscovery: ObservableObject {
   var liveUpdateTask: Task<Void, Never>?
   var liveSubscriptionID: String?
   var discoveryLiveSubscriptionID: String?
-  var discoveryPages: [String: RelayHistoryPage] = [:]
 
   init(modelContext: ModelContext) { context = modelContext }
 
@@ -50,7 +49,7 @@ final class ContactDiscovery: ObservableObject {
   func connect(_ pool: RelayPool, receiver: NostrRelayReceiver? = nil) {
     self.pool = pool
     self.receiver = receiver
-    if isVisible { refresh() }
+    if isVisible { refresh(includingHistory: checksOlderPages) }
   }
 
   func disconnect() {
@@ -64,13 +63,10 @@ final class ContactDiscovery: ObservableObject {
     owner = nil
   }
 
-  func refresh() {
+  func refresh(includingHistory: Bool = false) {
     closeSubscriptions()
     guard isVisible, let owner else { return }
-    discoveryPages = Dictionary(uniqueKeysWithValues: connectedRelays.map {
-      ($0, RelayHistoryPage(limit: 200, maximumLimit: 1_600))
-    })
-    canLoadMore = false
+    checksOlderPages = includingHistory
     verifiedAuthors.removeAll()
     queryFailed = false
     do {
@@ -87,15 +83,11 @@ final class ContactDiscovery: ObservableObject {
       discoveryLiveSubscriptionID = id
       _ = pool?.subscribe(with: filter, subscriptionId: id)
     }
-    beginDiscoveryPage()
+    for relay in connectedRelays {
+      beginDiscoveryPage(on: relay, page: RelayHistoryPage(limit: 200, maximumLimit: 1_600))
+    }
     startAuthorQueries()
     updateLiveSubscription()
-  }
-
-  func loadMore() {
-    guard canLoadMore, !isLoading else { return }
-    queryFailed = false
-    beginDiscoveryPage()
   }
 
   func records(ownerPubkey: String) throws -> [FollowRelationshipEntity] {

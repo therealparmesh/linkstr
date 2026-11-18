@@ -100,7 +100,7 @@ final class ContactDiscoveryTests: XCTestCase {
     XCTAssertEqual(discovery.queries["page"]?.page?.eventIDs.count, 1)
   }
 
-  func testCompletionWaitsForExpectedRelaysAndFailureDoesNotAdvancePagination() throws {
+  func testCompletionWaitsForExpectedRelaysAndReportsDisconnect() throws {
     let discovery = try makeDiscovery()
     discovery.loadState = .loading
     discovery.queries["page"] = ContactDiscovery.Query(
@@ -112,8 +112,6 @@ final class ContactDiscoveryTests: XCTestCase {
     XCTAssertEqual(discovery.loadState, .loading)
     discovery.relayDisconnected("second")
     XCTAssertEqual(discovery.loadState, .unavailable)
-    XCTAssertTrue(discovery.discoveryPages.isEmpty)
-    XCTAssertFalse(discovery.canLoadMore)
     discovery.complete(relayURL: "second", subscriptionID: "page")
     XCTAssertEqual(discovery.loadState, .unavailable)
   }

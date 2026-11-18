@@ -2,12 +2,10 @@ import Foundation
 import NostrSDK
 
 extension ContactDiscovery {
-  func beginDiscoveryPage() {
-    guard let owner else { return }
-    for (relayURL, page) in discoveryPages where connectedRelays.contains(relayURL) {
-      guard let filter = Filter(kinds: [3], pubkeys: [owner], until: page.until, limit: page.limit) else { continue }
-      beginQuery(filter: filter, authors: nil, relayURL: relayURL, page: page)
-    }
+  func beginDiscoveryPage(on relay: String, page: RelayHistoryPage) {
+    guard let owner, let filter = Filter(kinds: [3], pubkeys: [owner], until: page.until, limit: page.limit)
+    else { return }
+    beginQuery(filter: filter, authors: nil, relayURL: relay, page: page)
   }
 
   private func beginQuery(
@@ -77,16 +75,17 @@ extension ContactDiscovery {
       queryFailed = true
       if !isLoading { loadState = .unavailable }
     }
-    if isDiscovery, !verifiedAuthors.contains(event.pubkey),
-      !queries.values.contains(where: { $0.authors?.contains(event.pubkey) == true }) {
-      pendingAuthors.insert(event.pubkey)
-      startAuthorQueries()
-    }
+    guard isDiscovery, !verifiedAuthors.contains(event.pubkey),
+      !queries.values.contains(where: { $0.authors?.contains(event.pubkey) == true })
+    else { return }
+    pendingAuthors.insert(event.pubkey)
+    startAuthorQueries()
   }
 
   func complete(relayURL: String, subscriptionID: String, failed: Bool = false) {
     guard var query = queries[subscriptionID], query.expectedRelays.contains(relayURL),
-      !query.completedRelays.contains(relayURL) else {
+      !query.completedRelays.contains(relayURL)
+    else {
       return
     }
     query.failed = query.failed || failed
@@ -104,23 +103,18 @@ extension ContactDiscovery {
     let failed = failed || query.failed
     queryFailed = queryFailed || failed
     timeouts.removeValue(forKey: id)?.cancel()
-    if let authors = query.authors {
-      pool?.closeSubscription(with: id)
-      if !failed { verifiedAuthors.formUnion(authors) }
-    } else if let relayURL = query.expectedRelays.first, let page = query.page {
-      pool?.closeSubscription(with: id)
-      if failed {
-        discoveryPages.removeValue(forKey: relayURL)
-      } else {
+    pool?.closeSubscription(with: id)
+    if !failed {
+      if let authors = query.authors {
+        verifiedAuthors.formUnion(authors)
+      } else if let relay = query.expectedRelays.first, let page = query.page {
         switch page.completion() {
-        case .next(let next): discoveryPages[relayURL] = next
-        case .finished: discoveryPages.removeValue(forKey: relayURL)
-        case .incomplete:
-          discoveryPages.removeValue(forKey: relayURL)
-          queryFailed = true
+        case .next(let next):
+          if checksOlderPages { beginDiscoveryPage(on: relay, page: next) }
+        case .incomplete: queryFailed = true
+        case .finished: break
         }
       }
-      canLoadMore = !discoveryPages.isEmpty
     }
     startAuthorQueries()
     loadState = queries.isEmpty ? (queryFailed ? .unavailable : .ready) : .loading
