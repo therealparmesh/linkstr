@@ -219,7 +219,8 @@ private extension View {
       }
       .frame(
         minWidth: LinkstrTheme.minimumInteractiveDimension,
-        minHeight: LinkstrTheme.minimumInteractiveDimension
+        minHeight: LinkstrTheme.minimumInteractiveDimension,
+        alignment: compact ? .leading : .center
       )
       .background {
         if !compact {

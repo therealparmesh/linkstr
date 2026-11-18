@@ -210,7 +210,8 @@ struct WatchReactionActions: View {
       }
     }
     .foregroundStyle(LinkstrTheme.textPrimary)
-    .padding(.horizontal, LinkstrTheme.controlHorizontalPadding)
+    .padding(.leading, LinkstrTheme.screenHorizontalPadding)
+    .padding(.trailing, LinkstrTheme.controlHorizontalPadding)
     .id(Self.anchor)
   }
 }
