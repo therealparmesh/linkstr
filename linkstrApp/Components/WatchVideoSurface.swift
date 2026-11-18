@@ -83,7 +83,7 @@ private struct WatchPlaybackControls: View {
     .padding(.bottom, LinkstrTheme.metaSpacing)
     .linkstrReadableContent()
     .padding(.bottom, bottomInset)
-    .background(reduceTransparency ? LinkstrTheme.background : LinkstrTheme.watchPanel)
+    .background(reduceTransparency ? LinkstrTheme.background : LinkstrTheme.watchOverlay)
     .onReceive(player.publisher(for: \.timeControlStatus).receive(on: DispatchQueue.main)) { status in
       playbackStatus = status
       updatePosition()

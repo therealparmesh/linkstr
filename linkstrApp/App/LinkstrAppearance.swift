@@ -1,14 +1,14 @@
 import SwiftUI
 
 enum LinkstrTheme {
-  static let watchHeader = background.opacity(0.50)
-  static let watchPanel = background.opacity(0.75)
+  static let watchOverlay = background.opacity(0.60)
+  static let watchExpandedPanel = background.opacity(0.80)
   static let background = Color(red: 0.09, green: 0.10, blue: 0.16)
   static let chrome = background
   static let panel = Color(red: 0.13, green: 0.15, blue: 0.22)
   static let panelElevated = Color(red: 0.16, green: 0.18, blue: 0.26)
   static let panelMuted = Color(red: 0.11, green: 0.13, blue: 0.20)
-  static let separator = textPrimary.opacity(0.06)
+  static let separator = textPrimary.opacity(0.10)
   static let accent = Color(red: 0.49, green: 0.67, blue: 0.99)
   static let accentPink = Color(red: 0.72, green: 0.60, blue: 0.93)
   static let amber = Color(red: 0.90, green: 0.74, blue: 0.47)

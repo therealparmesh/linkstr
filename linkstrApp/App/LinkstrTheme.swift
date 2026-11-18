@@ -16,7 +16,7 @@ private struct LinkstrFieldChrome: ViewModifier {
           cornerRadius: LinkstrTheme.fieldCornerRadius,
           style: .continuous
         )
-        .stroke(LinkstrTheme.separator.opacity(2), lineWidth: 1)
+        .stroke(LinkstrTheme.separator, lineWidth: 1)
       }
   }
 }
@@ -218,7 +218,7 @@ struct LinkstrAppIconBadge: View {
       }
       .overlay {
         Circle()
-          .stroke(LinkstrTheme.separator.opacity(2), lineWidth: 1)
+          .stroke(LinkstrTheme.separator, lineWidth: 1)
       }
   }
 }

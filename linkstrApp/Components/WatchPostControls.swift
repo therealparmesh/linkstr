@@ -34,7 +34,8 @@ struct WatchPostControls<Content: View>: View {
   @State private var pullStartedAtTop = true
 
   private var panelBackground: Color {
-    reduceTransparency ? LinkstrTheme.background : LinkstrTheme.watchPanel
+    if reduceTransparency { return LinkstrTheme.background }
+    return isExpanded ? LinkstrTheme.watchExpandedPanel : LinkstrTheme.watchOverlay
   }
 
   var body: some View {

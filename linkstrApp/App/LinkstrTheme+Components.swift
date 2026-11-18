@@ -333,7 +333,7 @@ struct LinkstrReadOnlyBanner: View {
         cornerRadius: LinkstrTheme.fieldCornerRadius,
         style: .continuous
       )
-      .stroke(LinkstrTheme.separator.opacity(2), lineWidth: 1)
+      .stroke(LinkstrTheme.separator, lineWidth: 1)
     }
   }
 }

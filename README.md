@@ -171,7 +171,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 **Watching posts:**
 
 - Full-page navigation uses one shared leading-edge back gesture, including the post viewer. Its narrow edge touch area is separate from page controls so swiping back cannot also press a post row. The viewer returns to its session list; other pages dismiss their navigation destination. Sheets retain their normal dismissal behavior.
-- The post overlay shows the author and timestamp above the caption. Session information remains in the post list. Collapsed details show the saved note first, otherwise the description or title; expanded details show the full post text and note above reactions. The chevron toggles details. Both states use the same background tint. With Reduce Transparency enabled, the viewer uses solid backgrounds behind the header and controls.
+- The post overlay shows the author and timestamp above the caption. Session information remains in the post list. Collapsed details show the saved note first, otherwise the description or title; expanded details show the full post text and note above reactions. The chevron toggles details. The expanded panel has a darker tint for reading longer descriptions. With Reduce Transparency enabled, the viewer uses solid backgrounds behind the header and controls.
 
 - In the viewer, swipe up for older posts or down for newer posts. **back to posts** or a right swipe from the left edge returns to the post list at the scroll position you left.
 - Native video is centered in the viewer and preserves the full frame without cropping. Official video players fit between the post header and the post controls while keeping their aspect ratio. HTTPS links to MP4, MOV, or M4V files can play directly. Regular links show a readable card with a title, thumbnail, source, and available social post text. Use **open in browser** to visit the original.
@@ -534,7 +534,7 @@ run the test suite with Address Sanitizer enabled.
 
 ### UI conventions
 
-Use `LinkstrTheme` for Tokyo Night colors, typography, spacing, and corner radii. Main screens share the branded toolbar and page title; sheets use the compact close/title/action header. Keep page and sheet headers stationary while their content scrolls beneath them. Toolbar symbols are 20 points inside 44-point touch targets. Text uses an 18-point horizontal inset; icon rows account for the touch target inset so their visible edges align with that text. Fields have a subtle outline, cards use the quieter separator, and toolbar buttons have no decorative border. Preserve Dynamic Type wrapping, scrollable content, and reachable actions when changing layouts.
+Use `LinkstrTheme` for Tokyo Night colors, typography, spacing, and corner radii. Main screens share the branded toolbar and page title; sheets use the compact close/title/action header. Keep page and sheet headers stationary while their content scrolls beneath them. Toolbar symbols are 20 points inside 44-point touch targets. Text uses an 18-point horizontal inset; icon rows account for the touch target inset so their visible edges align with that text. Fields, neutral card borders, and row dividers share the same subtle separator color, and toolbar buttons have no decorative border. Preserve Dynamic Type wrapping, scrollable content, and reachable actions when changing layouts.
 
 ### Generate the Xcode project
 

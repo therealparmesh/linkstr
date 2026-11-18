@@ -122,7 +122,7 @@ struct PostDetailView: View {
     }
     .padding(.top, watchInsets.top)
     .background {
-      let tint = reduceTransparency ? LinkstrTheme.background : LinkstrTheme.watchHeader
+      let tint = reduceTransparency ? LinkstrTheme.background : LinkstrTheme.watchOverlay
       VStack(spacing: 0) {
         tint
         LinearGradient(colors: [tint, .clear], startPoint: .top, endPoint: .bottom)
