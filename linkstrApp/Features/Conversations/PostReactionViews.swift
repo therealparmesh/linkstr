@@ -57,8 +57,7 @@ struct LinkstrReactionRow: View {
   let summaries: [ReactionSummary]
   var mode: Mode = .interactive
   let onToggleEmoji: ((String) -> Void)?
-  var onOpenReaction: ((String) -> Void)?
-  var onOpenAllReactions: (() -> Void)?
+  var onShowBreakdown: (() -> Void)?
 
   private let quickEmojis = ["❤️", "👀"]
   private let readOnlyMaxEmojiCount = 10
@@ -85,8 +84,8 @@ struct LinkstrReactionRow: View {
     HStack(spacing: LinkstrTheme.metaSpacing) {
       ForEach(summaries.prefix(limit)) { summaryChip($0) }
       suggestions
-      if summaries.count > limit, let onOpenAllReactions {
-        Button(action: onOpenAllReactions) {
+      if summaries.count > limit, let onShowBreakdown {
+        Button(action: onShowBreakdown) {
           Text("+\(summaries.count - limit)")
             .font(LinkstrTheme.font(.caption, weight: .medium).monospacedDigit())
             .linkstrReactionChip(compact: true)
@@ -147,7 +146,7 @@ struct LinkstrReactionRow: View {
 
   private func summaryChip(_ summary: ReactionSummary) -> some View {
     Button {
-      (onToggleEmoji ?? onOpenReaction)?(summary.emoji)
+      if let onToggleEmoji { onToggleEmoji(summary.emoji) } else { onShowBreakdown?() }
     } label: {
       quickEmojiButtonLabel(emoji: summary.emoji, summary: summary)
     }
@@ -160,8 +159,8 @@ struct LinkstrReactionRow: View {
       onToggleEmoji == nil ? "view people who reacted" : "add or remove your reaction"
     )
     .accessibilityActions {
-      if let onOpenReaction {
-        Button("view people who reacted") { onOpenReaction(summary.emoji) }
+      if let onShowBreakdown {
+        Button("view people who reacted", action: onShowBreakdown)
       }
     }
   }
@@ -233,50 +232,5 @@ private extension View {
         }
       }
       .contentShape(Rectangle())
-  }
-}
-
-extension PostDetailView {
-  func postCardReactionBreakdown(_ participants: [ReactionParticipantBreakdown]) -> some View {
-    let visibleParticipants =
-      selectedReactionEmoji.map { emoji in
-        participants.filter { $0.emojis.contains(emoji) }
-      } ?? participants
-    return HStack(alignment: .top, spacing: LinkstrTheme.compactSpacing) {
-      VStack(alignment: .leading, spacing: LinkstrTheme.metaSpacing) {
-        ForEach(visibleParticipants) { entry in
-          let emojis = selectedReactionEmoji ?? entry.emojis.joined(separator: " ")
-          Text("\(entry.displayName)  \(emojis)")
-            .font(LinkstrTheme.font(.footnote))
-            .foregroundStyle(LinkstrTheme.textPrimary)
-            .fixedSize(horizontal: false, vertical: true)
-        }
-      }
-      Spacer(minLength: 0)
-      if reactionSummaries.count > 1 || selectedReactionEmoji != nil {
-        Menu {
-          Picker("filter reactions", selection: $selectedReactionEmoji) {
-            Text("all reactions").tag(String?.none)
-            ForEach(reactionSummaries) { reaction in
-              Text("\(reaction.emoji)  \(reaction.count)").tag(Optional(reaction.emoji))
-            }
-          }
-        } label: {
-          HStack(spacing: LinkstrTheme.metaSpacing) {
-            Text(selectedReactionEmoji ?? "all reactions")
-            Image(systemName: "chevron.down")
-          }
-          .font(LinkstrTheme.font(.footnote, weight: .medium))
-          .foregroundStyle(LinkstrTheme.accent)
-          .frame(minHeight: LinkstrTheme.minimumInteractiveDimension)
-        }
-        .accessibilityLabel("filter reactions")
-      }
-    }
-    .onChange(of: reactionSummaries.map(\.emoji), initial: true) { _, emojis in
-      if let selectedReactionEmoji, !emojis.contains(selectedReactionEmoji) {
-        self.selectedReactionEmoji = nil
-      }
-    }
   }
 }

@@ -61,31 +61,6 @@ extension PostDetailView {
     return LinkstrDeepLinkCodec.makeAppDeepLink(url: post.url)
   }
   @ViewBuilder
-  var postCardNoteBlock: some View {
-    if noteText != nil || remotePostText != nil {
-      VStack(alignment: .leading, spacing: LinkstrTheme.compactSpacing) {
-        if let remotePostText {
-          Text(remotePostText)
-            .font(LinkstrTheme.font(.subheadline))
-            .foregroundStyle(LinkstrTheme.textPrimary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .multilineTextAlignment(.leading)
-            .fixedSize(horizontal: false, vertical: true)
-            .textSelection(.enabled)
-        }
-        if let noteText {
-          accentTextBlock(label: "note", text: noteText)
-            .contextMenu {
-              if canDelete && canReactToPost {
-                Button("edit note", systemImage: "pencil") { activeSheet = .editNote }
-              }
-            }
-        }
-      }
-    }
-  }
-
-  @ViewBuilder
   func mediaBlock(_ post: SessionMessageEntity, isCovered: Bool) -> some View {
     if let url = LinkstrPostPreview.webURL(for: post.url) {
       AdaptiveMediaView(
@@ -130,7 +105,7 @@ extension PostDetailView {
         linkContent: {
           WatchLinkPreview(post: post, postText: remotePostText)
         },
-        overlayContent: { watchPostOverlay(post) },
+        overlayContent: { watchPostOverlay(post, reactions: $0) },
         headerContent: { save, menu in postHeader(saveAction: save) { menu } }
       )
     } else {
@@ -146,8 +121,7 @@ extension PostDetailView {
       reactions: reactionSummaries,
       toggleReaction: canReactToPost ? toggleReaction : nil,
       pickReaction: canReactToPost ? { activeSheet = .emojiPicker } : nil,
-      expanded: $detailsExpanded,
-      selectedEmoji: $selectedReactionEmoji
+      expanded: $detailsExpanded
     )
   }
 
@@ -169,7 +143,7 @@ extension PostDetailView {
         summary: controlsSummary(for: post),
         topInset: contentInsets.top, bottomInset: watchInsets.bottom, playbackControlsHeight: 0,
         onReservedHeightChange: { missingLinkControlsHeight = $0 },
-        content: { watchPostOverlay(post) }
+        content: { watchPostOverlay(post, reactions: $0) }
       )
     }
     .overlay(alignment: .top) { postHeader(saveAction: nil) { EmptyView() } }
@@ -297,19 +271,8 @@ extension PostDetailView {
       .clipped()
   }
 
-  private func watchPostOverlay(_ post: SessionMessageEntity) -> some View {
-    VStack(alignment: .leading, spacing: LinkstrTheme.rowSpacing) {
-      let participants = reactionBreakdown
-      Group {
-        if participants.isEmpty {
-          Text("no reactions yet")
-            .font(LinkstrTheme.font(.caption))
-            .foregroundStyle(LinkstrTheme.textSecondary)
-        } else {
-          postCardReactionBreakdown(participants)
-        }
-      }
-      .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+  private func watchPostOverlay(_ post: SessionMessageEntity, reactions: WatchReactionActions) -> some View {
+    VStack(alignment: .leading, spacing: LinkstrTheme.metaSpacing) {
       HStack(alignment: .top, spacing: LinkstrTheme.compactSpacing) {
         watchDetails(post)
         if canDelete {
@@ -328,6 +291,24 @@ extension PostDetailView {
       }
       .padding(.leading, LinkstrTheme.screenHorizontalPadding)
       .padding(.trailing, canDelete ? LinkstrTheme.controlHorizontalPadding : LinkstrTheme.screenHorizontalPadding)
+      reactions
+      let participants = reactionBreakdown
+      Group {
+        if participants.isEmpty {
+          Text("no reactions yet")
+            .font(LinkstrTheme.font(.caption))
+            .foregroundStyle(LinkstrTheme.textSecondary)
+        } else {
+          VStack(alignment: .leading, spacing: LinkstrTheme.metaSpacing) {
+            ForEach(participants) { person in
+              Text("\(person.displayName)  \(person.emojis.joined(separator: " "))")
+                .font(LinkstrTheme.font(.footnote))
+                .fixedSize(horizontal: false, vertical: true)
+            }
+          }
+        }
+      }
+      .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
     }
     .foregroundStyle(LinkstrTheme.textPrimary)
     .buttonStyle(.plain)

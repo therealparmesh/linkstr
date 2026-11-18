@@ -14,7 +14,6 @@ struct WatchPostSummary {
   let toggleReaction: ((String) -> Void)?
   let pickReaction: (() -> Void)?
   @Binding var expanded: Bool
-  @Binding var selectedEmoji: String?
 }
 
 /// Post details and actions stay separate from playback and post paging.
@@ -30,13 +29,12 @@ struct WatchPostControls<Content: View>: View {
   var showsLinkPreview = false
   var reservesExpandedSpace = false
   var onReservedHeightChange: (CGFloat) -> Void = { _ in }
-  @ViewBuilder let content: () -> Content
+  @ViewBuilder let content: (WatchReactionActions) -> Content
   private var isExpanded: Bool { summary.expanded }
   @State private var headerHeight = LinkstrTheme.minimumInteractiveDimension
-  @State private var actionsHeight = LinkstrTheme.minimumInteractiveDimension
   @State private var contentHeight: CGFloat = 240
   @State private var detailsPosition = ScrollPosition(edge: .top)
-  @State private var pullStartedAtTop = true
+  @State private var opensAtReactions = true
 
   var body: some View {
     GeometryReader { proxy in
@@ -49,16 +47,10 @@ struct WatchPostControls<Content: View>: View {
           } action: {
             headerHeight = $0
           }
-        quickActions
-          .highPriorityGesture(expansionGesture)
-          .onGeometryChange(for: CGFloat.self) {
-            $0.size.height
-          } action: {
-            actionsHeight = $0
-          }
         if isExpanded {
-          detailsScrollView(
-            availableHeight: max(1, min(proxy.size.height / 2, availableHeight - headerHeight - actionsHeight)))
+          detailsScrollView(availableHeight: max(1, min(proxy.size.height / 2, availableHeight - headerHeight)))
+        } else {
+          quickActions
         }
       }
       .padding(.bottom, playbackControlsHeight == 0 ? LinkstrTheme.metaSpacing : 0)
@@ -89,7 +81,7 @@ struct WatchPostControls<Content: View>: View {
 
   private func detailsScrollView(availableHeight: CGFloat) -> some View {
     ScrollView {
-      content()
+      content(quickActions)
         .padding(.bottom, LinkstrTheme.compactSpacing)
         .onGeometryChange(for: CGFloat.self) {
           $0.size.height
@@ -99,22 +91,23 @@ struct WatchPostControls<Content: View>: View {
     }
     .scrollPosition($detailsPosition)
     .scrollBounceBehavior(.basedOnSize)
-    .onScrollPhaseChange { _, phase, context in
-      if phase == .interacting {
-        pullStartedAtTop = context.geometry.contentOffset.y + context.geometry.contentInsets.top <= 1
+    .onAppear {
+      if opensAtReactions {
+        detailsPosition.scrollTo(id: WatchReactionActions.anchor, anchor: .top)
+      } else {
+        detailsPosition.scrollTo(edge: .top)
       }
     }
     .frame(height: min(contentHeight, availableHeight))
     .contentShape(Rectangle())
-    .highPriorityGesture(expansionGesture, including: contentHeight <= availableHeight ? .all : .subviews)
-    .simultaneousGesture(scrollDismissGesture, including: contentHeight > availableHeight ? .all : .subviews)
-    .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
+    .transition(.opacity)
   }
 
   private var handle: some View {
     let preview = summary.note ?? (showsLinkPreview ? nil : summary.caption)
     let caption = isExpanded ? nil : preview.map { $0.split(whereSeparator: \.isWhitespace).joined(separator: " ") }
     return Button {
+      opensAtReactions = false
       setExpanded(!isExpanded)
     } label: {
       HStack(spacing: LinkstrTheme.rowSpacing) {
@@ -161,36 +154,40 @@ struct WatchPostControls<Content: View>: View {
         Button("edit note", systemImage: "pencil", action: editNote)
       }
     }
-    .highPriorityGesture(expansionGesture)
     .accessibilityAction(.escape) { setExpanded(false) }
   }
 
-  private var expansionGesture: some Gesture {
-    DragGesture(minimumDistance: 12)
-      .onEnded { value in
-        guard abs(value.translation.height) > abs(value.translation.width) else { return }
-        setExpanded(value.translation.height < 0)
+  private var quickActions: WatchReactionActions {
+    WatchReactionActions(summary: summary) {
+      opensAtReactions = true
+      if isExpanded {
+        detailsPosition.scrollTo(id: WatchReactionActions.anchor, anchor: .top)
+      } else {
+        setExpanded(true)
       }
+    }
   }
 
-  private var scrollDismissGesture: some Gesture {
-    DragGesture(minimumDistance: 16)
-      .onEnded { value in
-        if pullStartedAtTop, value.translation.height > max(56, abs(value.translation.width)) {
-          setExpanded(false)
-        }
-      }
+  private func setExpanded(_ expanded: Bool) {
+    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+      summary.expanded = expanded
+    }
   }
+}
 
-  private var quickActions: some View {
+struct WatchReactionActions: View {
+  static let anchor = "post reactions"
+  let summary: WatchPostSummary
+  let showReactions: () -> Void
+
+  var body: some View {
     HStack(spacing: 0) {
       if summary.toggleReaction != nil || !summary.reactions.isEmpty {
         LinkstrReactionRow(
           summaries: summary.reactions,
           mode: .watch,
           onToggleEmoji: summary.toggleReaction,
-          onOpenReaction: { showReactions($0) },
-          onOpenAllReactions: { showReactions(nil) }
+          onShowBreakdown: showReactions
         )
         .padding(.trailing, LinkstrTheme.metaSpacing)
       }
@@ -211,21 +208,9 @@ struct WatchPostControls<Content: View>: View {
         .buttonStyle(.plain)
         .accessibilityLabel("add reaction")
       }
-
     }
     .foregroundStyle(LinkstrTheme.textPrimary)
     .padding(.horizontal, LinkstrTheme.controlHorizontalPadding)
-  }
-
-  private func showReactions(_ emoji: String?) {
-    summary.selectedEmoji = emoji
-    detailsPosition.scrollTo(edge: .top)
-    setExpanded(true)
-  }
-
-  private func setExpanded(_ expanded: Bool) {
-    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
-      summary.expanded = expanded
-    }
+    .id(Self.anchor)
   }
 }

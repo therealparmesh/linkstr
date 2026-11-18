@@ -30,7 +30,7 @@ struct AdaptiveMediaView<LinkContent: View, OverlayContent: View, HeaderContent:
   let postControlsSummary: WatchPostSummary?
   let onResolvedSource: ((URL) -> Void)?
   let linkContent: LinkContent
-  let overlayContent: () -> OverlayContent
+  let overlayContent: (WatchReactionActions) -> OverlayContent
   let headerContent: ((() -> Void)?, WatchPlaybackMenu) -> HeaderContent
   @State var postControlsReservedHeight = LinkstrTheme.minimumInteractiveDimension
   @State var watchControlsHeight =
@@ -70,7 +70,7 @@ struct AdaptiveMediaView<LinkContent: View, OverlayContent: View, HeaderContent:
     postControlsSummary: WatchPostSummary? = nil,
     onResolvedSource: ((URL) -> Void)? = nil,
     @ViewBuilder linkContent: () -> LinkContent = { EmptyView() },
-    @ViewBuilder overlayContent: @escaping () -> OverlayContent = { EmptyView() },
+    @ViewBuilder overlayContent: @escaping (WatchReactionActions) -> OverlayContent = { _ in EmptyView() },
     @ViewBuilder headerContent: @escaping ((() -> Void)?, WatchPlaybackMenu) -> HeaderContent = { _, _ in EmptyView() }
   ) {
     self.sourceURL = sourceURL

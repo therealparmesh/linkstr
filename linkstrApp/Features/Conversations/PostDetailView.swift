@@ -31,7 +31,6 @@ struct PostDetailView: View {
   @State var missingLinkControlsHeight: CGFloat = 120
   @State var activeSheet: Sheet?
   @State var detailsExpanded: Bool
-  @State var selectedReactionEmoji: String?
 
   @State var contacts: [ContactEntity] = []
   @Query var posts: [SessionMessageEntity]
@@ -192,19 +191,30 @@ struct PostDetailView: View {
 
   func watchDetails(_ post: SessionMessageEntity) -> some View {
     VStack(alignment: .leading, spacing: LinkstrTheme.compactSpacing) {
-      if remotePostText == nil, let title = LinkstrPostPreview.title(for: post) {
+      if let noteText {
+        accentTextBlock(label: "note", text: noteText)
+          .contextMenu {
+            if canDelete && canReactToPost {
+              Button("edit note", systemImage: "pencil") { activeSheet = .editNote }
+            }
+          }
+        if let editedAt = post.noteEditedAt {
+          Text("note edited \(editedAt.linkstrMessageTimestampLabel)")
+            .font(LinkstrTheme.font(.caption))
+            .foregroundStyle(LinkstrTheme.textSecondary)
+        }
+      }
+      if let remotePostText {
+        Text(remotePostText)
+          .font(LinkstrTheme.font(.subheadline))
+          .foregroundStyle(LinkstrTheme.textPrimary)
+          .fixedSize(horizontal: false, vertical: true)
+          .textSelection(.enabled)
+      } else if let title = LinkstrPostPreview.title(for: post) {
         Text(title)
           .font(LinkstrTheme.font(.headline))
           .accessibilityAddTraits(.isHeader)
           .textSelection(.enabled)
-      }
-
-      postCardNoteBlock
-
-      if let editedAt = post.noteEditedAt {
-        Text("note edited \(editedAt.linkstrMessageTimestampLabel)")
-          .font(LinkstrTheme.font(.caption))
-          .foregroundStyle(LinkstrTheme.textSecondary)
       }
 
       if let destination = LinkstrPostPreview.webURL(for: post.url) {
