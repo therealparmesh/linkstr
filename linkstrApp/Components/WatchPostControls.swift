@@ -208,13 +208,9 @@ struct WatchPostControls<Content: View>: View {
         .buttonStyle(.plain)
         .accessibilityLabel("add reaction")
       }
-      Button {
+      LinkstrHeaderButton(title: "view reactions", icon: "person.2") {
         summary.openReactions(nil)
-      } label: {
-        Image(systemName: "person.2").linkstrToolbarIconLabel()
       }
-      .buttonStyle(.plain)
-      .accessibilityLabel("view reactions")
     }
     .foregroundStyle(LinkstrTheme.textPrimary)
     .padding(.horizontal, LinkstrTheme.controlHorizontalPadding)
