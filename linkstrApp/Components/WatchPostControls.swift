@@ -10,7 +10,6 @@ struct WatchPostSummary {
   let toggleReaction: ((String) -> Void)?
   let pickReaction: (() -> Void)?
   let openReactions: (String?) -> Void
-  let shareLink: (() -> Void)?
 }
 
 /// Post details and actions stay separate from playback and post paging.
@@ -216,16 +215,6 @@ struct WatchPostControls<Content: View>: View {
       }
       .buttonStyle(.plain)
       .accessibilityLabel("view reactions")
-      if let shareLink = summary.shareLink {
-        Button(action: shareLink) {
-          Image(systemName: "square.and.arrow.up")
-            // Align the symbol's visible center without moving its tap target.
-            .offset(y: -2)
-            .linkstrToolbarIconLabel()
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("share link")
-      }
     }
     .foregroundStyle(LinkstrTheme.textPrimary)
     .padding(.horizontal, LinkstrTheme.controlHorizontalPadding)

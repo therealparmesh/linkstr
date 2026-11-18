@@ -150,8 +150,7 @@ extension PostDetailView {
       openReactions: { emoji in
         selectedReactionEmoji = emoji
         activeSheet = .reactions
-      },
-      shareLink: shareDeepLinkURL == nil ? nil : { activeSheet = .share }
+      }
     )
   }
 

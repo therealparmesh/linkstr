@@ -113,6 +113,11 @@ struct PostDetailView: View {
         .disabled(isRefreshingMetadata)
         .accessibilityHint("reloads the preview and retries playback")
       }
+      if shareDeepLinkURL != nil {
+        LinkstrHeaderButton(title: "share link", icon: "square.and.arrow.up", foreground: LinkstrTheme.textPrimary) {
+          activeSheet = .share
+        }
+      }
     }
     .linkstrPageHeaderLayout()
     .onGeometryChange(for: CGFloat.self) {
