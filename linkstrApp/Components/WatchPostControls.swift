@@ -181,37 +181,55 @@ struct WatchReactionActions: View {
   let showReactions: () -> Void
 
   var body: some View {
-    HStack(spacing: 0) {
-      if summary.toggleReaction != nil || !summary.reactions.isEmpty {
-        LinkstrReactionRow(
-          summaries: summary.reactions,
-          mode: .watch,
-          onToggleEmoji: summary.toggleReaction,
-          onShowBreakdown: showReactions
-        )
-        .padding(.trailing, LinkstrTheme.metaSpacing)
+    ViewThatFits(in: .horizontal) {
+      HStack(spacing: LinkstrTheme.metaSpacing) {
+        chips(showsSuggestions: true)
+        picker
       }
-      Spacer(minLength: 0)
-      if let pickReaction = summary.pickReaction {
-        Button(action: pickReaction) {
-          Image(systemName: "face.smiling")
-            .overlay(alignment: .topTrailing) {
-              Image(systemName: "plus")
-                .font(.system(size: 8, weight: .bold))
-                .padding(2)
-                .background(LinkstrTheme.background, in: Circle())
-                .offset(x: 4, y: -3)
-            }
-            .linkstrToolbarIconLabel()
-            .foregroundStyle(LinkstrTheme.accent)
+      .fixedSize(horizontal: true, vertical: false)
+
+      HStack(spacing: LinkstrTheme.metaSpacing) {
+        ScrollView(.horizontal) {
+          chips(showsSuggestions: summary.reactions.isEmpty)
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("add reaction")
+        .scrollIndicators(.hidden)
+        .scrollBounceBehavior(.basedOnSize)
+        picker
       }
     }
+    .frame(maxWidth: .infinity, alignment: .leading)
     .foregroundStyle(LinkstrTheme.textPrimary)
     .padding(.leading, LinkstrTheme.screenHorizontalPadding)
     .padding(.trailing, LinkstrTheme.controlHorizontalPadding)
     .id(Self.anchor)
+  }
+
+  private func chips(showsSuggestions: Bool) -> some View {
+    LinkstrReactionRow(
+      summaries: summary.reactions,
+      mode: .watch,
+      onToggleEmoji: summary.toggleReaction,
+      showsSuggestions: showsSuggestions,
+      onShowBreakdown: showReactions
+    )
+  }
+
+  @ViewBuilder private var picker: some View {
+    if let pickReaction = summary.pickReaction {
+      Button(action: pickReaction) {
+        Image(systemName: "face.smiling")
+          .overlay(alignment: .topTrailing) {
+            Image(systemName: "plus")
+              .font(.system(size: 8, weight: .bold))
+              .padding(2)
+              .background(LinkstrTheme.background, in: Circle())
+              .offset(x: 4, y: -3)
+          }
+          .linkstrToolbarIconLabel()
+          .foregroundStyle(LinkstrTheme.accent)
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel("add reaction")
+    }
   }
 }

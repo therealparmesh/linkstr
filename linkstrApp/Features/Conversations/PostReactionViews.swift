@@ -57,6 +57,7 @@ struct LinkstrReactionRow: View {
   let summaries: [ReactionSummary]
   var mode: Mode = .interactive
   let onToggleEmoji: ((String) -> Void)?
+  var showsSuggestions = true
   var onShowBreakdown: (() -> Void)?
 
   private let quickEmojis = ["❤️", "👀"]
@@ -68,33 +69,13 @@ struct LinkstrReactionRow: View {
 
   var body: some View {
     if mode == .watch {
-      ViewThatFits(in: .horizontal) {
-        watchReactions(limit: 3)
-        watchReactions(limit: 2)
-        watchReactions(limit: 1)
-        watchReactions(limit: 0)
+      HStack(spacing: LinkstrTheme.metaSpacing) {
+        ForEach(summaries) { summaryChip($0) }
+        if showsSuggestions { suggestions }
       }
-      .frame(maxWidth: .infinity, alignment: .leading)
     } else {
       scrollingReactions
     }
-  }
-
-  private func watchReactions(limit: Int) -> some View {
-    HStack(spacing: LinkstrTheme.metaSpacing) {
-      ForEach(summaries.prefix(limit)) { summaryChip($0) }
-      suggestions
-      if summaries.count > limit, let onShowBreakdown {
-        Button(action: onShowBreakdown) {
-          Text("+\(summaries.count - limit)")
-            .font(LinkstrTheme.font(.caption, weight: .medium).monospacedDigit())
-            .linkstrReactionChip(compact: true)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("view all reactions, \(summaries.count - limit) more emoji types")
-      }
-    }
-    .fixedSize(horizontal: true, vertical: false)
   }
 
   private var scrollingReactions: some View {
