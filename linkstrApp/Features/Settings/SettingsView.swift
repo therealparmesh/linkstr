@@ -222,10 +222,11 @@ struct SettingsView: View {
         } label: {
           Label("remove relay", systemImage: "minus.circle")
             .font(LinkstrTheme.font(.caption, weight: .medium))
+            .frame(minHeight: LinkstrTheme.minimumInteractiveDimension)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .foregroundStyle(LinkstrTheme.destructive)
-        .frame(minHeight: LinkstrTheme.minimumInteractiveDimension)
         .accessibilityLabel("remove relay \(relay.url)")
       }
     }

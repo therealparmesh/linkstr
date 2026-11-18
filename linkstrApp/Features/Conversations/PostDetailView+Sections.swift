@@ -235,7 +235,6 @@ extension PostDetailView {
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
-    .padding(.leading, 2)
   }
 
   @discardableResult
