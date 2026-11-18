@@ -6,7 +6,7 @@ Contacts mirror the signed-in account's public Nostr kind-3 follow list. Incomin
 
 Adding or removing a contact opens a scrollable confirmation sheet with a fixed close button. Tap a contact row to edit it; long-press for **copy public key** followed by **remove contact**. Both actions are available as accessibility actions. Contact detail also has a **remove contact** button.
 
-The **added you** list has a compact add-contact button and supports copying public keys from its long-press menu. Saved contacts show a checkmark with a descriptive accessibility label.
+In **added you**, each person outside your contacts has an add-contact button on their row. Long-press a row to copy its public key. Saved contacts show a checkmark with a descriptive accessibility label.
 
 Session-member rows show a compact add-contact button for people outside your contacts. Creators can remove someone with the row button or the long-press menu. Long-press a row or use its accessibility action to copy the public key. **choose from contacts** under **add members** excludes existing members. Adding or removing a member updates the draft after confirmation and takes effect when the creator saves.
 
@@ -24,7 +24,7 @@ Removing a contact records a cleared private alias for backup. Shared sessions a
 
 ## Added you
 
-Open **added you** from the contacts list. Both screens have their own search and an **add contact** button in the header. Incoming follows are ordered by follow-list timestamp, newest first, with public keys breaking ties. Nostr follow lists do not include a separate timestamp for adding each person; unrelated follow-list updates can also move someone up the list. Use the add-contact button beside a person to add them, or long-press their row to **copy public key**. The standard back button returns to contacts. Contact detail has its own back and save controls.
+Open **added you** from the contacts list. Both screens have their own search. Use **add contact** from contacts to enter a public key, or the refresh button on **added you** to check for follows. Incoming follows are ordered by follow-list timestamp, newest first, with public keys breaking ties. Nostr follow lists do not include a separate timestamp for adding each person; unrelated follow-list updates can also move someone up the list. Use the add-contact button beside a person to add them, or long-press their row to **copy public key**. The standard back button returns to contacts. Contact detail has its own back and save controls.
 
 `ContactDiscovery` shares the app's relay connections. It finds kind-3 events containing the owner's public key, then requests those authors' latest lists without requiring that tag. This second request can find unfollows. Visible rows receive live author updates, and a separate subscription finds new follows while historical pages load.
 

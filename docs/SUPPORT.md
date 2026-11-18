@@ -22,7 +22,7 @@ Your active account is stored in the device keychain. If you use iCloud Keychain
 Search filters your saved contacts and works offline. If nothing matches, use **clear search** or try another name or public key.
 
 1. Open **contacts**.
-2. Tap the add-contact button.
+2. Tap **add contact** in the top-right corner, or in the empty list if you have no contacts.
 3. Paste an `npub` or scan a QR code.
 4. Optionally save a private alias.
 5. Tap the top-right add icon, then confirm **add contact**.
@@ -39,7 +39,7 @@ The bottom footer shows validation and relay status only. The keyboard return ke
 2. Tap **added you** below search.
 3. Tap the add-contact button beside someone, then confirm. People already in your contacts show a checkmark.
 
-Long-press a row to **copy public key**. Tap the back arrow to return to contacts. The top-right add-contact button is available in both lists.
+Long-press a row to **copy public key**. Tap the back arrow to return to contacts. To add someone by public key, use **add contact** on the contacts screen.
 
 The list shows public Nostr follows found on your configured relays, including follows made in other Nostr apps. Tap the refresh icon at the top right to check who added you, including older follows. Saved results stay visible while checking and offline. When a check finishes or fails, the same button lets you check again. Search filters the people found so far. People appear newest first by their latest public follow-list update. Nostr does not provide an exact date for when each person added you. People may be missing if their follow lists are unavailable on your relays.
 

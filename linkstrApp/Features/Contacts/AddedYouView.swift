@@ -7,17 +7,13 @@ struct AddedYouView: View {
   @ObservedObject var discovery: ContactDiscovery
   let ownerPubkey: String
   @Query private var contacts: [ContactEntity]
-  let addContact: () -> Void
   @State private var query = ""
   @State private var pendingContactAddition: ContactPresentation?
   @Query private var relationships: [FollowRelationshipEntity]
 
-  init(
-    ownerPubkey: String, discovery: ContactDiscovery, addContact: @escaping () -> Void
-  ) {
+  init(ownerPubkey: String, discovery: ContactDiscovery) {
     self.ownerPubkey = ownerPubkey
     self.discovery = discovery
-    self.addContact = addContact
     _contacts = Query(
       filter: #Predicate<ContactEntity> { $0.ownerPubkey == ownerPubkey },
       sort: [SortDescriptor(\ContactEntity.createdAt)]
@@ -138,7 +134,6 @@ struct AddedYouView: View {
     .contactAddition(pending: $pendingContactAddition)
     .linkstrPinnedPageHeader {
       LinkstrPageHeader(title: "added you", backLabel: "back to contacts") {
-        LinkstrHeaderButton(title: "add contact", icon: "person.badge.plus", action: addContact)
         if discovery.isLoading {
           ProgressView()
             .tint(LinkstrTheme.accent)

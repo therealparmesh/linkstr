@@ -99,11 +99,9 @@ struct MainTabView: View {
           ownerPubkey: ownerPubkey, sessionID: sessionID, scrollToPostID: postID
         )
       case .addedYou:
-        AddedYouView(ownerPubkey: ownerPubkey, discovery: session.contactDiscovery) {
-          isPresentingAddContact = true
-        }
-        .background(LinkstrBackgroundView())
-        .toolbarVisibility(.hidden, for: .navigationBar)
+        AddedYouView(ownerPubkey: ownerPubkey, discovery: session.contactDiscovery)
+          .background(LinkstrBackgroundView())
+          .toolbarVisibility(.hidden, for: .navigationBar)
       case .settings(let showRelays):
         SettingsView(showRelays: showRelays)
           .toolbarVisibility(.hidden, for: .navigationBar, .tabBar)
