@@ -211,24 +211,7 @@ struct WatchPostControls<Content: View>: View {
         .buttonStyle(.plain)
         .accessibilityLabel("add reaction")
       }
-      if isExpanded, !summary.reactions.isEmpty {
-        Menu {
-          Picker("show reactions", selection: summary.$selectedEmoji) {
-            Text("all reactions").tag(String?.none)
-            ForEach(summary.reactions) { reaction in
-              Text("\(reaction.emoji)  \(reaction.count)").tag(Optional(reaction.emoji))
-            }
-          }
-        } label: {
-          Image(systemName: "person.2")
-            .linkstrToolbarIconLabel()
-            .foregroundStyle(LinkstrTheme.accent)
-        }
-        .accessibilityLabel("filter reactions")
-        .onChange(of: summary.selectedEmoji) { detailsPosition.scrollTo(edge: .top) }
-      } else {
-        LinkstrHeaderButton(title: "view reactions", icon: "person.2") { showReactions(nil) }
-      }
+
     }
     .foregroundStyle(LinkstrTheme.textPrimary)
     .padding(.horizontal, LinkstrTheme.controlHorizontalPadding)

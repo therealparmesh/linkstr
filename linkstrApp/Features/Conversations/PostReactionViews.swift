@@ -242,13 +242,35 @@ extension PostDetailView {
       selectedReactionEmoji.map { emoji in
         participants.filter { $0.emojis.contains(emoji) }
       } ?? participants
-    return VStack(alignment: .leading, spacing: LinkstrTheme.metaSpacing) {
-      ForEach(visibleParticipants) { entry in
-        let emojis = selectedReactionEmoji ?? entry.emojis.joined(separator: " ")
-        Text("\(entry.displayName)  \(emojis)")
-          .font(LinkstrTheme.font(.footnote))
-          .foregroundStyle(LinkstrTheme.textPrimary)
-          .fixedSize(horizontal: false, vertical: true)
+    return HStack(alignment: .top, spacing: LinkstrTheme.compactSpacing) {
+      VStack(alignment: .leading, spacing: LinkstrTheme.metaSpacing) {
+        ForEach(visibleParticipants) { entry in
+          let emojis = selectedReactionEmoji ?? entry.emojis.joined(separator: " ")
+          Text("\(entry.displayName)  \(emojis)")
+            .font(LinkstrTheme.font(.footnote))
+            .foregroundStyle(LinkstrTheme.textPrimary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+      }
+      Spacer(minLength: 0)
+      if reactionSummaries.count > 1 || selectedReactionEmoji != nil {
+        Menu {
+          Picker("filter reactions", selection: $selectedReactionEmoji) {
+            Text("all reactions").tag(String?.none)
+            ForEach(reactionSummaries) { reaction in
+              Text("\(reaction.emoji)  \(reaction.count)").tag(Optional(reaction.emoji))
+            }
+          }
+        } label: {
+          HStack(spacing: LinkstrTheme.metaSpacing) {
+            Text(selectedReactionEmoji ?? "all reactions")
+            Image(systemName: "chevron.down")
+          }
+          .font(LinkstrTheme.font(.footnote, weight: .medium))
+          .foregroundStyle(LinkstrTheme.accent)
+          .frame(minHeight: LinkstrTheme.minimumInteractiveDimension)
+        }
+        .accessibilityLabel("filter reactions")
       }
     }
     .onChange(of: reactionSummaries.map(\.emoji), initial: true) { _, emojis in
