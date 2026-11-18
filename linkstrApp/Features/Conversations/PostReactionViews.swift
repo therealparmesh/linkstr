@@ -41,10 +41,9 @@ struct ReactionSummary: Identifiable, Hashable {
   }
 }
 
-struct ReactionParticipantBreakdown: Identifiable, Hashable {
+struct ReactionParticipantBreakdown: Identifiable {
   let id: String
   let displayName: String
-  let avatarName: String?
   let emojis: [String]
 }
 
@@ -243,55 +242,13 @@ extension PostDetailView {
       selectedReactionEmoji.map { emoji in
         participants.filter { $0.emojis.contains(emoji) }
       } ?? participants
-    return VStack(alignment: .leading, spacing: LinkstrTheme.compactSpacing) {
-      reactionFilters
-      LazyVStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
-        ForEach(visibleParticipants) { entry in
-          HStack(alignment: .center, spacing: LinkstrTheme.compactSpacing) {
-            LinkstrContactAvatar(name: entry.avatarName, size: 32, seed: entry.id)
-              .accessibilityHidden(true)
-
-            let name = Text(entry.displayName)
-              .font(LinkstrTheme.font(.subheadline, weight: .medium))
-              .foregroundStyle(LinkstrTheme.textPrimary)
-              .lineLimit(2)
-              .truncationMode(.middle)
-              .accessibilityLabel(entry.displayName)
-            let emojis = Text(selectedReactionEmoji ?? entry.emojis.joined(separator: " "))
-              .font(LinkstrTheme.font(.subheadline))
-              .foregroundStyle(LinkstrTheme.textPrimary)
-
-            ViewThatFits(in: .horizontal) {
-              HStack {
-                name.fixedSize()
-                Spacer(minLength: LinkstrTheme.compactSpacing)
-                emojis.fixedSize()
-              }
-              VStack(alignment: .leading, spacing: LinkstrTheme.metaSpacing) {
-                name
-                emojis
-              }
-              .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-          }
-          .accessibilityElement(children: .combine)
-        }
-      }
-    }
-  }
-
-  private var reactionFilters: some View {
-    ReactionFlowLayout(spacing: LinkstrTheme.compactSpacing) {
-      reactionFilter(accessibilityTitle: "show all reactions", emoji: nil) {
-        Text("all")
-          .font(LinkstrTheme.font(.subheadline, weight: .medium))
-      }
-      ForEach(reactionSummaries) { summary in
-        let count = summary.count == 1 ? "1 reaction" : "\(summary.count) reactions"
-        reactionFilter(accessibilityTitle: "filter by \(summary.emoji), \(count)", emoji: summary.emoji) {
-          ReactionChipLabel(emoji: summary.emoji, count: String(summary.count))
-        }
+    return VStack(alignment: .leading, spacing: LinkstrTheme.metaSpacing) {
+      ForEach(visibleParticipants) { entry in
+        let emojis = selectedReactionEmoji ?? entry.emojis.joined(separator: " ")
+        Text("\(entry.displayName)  \(emojis)")
+          .font(LinkstrTheme.font(.footnote))
+          .foregroundStyle(LinkstrTheme.textPrimary)
+          .fixedSize(horizontal: false, vertical: true)
       }
     }
     .onChange(of: reactionSummaries.map(\.emoji), initial: true) { _, emojis in
@@ -299,60 +256,5 @@ extension PostDetailView {
         self.selectedReactionEmoji = nil
       }
     }
-  }
-
-  private func reactionFilter(
-    accessibilityTitle: String,
-    emoji: String?,
-    @ViewBuilder label: () -> some View
-  ) -> some View {
-    let isSelected = selectedReactionEmoji == emoji
-    return Button {
-      selectedReactionEmoji = emoji
-    } label: {
-      label()
-        .foregroundStyle(isSelected ? LinkstrTheme.textPrimary : LinkstrTheme.textSecondary)
-        .linkstrReactionChip(isSelected: isSelected)
-    }
-    .buttonStyle(.plain)
-    .accessibilityLabel(accessibilityTitle)
-    .accessibilityAddTraits(isSelected ? .isSelected : [])
-  }
-}
-
-/// Keeps reaction filters together without horizontal scrolling or stretched column gaps.
-private struct ReactionFlowLayout: Layout {
-  let spacing: CGFloat
-
-  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-    arrangement(width: proposal.width, subviews: subviews).size
-  }
-
-  func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-    let layout = arrangement(width: bounds.width, subviews: subviews)
-    for (index, subview) in subviews.enumerated() {
-      let origin = layout.origins[index]
-      subview.place(at: CGPoint(x: bounds.minX + origin.x, y: bounds.minY + origin.y), proposal: .unspecified)
-    }
-  }
-
-  private func arrangement(width: CGFloat?, subviews: Subviews) -> (size: CGSize, origins: [CGPoint]) {
-    let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
-    let availableWidth = width ?? sizes.reduce(0) { $0 + $1.width + spacing }
-    var origins: [CGPoint] = []
-    var cursorX: CGFloat = 0
-    var cursorY: CGFloat = 0
-    var rowHeight: CGFloat = 0
-    for size in sizes {
-      if cursorX > 0, cursorX + size.width > availableWidth {
-        cursorX = 0
-        cursorY += rowHeight + spacing
-        rowHeight = 0
-      }
-      origins.append(CGPoint(x: cursorX, y: cursorY))
-      cursorX += size.width + spacing
-      rowHeight = max(rowHeight, size.height)
-    }
-    return (CGSize(width: availableWidth, height: cursorY + rowHeight), origins)
   }
 }

@@ -31,10 +31,10 @@ struct AdaptiveMediaView<LinkContent: View, OverlayContent: View, HeaderContent:
   let onResolvedSource: ((URL) -> Void)?
   let linkContent: LinkContent
   let overlayContent: () -> OverlayContent
-  let headerContent: ((() -> Void)?) -> HeaderContent
+  let headerContent: ((() -> Void)?, WatchPlaybackMenu) -> HeaderContent
   @State var postControlsReservedHeight = LinkstrTheme.minimumInteractiveDimension
   @State var watchControlsHeight =
-    LinkstrTheme.minimumInteractiveDimension + LinkstrTheme.compactSpacing + LinkstrTheme.metaSpacing
+    LinkstrTheme.minimumInteractiveDimension + LinkstrTheme.metaSpacing
 
   @State var resolvedPresentation: ResolvedPresentation?
   @State var extractionState: ExtractionState?
@@ -71,7 +71,7 @@ struct AdaptiveMediaView<LinkContent: View, OverlayContent: View, HeaderContent:
     onResolvedSource: ((URL) -> Void)? = nil,
     @ViewBuilder linkContent: () -> LinkContent = { EmptyView() },
     @ViewBuilder overlayContent: @escaping () -> OverlayContent = { EmptyView() },
-    @ViewBuilder headerContent: @escaping ((() -> Void)?) -> HeaderContent = { _ in EmptyView() }
+    @ViewBuilder headerContent: @escaping ((() -> Void)?, WatchPlaybackMenu) -> HeaderContent = { _, _ in EmptyView() }
   ) {
     self.sourceURL = sourceURL
     self.reloadID = reloadID
@@ -104,17 +104,11 @@ struct AdaptiveMediaView<LinkContent: View, OverlayContent: View, HeaderContent:
             showsLinkPreview: !isResolvingPresentation && (effectiveMediaStrategy == .link || showsEmbeddedPost),
             reservesExpandedSpace: effectiveMediaStrategy == .link,
             onReservedHeightChange: { postControlsReservedHeight = $0 },
-            content: {
-              VStack(alignment: .leading, spacing: LinkstrTheme.rowSpacing) {
-                overlayContent()
-                watchPlaybackOptions
-                  .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-              }
-            }
+            content: overlayContent
           )
         }
       }
-      .overlay(alignment: .top) { headerContent(saveVideoAction) }
+      .overlay(alignment: .top) { headerContent(saveVideoAction, watchPlaybackMenu) }
       .task(id: playbackReloadTaskID) {
         await reloadPlaybackPresentation()
       }

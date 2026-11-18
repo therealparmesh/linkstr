@@ -32,7 +32,6 @@ extension PostDetailView {
         return ReactionParticipantBreakdown(
           id: senderPubkeyHash,
           displayName: displayName,
-          avatarName: identity.avatarName,
           emojis: emojis
         )
       }
@@ -132,7 +131,7 @@ extension PostDetailView {
           WatchLinkPreview(post: post, postText: remotePostText)
         },
         overlayContent: { watchPostOverlay(post) },
-        headerContent: { postHeader(saveAction: $0) }
+        headerContent: { save, menu in postHeader(saveAction: save) { menu } }
       )
     } else {
       missingLinkPost(post)
@@ -147,10 +146,8 @@ extension PostDetailView {
       reactions: reactionSummaries,
       toggleReaction: canReactToPost ? toggleReaction : nil,
       pickReaction: canReactToPost ? { activeSheet = .emojiPicker } : nil,
-      openReactions: { emoji in
-        selectedReactionEmoji = emoji
-        activeSheet = .reactions
-      }
+      expanded: $detailsExpanded,
+      selectedEmoji: $selectedReactionEmoji
     )
   }
 
@@ -175,7 +172,7 @@ extension PostDetailView {
         content: { watchPostOverlay(post) }
       )
     }
-    .overlay(alignment: .top) { postHeader(saveAction: nil) }
+    .overlay(alignment: .top) { postHeader(saveAction: nil) { EmptyView() } }
   }
 
   private func missingLinkNotice(icon: String?) -> some View {
@@ -301,24 +298,37 @@ extension PostDetailView {
   }
 
   private func watchPostOverlay(_ post: SessionMessageEntity) -> some View {
-    HStack(alignment: .top, spacing: LinkstrTheme.compactSpacing) {
-      watchDetails(post)
-      if canDelete {
-        Menu {
-          if canReactToPost {
-            Button(noteText == nil ? "add a note" : "edit note", systemImage: "pencil") {
-              activeSheet = .editNote
-            }
-          }
-          Button("delete post", systemImage: "trash", role: .destructive, action: delete)
-        } label: {
-          Image(systemName: "ellipsis").linkstrToolbarIconLabel()
+    VStack(alignment: .leading, spacing: LinkstrTheme.rowSpacing) {
+      let participants = reactionBreakdown
+      Group {
+        if participants.isEmpty {
+          Text("no reactions yet")
+            .font(LinkstrTheme.font(.caption))
+            .foregroundStyle(LinkstrTheme.textSecondary)
+        } else {
+          postCardReactionBreakdown(participants)
         }
-        .accessibilityLabel("more post actions")
       }
+      .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+      HStack(alignment: .top, spacing: LinkstrTheme.compactSpacing) {
+        watchDetails(post)
+        if canDelete {
+          Menu {
+            if canReactToPost {
+              Button(noteText == nil ? "add a note" : "edit note", systemImage: "pencil") {
+                activeSheet = .editNote
+              }
+            }
+            Button("delete post", systemImage: "trash", role: .destructive, action: delete)
+          } label: {
+            Image(systemName: "ellipsis").linkstrToolbarIconLabel()
+          }
+          .accessibilityLabel("more post actions")
+        }
+      }
+      .padding(.leading, LinkstrTheme.screenHorizontalPadding)
+      .padding(.trailing, canDelete ? LinkstrTheme.controlHorizontalPadding : LinkstrTheme.screenHorizontalPadding)
     }
-    .padding(.leading, LinkstrTheme.screenHorizontalPadding)
-    .padding(.trailing, LinkstrTheme.controlHorizontalPadding)
     .foregroundStyle(LinkstrTheme.textPrimary)
     .buttonStyle(.plain)
   }

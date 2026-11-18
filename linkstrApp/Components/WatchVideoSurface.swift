@@ -21,7 +21,8 @@ struct WatchVideoSurface: View {
     .background(LinkstrTheme.background)
     .overlay(alignment: .bottom) {
       WatchPlaybackControls(
-        player: player, bottomInset: bottomInset, fitsEntireVideo: videoInsets != nil, toggleVideoFit: toggleVideoFit
+        player: player, bottomInset: bottomInset, fitsEntireVideo: videoInsets != nil,
+        toggleVideoFit: toggleVideoFit
       )
       .id(ObjectIdentifier(player))
       .onGeometryChange(for: CGFloat.self) {
@@ -34,7 +35,7 @@ struct WatchVideoSurface: View {
 }
 
 private struct WatchPlaybackControls: View {
-  @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+  @Environment(\.watchPanelBackground) private var panelBackground
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   @Environment(\.verticalSizeClass) private var verticalSizeClass
   let player: AVPlayer
@@ -79,11 +80,10 @@ private struct WatchPlaybackControls: View {
     .foregroundStyle(LinkstrTheme.textPrimary)
     .buttonStyle(.plain)
     .padding(.horizontal, LinkstrTheme.controlHorizontalPadding)
-    .padding(.top, LinkstrTheme.compactSpacing)
     .padding(.bottom, LinkstrTheme.metaSpacing)
     .linkstrReadableContent()
     .padding(.bottom, bottomInset)
-    .background(reduceTransparency ? LinkstrTheme.background : LinkstrTheme.watchOverlay)
+    .background(panelBackground)
     .onReceive(player.publisher(for: \.timeControlStatus).receive(on: DispatchQueue.main)) { status in
       playbackStatus = status
       updatePosition()

@@ -1,5 +1,9 @@
 import SwiftUI
 
+extension EnvironmentValues {
+  @Entry var watchPanelBackground = LinkstrTheme.watchOverlay
+}
+
 struct WatchPostSummary {
   let author: String
   let timestamp: String
@@ -9,12 +13,13 @@ struct WatchPostSummary {
   let reactions: [ReactionSummary]
   let toggleReaction: ((String) -> Void)?
   let pickReaction: (() -> Void)?
-  let openReactions: (String?) -> Void
+  @Binding var expanded: Bool
+  @Binding var selectedEmoji: String?
 }
 
 /// Post details and actions stay separate from playback and post paging.
 struct WatchPostControls<Content: View>: View {
-  @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+  @Environment(\.watchPanelBackground) private var panelBackground
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   @Environment(\.verticalSizeClass) private var verticalSizeClass
@@ -26,16 +31,12 @@ struct WatchPostControls<Content: View>: View {
   var reservesExpandedSpace = false
   var onReservedHeightChange: (CGFloat) -> Void = { _ in }
   @ViewBuilder let content: () -> Content
-  @State private var isExpanded = false
+  private var isExpanded: Bool { summary.expanded }
   @State private var headerHeight = LinkstrTheme.minimumInteractiveDimension
   @State private var actionsHeight = LinkstrTheme.minimumInteractiveDimension
   @State private var contentHeight: CGFloat = 240
+  @State private var detailsPosition = ScrollPosition(edge: .top)
   @State private var pullStartedAtTop = true
-
-  private var panelBackground: Color {
-    if reduceTransparency { return LinkstrTheme.background }
-    return isExpanded ? LinkstrTheme.watchExpandedPanel : LinkstrTheme.watchOverlay
-  }
 
   var body: some View {
     GeometryReader { proxy in
@@ -48,9 +49,6 @@ struct WatchPostControls<Content: View>: View {
           } action: {
             headerHeight = $0
           }
-        if isExpanded {
-          detailsScrollView(availableHeight: max(1, availableHeight - headerHeight - actionsHeight))
-        }
         quickActions
           .highPriorityGesture(expansionGesture)
           .onGeometryChange(for: CGFloat.self) {
@@ -58,6 +56,10 @@ struct WatchPostControls<Content: View>: View {
           } action: {
             actionsHeight = $0
           }
+        if isExpanded {
+          detailsScrollView(
+            availableHeight: max(1, min(proxy.size.height / 2, availableHeight - headerHeight - actionsHeight)))
+        }
       }
       .padding(.bottom, playbackControlsHeight == 0 ? LinkstrTheme.metaSpacing : 0)
       .onGeometryChange(for: CGFloat.self) {
@@ -95,6 +97,7 @@ struct WatchPostControls<Content: View>: View {
           contentHeight = $0
         }
     }
+    .scrollPosition($detailsPosition)
     .scrollBounceBehavior(.basedOnSize)
     .onScrollPhaseChange { _, phase, context in
       if phase == .interacting {
@@ -186,8 +189,8 @@ struct WatchPostControls<Content: View>: View {
           summaries: summary.reactions,
           mode: .watch,
           onToggleEmoji: summary.toggleReaction,
-          onOpenReaction: { summary.openReactions($0) },
-          onOpenAllReactions: { summary.openReactions(nil) }
+          onOpenReaction: { showReactions($0) },
+          onOpenAllReactions: { showReactions(nil) }
         )
         .padding(.trailing, LinkstrTheme.metaSpacing)
       }
@@ -208,17 +211,38 @@ struct WatchPostControls<Content: View>: View {
         .buttonStyle(.plain)
         .accessibilityLabel("add reaction")
       }
-      LinkstrHeaderButton(title: "view reactions", icon: "person.2") {
-        summary.openReactions(nil)
+      if isExpanded, !summary.reactions.isEmpty {
+        Menu {
+          Picker("show reactions", selection: summary.$selectedEmoji) {
+            Text("all reactions").tag(String?.none)
+            ForEach(summary.reactions) { reaction in
+              Text("\(reaction.emoji)  \(reaction.count)").tag(Optional(reaction.emoji))
+            }
+          }
+        } label: {
+          Image(systemName: "person.2")
+            .linkstrToolbarIconLabel()
+            .foregroundStyle(LinkstrTheme.accent)
+        }
+        .accessibilityLabel("filter reactions")
+        .onChange(of: summary.selectedEmoji) { detailsPosition.scrollTo(edge: .top) }
+      } else {
+        LinkstrHeaderButton(title: "view reactions", icon: "person.2") { showReactions(nil) }
       }
     }
     .foregroundStyle(LinkstrTheme.textPrimary)
     .padding(.horizontal, LinkstrTheme.controlHorizontalPadding)
   }
 
+  private func showReactions(_ emoji: String?) {
+    summary.selectedEmoji = emoji
+    detailsPosition.scrollTo(edge: .top)
+    setExpanded(true)
+  }
+
   private func setExpanded(_ expanded: Bool) {
     withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
-      isExpanded = expanded
+      summary.expanded = expanded
     }
   }
 }

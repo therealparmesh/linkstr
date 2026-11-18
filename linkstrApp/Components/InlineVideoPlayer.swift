@@ -58,7 +58,7 @@ struct InlineVideoPlayer: View {
           Image(systemName: "arrow.up.left.and.arrow.down.right")
             .linkstrMediaOverlayIconLabel()
         }
-        .accessibilityLabel("open system player")
+        .accessibilityLabel("full screen")
         .padding(8)
       }
     }

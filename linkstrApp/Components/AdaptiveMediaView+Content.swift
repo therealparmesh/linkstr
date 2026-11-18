@@ -271,26 +271,17 @@ extension AdaptiveMediaView {
       .clipShape(.rect(cornerRadius: LinkstrTheme.fieldCornerRadius))
   }
 
-  var watchPlaybackOptions: some View {
-    VStack(alignment: .leading, spacing: 0) {
-      LinkstrListRowDivider(leadingInset: 0)
-      if canRetryOfficialEmbed {
-        watchPlaybackRow("retry embed", icon: "arrow.clockwise", action: retryEmbeddedPlayback)
-      }
-      watchPlaybackRow(LinkstrBrowserAction.title, icon: LinkstrBrowserAction.icon, action: openSourceAction)
-      if effectiveMediaStrategy.allowsLocalPlaybackToggle {
-        if localPlaybackMode == .localPreferred && (isShowingNativePlayer || extractionState == nil) {
-          watchPlaybackRow(officialEmbedActionTitle, icon: "rectangle.inset.filled", action: useOfficialEmbed)
-        } else {
-          watchPlaybackRow(localPlaybackActionTitle, icon: "play.rectangle", action: tryLocalPlayback)
-        }
-      }
-      if isShowingNativePlayer {
-        watchPlaybackRow("open system player", icon: "play.rectangle") {
-          isShowingFullscreenPlayer = true
-        }
-      }
-    }
+  var watchPlaybackMenu: WatchPlaybackMenu {
+    let offersEmbed = localPlaybackMode == .localPreferred && (isShowingNativePlayer || extractionState == nil)
+    return WatchPlaybackMenu(
+      openBrowser: openSourceAction,
+      retryEmbed: canRetryOfficialEmbed ? retryEmbeddedPlayback : nil,
+      switchTitle: offersEmbed ? officialEmbedActionTitle : localPlaybackActionTitle,
+      switchIcon: offersEmbed ? "rectangle.inset.filled" : "play.rectangle",
+      switchMode: effectiveMediaStrategy.allowsLocalPlaybackToggle
+        ? (offersEmbed ? useOfficialEmbed : tryLocalPlayback) : nil,
+      fullScreen: isShowingNativePlayer ? { isShowingFullscreenPlayer = true } : nil
+    )
   }
 
   private var canRetryOfficialEmbed: Bool {
@@ -304,26 +295,6 @@ extension AdaptiveMediaView {
     case .directVideo, .link:
       return false
     }
-  }
-
-  private func watchPlaybackRow(_ title: String, icon: String, action: @escaping () -> Void) -> some View {
-    Button(action: action) {
-      HStack(spacing: LinkstrTheme.rowSpacing) {
-        Image(systemName: icon)
-          .frame(minWidth: 22)
-          .foregroundStyle(LinkstrTheme.accent)
-          .accessibilityHidden(true)
-        Text(title)
-          .foregroundStyle(LinkstrTheme.textPrimary)
-          .multilineTextAlignment(.leading)
-          .fixedSize(horizontal: false, vertical: true)
-      }
-      .font(LinkstrTheme.font(.subheadline, weight: .medium))
-      .padding(.vertical, LinkstrTheme.tightSpacing)
-      .frame(maxWidth: .infinity, minHeight: LinkstrTheme.minimumInteractiveDimension, alignment: .leading)
-      .contentShape(Rectangle())
-    }
-    .buttonStyle(.plain)
   }
 
   func currentPlaybackCandidate(from candidates: [PlayableMedia]) -> PlayableMedia? {
@@ -384,5 +355,28 @@ extension AdaptiveMediaView {
     guard fileURL.isFileURL else { return nil }
     guard FileManager.default.fileExists(atPath: fileURL.path) else { return nil }
     return fileURL
+  }
+}
+
+struct WatchPlaybackMenu: View {
+  let openBrowser: () -> Void
+  let retryEmbed: (() -> Void)?
+  let switchTitle: String
+  let switchIcon: String
+  let switchMode: (() -> Void)?
+  let fullScreen: (() -> Void)?
+
+  var body: some View {
+    Menu {
+      Button(LinkstrBrowserAction.title, systemImage: LinkstrBrowserAction.icon, action: openBrowser)
+      if let switchMode { Button(switchTitle, systemImage: switchIcon, action: switchMode) }
+      if let retryEmbed { Button("retry embed", systemImage: "arrow.clockwise", action: retryEmbed) }
+      if let fullScreen { Button("full screen", systemImage: "arrow.up.left.and.arrow.down.right", action: fullScreen) }
+    } label: {
+      Image(systemName: "ellipsis")
+        .linkstrToolbarIconLabel()
+        .foregroundStyle(LinkstrTheme.textPrimary)
+    }
+    .accessibilityLabel("view options")
   }
 }

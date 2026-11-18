@@ -20,7 +20,6 @@ struct PostDetailView: View {
   let delete: () -> Void
 
   enum Sheet: String, Identifiable {
-    case reactions
     case emojiPicker
     case editNote
     case share
@@ -31,6 +30,7 @@ struct PostDetailView: View {
   @State private var headerHeight: CGFloat = 60
   @State var missingLinkControlsHeight: CGFloat = 120
   @State var activeSheet: Sheet?
+  @State var detailsExpanded: Bool
   @State var selectedReactionEmoji: String?
 
   @State var contacts: [ContactEntity] = []
@@ -62,7 +62,7 @@ struct PostDetailView: View {
     self.watchInsets = watchInsets
     self.isCovered = isCovered
     self.delete = delete
-    _activeSheet = State(initialValue: showsReactions ? .reactions : nil)
+    _detailsExpanded = State(initialValue: showsReactions)
     let storageID = SessionMessageEntity.storageID(ownerPubkey: ownerPubkey, eventID: postID)
     let rootKind = SessionMessageKind.root.rawValue
     _posts = Query(
@@ -94,7 +94,7 @@ struct PostDetailView: View {
       bottom: watchInsets.bottom, trailing: watchInsets.trailing)
   }
 
-  func postHeader(saveAction: (() -> Void)?) -> some View {
+  func postHeader(saveAction: (() -> Void)?, @ViewBuilder mediaMenu: () -> some View) -> some View {
     LinkstrPageTopBar(hasBackButton: true) {
       LinkstrHeaderButton(
         title: "back to posts", icon: "chevron.backward", foreground: LinkstrTheme.textPrimary, action: back)
@@ -118,6 +118,7 @@ struct PostDetailView: View {
           activeSheet = .share
         }
       }
+      mediaMenu()
     }
     .linkstrPageHeaderLayout()
     .onGeometryChange(for: CGFloat.self) {
@@ -126,16 +127,7 @@ struct PostDetailView: View {
       headerHeight = $0
     }
     .padding(.top, watchInsets.top)
-    .background {
-      let tint = reduceTransparency ? LinkstrTheme.background : LinkstrTheme.watchOverlay
-      VStack(spacing: 0) {
-        tint
-        LinearGradient(colors: [tint, .clear], startPoint: .top, endPoint: .bottom)
-          .frame(height: 22)
-      }
-      .padding(.bottom, -22)
-      .allowsHitTesting(false)
-    }
+    .background(reduceTransparency ? LinkstrTheme.background : LinkstrTheme.watchOverlay)
   }
 
   var isRefreshingMetadata: Bool { metadataRefreshRequest != nil }
@@ -144,6 +136,11 @@ struct PostDetailView: View {
     Group {
       if let post {
         watchPost(post)
+          .environment(
+            \.watchPanelBackground,
+            reduceTransparency
+              ? LinkstrTheme.background
+              : (detailsExpanded ? LinkstrTheme.watchExpandedPanel : LinkstrTheme.watchOverlay))
       } else {
         LinkstrCenteredEmptyStateView(
           title: "post unavailable",
@@ -167,7 +164,7 @@ struct PostDetailView: View {
       await PushNotificationService.shared.clearDeliveredNotifications(sessionID: sessionID, postID: post.rootID)
     }
     .onReceive(NotificationCenter.default.publisher(for: .linkstrWillPresentIncomingLink)) { _ in
-      guard activeSheet == .reactions || activeSheet == .emojiPicker else { return }
+      guard activeSheet == .emojiPicker else { return }
       activeSheet = nil
     }
     .sheet(item: $activeSheet) { sheet in
@@ -181,40 +178,12 @@ struct PostDetailView: View {
         }
       case .editNote:
         if let post { EditPostNoteSheet(post: post) }
-      case .reactions:
-        reactionsSheet
       case .emojiPicker:
         emojiPicker
           .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large])
           .presentationDragIndicator(.visible)
       }
     }
-  }
-
-  private var reactionsSheet: some View {
-    VStack(spacing: 0) {
-      LinkstrSheetHeader(title: "reactions", closeLabel: "close reactions") { activeSheet = nil }
-
-      ScrollView {
-        VStack(alignment: .leading, spacing: LinkstrTheme.rowSpacing) {
-          let participants = reactionBreakdown
-          if participants.isEmpty {
-            Text("no reactions yet")
-              .font(LinkstrTheme.font(.subheadline))
-              .foregroundStyle(LinkstrTheme.textSecondary)
-          } else {
-            postCardReactionBreakdown(participants)
-          }
-        }
-        .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-        .padding(.bottom, LinkstrTheme.compactSpacing)
-        .linkstrReadableContent()
-      }
-      .scrollBounceBehavior(.basedOnSize)
-    }
-    .background(LinkstrBackgroundView())
-    .presentationDetents(!dynamicTypeSize.isAccessibilitySize ? [.medium, .large] : [.large])
-    .presentationDragIndicator(.visible)
   }
 
   private var emojiPicker: some View {
