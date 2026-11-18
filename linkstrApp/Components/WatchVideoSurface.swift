@@ -5,7 +5,6 @@ import UIKit
 
 struct WatchVideoSurface: View {
   let player: AVPlayer
-  let aspectRatio: CGFloat
   let bottomInset: CGFloat
   let videoInsets: EdgeInsets?
   let onControlsHeightChange: (CGFloat) -> Void
@@ -14,8 +13,6 @@ struct WatchVideoSurface: View {
   var body: some View {
     GeometryReader { _ in
       WatchPlayerLayer(player: player)
-        .aspectRatio(aspectRatio, contentMode: .fit)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .padding(videoInsets ?? EdgeInsets())
         .contentShape(Rectangle())
         .onTapGesture { player.toggleWatchPlayback() }

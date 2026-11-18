@@ -87,7 +87,6 @@ extension AdaptiveMediaView {
             }
           },
           immersive: immersive,
-          aspectRatio: effectiveMediaAspectRatio,
           isCovered: isMediaCovered,
           watchBottomInset: watchInsets.bottom,
           watchVideoInsets: fitsEntireVideo
