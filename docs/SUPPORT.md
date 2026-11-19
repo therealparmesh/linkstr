@@ -85,7 +85,7 @@ Tap an existing emoji to add or remove your reaction. ❤️ and 👀 suggestion
 4. Add a note if you like.
 5. Tap **done** if you are editing, then **share to session**.
 
-Regular web links are valid posts. HTTPS links to MP4, MOV, or M4V files can play directly. Playback and saving depend on the provider, link, and video format. The composer indicates when an in-app view is available.
+Regular web links are valid posts. HTTPS links to MP4, MOV, or M4V files can play directly. Playback and saving depend on the provider, link, and video format. The composer shows a short playback hint for recognized media links. Tap **clear** to remove the link and keep your note.
 
 You can also paste a shared linkstr post link into the link field, or share it back into linkstr through the iOS share sheet. The new post uses the original web URL. If the share extension can’t find a web link, it tells you what to share instead.
 

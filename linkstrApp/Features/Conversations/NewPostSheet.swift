@@ -56,11 +56,6 @@ struct NewPostSheet: View {
           LinkstrShareFooter(status: footerStatus, canSend: canSend, isSending: isSending, send: sendPost)
         }
       }
-      .onChange(of: focusedField) { previousField, focusedField in
-        guard previousField == .link, focusedField != .link else { return }
-        guard let normalizedURL else { return }
-        url = normalizedURL
-      }
       .onChange(of: url) { _, _ in
         mutationFeedback.clear()
       }

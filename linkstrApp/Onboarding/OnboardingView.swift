@@ -99,12 +99,7 @@ struct OnboardingView: View {
         .frame(maxWidth: .infinity, minHeight: LinkstrTheme.minimumInteractiveDimension)
         .linkstrFieldChrome()
 
-        LinkstrInputAssistRow(
-          showClear: !secretKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-          showScan: false,
-          onPaste: pasteSecretKeyFromClipboard,
-          onClear: { secretKey = "" }
-        )
+        LinkstrInputAssistRow(text: $secretKey)
 
         Button {
           session.importNsec(secretKey)
@@ -190,14 +185,6 @@ struct OnboardingView: View {
         .disabled(isSavingCreatedProfileName)
       }
     }
-  }
-
-  private func pasteSecretKeyFromClipboard() {
-    #if canImport(UIKit)
-      if let clipboardText = UIPasteboard.general.string {
-        secretKey = clipboardText.trimmingCharacters(in: .whitespacesAndNewlines)
-      }
-    #endif
   }
 
   private func submitSecretKey() {

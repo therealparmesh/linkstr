@@ -126,11 +126,6 @@ struct ShareComposerView: View {
     .onAppear {
       selectDefaultSessionIfNeeded()
     }
-    .onChange(of: focusedField) { previousField, focusedField in
-      guard previousField == .link, focusedField != .link else { return }
-      guard let normalizedURL else { return }
-      link = normalizedURL
-    }
     .onChange(of: link) { _, _ in
       mutationFeedback.clear()
     }

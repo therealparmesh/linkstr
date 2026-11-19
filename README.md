@@ -159,13 +159,13 @@ linkstr is built around private sessions, not one-off direct messages. A session
 
 **Composer:**
 
-- Shows the destination, link, and optional note. A preview displays the source and, when available, a title and thumbnail.
+- Shows the destination, link, and optional note.
 - **share to session** sits at the bottom with any validation, relay, or error message. While editing the link or note, the footer hides to leave room for the field and keyboard; **done** dismisses editing and restores it. Both composers and the note editor keep the focused field visible when rotation, the keyboard, or text size changes the available space. Note fields use a compact, scrollable height in landscape.
 - The keyboard return key advances from the link field into the note field.
 - Fields: session name (read-only), link (required), note (optional).
 - The link field supports paste and clear helpers rendered directly below the field in a compact control row. Paste replaces the entire field value.
 - Links without a scheme are normalized to `https://`. Shared `linkstr://open?url=…` links are unwrapped to the original web URL. Posts store only valid `http` or `https` URLs; other schemes are rejected.
-- Recognized media links surface an inline hint when in-app playback is available.
+- Recognized media links show a short hint about playback or saving based on the URL. Media availability is checked when the post opens.
 - Note text is trimmed and persisted only when non-empty.
 
 **Watching posts:**

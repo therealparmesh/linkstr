@@ -41,20 +41,13 @@ struct AddContactSheet: View {
                 .linkstrInputField()
 
               LinkstrInputAssistRow(
-                showClear: !npub.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                text: $npub,
                 isDisabled: isSubmitting,
-                onPaste: {
-                  pasteFromClipboard()
-                  scannerErrorMessage = nil
-                },
                 onScan: {
                   scannerErrorMessage = nil
                   isPresentingScanner = true
                 },
-                onClear: {
-                  npub = ""
-                  scannerErrorMessage = nil
-                }
+                onEdit: { scannerErrorMessage = nil }
               )
             }
 
@@ -171,12 +164,6 @@ struct AddContactSheet: View {
       validationMessage: validationMessage,
       validationColor: LinkstrTheme.destructive.opacity(0.9)
     )
-  }
-
-  private func pasteFromClipboard() {
-    if let clipboardText = UIPasteboard.general.string {
-      npub = clipboardText.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
   }
 
   private func confirmationMessage(for existingContact: ContactEntity?) -> String {

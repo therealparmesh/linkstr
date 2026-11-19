@@ -111,12 +111,10 @@ struct LinkstrSearchField: View {
 }
 
 struct LinkstrInputAssistRow: View {
-  let showClear: Bool
-  var showScan = true
+  @Binding var text: String
   var isDisabled = false
-  let onPaste: () -> Void
   var onScan: (() -> Void)?
-  let onClear: () -> Void
+  var onEdit: () -> Void = {}
 
   var body: some View {
     ViewThatFits(in: .horizontal) {
@@ -136,19 +134,23 @@ struct LinkstrInputAssistRow: View {
 
   @ViewBuilder
   private var actions: some View {
-    assistButton("paste", systemImage: "doc.on.clipboard", action: onPaste)
+    assistButton("paste", systemImage: "doc.on.clipboard") {
+      let clipboard = UIPasteboard.general
+      if let value = clipboard.string ?? clipboard.url?.absoluteString {
+        text = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        onEdit()
+      }
+    }
 
-    if showScan, let onScan {
+    if let onScan {
       assistButton("scan", systemImage: "qrcode.viewfinder", action: onScan)
     }
 
-    if showClear {
-      assistButton(
-        "clear",
-        systemImage: "xmark.circle",
-        tint: LinkstrTheme.destructive.opacity(0.9),
-        action: onClear
-      )
+    if !text.isEmpty {
+      assistButton("clear", systemImage: "xmark.circle", tint: LinkstrTheme.destructive.opacity(0.9)) {
+        text = ""
+        onEdit()
+      }
     }
   }
 

@@ -28,26 +28,26 @@ struct LinkstrShareDraftFields: View {
         .linkstrInputField()
         .id(Field.link)
 
-      LinkstrInputAssistRow(
-        showClear: !link.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-        showScan: false,
-        isDisabled: isSending,
-        onPaste: {
-          if let text = UIPasteboard.general.string {
-            link = text.trimmingCharacters(in: .whitespacesAndNewlines)
-          }
-        },
-        onClear: { link = "" }
-      )
+      LinkstrInputAssistRow(text: $link, isDisabled: isSending)
 
-      if let normalizedURL {
-        LinkstrDraftPreview(url: normalizedURL, loadsRichPreview: focusedField.wrappedValue != .link)
+      if let normalizedURL, let hint = playbackHint(for: normalizedURL) {
+        Text(hint)
+          .font(LinkstrTheme.font(.caption))
+          .foregroundStyle(LinkstrTheme.textSecondary)
       }
     }
 
     LinkstrInsetSection(title: "note", accessory: "optional") {
       LinkstrNoteEditor(note: $note, isDisabled: isSending, focusedField: focusedField, field: .note)
         .id(Field.note)
+    }
+  }
+
+  private func playbackHint(for url: String) -> String? {
+    switch URLClassifier.mediaStrategy(for: url) {
+    case .directVideo, .extractionPreferred: "play or save this video when available"
+    case .embedOnly: "view the official embed when available"
+    case .link: nil
     }
   }
 }
@@ -110,117 +110,6 @@ struct LinkstrNoteEditor<Field: Hashable>: View {
         .disabled(isDisabled)
     }
     .linkstrFieldChrome()
-  }
-}
-
-struct LinkstrDraftPreview: View {
-  private struct Preview {
-    let url: String
-    let destination: URL
-    let title: String?
-    let image: UIImage?
-  }
-
-  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-
-  let url: String
-  let loadsRichPreview: Bool
-  @State private var preview: Preview?
-
-  private func previewStrategy(for address: String) -> URLClassifier.MediaStrategy {
-    guard let sourceURL = URL(string: address),
-      !SocialURLHeuristics.isTwitterStatusURL(sourceURL),
-      !SocialURLHeuristics.isTikTokShortURL(sourceURL)
-    else {
-      return .link
-    }
-    return URLClassifier.mediaStrategy(for: sourceURL)
-  }
-
-  static func availabilityHint(for strategy: URLClassifier.MediaStrategy) -> String? {
-    switch strategy {
-    case .extractionPreferred, .directVideo: "play or save this video when available"
-    case .embedOnly: "view the official embed when available"
-    case .link: nil
-    }
-  }
-
-  var body: some View {
-    let currentPreview = preview?.url == url ? preview : nil
-    let previewAddress = currentPreview?.destination.absoluteString ?? url
-    let strategy = previewStrategy(for: previewAddress)
-    let source = LinkstrPostPreview.source(for: previewAddress)
-    let title = currentPreview?.title
-    VStack(alignment: .leading, spacing: 0) {
-      if !dynamicTypeSize.isAccessibilitySize, let image = currentPreview?.image {
-        Rectangle()
-          .fill(LinkstrTheme.panelElevated)
-          .overlay { Image(uiImage: image).resizable().scaledToFill() }
-          .frame(height: 142)
-          .clipped()
-          .accessibilityHidden(true)
-      }
-
-      HStack(spacing: LinkstrTheme.buttonRowSpacing) {
-        Image(systemName: previewIcon(for: strategy, address: previewAddress))
-          .font(LinkstrTheme.font(.title3))
-          .dynamicTypeSize(...DynamicTypeSize.xxLarge)
-          .foregroundStyle(LinkstrTheme.accent)
-          .frame(width: 38, height: 38)
-          .background(LinkstrTheme.panelElevated, in: .rect(cornerRadius: LinkstrTheme.thumbnailCornerRadius))
-          .accessibilityHidden(true)
-
-        VStack(alignment: .leading, spacing: LinkstrTheme.metaSpacing) {
-          Text(title ?? source ?? "shared link")
-            .font(LinkstrTheme.font(.subheadline, weight: .semibold))
-            .foregroundStyle(LinkstrTheme.textPrimary)
-            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-            .fixedSize(horizontal: false, vertical: true)
-          if let title, let source, title != source {
-            Text(source)
-              .font(LinkstrTheme.font(.caption))
-              .foregroundStyle(LinkstrTheme.textSecondary)
-          }
-          if let hint = Self.availabilityHint(for: strategy) {
-            Text(hint)
-              .font(LinkstrTheme.font(.caption))
-              .foregroundStyle(LinkstrTheme.textSecondary)
-          }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-      }
-      .padding(10)
-    }
-    .linkstrCardSurface()
-    .task(id: loadsRichPreview ? url : nil) { await loadPreview() }
-  }
-
-  private func loadPreview() async {
-    guard loadsRichPreview, let sourceURL = URL(string: url) else { return }
-    do { try await Task.sleep(for: .milliseconds(350)) } catch { return }
-    let destination =
-      SocialURLHeuristics.isTikTokShortURL(sourceURL)
-      ? await URLCanonicalizationService.shared.canonicalPlaybackURL(for: sourceURL)
-      : sourceURL
-    guard !Task.isCancelled else { return }
-    if preview?.url != url || preview?.destination != destination {
-      preview = Preview(url: url, destination: destination, title: nil, image: nil)
-    }
-
-    let address = destination.absoluteString
-    guard let metadata = await URLMetadataService.shared.fetchPreview(for: address), !Task.isCancelled else { return }
-    let title = LinkstrPostPreview.displayTitle(metadata.title, for: address)
-    preview = Preview(url: url, destination: destination, title: title, image: nil)
-    if let path = ManagedLocalFileScope.shared.managedFileURL(fromPath: metadata.thumbnailPath)?.path {
-      let image = await ThumbnailImageCache.shared.loadImageAsync(at: path)
-      guard !Task.isCancelled else { return }
-      preview = Preview(url: url, destination: destination, title: title, image: image)
-    }
-  }
-
-  private func previewIcon(for strategy: URLClassifier.MediaStrategy, address: String) -> String {
-    if LinkstrPostPreview.kind(for: address) == "photo post" { return "photo" }
-    return strategy == .link ? "link" : "play.rectangle"
   }
 }
 
