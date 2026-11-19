@@ -28,9 +28,7 @@ extension SettingsView {
   }
 
   var storageUsageHint: String? {
-    if isRefreshingStorageUsage
-      && clearableStorageBytes == nil
-      && clearableMetadataBytes == nil {
+    if isRefreshingStorageUsage, clearableStorageBytes == nil, clearableMetadataBytes == nil {
       return "checking local storage…"
     }
     let segments = [
@@ -162,7 +160,7 @@ extension SettingsView {
     case .connected:
       return "connected"
     case .connecting:
-      return "connecting"
+      return session.relayErrorMessage(for: relay) == nil ? "connecting" : "reconnecting"
     case .readOnly:
       return "read only"
     case .failed:

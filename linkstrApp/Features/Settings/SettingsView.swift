@@ -130,7 +130,7 @@ struct SettingsView: View {
   private var relaysSection: some View {
     LinkstrInsetSection(
       title: "relays",
-      accessory: "\(connectedRelayCount)/\(session.configuredRelays.count)",
+      accessory: "\(connectedRelayCount) of \(session.configuredRelays.count) connected",
       footer:
         "enable at least one writable relay to create sessions, send posts, or publish account changes."
     ) {

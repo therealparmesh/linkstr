@@ -237,7 +237,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 - Users can add a relay URL (`ws://` or `wss://`, valid host required), enable or disable a relay, remove a relay, or restore the current shipped default relays.
 - The relay header shows `connected_or_readonly / total`.
 - Relay, storage, and identity controls remain visible without disclosure-group expansion.
-- Relay rows show a live status dot and label for connecting, connected, read-only, failed, disconnected, or disabled states. Expand **technical details** to read a failure. The latest failure stays visible through reconnect attempts and clears when the relay connects successfully.
+- Relay rows show a live status dot and label for connecting, reconnecting after an error, connected, read-only, failed, disconnected, or disabled states. Expand **technical details** to read a failure. The latest failure stays visible through reconnect attempts and clears when the relay connects successfully.
 - Offline relay toast signaling is suppressed during initial connection and only shown after a previously healthy relay drops in the same foreground lifecycle.
 - In-app notifications appear below the active page or sheet header. Success messages clear automatically.
 - Tapping a relay connection alert opens relay settings; tapping any other toast dismisses it.

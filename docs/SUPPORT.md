@@ -345,7 +345,7 @@ Archived sessions do not send notifications.
 4. Bring the app back to the foreground and leave it open for a few seconds. linkstr reconnects from a disconnected baseline after backgrounding, while retaining message deduplication for the same account. Brief interruptions such as opening Control Center do not restart the relay runtime.
 5. If it still does not recover, force-quit and reopen the app.
 
-Relay technical details retain the latest failure while reconnecting, so an expanded error stays readable during retries. The details clear when the relay connects successfully.
+A relay shows **connecting** on its first attempt and **reconnecting** when it retries after an error. Expand **technical details** to read the latest failure. The details stay open through retries. The details clear when the relay connects successfully.
 
 ### My posts are not syncing across devices
 

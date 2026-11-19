@@ -89,23 +89,22 @@ struct LinkstrSearchField: View {
     }
     .linkstrInputField()
     .overlay(alignment: .trailing) {
-      Button {
-        text = ""
-      } label: {
-        Image(systemName: "xmark.circle.fill")
-          .font(LinkstrTheme.font(.footnote))
-          .foregroundStyle(LinkstrTheme.textTertiary)
-          .frame(
-            width: LinkstrTheme.minimumInteractiveDimension,
-            height: LinkstrTheme.minimumInteractiveDimension
-          )
-          .contentShape(Rectangle())
+      if !text.isEmpty {
+        Button {
+          text = ""
+        } label: {
+          Image(systemName: "xmark.circle.fill")
+            .font(LinkstrTheme.font(.footnote))
+            .foregroundStyle(LinkstrTheme.textTertiary)
+            .frame(
+              width: LinkstrTheme.minimumInteractiveDimension,
+              height: LinkstrTheme.minimumInteractiveDimension
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("clear search")
       }
-      .buttonStyle(.plain)
-      .opacity(text.isEmpty ? 0 : 1)
-      .allowsHitTesting(!text.isEmpty)
-      .accessibilityHidden(text.isEmpty)
-      .accessibilityLabel("clear search")
     }
   }
 }
