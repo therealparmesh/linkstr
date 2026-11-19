@@ -30,10 +30,9 @@ struct LinkstrShareDraftFields: View {
 
       LinkstrInputAssistRow(text: $link, isDisabled: isSending)
 
-      if let normalizedURL, let hint = playbackHint(for: normalizedURL) {
-        Text(hint)
-          .font(LinkstrTheme.font(.caption))
-          .foregroundStyle(LinkstrTheme.textSecondary)
+      if let normalizedURL {
+        DraftLinkPreview(url: normalizedURL, isEditing: focusedField.wrappedValue == .link)
+          .id(normalizedURL)
       }
     }
 
@@ -42,12 +41,64 @@ struct LinkstrShareDraftFields: View {
         .id(Field.note)
     }
   }
+}
 
-  private func playbackHint(for url: String) -> String? {
+private struct DraftLinkPreview: View {
+  let url: String
+  let isEditing: Bool
+  @State private var title: String?
+  @State private var thumbnail: UIImage?
+
+  private var availability: String? {
     switch URLClassifier.mediaStrategy(for: url) {
-    case .directVideo, .extractionPreferred: "play or save this video when available"
-    case .embedOnly: "view the official embed when available"
+    case .directVideo, .extractionPreferred: "viewable in-app. some videos can be saved."
+    case .embedOnly: "viewable in-app."
     case .link: nil
+    }
+  }
+
+  var body: some View {
+    let source = LinkstrPostPreview.source(for: url) ?? url
+    HStack(spacing: LinkstrTheme.buttonRowSpacing) {
+      Rectangle()
+        .fill(LinkstrTheme.panelElevated)
+        .overlay {
+          if let thumbnail {
+            Image(uiImage: thumbnail).resizable().scaledToFill()
+          } else {
+            Image(systemName: "link").foregroundStyle(LinkstrTheme.textSecondary)
+          }
+        }
+        .frame(width: 44, height: 44)
+        .clipShape(.rect(cornerRadius: LinkstrTheme.thumbnailCornerRadius))
+        .accessibilityHidden(true)
+
+      VStack(alignment: .leading, spacing: LinkstrTheme.metaSpacing) {
+        Text(title ?? source)
+          .font(LinkstrTheme.font(.subheadline, weight: .semibold))
+          .lineLimit(2)
+        if title != nil {
+          Text(source).font(LinkstrTheme.font(.caption)).foregroundStyle(LinkstrTheme.textSecondary)
+        }
+        if let availability {
+          Text(availability).font(LinkstrTheme.font(.caption)).foregroundStyle(LinkstrTheme.accent)
+        }
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    .padding(LinkstrTheme.compactSpacing)
+    .linkstrCardSurface()
+    .allowsHitTesting(false)
+    .accessibilityElement(children: .combine)
+    .task(id: isEditing) {
+      guard !isEditing, let preview = await URLMetadataService.shared.fetchPreview(for: url), !Task.isCancelled else {
+        return
+      }
+      title = LinkstrPostPreview.displayTitle(preview.title, for: url)
+      if let path = ManagedLocalFileScope.shared.managedFileURL(fromPath: preview.thumbnailPath)?.path {
+        let image = await ThumbnailImageCache.shared.loadImageAsync(at: path, size: .listRow)
+        if !Task.isCancelled { thumbnail = image }
+      }
     }
   }
 }

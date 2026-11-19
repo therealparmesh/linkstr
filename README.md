@@ -165,7 +165,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 - Fields: session name (read-only), link (required), note (optional).
 - The link field supports paste and clear helpers rendered directly below the field in a compact control row. Paste replaces the entire field value.
 - Links without a scheme are normalized to `https://`. Shared `linkstr://open?url=…` links are unwrapped to the original web URL. Posts store only valid `http` or `https` URLs; other schemes are rejected.
-- Recognized media links show a short hint about playback or saving based on the URL. Media availability is checked when the post opens.
+- A compact draft preview shows the source immediately, plus a title and thumbnail when available. Recognized media links show whether they can open in-app and whether saving may be available. The hint stays visible while editing and does not depend on loading the preview.
 - Note text is trimmed and persisted only when non-empty.
 
 **Watching posts:**
