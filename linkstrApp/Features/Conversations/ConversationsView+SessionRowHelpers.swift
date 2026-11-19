@@ -125,6 +125,7 @@ extension SessionManagementSheet {
           }
         } else {
           LinkstrSearchField(prompt: "search contacts", text: $query)
+            .focused($focusedField, equals: .search)
             .padding(.top, LinkstrTheme.compactSpacing)
 
           if filteredContacts.isEmpty {

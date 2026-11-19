@@ -80,7 +80,6 @@ struct AddContactSheet: View {
           }
           .linkstrPageContentLayout()
         }
-        .linkstrKeyboardDismissal()
       }
       .task(id: previewPubkeyHex) {
         guard let previewPubkeyHex else { return }
@@ -121,6 +120,7 @@ struct AddContactSheet: View {
           )
         }
       }
+      .linkstrKeyboardDismissal($focusedField)
       .sheet(isPresented: $isPresentingScanner) {
         LinkstrQRScannerSheet { scannedValue in
           if let scannedNPub = ContactKeyParser.extractNPub(from: scannedValue) {

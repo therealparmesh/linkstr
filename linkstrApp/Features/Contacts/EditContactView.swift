@@ -6,6 +6,7 @@ struct EditContactView: View {
 
   let contact: ContactEntity
 
+  @FocusState private var isEditingField: Bool
   @State private var pendingRemoval: ContactEntity?
   @State private var alias: String
 
@@ -29,6 +30,7 @@ struct EditContactView: View {
 
           LinkstrInsetSection(title: "alias", footer: "only you see this alias.") {
             TextField("optional alias", text: $alias, prompt: LinkstrTheme.placeholder("optional alias"))
+              .focused($isEditingField)
               .font(LinkstrTheme.font(.subheadline))
               .textInputAutocapitalization(.words)
               .submitLabel(.done)
@@ -69,7 +71,7 @@ struct EditContactView: View {
         }
         .linkstrPageContentLayout(topPadding: LinkstrTheme.pinnedPageContentTopPadding)
       }
-      .linkstrKeyboardDismissal()
+      .linkstrKeyboardDismissal($isEditingField)
     }
     .contactRemoval(pending: $pendingRemoval) { dismiss() }
     .linkstrPinnedPageHeader {

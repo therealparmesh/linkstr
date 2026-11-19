@@ -162,6 +162,7 @@ private struct ConversationsContentView: View {
   let createSession: () -> Void
   let openSession: (String) -> Void
 
+  @FocusState private var isEditingField: Bool
   @State private var query = ""
 
   private var normalizedQuery: String {
@@ -237,6 +238,7 @@ private struct ConversationsContentView: View {
               prompt: isShowingArchivedSessions ? "search archived sessions" : "search sessions",
               text: $query
             )
+            .focused($isEditingField)
           }
 
           if visibleSummaries.isEmpty {
@@ -276,7 +278,7 @@ private struct ConversationsContentView: View {
         }
         .linkstrPageContentLayout(topPadding: LinkstrTheme.pinnedPageContentTopPadding)
       }
-      .linkstrKeyboardDismissal()
+      .linkstrKeyboardDismissal($isEditingField)
     }
   }
 }

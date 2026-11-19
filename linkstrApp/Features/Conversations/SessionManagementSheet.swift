@@ -5,6 +5,7 @@ import UIKit
 struct SessionManagementSheet: View {
   enum Field: Hashable {
     case sessionName
+    case search
   }
 
   @Environment(\.dismiss) var dismiss
@@ -96,7 +97,7 @@ struct SessionManagementSheet: View {
                       LinkstrContactAvatar(
                         name: identity.avatarName, size: LinkstrTheme.memberAvatarSize, seed: identity.npub
                       )
-                        .accessibilityHidden(true)
+                      .accessibilityHidden(true)
 
                       LinkstrContactIdentityView(
                         identity: identity,
@@ -158,7 +159,6 @@ struct SessionManagementSheet: View {
           }
           .linkstrPageContentLayout()
         }
-        .linkstrKeyboardDismissal()
       }
       .linkstrBarChrome()
       .linkstrSheetHeader(title: canManageSession ? "manage session" : "session members") {
@@ -225,6 +225,7 @@ struct SessionManagementSheet: View {
           )
         }
       }
+      .linkstrKeyboardDismissal($focusedField)
       .task(id: lookupPubkeys.stableTaskID) {
         session.requestRemoteProfilesIfNeeded(pubkeyHexes: lookupPubkeys)
       }

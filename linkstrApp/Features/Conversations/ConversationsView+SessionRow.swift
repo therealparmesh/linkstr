@@ -83,7 +83,7 @@ struct NewSessionSheet: View {
                           LinkstrContactAvatar(
                             name: identity.avatarName, size: LinkstrTheme.memberAvatarSize, seed: identity.npub
                           )
-                            .accessibilityHidden(true)
+                          .accessibilityHidden(true)
                           LinkstrContactIdentityView(
                             identity: identity,
                             primaryFont: LinkstrTheme.font(.footnote, weight: .medium)
@@ -131,7 +131,6 @@ struct NewSessionSheet: View {
           }
           .linkstrPageContentLayout()
         }
-        .linkstrKeyboardDismissal()
       }
 
       .linkstrBarChrome()
@@ -152,6 +151,7 @@ struct NewSessionSheet: View {
           )
         }
       }
+      .linkstrKeyboardDismissal($focusedField)
       .task(id: profileLookupPubkeys.stableTaskID) {
         session.requestRemoteProfilesIfNeeded(pubkeyHexes: profileLookupPubkeys)
       }

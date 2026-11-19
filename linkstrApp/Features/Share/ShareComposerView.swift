@@ -104,7 +104,6 @@ struct ShareComposerView: View {
           }
           .linkstrPageContentLayout()
         }
-        .linkstrKeyboardDismissal()
         .modifier(LinkstrFocusedFieldScrolling(focusedField: focusedField))
       }
       .linkstrBarChrome()
@@ -120,6 +119,7 @@ struct ShareComposerView: View {
           LinkstrShareFooter(status: footerStatus, canSend: canSend, isSending: isSending, send: sendSharedLink)
         }
       }
+      .linkstrKeyboardDismissal($focusedField)
     }
     .interactiveDismissDisabled(isSending)
     .preferredColorScheme(.dark)

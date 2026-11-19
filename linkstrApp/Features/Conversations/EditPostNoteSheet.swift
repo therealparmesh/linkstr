@@ -69,7 +69,7 @@ struct EditPostNoteSheet: View {
         }
       }
       .onAppear { focusedField = .note }
-      .linkstrKeyboardDismissal()
+      .linkstrKeyboardDismissal($focusedField)
       .modifier(LinkstrFocusedFieldScrolling(focusedField: focusedField))
       .interactiveDismissDisabled(isSaving)
       .onChange(of: draft) { _, _ in feedback.clear() }

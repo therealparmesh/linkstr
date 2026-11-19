@@ -12,6 +12,7 @@ struct ContactsView: View {
   @Query
   private var contacts: [ContactEntity]
 
+  @FocusState private var isEditingField: Bool
   @State private var selectedContact: ContactEntity?
   @State private var pendingContactRemoval: ContactEntity?
   @State private var query = ""
@@ -96,6 +97,7 @@ struct ContactsView: View {
       ScrollView {
         VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
           LinkstrSearchField(prompt: "search contacts", text: $query)
+            .focused($isEditingField)
           addedYouShortcut
 
           if visibleContacts.isEmpty {
@@ -139,7 +141,7 @@ struct ContactsView: View {
         }
         .linkstrPageContentLayout(topPadding: LinkstrTheme.pinnedPageContentTopPadding)
       }
-      .linkstrKeyboardDismissal()
+      .linkstrKeyboardDismissal($isEditingField)
     }
   }
 

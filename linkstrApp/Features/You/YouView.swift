@@ -77,7 +77,7 @@ struct YouView: View {
             }
           }
           .interactiveDismissDisabled(isSavingProfileName)
-          .linkstrKeyboardDismissal()
+          .linkstrKeyboardDismissal($isProfileNameFieldFocused)
           .linkstrBarChrome()
         }
       }

@@ -27,6 +27,7 @@ struct SettingsView: View {
 
   @AppStorage("loopLocalVideos") private var loopLocalVideos = true
 
+  @FocusState private var isEditingField: Bool
   @State private var relayURL = ""
   @State private var showsRelayAddressError = false
   @State var revealedNsec = ""
@@ -86,7 +87,7 @@ struct SettingsView: View {
       LinkstrPageHeader(title: "settings", backLabel: "back to you") { EmptyView() }
     }
     .linkstrEdgeBack()
-    .linkstrKeyboardDismissal()
+    .linkstrKeyboardDismissal($isEditingField)
     .alert("log out", isPresented: $isPresentingLogoutOptions) {
       Button("log out and keep local data") {
         session.logOut(clearLocalData: false)
@@ -151,6 +152,7 @@ struct SettingsView: View {
       }
 
       TextField("relay address", text: $relayURL, prompt: LinkstrTheme.placeholder("wss://relay.example.com"))
+        .focused($isEditingField)
         .font(LinkstrTheme.font(.subheadline))
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled(true)

@@ -91,7 +91,7 @@ You can also paste a shared linkstr post link into the link field, or share it b
 
 If you share from another app while signed out, finish signing in with linkstr still open. The composer then opens with the shared link and any note.
 
-The footer shows relay status or errors next to the share button. The keyboard return key on the link field advances into the note field.
+While editing, tap **done** above the docked keyboard to return to the share button. The footer shows relay status or errors next to the share button. The keyboard return key on the link field advances into the note field.
 
 If the selected session becomes unavailable while sharing from another app, linkstr keeps your draft and disables sharing. If another active session is available, tap **choose a session** to select it. Otherwise, the recipient section explains that you need to create a session before sharing. Linkstr does not automatically switch to a different session.
 

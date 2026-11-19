@@ -60,6 +60,7 @@ struct ShareSessionPickerSheet: View {
   let avatarsBySessionID: [String: [SessionMemberAvatar]]
   @Binding var selectedSessionID: String?
 
+  @FocusState private var isEditingField: Bool
   @State private var query = ""
 
   private var visibleSessions: [SessionEntity] {
@@ -87,13 +88,14 @@ struct ShareSessionPickerSheet: View {
                 text: $query,
                 submitLabel: .search
               )
+              .focused($isEditingField)
 
               sessionPicker(filteredSessions)
             }
           }
           .linkstrPageContentLayout()
         }
-        .linkstrKeyboardDismissal()
+        .linkstrKeyboardDismissal($isEditingField)
       }
       .linkstrBarChrome()
       .linkstrSheetHeader(title: "choose a session") {

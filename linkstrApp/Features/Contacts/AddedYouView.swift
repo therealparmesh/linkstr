@@ -7,6 +7,7 @@ struct AddedYouView: View {
   @ObservedObject var discovery: ContactDiscovery
   let ownerPubkey: String
   @Query private var contacts: [ContactEntity]
+  @FocusState private var isEditingField: Bool
   @State private var query = ""
   @State private var pendingContactAddition: ContactPresentation?
   @Query private var relationships: [FollowRelationshipEntity]
@@ -48,6 +49,7 @@ struct AddedYouView: View {
     ScrollView {
       VStack(alignment: .leading, spacing: LinkstrTheme.listBlockSpacing) {
         LinkstrSearchField(prompt: "search people", text: $query)
+          .focused($isEditingField)
         if rows.isEmpty, discovery.loadState == .unavailable {
           LinkstrCenteredEmptyStateView(
             title: "couldn’t load people",
@@ -148,7 +150,7 @@ struct AddedYouView: View {
       }
     }
     .linkstrEdgeBack()
-    .linkstrKeyboardDismissal()
+    .linkstrKeyboardDismissal($isEditingField)
     .task(id: visibleRows.map(\.pubkey).stableTaskID) {
       session.requestRemoteProfilesIfNeeded(pubkeyHexes: visibleRows.map(\.pubkey))
     }

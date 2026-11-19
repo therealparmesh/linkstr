@@ -6,6 +6,7 @@ import SwiftUI
 
 struct OnboardingView: View {
   @EnvironmentObject private var session: AppSession
+  @FocusState private var isEditingField: Bool
   @State private var secretKey = ""
   @State private var isSecretKeyVisible = false
   @State private var createdProfileName = ""
@@ -35,13 +36,13 @@ struct OnboardingView: View {
         .linkstrPageContentLayout(topPadding: LinkstrTheme.pinnedPageContentTopPadding)
       }
       .linkstrPinnedPageHeader { header }
-      .linkstrKeyboardDismissal()
     }
     .safeAreaInset(edge: .bottom, spacing: 0) {
       if session.pendingCreatedAccountNsec != nil, let status = footerStatus {
         LinkstrSheetStatusFooter(message: status.message, messageColor: status.color)
       }
     }
+    .linkstrKeyboardDismissal($isEditingField)
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     .onChange(of: createdProfileName) { _, _ in
       session.clearProfileNameError()
@@ -78,6 +79,7 @@ struct OnboardingView: View {
           .autocorrectionDisabled(true)
           .submitLabel(.go)
           .onSubmit(submitSecretKey)
+          .focused($isEditingField)
           .privacySensitive()
 
           Button {
@@ -169,6 +171,7 @@ struct OnboardingView: View {
           .textInputAutocapitalization(.words)
           .autocorrectionDisabled(true)
           .submitLabel(.done)
+          .focused($isEditingField)
           .onSubmit(completePendingAccountCreation)
           .linkstrInputField()
           .disabled(isSavingCreatedProfileName)

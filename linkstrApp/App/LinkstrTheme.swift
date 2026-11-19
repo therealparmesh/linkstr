@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 private struct LinkstrFieldChrome: ViewModifier {
   func body(content: Content) -> some View {
@@ -36,29 +35,6 @@ private struct LinkstrInputField: ViewModifier {
   }
 }
 
-private struct LinkstrKeyboardDismissal: ViewModifier {
-  func body(content: Content) -> some View {
-    content
-      .scrollDismissesKeyboard(.immediately)
-      .toolbar {
-        ToolbarItemGroup(placement: .keyboard) {
-          Spacer()
-
-          Button("done") {
-            UIApplication.shared.sendAction(
-              #selector(UIResponder.resignFirstResponder),
-              to: nil,
-              from: nil,
-              for: nil
-            )
-          }
-          .font(LinkstrTheme.font(.subheadline, weight: .semibold))
-          .tint(LinkstrTheme.accent)
-        }
-      }
-  }
-}
-
 private struct LinkstrActionButtonStyle: ButtonStyle {
   @Environment(\.isEnabled) private var isEnabled
   let tint: Color
@@ -92,8 +68,33 @@ extension View {
     modifier(LinkstrInputField(minHeight: minHeight, alignment: alignment))
   }
 
-  func linkstrKeyboardDismissal() -> some View {
-    modifier(LinkstrKeyboardDismissal())
+  func linkstrKeyboardDismissal(_ focus: FocusState<Bool>.Binding) -> some View {
+    keyboardDismissal(isEditing: focus.wrappedValue) { focus.wrappedValue = false }
+  }
+
+  func linkstrKeyboardDismissal<Field>(_ focus: FocusState<Field?>.Binding) -> some View {
+    keyboardDismissal(isEditing: focus.wrappedValue != nil) { focus.wrappedValue = nil }
+  }
+
+  private func keyboardDismissal(isEditing: Bool, dismiss: @escaping () -> Void) -> some View {
+    scrollDismissesKeyboard(.immediately)
+      .safeAreaInset(edge: .bottom, spacing: 0) {
+        if isEditing {
+          Button(action: dismiss) {
+            Text("done")
+              .font(LinkstrTheme.font(.subheadline, weight: .semibold))
+              .frame(
+                minWidth: LinkstrTheme.minimumInteractiveDimension,
+                minHeight: LinkstrTheme.minimumInteractiveDimension
+              )
+              .contentShape(Rectangle())
+          }
+          .tint(LinkstrTheme.accent)
+          .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+          .frame(maxWidth: .infinity, alignment: .trailing)
+          .background(.bar)
+        }
+      }
   }
 
   func linkstrPrimaryButton() -> some View {

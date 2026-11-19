@@ -38,7 +38,6 @@ struct NewPostSheet: View {
           }
           .linkstrPageContentLayout()
         }
-        .linkstrKeyboardDismissal()
         .modifier(LinkstrFocusedFieldScrolling(focusedField: focusedField))
       }
 
@@ -56,6 +55,7 @@ struct NewPostSheet: View {
           LinkstrShareFooter(status: footerStatus, canSend: canSend, isSending: isSending, send: sendPost)
         }
       }
+      .linkstrKeyboardDismissal($focusedField)
       .onChange(of: url) { _, _ in
         mutationFeedback.clear()
       }
