@@ -97,7 +97,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 
 - The session list is the top-level surface.
 - Sessions are local, account-scoped entities with a session ID, name, creator pubkey, updated timestamp, and archive flag.
-- Users create sessions from the compose action in the top-right corner of the sessions tab.
+- Tap the plus in the sessions toolbar to create a session, or **new session** in the empty list.
 - Search covers session names and recent post text. A session row shows the sender's note or linked title when available, plus the source, timestamp, and unread count.
 - Group rows show up to three member initials. A session with one other member shows their initials, and a solo session shows a bookmark.
 - Opening a session shows the post list. Tap a row to view that post, or use **watch posts** to start at the newest unread post from another member, or the newest post when none are unread. Swipe in the viewer to move between posts. **mark all as read** is available beside the post count in the session list. If the final post disappears, the viewer returns to the empty list. Later arrivals stay in the list until you open them.
@@ -155,7 +155,7 @@ linkstr is built around private sessions, not one-off direct messages. A session
 
 ### Posts (root links)
 
-- Posting is session-scoped.
+- In a session, tap the square-and-pencil **new post** button to open a draft.
 
 **Composer:**
 
@@ -443,11 +443,11 @@ See [contact synchronization](docs/CONTACTS.md) for persistence and relay behavi
 - Media save format: `linkstr://save?url=…`
 - Valid deep links open a full-screen shared-link detail, share composer, or media-save surface.
 - Post detail can share the current post as a deep link through the native iOS share sheet. Opening the sheet pauses playback; dismissing it resumes a video that was playing. Background session media also pauses while a shared-link, share-composer, or media-save screen is open.
-- The iOS share extension accepts web URLs, webpages, shared linkstr post links, or text containing either kind of link, then offers **share to session** or **save video**.
+- The iOS share extension accepts web URLs, webpages, shared linkstr post links, or text containing either kind of link, then offers **new post** or **save video**.
 - If the source app has not supplied its link after 15 seconds, the extension replaces the loading indicator with recovery guidance. A later link still restores the share actions; closing the extension ignores later results.
 - The share extension waits for iOS to confirm that linkstr opened. If opening fails, the link and actions stay available so you can retry or close the extension.
 - Sharing a linkstr post link back into the app or pasting it into either composer uses the original web URL, including its query and fragment. Invalid or nested deep links are rejected.
-- **share to session** opens a full-screen share composer with the link prefilled, any surrounding text as the optional note, and a separate searchable active-session picker.
+- **new post** opens a full-screen share composer with the link prefilled, any surrounding text as the optional note, and a separate searchable active-session picker.
 - If another link opens while a share is sending, the original send can finish without dismissing the newer composer or changing its navigation.
 - **save video** opens linkstr to cache supported video and offer Photos or Files as the destination. It checks the downloaded copy before export and retries once if that copy is unreadable. If no web link can be found, the extension explains what to share instead.
 - Shared deep links carry only the normalized web URL; title, thumbnail, and provider-specific preview text are fetched when the recipient opens the link.

@@ -212,7 +212,7 @@ private struct ConversationsContentView: View {
       }
 
       if hasSessions {
-        LinkstrHeaderButton(title: "new session", icon: "square.and.pencil", action: createSession)
+        LinkstrHeaderButton(title: "new session", icon: "plus", action: createSession)
       }
     }
   }
@@ -225,7 +225,7 @@ private struct ConversationsContentView: View {
         systemImage: "rectangle.stack.badge.plus",
         description: "create a private session to share links with your people.",
         actionTitle: "new session",
-        actionSystemImage: "square.and.pencil",
+        actionSystemImage: "plus",
         action: createSession
       )
       .linkstrPageContentLayout(topPadding: LinkstrTheme.pinnedPageContentTopPadding)

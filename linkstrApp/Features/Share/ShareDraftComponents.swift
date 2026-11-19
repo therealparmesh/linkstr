@@ -251,7 +251,7 @@ struct LinkstrShareFooter: View {
           }
           .frame(maxWidth: .infinity)
         } else {
-          LinkstrActionButtonLabel(title: "share to session")
+          LinkstrActionButtonLabel(title: "share to session", systemImage: "paperplane")
         }
       }
       .linkstrPrimaryButton()

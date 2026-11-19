@@ -180,7 +180,7 @@ struct SettingsView: View {
         Button {
           session.restoreDefaultRelays()
         } label: {
-          LinkstrActionButtonLabel(title: "restore defaults")
+          LinkstrActionButtonLabel(title: "restore default relays", systemImage: "arrow.counterclockwise")
         }
         .linkstrSecondaryButton()
       }

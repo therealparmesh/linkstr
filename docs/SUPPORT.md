@@ -48,7 +48,7 @@ You can also tap the add-contact button beside a member who is not in your conta
 ### Create a session
 
 1. Open **sessions**.
-2. Tap the compose button in the top-right corner.
+2. Tap the plus in the top-right corner, or **new session** in the empty list.
 3. Enter a session name.
 4. Optionally add contacts now, or start solo and add them later.
 5. Tap the top-right create icon.
@@ -80,7 +80,7 @@ Tap an existing emoji to add or remove your reaction. ❤️ and 👀 suggestion
 ### Share a link
 
 1. Open a session.
-2. Tap **share a link** at the top.
+2. Tap the square-and-pencil **new post** button, or **new post** in the empty list.
 3. Paste a link.
 4. Add a note if you like.
 5. Tap **done** if you are editing, then **share to session**.
@@ -101,9 +101,9 @@ If the selected session becomes unavailable while sharing from another app, link
 | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | React to a post                | Tap a suggested or existing emoji on the post, or tap the smiley with a plus to choose another emoji.                                                                                                                       |
 | Remove a reaction              | Tap your selected emoji again, either on the post or in the picker.                                                                                                                                                         |
-| Share into linkstr             | Use the iOS share sheet from another app, choose linkstr, then **share to session**. linkstr opens with the link prefilled, an optional note, and a separate searchable picker of active sessions.                          |
+| Share into linkstr             | Use the iOS share sheet from another app, choose linkstr, then **new post**. linkstr opens with the link prefilled, an optional note, and a separate searchable picker of active sessions.                                  |
 | Save shared video              | Use the iOS share sheet from another app, choose linkstr, then choose **save video**. linkstr prepares supported video and lets you choose Photos or Files. If preparation fails, use **try again** or **open in browser**. |
-| Share a deep link              | Tap the share button beside the quick reactions on the post. The recipient opens the original link in linkstr.                                                                                                              |
+| Share a deep link              | Tap the share button in the post’s top toolbar. The recipient opens the original link in linkstr.                                                                                                                           |
 | Edit your own note             | Open **more** on a link you shared, then choose **edit note** or **add a note**. Clear the text, then confirm with **remove note** to remove it.                                                                            |
 | Delete your own post           | Choose **delete post** from **more**, or long-press the post in the timeline.                                                                                                                                               |
 | Archive or unarchive a session | Open **manage session** or **view members** from the post list. Use **archive session** or **unarchive session**.                                                                                                           |
@@ -123,7 +123,7 @@ Open **you**, tap **settings**, and find **relays**.
 - You can add your own relay URLs.
 - Enabled relays can be toggled on or off.
 - Relay rows can be removed.
-- **restore defaults** puts you back on the current default relay set.
+- **restore default relays** puts you back on the current default relay set.
 - In-app notices appear below the open screen or sheet’s header. Success notices clear automatically. Tap a relay connection alert to open relay settings.
 
 ---
@@ -341,7 +341,7 @@ Archived sessions do not send notifications.
 
 1. Confirm your internet connection works.
 2. Open **you**, tap **settings**, and check that at least one relay is enabled.
-3. If needed, use **restore defaults** in the relays section to go back to the current default relay set.
+3. If needed, use **restore default relays** in the relays section to go back to the current default relay set.
 4. Bring the app back to the foreground and leave it open for a few seconds. linkstr reconnects from a disconnected baseline after backgrounding, while retaining message deduplication for the same account. Brief interruptions such as opening Control Center do not restart the relay runtime.
 5. If it still does not recover, force-quit and reopen the app.
 

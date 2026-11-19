@@ -94,8 +94,8 @@ private struct ShareExtensionScreen: View {
             linkPreview(share.url)
             VStack(spacing: 0) {
               actionRow(
-                "share to session", subtitle: "choose a session, with an optional note",
-                icon: "paperplane", action: .shareLink)
+                "new post", subtitle: "choose a session, with an optional note",
+                icon: "square.and.pencil", action: .shareLink)
               Rectangle().fill(LinkstrTheme.separator).frame(height: 1)
                 .accessibilityHidden(true)
               actionRow(
@@ -188,6 +188,7 @@ private struct ShareExtensionScreen: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
-    .accessibilityElement(children: .combine)
+    .accessibilityLabel(title)
+    .accessibilityHint(subtitle)
   }
 }

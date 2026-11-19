@@ -154,7 +154,7 @@ struct SessionPostsView: View {
       isPresentingMembers = true
     }
     if canShareLinks, !rootPosts.isEmpty {
-      LinkstrHeaderButton(title: "share a link", icon: "plus") { isPresentingNewPost = true }
+      LinkstrHeaderButton(title: "new post", icon: "square.and.pencil") { isPresentingNewPost = true }
     }
   }
 

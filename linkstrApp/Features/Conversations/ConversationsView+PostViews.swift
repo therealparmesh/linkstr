@@ -22,8 +22,8 @@ extension SessionPostsView {
               systemImage: contentState.canCreatePosts ? "link.badge.plus" : "link",
               description: contentState.canCreatePosts
                 ? "share the first link with this session." : "this session is read-only.",
-              actionTitle: contentState.canCreatePosts ? "share a link" : nil,
-              actionSystemImage: "plus",
+              actionTitle: contentState.canCreatePosts ? "new post" : nil,
+              actionSystemImage: "square.and.pencil",
               action: contentState.canCreatePosts ? { isPresentingNewPost = true } : nil
             )
             .frame(maxWidth: .infinity, minHeight: 260)
@@ -40,8 +40,10 @@ extension SessionPostsView {
         }
         .linkstrPageContentLayout(topPadding: LinkstrTheme.pinnedPageContentTopPadding)
       }
-      .onChange(of: pendingScrollPostID.map { target in rootPosts.contains { $0.rootID == target } } == true,
-                initial: true) { _, isAvailable in
+      .onChange(
+        of: pendingScrollPostID.map { target in rootPosts.contains { $0.rootID == target } } == true,
+        initial: true
+      ) { _, isAvailable in
         guard isAvailable, let postID = pendingScrollPostID else { return }
         proxy.scrollTo(postID, anchor: .top)
         pendingScrollPostID = nil
@@ -53,7 +55,8 @@ extension SessionPostsView {
   }
 
   private func timelineSummary(_ postCountLabel: String) -> some View {
-    let layout = dynamicTypeSize.isAccessibilitySize
+    let layout =
+      dynamicTypeSize.isAccessibilitySize
       ? AnyLayout(VStackLayout(alignment: .leading, spacing: 0))
       : AnyLayout(HStackLayout(spacing: LinkstrTheme.rowSpacing))
     return layout {
@@ -289,7 +292,7 @@ struct PostListRowView: View {
           LinkstrContactAvatar(
             name: avatarName, size: 24, seed: post.senderPubkeyHash
           )
-            .accessibilityHidden(true)
+          .accessibilityHidden(true)
           Text(senderLabel)
             .font(LinkstrTheme.font(.caption, weight: .semibold))
             .foregroundStyle(isOutgoing ? LinkstrTheme.accent : LinkstrTheme.textSecondary)
