@@ -109,6 +109,7 @@ targets:
       - path: linkstrShareExtension
       - path: linkstrApp/App/LinkstrAppearance.swift
       - path: linkstrApp/App/LinkstrTabHeader.swift
+      - path: linkstrApp/App/LinkstrErrorToast.swift
       - path: linkstrApp/Domain/LinkstrURLValidator.swift
       - path: linkstrApp/Domain/LinkstrDeepLinkCodec.swift
     settings:

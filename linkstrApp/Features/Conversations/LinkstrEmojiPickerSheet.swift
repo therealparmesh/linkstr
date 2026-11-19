@@ -42,6 +42,8 @@ struct LinkstrEmojiPickerSheet: View {
           .padding(.bottom, LinkstrTheme.compactSpacing)
           .linkstrReadableContent()
 
+          if compactSearch { LinkstrToastOutlet() }
+
           if let searchCategory, searchCategory.emojis.isEmpty {
             ScrollView {
               Text("no emoji found. try another search.")

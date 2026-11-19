@@ -62,9 +62,8 @@ struct MainTabView: View {
       navigateToPendingSessionIfNeeded()
     }
     .onChange(of: relaySettingsRequest) { _, request in
-      guard request != nil else { return }
-      selectedTab = .you
-      navigationPath = [.settings(showRelays: true)]
+      guard let request else { return }
+      navigate(to: [.settings(showRelays: true)], tab: .you, id: request)
     }
   }
 
@@ -155,12 +154,16 @@ struct MainTabView: View {
 
   private func navigateToPendingSessionIfNeeded() {
     guard let request = session.pendingSessionNavigationRequest else { return }
-    selectedTab = .sessions
+    navigate(to: request.path, tab: .sessions, id: request.id)
+    session.clearPendingSessionNavigationRequest()
+  }
+
+  private func navigate(to path: [AppRoute], tab: AppTab, id: UUID) {
+    selectedTab = tab
     isPresentingNewSession = false
     isPresentingAddContact = false
-    navigationPath = request.path
+    navigationPath = path
     // Replace the stack's identity to dismiss any child sheet, even for the same destination.
-    navigationID = request.id
-    session.clearPendingSessionNavigationRequest()
+    navigationID = id
   }
 }

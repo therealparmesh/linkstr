@@ -124,7 +124,7 @@ Open **you**, tap **settings**, and find **relays**.
 - Enabled relays can be toggled on or off.
 - Relay rows can be removed.
 - **restore defaults** puts you back on the current default relay set.
-- Tapping a relay connection alert opens relay settings.
+- In-app notices appear below the open screen or sheet’s header. Success notices clear automatically. Tap a relay connection alert to open relay settings.
 
 ---
 

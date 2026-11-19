@@ -1,9 +1,6 @@
 import SwiftUI
-import UIKit
 
 private enum RootViewTimingDefaults {
-  static let toastAnimationDuration: TimeInterval = 0.2
-  static let toastDisplayDuration: TimeInterval = 2
   static let contentTransitionDuration: TimeInterval = 0.3
 }
 
@@ -13,12 +10,8 @@ struct RootView: View {
   @EnvironmentObject private var session: AppSession
   @EnvironmentObject private var deepLinkHandler: DeepLinkHandler
   @ObservedObject private var pushNotifications: PushNotificationService
-  @State private var toastMessage: String?
-  @State private var toastIsSuccess: Bool = false
-  @State private var toastOpensRelaySettings = false
-  @State private var toastDisplayID = UUID()
+  @State private var toasts = LinkstrToastPresenter()
   @State private var selectedTab: AppTab = .sessions
-  @State private var relaySettingsRequest: UUID?
 
   init(pushNotifications: PushNotificationService? = nil) {
     self.pushNotifications = pushNotifications ?? .shared
@@ -96,7 +89,7 @@ struct RootView: View {
           MainTabView(
             ownerPubkey: session.identityService.pubkeyHex ?? "",
             selectedTab: $selectedTab,
-            relaySettingsRequest: relaySettingsRequest
+            relaySettingsRequest: toasts.relaySettingsRequest
           )
           .environment(
             \.isUnderlyingMediaCovered,
@@ -115,24 +108,6 @@ struct RootView: View {
         value: session.shouldShowOnboarding
       )
     }
-    .overlay(alignment: .top) {
-      if let toastMessage {
-        Button(action: handleToastTap) {
-          LinkstrErrorToast(
-            message: toastMessage, isSuccess: toastIsSuccess, opensRelaySettings: toastOpensRelaySettings
-          )
-        }
-        .buttonStyle(.plain)
-        .frame(maxWidth: LinkstrTheme.readableContentMaxWidth)
-        .padding(.top, LinkstrTheme.toastTopPadding)
-        .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-        .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
-        .accessibilityElement(children: .combine)
-        .accessibilityHint(
-          toastOpensRelaySettings ? "opens relay settings" : "dismisses notification"
-        )
-      }
-    }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .tint(LinkstrTheme.accent)
     .onChange(of: pushNotifications.pendingNavigation?.id, initial: true) { _, _ in
@@ -149,7 +124,7 @@ struct RootView: View {
     .onChange(of: session.composeError) { _, newValue in
       guard let newValue, !newValue.isEmpty else { return }
       guard session.shouldPresentComposeErrorToast else { return }
-      presentToast(
+      toasts.show(
         newValue,
         isSuccess: false,
         opensRelaySettings: session.isRelayConnectionAlertMessage(newValue)
@@ -158,13 +133,10 @@ struct RootView: View {
     }
     .onReceive(NotificationCenter.default.publisher(for: .linkstrSuccessToast)) { notification in
       guard let message = notification.object as? String else { return }
-      presentToast(message, isSuccess: true)
+      toasts.show(message, isSuccess: true)
     }
-    .task(id: toastDisplayID) {
-      guard toastMessage != nil, toastIsSuccess else { return }
-      try? await Task.sleep(for: .seconds(RootViewTimingDefaults.toastDisplayDuration))
-      guard !Task.isCancelled else { return }
-      dismissToast()
+    .onChange(of: toasts.relaySettingsRequest) { _, _ in
+      deepLinkHandler.clearPendingRoutes()
     }
     .fullScreenCover(
       isPresented: sharedLinkDetailBinding
@@ -195,35 +167,7 @@ struct RootView: View {
     .fullScreenCover(item: mediaSaveDraftBinding) { draft in
       ShareMediaSaveView(draft: draft)
     }
-  }
-
-  private func handleToastTap() {
-    let shouldOpenRelaySettings = toastOpensRelaySettings
-    dismissToast()
-    if shouldOpenRelaySettings {
-      relaySettingsRequest = UUID()
-    }
-  }
-
-  private func presentToast(
-    _ message: String,
-    isSuccess: Bool,
-    opensRelaySettings: Bool = false
-  ) {
-    withAnimation(reduceMotion ? nil : .easeIn(duration: RootViewTimingDefaults.toastAnimationDuration)) {
-      toastIsSuccess = isSuccess
-      toastMessage = message
-      toastOpensRelaySettings = opensRelaySettings
-    }
-    toastDisplayID = UUID()
-    UIAccessibility.post(notification: .announcement, argument: message)
-  }
-
-  private func dismissToast() {
-    withAnimation(reduceMotion ? nil : .easeOut(duration: RootViewTimingDefaults.toastAnimationDuration)) {
-      toastMessage = nil
-    }
-    toastOpensRelaySettings = false
+    .environment(toasts)
   }
 }
 
@@ -251,5 +195,6 @@ private struct LinkstrBootLoadingView: View {
     }
     .padding(.horizontal, 24)
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+    .safeAreaInset(edge: .top, spacing: 0) { LinkstrToastOutlet() }
   }
 }

@@ -38,7 +38,6 @@ enum LinkstrTheme {
   static let pinnedPageContentTopPadding = listBlockSpacing - compactSpacing
   static let screenBottomPadding: CGFloat = 24
   static let panelPadding: CGFloat = 18
-  static let toastTopPadding = pageHeaderTopPadding + minimumInteractiveDimension + compactSpacing
   static let fieldHorizontalPadding: CGFloat = 14
   static let fieldVerticalPadding: CGFloat = 12
   static let inputAssistButtonSpacing: CGFloat = 14
