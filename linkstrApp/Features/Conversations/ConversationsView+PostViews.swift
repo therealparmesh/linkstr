@@ -1,7 +1,5 @@
 import SwiftUI
 
-// MARK: - SessionPostsView Helpers
-
 extension SessionPostsView {
   func timelineView(for sessionEntity: SessionEntity) -> some View {
     let contentState = contentState
@@ -55,28 +53,34 @@ extension SessionPostsView {
   }
 
   private func timelineSummary(_ postCountLabel: String) -> some View {
-    let layout =
-      dynamicTypeSize.isAccessibilitySize
-      ? AnyLayout(VStackLayout(alignment: .leading, spacing: 0))
-      : AnyLayout(HStackLayout(spacing: LinkstrTheme.rowSpacing))
-    return layout {
-      Text(postCountLabel)
-        .font(LinkstrTheme.font(.caption, weight: .medium))
-        .foregroundStyle(LinkstrTheme.textSecondary)
-        .frame(maxWidth: .infinity, alignment: .leading)
-      if hasUnreadLinks {
-        Button {
-          session.markSessionRead(sessionID: sessionID, ownerPubkey: ownerPubkey)
-        } label: {
-          Label("mark all as read", systemImage: "checkmark.circle")
+    Text(postCountLabel)
+      .font(LinkstrTheme.font(.caption, weight: .medium))
+      .foregroundStyle(LinkstrTheme.textSecondary)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .overlay(alignment: .trailing) {
+        if hasUnreadLinks {
+          Button {
+            session.markSessionRead(sessionID: sessionID, ownerPubkey: ownerPubkey)
+          } label: {
+            Group {
+              let label = Label("mark all as read", systemImage: "checkmark.circle")
+              if dynamicTypeSize.isAccessibilitySize {
+                label.labelStyle(.iconOnly)
+                  .font(.system(size: LinkstrTheme.toolbarSymbolSize, weight: .semibold))
+              } else {
+                label
+              }
+            }
             .font(LinkstrTheme.font(.footnote, weight: .semibold))
             .foregroundStyle(LinkstrTheme.accent)
-            .frame(minHeight: LinkstrTheme.minimumInteractiveDimension)
+            .frame(
+              minWidth: LinkstrTheme.minimumInteractiveDimension, minHeight: LinkstrTheme.minimumInteractiveDimension
+            )
             .contentShape(Rectangle())
+          }
+          .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
       }
-    }
   }
 
   private var contentState: SessionPostsContentState {
