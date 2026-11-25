@@ -10,6 +10,7 @@ struct RootView: View {
   @EnvironmentObject private var session: AppSession
   @EnvironmentObject private var deepLinkHandler: DeepLinkHandler
   @ObservedObject private var pushNotifications: PushNotificationService
+  @State private var sharedPlaybackReloadID = 0
   @State private var toasts = LinkstrToastPresenter()
   @State private var selectedTab: AppTab = .sessions
 
@@ -143,14 +144,16 @@ struct RootView: View {
     ) {
       if let sourceURL = deepLinkHandler.pendingSharedURL {
         NavigationStack {
-          DeepLinkDetailView(sourceURL: sourceURL)
+          DeepLinkDetailView(sourceURL: sourceURL, reloadID: sharedPlaybackReloadID)
             .linkstrBarChrome()
             .linkstrSheetHeader(title: "shared link") {
               LinkstrHeaderButton(title: "close shared link", icon: "xmark") {
                 deepLinkHandler.clearSharedLinkDetail()
               }
             } actions: {
-              EmptyView()
+              if URLClassifier.mediaStrategy(for: sourceURL) != .link {
+                LinkstrHeaderButton(title: "refresh playback", icon: "arrow.clockwise") { sharedPlaybackReloadID += 1 }
+              }
             }
         }
       } else {

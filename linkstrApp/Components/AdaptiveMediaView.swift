@@ -52,7 +52,6 @@ struct AdaptiveMediaView<LinkContent: View, OverlayContent: View, HeaderContent:
   @State var hasRenderedEmbeddedPost = false
   @State var detectedMediaAspectRatio: CGFloat?
   @State var embeddedLoadFailure: EmbeddedWebView.LoadFailure?
-  @State var embeddedReloadID = 0
   @State var fitsEntireVideo = false
   @State var isShowingFullscreenPlayer = false
 

@@ -168,12 +168,12 @@ extension AdaptiveMediaView {
     embedSource: EmbeddedWebSource,
     allowsTryLocalPlayback: Bool
   ) -> some View {
-    let canRetry = isRenderableEmbedSource(embedSource)
+    let canRender = isRenderableEmbedSource(embedSource)
     if immersive {
       watchContentArea(
-        edgeToEdge: canRetry && embeddedLoadFailure == nil && !embedSource.usesManagedHTMLDocument
+        edgeToEdge: canRender && embeddedLoadFailure == nil && !embedSource.usesManagedHTMLDocument
       ) { size in
-        if canRetry, embeddedLoadFailure == nil {
+        if canRender, embeddedLoadFailure == nil {
           let isDocument = embedSource.usesManagedHTMLDocument
           let aspectRatio = effectiveMediaAspectRatio
           let fittedWidth = isDocument ? size.width : min(size.width, size.height * aspectRatio)
@@ -188,7 +188,7 @@ extension AdaptiveMediaView {
             .scaleEffect(scale)
             .frame(width: width * scale, height: height * scale)
         } else {
-          embedRecovery(canRetry: canRetry, offersModeSwitch: allowsTryLocalPlayback)
+          embedRecovery(offersModeSwitch: allowsTryLocalPlayback)
         }
       }
     } else {
@@ -199,28 +199,27 @@ extension AdaptiveMediaView {
   private func standardEmbedPlaybackBlock(
     embedSource: EmbeddedWebSource, allowsTryLocalPlayback: Bool
   ) -> some View {
-    let canRetry = isRenderableEmbedSource(embedSource)
+    let canRender = isRenderableEmbedSource(embedSource)
     return VStack(alignment: .leading, spacing: LinkstrTheme.compactSpacing) {
-      if canRetry, embeddedLoadFailure == nil {
+      if canRender, embeddedLoadFailure == nil {
         embeddedPlayerSurface(embedSource)
         linkContent
-        secondaryActionButton("retry embed", systemImage: "arrow.clockwise", action: retryEmbeddedPlayback)
         LinkstrBrowserButton(action: openSourceAction)
         if allowsTryLocalPlayback { tryLocalPlaybackButton }
       } else {
-        embedRecovery(canRetry: canRetry, offersModeSwitch: allowsTryLocalPlayback)
+        embedRecovery(offersModeSwitch: allowsTryLocalPlayback)
         linkContent
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
   }
 
-  private func embedRecovery(canRetry: Bool, offersModeSwitch: Bool) -> some View {
+  private func embedRecovery(offersModeSwitch: Bool) -> some View {
     mediaRecovery(
       embeddedLoadFailure == .tiktokRateLimited
         ? "tiktok is limiting requests"
         : "couldn’t load the official embed",
-      retry: canRetry ? retryEmbeddedPlayback : nil,
+      retry: nil,
       offersLocalPlayback: offersModeSwitch
     )
   }
@@ -257,7 +256,6 @@ extension AdaptiveMediaView {
           isPlaybackSuspended: isMediaCovered || (immersive && scenePhase != .active),
           allowsVerticalScroll: allowsVerticalScroll
         )
-        .id(embeddedReloadID)
         .scopedPlaybackAudioSession()
         .opacity(hidesDocument ? 0 : 1)
         .allowsHitTesting(!hidesDocument)
@@ -275,26 +273,12 @@ extension AdaptiveMediaView {
     let offersEmbed = localPlaybackMode == .localPreferred && (isShowingNativePlayer || extractionState == nil)
     return WatchPlaybackMenu(
       openBrowser: openSourceAction,
-      retryEmbed: canRetryOfficialEmbed ? retryEmbeddedPlayback : nil,
       switchTitle: offersEmbed ? officialEmbedActionTitle : localPlaybackActionTitle,
       switchIcon: offersEmbed ? "rectangle.inset.filled" : "play.rectangle",
       switchMode: effectiveMediaStrategy.allowsLocalPlaybackToggle
         ? (offersEmbed ? useOfficialEmbed : tryLocalPlayback) : nil,
       fullScreen: isShowingNativePlayer ? { isShowingFullscreenPlayer = true } : nil
     )
-  }
-
-  private var canRetryOfficialEmbed: Bool {
-    guard !isResolvingPresentation else { return false }
-    switch effectiveMediaStrategy {
-    case .embedOnly(let url):
-      return isRenderableEmbedSource(resolvedOrFallbackEmbedSource(url))
-    case .extractionPreferred(let url):
-      let showsEmbed = localPlaybackMode == .embedPreferred || (extractionState != nil && !isShowingNativePlayer)
-      return showsEmbed && isRenderableEmbedSource(resolvedOrFallbackEmbedSource(url))
-    case .directVideo, .link:
-      return false
-    }
   }
 
   func currentPlaybackCandidate(from candidates: [PlayableMedia]) -> PlayableMedia? {
@@ -360,7 +344,6 @@ extension AdaptiveMediaView {
 
 struct WatchPlaybackMenu: View {
   let openBrowser: () -> Void
-  let retryEmbed: (() -> Void)?
   let switchTitle: String
   let switchIcon: String
   let switchMode: (() -> Void)?
@@ -370,7 +353,6 @@ struct WatchPlaybackMenu: View {
     Menu {
       Button(LinkstrBrowserAction.title, systemImage: LinkstrBrowserAction.icon, action: openBrowser)
       if let switchMode { Button(switchTitle, systemImage: switchIcon, action: switchMode) }
-      if let retryEmbed { Button("retry embed", systemImage: "arrow.clockwise", action: retryEmbed) }
       if let fullScreen { Button("full screen", systemImage: "arrow.up.left.and.arrow.down.right", action: fullScreen) }
     } label: {
       Image(systemName: "ellipsis")

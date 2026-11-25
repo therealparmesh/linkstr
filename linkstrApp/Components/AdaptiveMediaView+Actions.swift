@@ -166,12 +166,6 @@ extension AdaptiveMediaView {
     }
   }
 
-  func retryEmbeddedPlayback() {
-    LinkstrPlaybackDiagnostics.logger.info("retrying official embed")
-    resetEmbeddedPresentation()
-    embeddedReloadID += 1
-  }
-
   func resetEmbeddedPresentation() {
     embeddedLoadFailure = nil
     isEmbeddedContentReady = false

@@ -3,6 +3,7 @@ import UIKit
 
 struct DeepLinkDetailView: View {
   let sourceURL: URL
+  var reloadID = 0
 
   @Environment(\.openURL) private var openURL
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -33,6 +34,7 @@ struct DeepLinkDetailView: View {
           AdaptiveMediaView(
             sourceURL: sourceURL,
             openSourceAction: { openURL(sourceURL) },
+            reloadID: reloadID,
             onResolvedSource: { destination in
               if SocialURLHeuristics.isTikTokShortURL(sourceURL) {
                 resolvedShortLink = (sourceURL, destination)
