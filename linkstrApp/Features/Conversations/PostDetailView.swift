@@ -94,39 +94,43 @@ struct PostDetailView: View {
   }
 
   func postHeader(saveAction: (() -> Void)?, @ViewBuilder mediaMenu: () -> some View) -> some View {
-    LinkstrPageTopBar(hasBackButton: true) {
-      LinkstrHeaderButton(
-        title: "back to posts", icon: "chevron.backward", foreground: LinkstrTheme.textPrimary, action: back)
-    } actions: {
-      if let saveAction {
+    VStack(spacing: 0) {
+      LinkstrPageTopBar(hasBackButton: true) {
         LinkstrHeaderButton(
-          title: "save video", icon: "square.and.arrow.down", foreground: LinkstrTheme.textPrimary, action: saveAction)
-      }
-      if LinkstrPostPreview.webURL(for: post?.url) != nil {
-        LinkstrHeaderButton(
-          title: isRefreshingMetadata ? "refreshing post…" : "refresh post", icon: "arrow.clockwise",
-          foreground: LinkstrTheme.textPrimary
-        ) {
-          metadataRefreshRequest = UUID()
+          title: "back to posts", icon: "chevron.backward", foreground: LinkstrTheme.textPrimary, action: back)
+      } actions: {
+        if let saveAction {
+          LinkstrHeaderButton(
+            title: "save video", icon: "square.and.arrow.down", foreground: LinkstrTheme.textPrimary, action: saveAction
+          )
         }
-        .disabled(isRefreshingMetadata)
-        .accessibilityHint("reloads the preview and retries playback")
-      }
-      if shareDeepLinkURL != nil {
-        LinkstrHeaderButton(title: "share link", icon: "square.and.arrow.up", foreground: LinkstrTheme.textPrimary) {
-          activeSheet = .share
+        if LinkstrPostPreview.webURL(for: post?.url) != nil {
+          LinkstrHeaderButton(
+            title: isRefreshingMetadata ? "refreshing post…" : "refresh post", icon: "arrow.clockwise",
+            foreground: LinkstrTheme.textPrimary
+          ) {
+            metadataRefreshRequest = UUID()
+          }
+          .disabled(isRefreshingMetadata)
+          .accessibilityHint("reloads the preview and retries playback")
         }
+        if shareDeepLinkURL != nil {
+          LinkstrHeaderButton(title: "share link", icon: "square.and.arrow.up", foreground: LinkstrTheme.textPrimary) {
+            activeSheet = .share
+          }
+        }
+        mediaMenu()
       }
-      mediaMenu()
+      .linkstrPageHeaderContentLayout()
+      .onGeometryChange(for: CGFloat.self) {
+        $0.size.height
+      } action: {
+        headerHeight = $0
+      }
+      .padding(.top, watchInsets.top)
+      .background(reduceTransparency ? LinkstrTheme.background : LinkstrTheme.watchOverlay)
+      LinkstrToastOutlet()
     }
-    .linkstrPageHeaderLayout()
-    .onGeometryChange(for: CGFloat.self) {
-      $0.size.height
-    } action: {
-      headerHeight = $0
-    }
-    .padding(.top, watchInsets.top)
-    .background(reduceTransparency ? LinkstrTheme.background : LinkstrTheme.watchOverlay)
   }
 
   var isRefreshingMetadata: Bool { metadataRefreshRequest != nil }

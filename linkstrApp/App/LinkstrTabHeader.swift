@@ -193,13 +193,17 @@ extension View {
 
   func linkstrPageHeaderLayout() -> some View {
     VStack(spacing: 0) {
-      self
-        .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
-        .padding(.top, LinkstrTheme.pageHeaderTopPadding)
-        .padding(.bottom, LinkstrTheme.compactSpacing)
-        .linkstrReadableContent()
+      linkstrPageHeaderContentLayout()
       LinkstrToastOutlet()
     }
+  }
+
+  func linkstrPageHeaderContentLayout() -> some View {
+    self
+      .padding(.horizontal, LinkstrTheme.screenHorizontalPadding)
+      .padding(.top, LinkstrTheme.pageHeaderTopPadding)
+      .padding(.bottom, LinkstrTheme.compactSpacing)
+      .linkstrReadableContent()
   }
 
   func linkstrNavigationBarChrome() -> some View {
