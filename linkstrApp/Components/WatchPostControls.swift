@@ -32,7 +32,7 @@ struct WatchPostControls<Content: View>: View {
   @ViewBuilder let content: (WatchReactionActions) -> Content
   private var isExpanded: Bool { summary.expanded }
   @State private var headerHeight = LinkstrTheme.minimumInteractiveDimension
-  @State private var contentHeight: CGFloat = 240
+  @State private var contentHeight: CGFloat = .infinity
   @State private var detailsPosition = ScrollPosition(edge: .top)
   @State private var opensAtReactions = true
 
@@ -47,9 +47,8 @@ struct WatchPostControls<Content: View>: View {
           } action: {
             headerHeight = $0
           }
-        if isExpanded {
-          detailsScrollView(availableHeight: max(1, min(proxy.size.height / 2, availableHeight - headerHeight)))
-        } else {
+        detailsScrollView(availableHeight: max(1, min(proxy.size.height / 2, availableHeight - headerHeight)))
+        if !isExpanded {
           quickActions
         }
       }
@@ -91,16 +90,18 @@ struct WatchPostControls<Content: View>: View {
     }
     .scrollPosition($detailsPosition)
     .scrollBounceBehavior(.basedOnSize)
-    .onAppear {
+    .onChange(of: isExpanded, initial: true) { _, expanded in
+      guard expanded else { return }
       if opensAtReactions {
         detailsPosition.scrollTo(id: WatchReactionActions.anchor, anchor: .top)
       } else {
         detailsPosition.scrollTo(edge: .top)
       }
     }
-    .frame(height: min(contentHeight, availableHeight))
-    .contentShape(Rectangle())
-    .transition(.opacity)
+    .frame(height: isExpanded ? min(contentHeight, availableHeight) : 0)
+    .clipped()
+    .allowsHitTesting(isExpanded)
+    .accessibilityHidden(!isExpanded)
   }
 
   private var handle: some View {
