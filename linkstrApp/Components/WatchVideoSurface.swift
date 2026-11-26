@@ -56,7 +56,7 @@ private struct WatchPlaybackControls: View {
     Group {
       if dynamicTypeSize.isAccessibilitySize, verticalSizeClass != .compact {
         VStack(spacing: 0) {
-          HStack(spacing: LinkstrTheme.compactSpacing) {
+          HStack(spacing: 0) {
             playButton
             Spacer(minLength: 0)
             timeLabel
@@ -65,12 +65,15 @@ private struct WatchPlaybackControls: View {
             videoFitButton
           }
           positionSlider
+            .padding(.horizontal, LinkstrTheme.toolbarOpticalInset)
         }
       } else {
-        HStack(spacing: LinkstrTheme.compactSpacing) {
+        HStack(spacing: 0) {
           playButton
           positionSlider
+            .padding(.horizontal, LinkstrTheme.toolbarOpticalInset)
           timeLabel
+            .padding(.horizontal, LinkstrTheme.toolbarOpticalInset)
           muteButton
           videoFitButton
         }
@@ -98,12 +101,19 @@ private struct WatchPlaybackControls: View {
     }
   }
 
+  private func controlIcon(_ symbol: String) -> some View {
+    Image(systemName: symbol)
+      .resizable()
+      .scaledToFit()
+      .frame(width: LinkstrTheme.toolbarSymbolSize)
+      .linkstrToolbarIconLabel()
+  }
+
   private var playButton: some View {
     Button {
       player.toggleWatchPlayback()
     } label: {
-      Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-        .linkstrToolbarIconLabel()
+      controlIcon(isPlaying ? "pause.fill" : "play.fill")
     }
     .accessibilityLabel(isPlaying ? "pause video" : "play video")
     .accessibilityValue(isBuffering ? "buffering" : "")
@@ -111,8 +121,7 @@ private struct WatchPlaybackControls: View {
 
   private var videoFitButton: some View {
     Button(action: toggleVideoFit) {
-      Image(systemName: fitsEntireVideo ? "arrow.up.left.and.arrow.down.right" : "arrow.down.right.and.arrow.up.left")
-        .linkstrToolbarIconLabel()
+      controlIcon(fitsEntireVideo ? "arrow.up.left.and.arrow.down.right" : "arrow.down.right.and.arrow.up.left")
     }
     .accessibilityLabel(fitsEntireVideo ? "fill screen" : "fit entire video")
     .accessibilityHint(fitsEntireVideo ? "fill the viewer" : "show the full video above the post controls")
@@ -122,8 +131,7 @@ private struct WatchPlaybackControls: View {
     Button {
       player.isMuted.toggle()
     } label: {
-      Image(systemName: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-        .linkstrToolbarIconLabel()
+      controlIcon(isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
     }
     .accessibilityLabel(isMuted ? "unmute video" : "mute video")
   }
